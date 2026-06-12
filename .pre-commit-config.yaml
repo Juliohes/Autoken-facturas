@@ -1,0 +1,21 @@
+# Pre-commit hooks — Regla de Oro 6: gitleaks como pre-commit desde el commit 1.
+# Instalar: pip install pre-commit && pre-commit install
+# Ejecutar manual: pre-commit run --all-files
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+        name: gitleaks (detección de secretos)
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: detect-private-key
+      - id: check-yaml
+      - id: check-json

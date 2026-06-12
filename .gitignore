@@ -1,0 +1,92 @@
+# === Secretos (Regla de Oro 6: NUNCA en el repo) =========================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+.secrets/
+*.fernet
+doppler.yaml
+
+# === Python ==============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+env/
+ENV/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+
+# === Node / Frontend =====================================================
+node_modules/
+.pnp
+.pnp.js
+.npm
+dist-ssr/
+*.local
+.vite/
+coverage/
+.eslintcache
+
+# === Docker / Infra ======================================================
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# === Datos locales / volúmenes ===========================================
+data/
+postgres-data/
+minio-data/
+redis-data/
+*.dump
+*.sql.gz
+
+# === OCR: facturas reales (datos sensibles, NUNCA al repo) ===============
+# El ground-truth anotado vive en docs/ocr-eval/ pero las imágenes/PDF de
+# facturas reales no se versionan.
+docs/ocr-eval/**/*.pdf
+docs/ocr-eval/**/*.png
+docs/ocr-eval/**/*.jpg
+docs/ocr-eval/**/*.jpeg
+entregas/
+
+# === Claude Code (config local) ==========================================
+.claude/settings.local.json
+
+# === Editores / SO =======================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*.log

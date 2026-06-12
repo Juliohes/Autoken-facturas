@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Plan maestro
+    url: https://github.com/Juliohes/Autoken-facturas/blob/main/PLAN_MAESTRO_AUTOKEN_FACTURAS_V2_v1.1.md
+    about: Fuente de verdad del proyecto (arquitectura, fases, tareas y reglas).
