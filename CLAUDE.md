@@ -50,12 +50,19 @@
 
 ## Estado actual
 - **Fase**: FASE 0 — Fundación.
-- **Tarea en curso**: **0.1 Repo GitHub** — parte local completada (init, estructura, README, .gitignore, plantillas,
-  pre-commit gitleaks, ramas `main`+`develop`). **BLOQUEADO** esperando autenticación de GitHub de Julio para:
-  crear/empujar el repo remoto y configurar protección de ramas `main`/`develop`.
-- **Próximo**: con auth → push + branch protection → cerrar 0.1 → 0.2 DNS Cloudflare (acción guiada de Julio).
+- **Tarea cerrada**: **0.1 Repo GitHub** ✅ — repo privado `Juliohes/Autoken-facturas` creado; default branch
+  `develop`; `main` y `develop` protegidas (PR obligatorio, sin force-push/borrado, historial lineal,
+  conversaciones resueltas, reglas aplicadas a admins); README, .gitignore (.env excluido), estructura del
+  monorepo, plantillas PR/issues, pre-commit gitleaks (verificado: *no leaks found*).
+  > Las *required status checks* de CI se enlazarán en 0.6 cuando exista el pipeline.
+- **Próxima tarea**: **0.2 DNS de `autoken.es` en Cloudflare** — acción guiada de Julio (PDF paso 3):
+  zona en Cloudflare, cambio de nameservers, registros A `setex`/`panel`/`joseramon`/`setex-staging`/`panel-staging`
+  → `2.24.8.109` (proxy ON).
+- Luego: 0.3 hardening VPS → 0.4 backend → 0.5 frontend → 0.6 CI → 0.7 ADRs → tag `fase-0-done` + demo.
 
 ### Pendientes de Julio (sección 9 del plan)
-- [ ] Autenticación GitHub para Claude Code (ver petición en el chat).
+- [x] Autenticación GitHub para Claude Code (hecha vía `gh auth login`).
+- [ ] **0.2**: mover DNS de `autoken.es` a Cloudflare (acción guiada).
 - [ ] Azure Document Intelligence (West Europe, S0), Azure OpenAI (gpt-4o), Mistral (POC), SMTP soporte@autoken.es.
+- [ ] Acceso SSH a los 2 VPS para la tarea 0.3 (hardening).
 - [ ] Excel 51 empresas + 15-30 facturas reales → carpeta `entregas/`.
