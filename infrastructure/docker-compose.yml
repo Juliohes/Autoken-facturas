@@ -1,0 +1,53 @@
+# Docker Compose — Autoken Facturas v2
+# Esqueleto de la Fase 0: api + postgres + redis. El resto de servicios
+# (worker, minio, clamav, caddy) se añaden en sprints posteriores.
+# Los secretos se inyectan vía .env (no versionado). Ver ../.env.example.
+
+services:
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: autoken/api:dev
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-autoken_app}:${POSTGRES_PASSWORD:-autoken}@postgres:5432/${POSTGRES_DB:-autoken}
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-autoken_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autoken}
+      POSTGRES_DB: ${POSTGRES_DB:-autoken}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-autoken_app} -d ${POSTGRES_DB:-autoken}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
