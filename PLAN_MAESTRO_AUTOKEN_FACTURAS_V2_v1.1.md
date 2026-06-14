@@ -377,9 +377,14 @@ Para CADA endpoint que toque datos:
 ### 11.1 Decisiones arquitectónicas (ADRs) — `docs/adr/`
 | ADR | Título | Estado |
 |---|---|---|
-| ADR-001..006 | Reservados (se redactan en la tarea 0.7) | pendiente |
-| ADR-007 | Motores OCR ganadores (tras Fase 1) | pendiente |
-| **ADR-0008** | DNS en Hostinger durante el desarrollo (enmienda a ADR-004) | aceptado |
+| **ADR-0001** | Aislamiento multi-tenant con RLS de dos niveles | aceptado |
+| **ADR-0002** | PWA primero, TWA (Google Play) cuando haya demanda | aceptado |
+| **ADR-0003** | Pipeline OCR de 4 capas (doble motor + árbitro + anti-alucinación) | aceptado |
+| **ADR-0004** | Un solo dominio `autoken.es` con subdominios de primer nivel | aceptado (matizado por 0008) |
+| **ADR-0005** | Hostinger + Docker Compose; portable a AWS | aceptado (matizado por 0009) |
+| **ADR-0006** | Recibidas editables (auditado); emitidas inmutables (futuro Verifactu) | aceptado |
+| ADR-0007 | Motores OCR ganadores (tras Fase 1) | pendiente |
+| **ADR-0008** | DNS en Hostinger durante el desarrollo (enmienda a ADR-0004) | aceptado |
 | **ADR-0009** | Hardening mínimo del VPS A; construir todo en VPS B | aceptado |
 
 ### 11.2 Runbooks — `docs/runbooks/`
@@ -414,6 +419,7 @@ Para CADA endpoint que toque datos:
 | 0.2 DNS | ✅ | #3, #4 |
 | 0.3 Hardening VPS | ✅ | #5 |
 | 0.4 Esqueleto backend | ✅ | #8 |
-| 0.5 Esqueleto frontend | ✅ | (esta PR) |
-| 0.6 CI | ⏳ en curso | — |
-| 0.7 ADRs | pendiente | — |
+| 0.5 Esqueleto frontend | ✅ | #10 |
+| 0.6 CI | ✅ | #11 |
+| 0.7 ADRs 0001-0006 | ✅ | (esta PR) |
+| **FASE 0** | ✅ completada | tag `fase-0-done` |

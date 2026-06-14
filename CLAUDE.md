@@ -76,11 +76,15 @@
 - **Tarea cerrada**: **0.5 Esqueleto frontend** ✅ — React 18 + Vite + TS + Tailwind + PWA (manifest + SW);
   cliente API **autogenerado** desde el OpenAPI del backend (openapi-typescript + openapi-fetch) consultando
   `/api/v1/health` con TanStack Query. Build/typecheck/lint OK; E2E proxy verificado.
+- **Tarea cerrada**: **0.6 CI completo** ✅ (PR #11) — GitHub Actions: backend (ruff/mypy/pytest), gate
+  aislamiento, frontend (typecheck/lint/build), secretos (gitleaks) + audits, build imagen. Los 5 checks son
+  **required** (strict, también admins) en `develop`/`main`: ningún PR mergea con CI en rojo.
+- **Tarea cerrada**: **0.7 ADRs 0001-0006** ✅ — documentadas las decisiones cerradas (RLS 2 niveles, PWA→TWA,
+  pipeline OCR, dominio/subdominios, Hostinger/Docker vs AWS, edición recibidas vs inmutabilidad emitidas).
 - **Nota**: el proyecto vive en **`/opt/app-facturas/`** (no en `/opt`). Clave SSH en `~/.ssh/autoken_deploy`.
   Toolchain del entorno: Python 3.12 + venv en `backend/.venv`; **Node 20** + npm; Docker 29.
-- **Próxima tarea**: **0.6 CI completo** (GitHub Actions: lint+tipos+tests+gitleaks+audit+build; enlazar
-  required status checks en la protección de ramas). Autónoma.
-- Luego: 0.7 ADRs → tag `fase-0-done` + demo + **STOP** para aprobación de Julio.
+- **FASE 0 COMPLETADA** → tag `fase-0-done`. **STOP**: esperando aprobación de Julio antes de la Fase 1
+  (POC OCR). La Fase 1 necesita entregables de Julio (cuentas Azure/Mistral + facturas reales).
 
 ### Pendientes de Julio (sección 9 del plan)
 - [x] Autenticación GitHub para Claude Code (hecha vía `gh auth login`).
