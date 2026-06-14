@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dev-dist/
+*.local
+.vite/
+*.tsbuildinfo
+# Artefactos de compilación de vite.config.ts (proyecto node de tsc)
+vite.config.js
+vite.config.d.ts
