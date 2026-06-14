@@ -22,7 +22,9 @@ resuelve **Caddy** en el VPS (PLAN MAESTRO §3.1), no dependemos del certificado
 
 ## Decisión
 Durante **desarrollo y staging**, gestionar el DNS de `autoken.es` **directamente en Hostinger**:
-- Registros A para `setex`, `panel`, `joseramon`, `setex-staging`, `panel-staging` → `2.24.8.109` (VPS B).
+- Registros A creados (verificados resolviendo a la IP correcta el 2026-06-14): `setex`, `panel`, `tuti`
+  (tenant demo, renombrado por Julio desde el provisional `joseramon`), `setex-staging`, `panel-staging`
+  → `2.24.8.109` (VPS B), TTL 300.
 - HTTPS gestionado por **Caddy** (Let's Encrypt automático por host) en el VPS B.
 - **Antes del go-live** se evaluará migrar el DNS a Cloudflare para recuperar el escudo proxy y el comodín
   (cambio sin impacto en código: solo nameservers). Pendiente registrado como issue de GitHub.
