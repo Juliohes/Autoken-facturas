@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Write(**/.env)",
+      "Write(**/.env.*)",
+      "Read(**/secrets/**)",
+      "Write(**/secrets/**)",
+      "Bash(rm -rf*)",
+      "Bash(sudo *)",
+      "Bash(chmod -R 777*)",
+      "Bash(curl * | bash)",
+      "Bash(wget * | sh)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(alembic downgrade*)",
+      "Bash(dropdb *)",
+      "Bash(psql * -c DROP*)"
+    ],
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(pytest*)",
+      "Bash(ruff*)",
+      "Bash(black*)",
+      "Bash(mypy*)",
+      "Bash(ls*)",
+      "Bash(cat*)",
+      "Bash(grep*)",
+      "Bash(find*)",
+      "Bash(python --version)",
+      "Bash(pip list*)",
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(gitleaks version *)",
+      "Bash(pre-commit --version)",
+      "Bash(git config *)"
+    ]
+  }
+}
