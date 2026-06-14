@@ -55,17 +55,18 @@
   conversaciones resueltas, reglas aplicadas a admins); README, .gitignore (.env excluido), estructura del
   monorepo, plantillas PR/issues, pre-commit gitleaks (verificado: *no leaks found*).
   > Las *required status checks* de CI se enlazarán en 0.6 cuando exista el pipeline.
-- **Tarea en curso**: **0.2 DNS de `autoken.es`** — DECISIÓN: se gestiona en **Hostinger** durante el
-  desarrollo (no Cloudflare), por comodidad de Julio y porque no aporta nada en staging. Documentado en
-  **ADR-0008** (enmienda a ADR-004). Caddy hace el HTTPS. Cloudflare se valorará antes del go-live (issue de
-  seguimiento). **Acción pendiente de Julio**: añadir 5 registros A (`setex`/`panel`/`joseramon`/
-  `setex-staging`/`panel-staging` → `2.24.8.109`) en hPanel → Zona DNS. Luego Claude verifica con `dig` y cierra.
+- **Tarea cerrada**: **0.2 DNS de `autoken.es`** ✅ — DNS gestionado en **Hostinger** durante el desarrollo
+  (no Cloudflare; ADR-0008, enmienda a ADR-004). Caddy hará el HTTPS. 5 registros A creados y **verificados**
+  resolviendo a `2.24.8.109` (TTL 300): `setex`, `panel`, **`tuti`** (tenant demo, renombrado por Julio desde
+  el provisional `joseramon`), `setex-staging`, `panel-staging`. Cloudflare: issue #2 (revisar antes del go-live).
 - **Nota**: el proyecto vive en **`/opt/app-facturas/`** (no en `/opt`).
-- Luego: 0.3 hardening VPS → 0.4 backend → 0.5 frontend → 0.6 CI → 0.7 ADRs → tag `fase-0-done` + demo.
+- **Próxima tarea**: **0.3 Hardening de los 2 VPS** — necesita acceso SSH de Julio (VPS A `72.60.186.89` SOLO
+  hardening de acceso, intocable lo demás; VPS B `2.24.8.109` completo + Docker/Compose).
+- Luego: 0.4 backend → 0.5 frontend → 0.6 CI → 0.7 ADRs → tag `fase-0-done` + demo.
 
 ### Pendientes de Julio (sección 9 del plan)
 - [x] Autenticación GitHub para Claude Code (hecha vía `gh auth login`).
-- [ ] **0.2**: añadir los 5 registros A en hPanel de Hostinger (DNS en Hostinger, ADR-0008).
+- [x] **0.2**: 5 registros A en hPanel de Hostinger creados y verificados (tenant demo = `tuti`).
 - [ ] Azure Document Intelligence (West Europe, S0), Azure OpenAI (gpt-4o), Mistral (POC), SMTP soporte@autoken.es.
 - [ ] Acceso SSH a los 2 VPS para la tarea 0.3 (hardening).
 - [ ] Excel 51 empresas + 15-30 facturas reales → carpeta `entregas/`.
