@@ -49,3 +49,6 @@ namespace_packages = true
 pythonpath = ["src"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "isolation: suite anti-cruce de tenants (gate de CI bloqueante, plan §8)",
+]
