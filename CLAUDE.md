@@ -59,14 +59,21 @@
   (no Cloudflare; ADR-0008, enmienda a ADR-004). Caddy hará el HTTPS. 5 registros A creados y **verificados**
   resolviendo a `2.24.8.109` (TTL 300): `setex`, `panel`, **`tuti`** (tenant demo, renombrado por Julio desde
   el provisional `joseramon`), `setex-staging`, `panel-staging`. Cloudflare: issue #2 (revisar antes del go-live).
-- **Nota**: el proyecto vive en **`/opt/app-facturas/`** (no en `/opt`).
-- **Próxima tarea**: **0.3 Hardening de los 2 VPS** — necesita acceso SSH de Julio (VPS A `72.60.186.89` SOLO
-  hardening de acceso, intocable lo demás; VPS B `2.24.8.109` completo + Docker/Compose).
-- Luego: 0.4 backend → 0.5 frontend → 0.6 CI → 0.7 ADRs → tag `fase-0-done` + demo.
+- **Tarea cerrada**: **0.3 Hardening VPS** ✅ — acceso por clave SSH dedicada `autoken_deploy`.
+  **VPS B `2.24.8.109` completo**: usuario `deploy` (sudo+clave), SSH solo clave (`AllowUsers deploy`),
+  UFW 22/80/443, fail2ban, unattended-upgrades, root rotada (solo en VPS), Docker 29 + Compose.
+  **VPS A `72.60.186.89` MÍNIMO** (ADR-0009): solo `PasswordAuthentication no`; NO se tocan usuarios/UFW/root.
+  Decisión: construir todo en VPS B y retirar A tras migración (ver [[no-tocar-vps-a]]). Runbook:
+  `docs/runbooks/provisioning.md`. Hallazgos informativos en A: puerto 2222 expone SSH del contenedor prod;
+  staging de v1 corre en prod (no se tocan).
+- **Nota**: el proyecto vive en **`/opt/app-facturas/`** (no en `/opt`). Clave SSH en `~/.ssh/autoken_deploy`.
+- **Próxima tarea**: **0.4 Esqueleto backend** (FastAPI en Docker, `/api/v1/health`, structlog,
+  pydantic-settings, Alembic). Autónoma.
+- Luego: 0.5 frontend → 0.6 CI → 0.7 ADRs → tag `fase-0-done` + demo.
 
 ### Pendientes de Julio (sección 9 del plan)
 - [x] Autenticación GitHub para Claude Code (hecha vía `gh auth login`).
 - [x] **0.2**: 5 registros A en hPanel de Hostinger creados y verificados (tenant demo = `tuti`).
+- [x] **0.3**: acceso SSH entregado; VPS B endurecido completo, VPS A mínimo.
 - [ ] Azure Document Intelligence (West Europe, S0), Azure OpenAI (gpt-4o), Mistral (POC), SMTP soporte@autoken.es.
-- [ ] Acceso SSH a los 2 VPS para la tarea 0.3 (hardening).
 - [ ] Excel 51 empresas + 15-30 facturas reales → carpeta `entregas/`.
