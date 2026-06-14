@@ -20,6 +20,8 @@
 11. **Registro único (Julio, 2026-06-14)**: TODO (decisiones, desvíos, hallazgos, ADRs, runbooks, issues) se
     documenta en el **PLAN MAESTRO** o enlazado desde su **§11 Registro central**. El plan es el sitio único;
     este `CLAUDE.md` es solo el resumen de arranque. Al cerrar cada tarea, actualizar §11 del plan.
+12. **Commit + push por tarea (Julio, 2026-06-14)**: cada tarea deja **commit y `git push`** a GitHub (rama
+    feature publicada + PR). En tareas largas, commits incrementales y push temprano para no perder trabajo.
 
 ## 2. Git y commits (sección 2 del plan)
 - **Repo**: privado `Juliohes/Autoken-facturas` (monorepo: `backend/`, `frontend/`, `infrastructure/`, `docs/`).
