@@ -71,10 +71,16 @@
   Decisión: construir todo en VPS B y retirar A tras migración (ver [[no-tocar-vps-a]]). Runbook:
   `docs/runbooks/provisioning.md`. Hallazgos informativos en A: puerto 2222 expone SSH del contenedor prod;
   staging de v1 corre en prod (no se tocan).
+- **Tarea cerrada**: **0.4 Esqueleto backend** ✅ (PR #8) — FastAPI en Docker, `/api/v1/health`, structlog
+  + correlation id, pydantic-settings, Alembic. Tests verdes; ruff/mypy OK.
+- **Tarea cerrada**: **0.5 Esqueleto frontend** ✅ — React 18 + Vite + TS + Tailwind + PWA (manifest + SW);
+  cliente API **autogenerado** desde el OpenAPI del backend (openapi-typescript + openapi-fetch) consultando
+  `/api/v1/health` con TanStack Query. Build/typecheck/lint OK; E2E proxy verificado.
 - **Nota**: el proyecto vive en **`/opt/app-facturas/`** (no en `/opt`). Clave SSH en `~/.ssh/autoken_deploy`.
-- **Próxima tarea**: **0.4 Esqueleto backend** (FastAPI en Docker, `/api/v1/health`, structlog,
-  pydantic-settings, Alembic). Autónoma.
-- Luego: 0.5 frontend → 0.6 CI → 0.7 ADRs → tag `fase-0-done` + demo.
+  Toolchain del entorno: Python 3.12 + venv en `backend/.venv`; **Node 20** + npm; Docker 29.
+- **Próxima tarea**: **0.6 CI completo** (GitHub Actions: lint+tipos+tests+gitleaks+audit+build; enlazar
+  required status checks en la protección de ramas). Autónoma.
+- Luego: 0.7 ADRs → tag `fase-0-done` + demo + **STOP** para aprobación de Julio.
 
 ### Pendientes de Julio (sección 9 del plan)
 - [x] Autenticación GitHub para Claude Code (hecha vía `gh auth login`).
