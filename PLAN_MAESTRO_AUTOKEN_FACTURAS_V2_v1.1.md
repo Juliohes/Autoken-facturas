@@ -298,6 +298,18 @@ La asignación inicial propuesta por Julio (v2-prod en el VPS de la v1) se **inv
 - **D.4 Corte de dominio** — CA: `setex-facturas.es` pasa a apuntar (custom domain) a la v2; v1 queda en solo-lectura 30 días como red de seguridad; usuarios entran con sus mismas credenciales y ven la misma interfaz.
 - **D.5 Smoke test con Setex** — CA: un usuario real captura una factura real de punta a punta; Julio verifica panel y export.
 
+### FASE RETIRADA — Limpieza del VPS A (≈ +30 días tras el go-live)
+> Se ejecuta cuando la v1 ya no es necesaria (tras los 30 días de solo-lectura) y el VPS A deja de ser
+> producción. Hasta entonces el VPS A NO se toca más allá del hardening mínimo ya aplicado (ver ADR-0009).
+- **R.1 Hardening completo + limpieza del VPS A `72.60.186.89`** — CA: confirmada la retirada de la v1, parar y
+  eliminar los contenedores de la v1 (`setex-prod-*`, `setex-staging-*`, `traefik`), revisar/cerrar el puerto
+  `2222` (SSH de contenedor expuesto, hallazgo de la tarea 0.3) y demás puertos no necesarios, y aplicar el
+  hardening COMPLETO que se difirió: usuario `deploy` dedicado + `AllowUsers`, `PermitRootLogin no`, UFW
+  (con `ufw-docker` si se reinstala Docker), rotación de la contraseña root, y limpieza de usuarios
+  preexistentes no necesarios (`devuser`, `claude`, etc., previa confirmación de Julio). Resultado: VPS A
+  convertido en **STAGING definitivo**, 100% Docker, sin herencias. Actualizar `docs/runbooks/provisioning.md`.
+  **Origen del desvío**: ADR-0009 (hardening mínimo en 0.3 por ser producción activa).
+
 ### CARRIL PARALELO (post-MVP, no bloquea nada)
 - **P.1 Verifactu** (objetivo: operativo antes de 01/2027): módulo `verifactu` (hash encadenado por empresa emisora, QR, registro de eventos RRSIF, envío AEAT), inmutabilidad de emitidas tras emisión (solo rectificativas), gestión de certificados cifrada por tenant, declaración responsable de Julio como productor de software. Requisito previo: decidir modelo de certificados (cada empresa el suyo vs asesoría como colaborador social) — preguntar a Setex.
 - **P.2 Factura electrónica B2B (RD 238/2026)**: export Facturae/UBL + estados de factura. Modelo de datos ya preparado.
@@ -352,4 +364,54 @@ Para CADA endpoint que toque datos:
 3. FASE 1 (POC OCR) → decisión de motores con datos → ADR-007.
 4. Sprints 1→5 con aprobación de Julio al cierre de cada uno.
 5. Despliegue en `2.24.8.109` + migración nocturna de Setex + corte de `setex-facturas.es`.
-6. +30 días: retirada de la v1, limpieza de `72.60.186.89` → staging definitivo.
+6. +30 días: retirada de la v1, limpieza de `72.60.186.89` → staging definitivo (tarea **R.1**).
+
+---
+
+## 11. REGISTRO CENTRAL — fuente única de documentación (REGLA)
+
+> **REGLA (Julio, 2026-06-14)**: TODO lo que se decide, desvía o documenta queda **aquí o enlazado desde aquí**.
+> El PLAN MAESTRO es el único sitio donde "se apunta todo". Esta sección se actualiza al cerrar cada tarea y
+> cada vez que hay una decisión o desvío. El `CLAUDE.md` es solo el resumen operativo de arranque.
+
+### 11.1 Decisiones arquitectónicas (ADRs) — `docs/adr/`
+| ADR | Título | Estado |
+|---|---|---|
+| ADR-001..006 | Reservados (se redactan en la tarea 0.7) | pendiente |
+| ADR-007 | Motores OCR ganadores (tras Fase 1) | pendiente |
+| **ADR-0008** | DNS en Hostinger durante el desarrollo (enmienda a ADR-004) | aceptado |
+| **ADR-0009** | Hardening mínimo del VPS A; construir todo en VPS B | aceptado |
+
+### 11.2 Runbooks — `docs/runbooks/`
+| Runbook | Contenido |
+|---|---|
+| `provisioning.md` | Hardening y acceso de los VPS (tarea 0.3), claves SSH, Docker |
+| `rollback.md` | (pendiente) Vuelta atrás: tag + Alembic downgrade + restore |
+
+### 11.3 Desvíos del plan registrados
+| Fecha | Desvío | Dónde queda | Tarea de cierre |
+|---|---|---|---|
+| 2026-06-13 | DNS en Hostinger en vez de Cloudflare (durante desarrollo) | ADR-0008 | Issue #2 (revisar antes del go-live) |
+| 2026-06-13 | Proyecto reubicado en `/opt/app-facturas/` (no en `/opt`) | CLAUDE.md | — |
+| 2026-06-14 | Tenant demo renombrado `joseramon` → `tuti` | CLAUDE.md / ADR-0008 | — |
+| 2026-06-14 | Hardening mínimo del VPS A (es producción activa) | ADR-0009 | **R.1** (FASE RETIRADA, +30 días) |
+
+### 11.4 Hallazgos de seguridad abiertos (informativos)
+| Hallazgo | Máquina | Acción |
+|---|---|---|
+| Puerto `2222` expone el SSH del contenedor `setex-prod-backend` a Internet | VPS A | Revisar en **R.1** (tocar la v1 requiere OK de Julio) |
+| Staging de la v1 corre en la máquina de producción | VPS A | Se resuelve al retirar la v1 (**R.1**) |
+
+### 11.5 Issues de seguimiento (GitHub)
+| # | Título | Motivo |
+|---|---|---|
+| #2 | Migrar DNS a Cloudflare antes del go-live | Pendiente derivado de ADR-0008 |
+
+### 11.6 Estado de tareas (Fase 0)
+| Tarea | Estado | PR |
+|---|---|---|
+| 0.1 Repo GitHub | ✅ | #1 |
+| 0.2 DNS | ✅ | #3, #4 |
+| 0.3 Hardening VPS | ✅ | #5 |
+| 0.4 Esqueleto backend | ⏳ en curso | — |
+| 0.5 Frontend · 0.6 CI · 0.7 ADRs | pendiente | — |
