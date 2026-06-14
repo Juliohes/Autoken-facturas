@@ -17,6 +17,9 @@
 8. **Código completo**: nunca `...` ni TODOs silenciosos. Pendiente → issue en GitHub.
 9. Toda decisión arquitectónica → ADR en `docs/adr/NNN-titulo.md`.
 10. **Idioma**: código e identificadores en inglés; comentarios de dominio, ADRs y docs en español.
+11. **Registro único (Julio, 2026-06-14)**: TODO (decisiones, desvíos, hallazgos, ADRs, runbooks, issues) se
+    documenta en el **PLAN MAESTRO** o enlazado desde su **§11 Registro central**. El plan es el sitio único;
+    este `CLAUDE.md` es solo el resumen de arranque. Al cerrar cada tarea, actualizar §11 del plan.
 
 ## 2. Git y commits (sección 2 del plan)
 - **Repo**: privado `Juliohes/Autoken-facturas` (monorepo: `backend/`, `frontend/`, `infrastructure/`, `docs/`).
