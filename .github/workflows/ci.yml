@@ -1,0 +1,148 @@
+name: CI
+
+# Pipeline de la sección 2.5 del plan. Se ejecuta en cada PR a develop/main
+# y en push a esas ramas.
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: backend (lint + tipos + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: autoken_app
+          POSTGRES_PASSWORD: autoken
+          POSTGRES_DB: autoken_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U autoken_app -d autoken_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Instalar dependencias
+        run: pip install -e ".[dev]"
+      - name: Ruff (lint)
+        run: ruff check src tests
+      - name: Ruff (formato)
+        run: ruff format --check src tests
+      - name: Mypy (tipos)
+        run: mypy src
+      - name: Pytest
+        env:
+          DATABASE_URL: postgresql+asyncpg://autoken_app:autoken@localhost:5432/autoken_test
+          REDIS_URL: redis://localhost:6379/0
+        run: pytest -q
+
+  tenant-isolation:
+    name: gate aislamiento de tenants
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Instalar dependencias
+        run: pip install -e ".[dev]"
+      - name: Suite anti-cruce de tenants (gate bloqueante, plan §8)
+        run: pytest -m isolation -q
+
+  frontend:
+    name: frontend (typecheck + lint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Generar cliente OpenAPI
+        run: npm run gen:api
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+
+  security:
+    name: secretos + dependencias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks (detección de secretos)
+        run: |
+          VER=8.18.4
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" -o /tmp/gl.tgz
+          tar xzf /tmp/gl.tgz -C /tmp gitleaks
+          /tmp/gitleaks detect --source . --no-banner --redact
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pip-audit (dependencias backend) — informativo
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip install -e ./backend
+          pip-audit || true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: npm audit (dependencias frontend) — informativo
+        continue-on-error: true
+        working-directory: frontend
+        run: npm audit --audit-level=high || true
+
+  docker-build:
+    name: build imagen backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build imagen del backend (sin push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          tags: autoken/api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
