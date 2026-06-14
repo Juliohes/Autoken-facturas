@@ -413,5 +413,6 @@ Para CADA endpoint que toque datos:
 | 0.1 Repo GitHub | ✅ | #1 |
 | 0.2 DNS | ✅ | #3, #4 |
 | 0.3 Hardening VPS | ✅ | #5 |
-| 0.4 Esqueleto backend | ⏳ en curso | — |
-| 0.5 Frontend · 0.6 CI · 0.7 ADRs | pendiente | — |
+| 0.4 Esqueleto backend | ✅ | #8 |
+| 0.5 Esqueleto frontend | ⏳ en curso | — |
+| 0.6 CI · 0.7 ADRs | pendiente | — |
