@@ -383,9 +383,10 @@ Para CADA endpoint que toque datos:
 | **ADR-0004** | Un solo dominio `autoken.es` con subdominios de primer nivel | aceptado (matizado por 0008) |
 | **ADR-0005** | Hostinger + Docker Compose; portable a AWS | aceptado (matizado por 0009) |
 | **ADR-0006** | Recibidas editables (auditado); emitidas inmutables (futuro Verifactu) | aceptado |
-| ADR-0007 | Motores OCR ganadores (tras Fase 1) | pendiente |
+| ADR-0007 | Motores OCR ganadores (tras Fase 1) | pendiente (arquitectura y candidatos decididos 2026-06-15, ver §11.7; ganador tras bench) |
 | **ADR-0008** | DNS en Hostinger durante el desarrollo (enmienda a ADR-0004) | aceptado |
 | **ADR-0009** | Hardening mínimo del VPS A; construir todo en VPS B | aceptado |
+| **ADR-0010** | Capa de verificación determinista "tipo DNI" (dígitos de control CIF/NIF módulo-23, IBAN módulo-97, consulta VIES/AEAT, cuadre aritmético) común a todos los motores | aceptado (2026-06-15) |
 
 ### 11.2 Runbooks — `docs/runbooks/`
 | Runbook | Contenido |
@@ -411,6 +412,22 @@ Para CADA endpoint que toque datos:
 | # | Título | Motivo |
 |---|---|---|
 | #2 | Migrar DNS a Cloudflare antes del go-live | Pendiente derivado de ADR-0008 |
+
+### 11.7 Decisión de Fase 1 — arquitectura y candidatos OCR (2026-06-15)
+> Tras investigación comparativa (3 análisis IA + verificación web) y revisión con Julio. La arquitectura
+> híbrida del plan (§4) queda confirmada como estándar de mercado. La elección final del ganador se hace por
+> **bench con facturas reales** (tarea 1.2) → ADR-0007. Requisitos nuevos de Julio incorporados: (a) muchas
+> plantillas distintas → motores generalistas, sin entrenar plantillas; (b) las facturas pasan por el servidor
+> de Julio → se evalúa motor self-hosted; (c) "verificación exacta tipo DNI" → ADR-0010.
+
+> **Revisión 2026-06-16**: actualizado el lineup con los modelos líderes a junio 2026 (ranking OCR Arena: #1 Gemini 3 Flash, #2 Gemini 3 Pro, #3 Claude Opus 4.6, #4 GPT-5.2). Cuentas necesarias: 3 (Azure, Google Cloud —cubre Gemini **y** Claude vía Vertex—, Mistral). Qwen3-VL y PaddleOCR self-hosted.
+
+- **Capa LECTURA (bench)**: Azure DocIntel `prebuilt-invoice` v4 (cloud UE, confianza + bounding boxes) · **PaddleOCR-VL self-hosted** (en el servidor, datos no salen, Apache 2.0, ~8,5 GB VRAM o CPU para el POC) · **Qwen3-VL** (mejor VLM OCR open source, JSON de facturas, self-hostable).
+- **Capa 2º LECTOR / semántica (bench)**: **Gemini 3 Flash + Gemini 3 Pro** vía Vertex AI **región UE europe-west4** (retención cero; Flash es nº1 de OCR Arena, barato/rápido = por defecto, Pro para difíciles) · **Claude Opus 4.6** vía Vertex UE (misma cuenta Google; #3 ranking, fuerte en JSON estricto y baja alucinación) · familia GPT en Azure: **`gpt-4.1`** (disponible ya tras cuota), **`gpt-5.1`** cuando se conceda cuota · Mistral OCR 3 (coste 2 $/1.000 págs).
+- **Capa VERIFICACIÓN EXACTA "tipo DNI" (ADR-0010, determinista, en TODOS los motores)**: control CIF/NIF/NIE (módulo-23), IBAN (módulo-97), consulta online VIES/AEAT (confirma que el CIF existe y pertenece a la empresa), cuadre aritmético de tramos/total, fecha plausible. Los campos numéricos clave no dependen de la lectura de la IA: se verifican matemáticamente.
+- **Enrutado por confianza**: alta→automático · media→segunda lectura · baja/descuadre→revisión humana.
+- **Residencia UE confirmada** para todos los candidatos (Azure UE, Vertex europe-west4, Mistral UE, PaddleOCR/Qwen en el propio servidor).
+- **Regiones Azure (estado 2026-06-16)**: Document Intelligence en **West Europe** (`autoken-docintel-we`); Azure OpenAI en **Sweden Central** (`autoken-openai-sweden`) porque West Europe daba cuota 0 y gpt-5.1 solo se ofrecía "Global" (rompe RGPD). Tipo de despliegue obligatorio: **Data Zone Standard** o **Standard regional**; NUNCA **Global**. Tener 2 regiones UE no afecta a la residencia. **Pendiente**: aprobación de cuota de Microsoft para `gpt-4.1`/`gpt-5.1` Data Zone Standard en Sweden Central (solicitada 2026-06-16, 30.000 TPM, 1-2 días hábiles).
 
 ### 11.6 Estado de tareas (Fase 0)
 | Tarea | Estado | PR |

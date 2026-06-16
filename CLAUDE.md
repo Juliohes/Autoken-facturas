@@ -90,5 +90,16 @@
 - [x] Autenticación GitHub para Claude Code (hecha vía `gh auth login`).
 - [x] **0.2**: 5 registros A en hPanel de Hostinger creados y verificados (tenant demo = `tuti`).
 - [x] **0.3**: acceso SSH entregado; VPS B endurecido completo, VPS A mínimo.
-- [ ] Azure Document Intelligence (West Europe, S0), Azure OpenAI (gpt-4o), Mistral (POC), SMTP soporte@autoken.es.
-- [ ] Excel 51 empresas + 15-30 facturas reales → carpeta `entregas/`.
+- **Fase 1 — candidatos OCR (rev. 2026-06-16, ver plan §11.7 + ADR-0007/0010)**: bench de Azure DocIntel (✅) +
+  **Gemini 3 Flash/Pro** + **Claude Opus 4.6** (ambos vía Vertex UE, misma cuenta Google) + familia GPT en Azure
+  (`gpt-4.1`, `gpt-5.1` tras cuota) + **Mistral OCR 3** + **PaddleOCR-VL** y **Qwen3-VL** self-hosted (los monta
+  Claude Code). Cuentas que necesita Julio: 3 (Azure ✓, Google Cloud, Mistral). Capa de verificación "tipo DNI"
+  (CIF/NIF mód-23, IBAN mód-97, VIES/AEAT, cuadre aritmético) común a todos → **implementada** en
+  `backend/src/ocr/verification.py` (PR `feature/adr0010-verification-tipo-dni`, 26 tests verdes).
+- **Azure (estado 2026-06-16)**: DocIntel en West Europe (`autoken-docintel-we`, clave ya en uso), Azure OpenAI
+  en **Sweden Central** (`autoken-openai-sweden`); **cuota solicitada** (gpt-4.1/gpt-5.1 Data Zone Standard,
+  30.000 TPM) pendiente de aprobación (1-2 días). Despliegue obligatorio Data Zone Standard / Standard, NUNCA Global.
+- [ ] Pendientes de Julio para arrancar Fase 1: terminar despliegue gpt-4o + pegar claves en `kk.txt`;
+      cuenta **Google Cloud** (Gemini/Vertex UE); cuenta **Mistral**; **15-30 facturas reales** →
+      `entregas/facturas/` (carpeta vacía, BLOQUEA el bench). PaddleOCR no requiere nada de Julio.
+- [ ] (No bloquea Fase 1) SMTP soporte@autoken.es; Excel 51 empresas → `entregas/`.
