@@ -8,6 +8,8 @@
 *.pfx
 secrets/
 .secrets/
+# Ficheros temporales de trabajo (credenciales, prompts, IDs) — NUNCA al repo
+kk*.txt
 *.fernet
 doppler.yaml
 
