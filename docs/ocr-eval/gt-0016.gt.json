@@ -1,0 +1,29 @@
+{
+  "id": "gt-0016",
+  "imagen": "img/gt-0016.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.21.57.jpeg",
+  "estado": "borrador",
+  "dificultad": "facil",
+  "notas": "[orientacion: ccw] Nombre comercial 'Teknollab'; NIF emisor no visible. Base 815.53 + IVA 21% 171.26 = 986.79.",
+  "campos_pendientes": [
+    "emisor_nif",
+    "emisor_nombre"
+  ],
+  "campos": {
+    "numero": "2026 0069",
+    "fecha": "2026-03-11",
+    "emisor_nombre": "Teknollab",
+    "emisor_nif": null,
+    "receptor_nombre": "ESTUDIO INGHERVI S.L.U.",
+    "receptor_nif": "B06400980",
+    "tramos": [
+      {
+        "base": "815.53",
+        "iva_pct": "21",
+        "cuota": "171.26"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "986.79"
+  }
+}

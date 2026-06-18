@@ -1,0 +1,25 @@
+{
+  "id": "gt-0018",
+  "imagen": "img/gt-0018.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.22.05.jpeg",
+  "estado": "borrador",
+  "dificultad": "media",
+  "notas": "[orientacion: ccw] Factura de luz Repsol. Desglose Termino fijo 29.45 + Energia 77.08 + Otros 1.48 + Impuestos 29.30 = 137.31. Sin base imponible ni %IVA explicitos -> tramos pendiente. NIF emisor/receptor no visibles.",
+  "campos_pendientes": [
+    "emisor_nif",
+    "receptor_nif",
+    "receptor_nombre",
+    "tramos"
+  ],
+  "campos": {
+    "numero": "61077316943",
+    "fecha": "2026-01-22",
+    "emisor_nombre": "Repsol",
+    "emisor_nif": null,
+    "receptor_nombre": "ESTUDIO INGHERVY, S.L.",
+    "receptor_nif": null,
+    "tramos": null,
+    "irpf_cuota": null,
+    "total": "137.31"
+  }
+}

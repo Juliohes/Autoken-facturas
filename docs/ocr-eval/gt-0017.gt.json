@@ -1,0 +1,25 @@
+{
+  "id": "gt-0017",
+  "imagen": "img/gt-0017.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.22.05 (1).jpeg",
+  "estado": "borrador",
+  "dificultad": "media",
+  "notas": "[orientacion: ccw] Liquidacion del Impuesto de Vehiculos de Traccion Mecanica (IVTM), no factura con IVA -> sin tramos. Periodo pago 12/03-20/04/2026; sin fecha de emision clara. Referencia 2600264732 usada como numero.",
+  "campos_pendientes": [
+    "emisor_nif",
+    "fecha",
+    "numero",
+    "receptor_nif"
+  ],
+  "campos": {
+    "numero": "2600264732",
+    "fecha": null,
+    "emisor_nombre": "AYUNTAMIENTO DE BADAJOZ",
+    "emisor_nif": null,
+    "receptor_nombre": "ESTUDIO INGHERVI SL",
+    "receptor_nif": "B06049880",
+    "tramos": [],
+    "irpf_cuota": null,
+    "total": "113.16"
+  }
+}

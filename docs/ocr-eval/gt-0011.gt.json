@@ -1,0 +1,26 @@
+{
+  "id": "gt-0011",
+  "imagen": "img/gt-0011.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.21.54 (2).jpeg",
+  "estado": "borrador",
+  "dificultad": "facil",
+  "notas": "[orientacion: ccw] Venta de vehiculo BMW (importe alto). Base 52916.05 + IVA 21% 11112.37 = 64028.42, cuadra.",
+  "campos_pendientes": [],
+  "campos": {
+    "numero": "VNB-26-0030",
+    "fecha": "2026-03-12",
+    "emisor_nombre": "CERES MOTOR S.L. (MANDEL MOTOR)",
+    "emisor_nif": "B10191625",
+    "receptor_nombre": "ESTUDIO INGHERVI S.L.",
+    "receptor_nif": "B06400980",
+    "tramos": [
+      {
+        "base": "52916.05",
+        "iva_pct": "21",
+        "cuota": "11112.37"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "64028.42"
+  }
+}

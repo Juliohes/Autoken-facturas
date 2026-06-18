@@ -1,0 +1,25 @@
+{
+  "id": "gt-0015",
+  "imagen": "img/gt-0015.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.21.57 (1).jpeg",
+  "estado": "borrador",
+  "dificultad": "dificil",
+  "notas": "[orientacion: ccw] Factura de agua Aqualia (suministro). Conceptos multiples con tipos de IVA mezclados y parte de canon exento -> sin tramo base/iva/cuota limpio (tramos pendiente). IMPORTE IVA indicado 2.31. TOTAL A PAGAR 26.00.",
+  "campos_pendientes": [
+    "emisor_nif",
+    "numero",
+    "receptor_nif",
+    "tramos"
+  ],
+  "campos": {
+    "numero": "1841260IP0006814",
+    "fecha": "2026-03-24",
+    "emisor_nombre": "FCC Aqualia, S.A.",
+    "emisor_nif": "A26019992",
+    "receptor_nombre": "ESTUDIO INGHERVI S.L.",
+    "receptor_nif": null,
+    "tramos": null,
+    "irpf_cuota": null,
+    "total": "26.00"
+  }
+}

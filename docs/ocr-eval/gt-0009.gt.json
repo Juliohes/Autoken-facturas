@@ -1,0 +1,30 @@
+{
+  "id": "gt-0009",
+  "imagen": "img/gt-0009.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.21.53.jpeg",
+  "estado": "borrador",
+  "dificultad": "media",
+  "notas": "[orientacion: up] Base 129.05 + IVA 21% 27.10 = 156.15, cuadra. NIF emisor 08843489B con leve duda.",
+  "campos_pendientes": [
+    "emisor_nif",
+    "fecha",
+    "numero"
+  ],
+  "campos": {
+    "numero": "2026 0124",
+    "fecha": "2026-05-18",
+    "emisor_nombre": "Ana Maria Rosa Mateos",
+    "emisor_nif": "08843489B",
+    "receptor_nombre": "ESTUDIO INGHERVI S.L.U.",
+    "receptor_nif": "B06400980",
+    "tramos": [
+      {
+        "base": "129.05",
+        "iva_pct": "21",
+        "cuota": "27.10"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "156.15"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "gt-0001",
+  "imagen": "img/gt-0001.pdf",
+  "origen": "factura-2.pdf",
+  "estado": "verificado",
+  "dificultad": "facil",
+  "notas": "PDF digital nativo. Exento de IVA (Art.20.Uno.16 LIVA), tramo al 0%. IRPF no sujeto -> null. IBAN ES45 0049 1246 6828 1004 9350. Concepto: comisiones por mediacion de seguros.",
+  "campos_pendientes": [],
+  "campos": {
+    "numero": "04/2026",
+    "fecha": "2026-05-18",
+    "emisor_nombre": "LUMAPA2 BROKERS SL",
+    "emisor_nif": "B56922321",
+    "receptor_nombre": "HISPALAR NEW CENTURY S.A.",
+    "receptor_nif": "A87563888",
+    "tramos": [{"base": "996.40", "iva_pct": "0", "cuota": "0.00"}],
+    "irpf_cuota": null,
+    "total": "996.40"
+  }
+}

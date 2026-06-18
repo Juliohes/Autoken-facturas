@@ -1,0 +1,26 @@
+{
+  "id": "gt-0020",
+  "imagen": "img/gt-0020.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.22.06.jpeg",
+  "estado": "borrador",
+  "dificultad": "media",
+  "notas": "[orientacion: cw] Apaisada (rotacion cw). Base 750 + IVA 21% 157.50 = 907.50, cuadra.",
+  "campos_pendientes": [],
+  "campos": {
+    "numero": "26F00007",
+    "fecha": "2026-03-25",
+    "emisor_nombre": "Estudio INGHERVI s.l.u.",
+    "emisor_nif": "B06400980",
+    "receptor_nombre": "JOSE FELIX RODRIGUEZ DELGADO",
+    "receptor_nif": "44779513P",
+    "tramos": [
+      {
+        "base": "750.00",
+        "iva_pct": "21",
+        "cuota": "157.50"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "907.50"
+  }
+}

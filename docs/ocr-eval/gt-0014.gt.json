@@ -1,0 +1,28 @@
+{
+  "id": "gt-0014",
+  "imagen": "img/gt-0014.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.21.55.jpeg",
+  "estado": "borrador",
+  "dificultad": "facil",
+  "notas": "[orientacion: ccw] Teknolweb. NIF emisor 16834345B (ultimo caracter B/D dudoso). HP Impresora Smart Tank 5106. Base 148.68 + IVA 21% 31.22 = 179.90.",
+  "campos_pendientes": [
+    "emisor_nif"
+  ],
+  "campos": {
+    "numero": "2026 0095",
+    "fecha": "2026-04-01",
+    "emisor_nombre": "Ana Maria Rosa Mateos",
+    "emisor_nif": "16834345B",
+    "receptor_nombre": "ESTUDIO INGHERVI S.L.U.",
+    "receptor_nif": "B06400980",
+    "tramos": [
+      {
+        "base": "148.68",
+        "iva_pct": "21",
+        "cuota": "31.22"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "179.90"
+  }
+}

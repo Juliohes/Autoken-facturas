@@ -1,0 +1,29 @@
+{
+  "id": "gt-0004",
+  "imagen": "img/gt-0004.png",
+  "origen": "Captura de pantalla 2026-06-16 181644.png",
+  "estado": "borrador",
+  "dificultad": "media",
+  "notas": "[orientacion: up] Coca-Cola European Partners, 'NOTA ENTR' (nota de entrega). Banda de impuestos algo borrosa, coherente con totales. Sin CIF emisor legible. Anotacion manuscrita '910 -5'.",
+  "campos_pendientes": [
+    "emisor_nif",
+    "tramos"
+  ],
+  "campos": {
+    "numero": "4533514949",
+    "fecha": "2026-06-03",
+    "emisor_nombre": "Coca-Cola European Partners",
+    "emisor_nif": null,
+    "receptor_nombre": "LAREU JIMENEZ JORGE ANTONIO",
+    "receptor_nif": "08835156M",
+    "tramos": [
+      {
+        "base": "36.43",
+        "iva_pct": "21",
+        "cuota": "7.65"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "44.08"
+  }
+}

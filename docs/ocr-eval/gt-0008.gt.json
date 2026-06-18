@@ -1,0 +1,29 @@
+{
+  "id": "gt-0008",
+  "imagen": "img/gt-0008.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.21.53 (2).jpeg",
+  "estado": "borrador",
+  "dificultad": "media",
+  "notas": "[orientacion: up] Honorarios 120 + IVA 25.20 = 145.20, cuadra. Nº factura '28/01' poco claro. Casilla %IRPF vacia.",
+  "campos_pendientes": [
+    "emisor_nif",
+    "numero"
+  ],
+  "campos": {
+    "numero": "28/01",
+    "fecha": "2026-01-08",
+    "emisor_nombre": "JUAN MENDEZ ASESORIA INTEGRAL DE EMPRESAS SL",
+    "emisor_nif": "B06846298",
+    "receptor_nombre": "ESTUDIO INGHERVI SLU",
+    "receptor_nif": "B06400980",
+    "tramos": [
+      {
+        "base": "120.00",
+        "iva_pct": "21",
+        "cuota": "25.20"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "145.20"
+  }
+}

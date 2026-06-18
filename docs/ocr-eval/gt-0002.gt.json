@@ -1,0 +1,20 @@
+{
+  "id": "gt-0002",
+  "imagen": "img/gt-0002.pdf",
+  "origen": "Factura pago VFR Lite - Julio Hernandez.pdf",
+  "estado": "verificado",
+  "dificultad": "facil",
+  "notas": "PDF digital recuperado de una respuesta HTTP guardada con cabeceras (se removieron los primeros 201 bytes hasta %PDF-). Factura extranjera (EE.UU.) en formato 'Invoice', SIN desglose de IVA -> tramos vacio. Emisor con EIN estadounidense 39-2932994 (no es CIF espanol; la capa de verificacion lo marcara). Receptor solo 'Julio', sin NIF impreso. Vence 22/04/2026. Concepto: Renovacion Formacion Inversion Multimercado.",
+  "campos_pendientes": [],
+  "campos": {
+    "numero": "I260943",
+    "fecha": "2026-04-07",
+    "emisor_nombre": "Boutique Holdings LLC",
+    "emisor_nif": "39-2932994",
+    "receptor_nombre": "Julio",
+    "receptor_nif": null,
+    "tramos": [],
+    "irpf_cuota": null,
+    "total": "300.00"
+  }
+}

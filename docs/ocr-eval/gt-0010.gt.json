@@ -1,0 +1,29 @@
+{
+  "id": "gt-0010",
+  "imagen": "img/gt-0010.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.21.54 (1).jpeg",
+  "estado": "borrador",
+  "dificultad": "media",
+  "notas": "[orientacion: ccw] Factura Movistar movil (apaisada, rotacion ccw). NIF emisor no legible. Base 23.05 + IVA 4.84 = 27.89.",
+  "campos_pendientes": [
+    "emisor_nif",
+    "numero"
+  ],
+  "campos": {
+    "numero": "28-D6M0-051004",
+    "fecha": "2026-04-01",
+    "emisor_nombre": "Movistar (Telefonica)",
+    "emisor_nif": null,
+    "receptor_nombre": "ESTUDIO INGHERVI, S.L.",
+    "receptor_nif": "B06400980",
+    "tramos": [
+      {
+        "base": "23.05",
+        "iva_pct": "21",
+        "cuota": "4.84"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "27.89"
+  }
+}

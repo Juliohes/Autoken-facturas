@@ -1,0 +1,28 @@
+{
+  "id": "gt-0003",
+  "imagen": "img/gt-0003.png",
+  "origen": "Captura de pantalla 2026-06-16 181602.png",
+  "estado": "borrador",
+  "dificultad": "media",
+  "notas": "[orientacion: up] Coca-Cola European Partners (Esplugues de Llobregat, Barcelona). Documento tipo 'NOTA ENTR' (nota de entrega), no factura formal. Pago CREDITO. No aparece CIF del emisor legible. REC 0%. Anotacion manuscrita '910 +3'.",
+  "campos_pendientes": [
+    "emisor_nif"
+  ],
+  "campos": {
+    "numero": "4533274561",
+    "fecha": "2026-05-27",
+    "emisor_nombre": "Coca-Cola European Partners",
+    "emisor_nif": null,
+    "receptor_nombre": "LAREU JIMENEZ JORGE ANTONIO",
+    "receptor_nif": "08835156M",
+    "tramos": [
+      {
+        "base": "135.53",
+        "iva_pct": "21",
+        "cuota": "28.46"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "163.99"
+  }
+}

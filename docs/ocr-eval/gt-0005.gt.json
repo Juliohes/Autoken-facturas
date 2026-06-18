@@ -1,0 +1,36 @@
+{
+  "id": "gt-0005",
+  "imagen": "img/gt-0005.png",
+  "origen": "Captura de pantalla 2026-06-16 181738.png",
+  "estado": "borrador",
+  "dificultad": "facil",
+  "notas": "[orientacion: up] ALEX DISTRIBUCIONES (Roberto Ramirez Sanchez S.L., Badajoz). Multi-tramo IVA 21/4/10. Sellada PAGADO, pago Tarjeta. OJO: bases+cuotas=146.17 vs total 146.16 (descuadre 0.01, revisar una base).",
+  "campos_pendientes": ["tramos"],
+  "campos": {
+    "numero": "01F/6.961",
+    "fecha": "2026-06-11",
+    "emisor_nombre": "ALEX DISTRIBUCIONES (Roberto Ramirez Sanchez S.L.)",
+    "emisor_nif": "B06695381",
+    "receptor_nombre": "LAREU JIMENEZ, JORGE A.",
+    "receptor_nif": "08835156M",
+    "tramos": [
+      {
+        "base": "36.55",
+        "iva_pct": "21",
+        "cuota": "7.68"
+      },
+      {
+        "base": "49.96",
+        "iva_pct": "4",
+        "cuota": "2.00"
+      },
+      {
+        "base": "45.44",
+        "iva_pct": "10",
+        "cuota": "4.54"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "146.16"
+  }
+}

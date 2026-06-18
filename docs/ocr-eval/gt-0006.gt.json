@@ -1,0 +1,36 @@
+{
+  "id": "gt-0006",
+  "imagen": "img/gt-0006.png",
+  "origen": "Captura de pantalla 2026-06-16 181753.png",
+  "estado": "borrador",
+  "dificultad": "facil",
+  "notas": "[orientacion: up] ALEX DISTRIBUCIONES (Roberto Ramirez Sanchez S.L., Badajoz). Multi-tramo IVA 21/10/4. Cuadra: bases 144.08 + cuotas 21.66 = 165.74.",
+  "campos_pendientes": [],
+  "campos": {
+    "numero": "01F/6.809",
+    "fecha": "2026-06-08",
+    "emisor_nombre": "ALEX DISTRIBUCIONES (Roberto Ramirez Sanchez S.L.)",
+    "emisor_nif": "B06695381",
+    "receptor_nombre": "LAREU JIMENEZ, JORGE A.",
+    "receptor_nif": "08835156M",
+    "tramos": [
+      {
+        "base": "80.08",
+        "iva_pct": "21",
+        "cuota": "16.83"
+      },
+      {
+        "base": "37.92",
+        "iva_pct": "10",
+        "cuota": "3.79"
+      },
+      {
+        "base": "26.08",
+        "iva_pct": "4",
+        "cuota": "1.04"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "165.74"
+  }
+}

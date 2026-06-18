@@ -1,0 +1,31 @@
+{
+  "id": "gt-0013",
+  "imagen": "img/gt-0013.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.21.54.jpeg",
+  "estado": "borrador",
+  "dificultad": "dificil",
+  "notas": "[orientacion: up] Contenido girado ~180 grados dentro del recorte; transcrito rotado. CERES MOTOR S.L. Matriculacion 1771AJD. Base 495.87 + IVA 21% 104.13 = 600.00.",
+  "campos_pendientes": [
+    "emisor_nif",
+    "fecha",
+    "numero",
+    "tramos"
+  ],
+  "campos": {
+    "numero": "CB-26-0035",
+    "fecha": "2026-03-12",
+    "emisor_nombre": "CERES MOTOR, S.L.",
+    "emisor_nif": "B10191625",
+    "receptor_nombre": "ESTUDIO INGHERVI S.L.",
+    "receptor_nif": "B06400980",
+    "tramos": [
+      {
+        "base": "495.87",
+        "iva_pct": "21",
+        "cuota": "104.13"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "600.00"
+  }
+}

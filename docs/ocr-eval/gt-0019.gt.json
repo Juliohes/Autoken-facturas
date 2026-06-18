@@ -1,0 +1,26 @@
+{
+  "id": "gt-0019",
+  "imagen": "img/gt-0019.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.22.06 (1).jpeg",
+  "estado": "borrador",
+  "dificultad": "facil",
+  "notas": "[orientacion: up] Base 450 + IVA 21% 94.50 = 544.50, cuadra.",
+  "campos_pendientes": [],
+  "campos": {
+    "numero": "26F00006",
+    "fecha": "2026-04-02",
+    "emisor_nombre": "Estudio INGHERVI s.l.u.",
+    "emisor_nif": "B06400980",
+    "receptor_nombre": "HIJOS DE FRANCISCO ESCASO S.L.",
+    "receptor_nif": "B06339923",
+    "tramos": [
+      {
+        "base": "450.00",
+        "iva_pct": "21",
+        "cuota": "94.50"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "544.50"
+  }
+}

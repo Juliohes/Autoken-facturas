@@ -1,0 +1,28 @@
+{
+  "id": "gt-0007",
+  "imagen": "img/gt-0007.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.21.53 (1).jpeg",
+  "estado": "borrador",
+  "dificultad": "facil",
+  "notas": "[orientacion: up] CASO CON IRPF (19%). Base 1100 + IVA 231 - IRPF 209 = 1122, cuadra.",
+  "campos_pendientes": [
+    "receptor_nif"
+  ],
+  "campos": {
+    "numero": "26P00001",
+    "fecha": "2026-01-01",
+    "emisor_nombre": "Estudio INGHERVI s.l.u.",
+    "emisor_nif": "B06400980",
+    "receptor_nombre": "INGENIEROS CONSULTORES GLOBAL ENERGY S.L.",
+    "receptor_nif": "B06727739",
+    "tramos": [
+      {
+        "base": "1100.00",
+        "iva_pct": "21",
+        "cuota": "231.00"
+      }
+    ],
+    "irpf_cuota": "209.00",
+    "total": "1122.00"
+  }
+}

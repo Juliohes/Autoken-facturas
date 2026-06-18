@@ -1,0 +1,30 @@
+{
+  "id": "gt-0012",
+  "imagen": "img/gt-0012.jpeg",
+  "origen": "WhatsApp Image 2026-06-16 at 18.21.54 (3).jpeg",
+  "estado": "borrador",
+  "dificultad": "media",
+  "notas": "[orientacion: ccw] OJO: es un PRESUPUESTO, no una factura. Jose Gil Guisado (Ing. Tec. Industrial). C.I.F. del cliente vacio. Base 4070 + IVA 854.70 = 4924.70.",
+  "campos_pendientes": [
+    "emisor_nif",
+    "numero",
+    "receptor_nif"
+  ],
+  "campos": {
+    "numero": "146-25",
+    "fecha": "2025-11-19",
+    "emisor_nombre": "JOSE GIL GUISADO",
+    "emisor_nif": null,
+    "receptor_nombre": "LORENZO FLORES",
+    "receptor_nif": null,
+    "tramos": [
+      {
+        "base": "4070.00",
+        "iva_pct": "21",
+        "cuota": "854.70"
+      }
+    ],
+    "irpf_cuota": null,
+    "total": "4924.70"
+  }
+}
