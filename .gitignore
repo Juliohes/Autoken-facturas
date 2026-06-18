@@ -8,7 +8,9 @@
 *.pfx
 secrets/
 .secrets/
-# Ficheros temporales de trabajo (credenciales, prompts, IDs) — NUNCA al repo
+# Fichero local con credenciales reales (Mistral, Azure...) — NUNCA al repo
+CREDENCIALES-LOCAL-NO-BORRAR.txt
+# Ficheros temporales de trabajo (prompts, IDs) — NUNCA al repo
 kk*.txt
 *.fernet
 doppler.yaml
