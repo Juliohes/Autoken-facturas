@@ -1,6 +1,6 @@
 # CLAUDE.md — Resumen operativo Autoken Facturas v2
 
-> Fuente de verdad: **`PLAN_MAESTRO_AUTOKEN_FACTURAS_V2_v1.1.md`**. Este archivo es un resumen de arranque
+> Fuente de verdad: **`PLAN_MAESTRO_AUTOKEN_FACTURAS_V2_v1.2.md`**. Este archivo es un resumen de arranque
 > para retomar contexto en cualquier sesión. Si hay conflicto, manda el PLAN MAESTRO.
 > Se actualiza al cerrar cada tarea (sección "Estado actual").
 
@@ -103,3 +103,14 @@
       cuenta **Google Cloud** (Gemini/Vertex UE); cuenta **Mistral**; **15-30 facturas reales** →
       `entregas/facturas/` (carpeta vacía, BLOQUEA el bench). PaddleOCR no requiere nada de Julio.
 - [ ] (No bloquea Fase 1) SMTP soporte@autoken.es; Excel 51 empresas → `entregas/`.
+
+### Enmienda 2026-06-18 — CIF de contraparte (plan §11.8, ADR-0011)
+- **Identidad propia conocida**: el nombre/CIF de la empresa del usuario NO se leen por OCR; se inyectan desde
+  `companies`. El OCR concentra el esfuerzo en **fecha + importes + CIF de la CONTRAPARTE** (lo que más falla).
+- **Verificación del CIF de contraparte en 4 niveles**: L1 estructura (`ocr/verification.py`, ya hecho) · L2
+  supplier master del tenant (`counterparties`) · L3 resolución externa (AEAT censal con certificado / VIES /
+  BORME LibreBOR-OpenMercantil / eInforma-Axesor de pago) · L4 caché (`cif_lookups`). CIF inválido o inexistente
+  → bloquea "Confirmar y guardar"; nombre que no casa → aviso con razón social oficial.
+- **Pantalla de revisión**: siempre visibles total + CIF contraparte + fecha; el resto plegado; aviso rojo
+  grande de responsabilidad bajo el botón. Implementación en tarea **S2.8** (+ refuerzos S2.3/S2.4).
+- **Pendientes de Julio**: certificado electrónico para AEAT censal; decidir si se contrata API comercial de pago.

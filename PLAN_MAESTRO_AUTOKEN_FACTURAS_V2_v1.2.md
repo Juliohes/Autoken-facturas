@@ -1,7 +1,11 @@
 # PLAN MAESTRO — Autoken Facturas v2 (Setex v2)
 **Plataforma SaaS multi-asesoría de digitalización de facturas con OCR/IA**
-Versión 1.1 — 11/06/2026 — Documento de ejecución para Claude Code, supervisado por Julio
+Versión **1.2 — 18/06/2026** (base v1.1 del 11/06/2026; **solo añadidos, no se elimina nada del plan inicial**) — Documento de ejecución para Claude Code, supervisado por Julio
 **v1.1: datos de arranque confirmados (GitHub, dominio, VPS, emails, cuentas IA) — listo para ejecutar**
+**v1.2 (Enmienda 2026-06-18, Fase 0 cerrada, antes de Fase 1)**: incorporada la mejora crítica del **CIF de la
+contraparte** e **identidad propia conocida** (no se lee por OCR lo que ya se sabe del registro). Decisión nueva
+en **§11.8** (con investigación de mercado), refuerzos en **§3.6** (reglas 10-13), **§3.4** (modelo de datos),
+**S2.3/S2.4/S2.8** (tareas) y **§9** (pendientes de Julio). ADR-0011 (§11.1). Cambio **aditivo**: no rompe nada.
 
 ---
 
@@ -152,8 +156,15 @@ Plataforma (platform_admin: juliohesuni@gmail.com y albertomurimarti@gmail.com �
 | `ocr_extractions` | invoice_id, engine, raw_json(JSONB), field_confidences(JSONB), duration_ms, cost | una fila por motor |
 | `ocr_corrections` | invoice_id, field, ai_value, human_value, corrected_by, at | **dataset de mejora continua** |
 | `audit_log` | id, tenant_id, actor_id, action, entity, entity_id, payload_hash, at | append-only, sin UPDATE/DELETE |
+| `counterparties` (NUEVO 2026-06-18, §11.8) | id, tenant_id, cif, name, name_source(human/aeat/vies/borme/commercial), verified_at, times_seen | **supplier master** del tenant: CIF↔razón social ya confirmados; primera línea de verificación del CIF de contraparte |
+| `cif_lookups` (NUEVO 2026-06-18, §11.8) | cif, source, exists(bool), official_name, raw_json(JSONB), fetched_at, ttl | **caché global** de resoluciones externas (AEAT/VIES/BORME) para no repetir llamadas ni gastar cuota |
 
-Toda tabla de negocio: índice compuesto que empieza por `tenant_id`.
+> `invoices` (NUEVO 2026-06-18, §11.8): añadir `counterparty_cif_status` (valid/invalid/not_found/unverified),
+> `counterparty_name_match` (match/mismatch/unknown), `counterparty_official_name`, `counterparty_source`.
+> El CIF/nombre del usuario (`supplier_*` o `receiver_*` según el tipo) se **inyecta desde `companies`**, no del OCR.
+
+Toda tabla de negocio: índice compuesto que empieza por `tenant_id`. (`cif_lookups` es caché global no-tenant:
+es dato público de registro, sin información de cliente; no lleva `tenant_id` ni RLS.)
 
 ### 3.5 Ficheros (MinIO)
 - Bucket por tenant: `invoices-<tenant_id>`. Original SIEMPRE conservado (imagen/PDF) + versión procesada.
@@ -162,7 +173,7 @@ Toda tabla de negocio: índice compuesto que empieza por `tenant_id`.
 
 ### 3.6 Reglas de negocio confirmadas de la v1 (se conservan todas)
 1. Selector Recibida/Emitida ANTES de capturar.
-2. El CIF del usuario debe aparecer en la factura (como receptor si es recibida, como emisor si es emitida). Si no aparece → aviso bloqueante. Excepción: admins (tenant y plataforma).
+2. El CIF del usuario debe aparecer en la factura (como receptor si es recibida, como emisor si es emitida). Si no aparece → aviso bloqueante. Excepción: admins (tenant y plataforma). **Matización 2026-06-18 (§11.8)**: el nombre y CIF de la **propia empresa** del usuario NO se "leen" para rellenar campos: se **conocen** desde el registro (tabla `companies`) y se inyectan. El OCR de "su lado" solo sirve para confirmar que la foto es de SU factura (anti-foto-equivocada) y detectar contradicciones con el selector Recibida/Emitida.
 3. Facturas de prueba de admins: flag `is_test`, excluidas de informes, purga con un clic.
 4. Aviso de duplicado (hash + heurística nº factura + CIF + fecha + total).
 5. Validación aritmética: Σ(base×IVA%) = cuota por tramo, Σ tramos + IVA − IRPF = total. Descuadre → aviso "Revisar".
@@ -170,6 +181,10 @@ Toda tabla de negocio: índice compuesto que empieza por `tenant_id`.
 7. Confirmación humana obligatoria con todos los campos editables ANTES de guardar.
 8. **NUEVO**: checkbox "He revisado que los datos coinciden con la factura — la veracidad de los datos es responsabilidad de quien los confirma" + registro en audit_log (quién, cuándo, snapshot de datos).
 9. Panel admin asesoría: filtros (fechas, proveedor/CIF, usuario, estado), tabla completa (tramos IVA, IRPF, totales, estado, imagen "Ver", fecha subida), export Excel, edición de campos (auditada), gestión de empresas (alta/pendiente/activa) y aprobación de usuarios.
+10. **NUEVO (2026-06-18, §11.8) — Foco del OCR en lo que sí importa**: los campos de oro que la IA debe leer son **fecha**, **importes** (total + tramos) y, sobre todo, el **CIF de la CONTRAPARTE** (proveedor si recibida, cliente si emitida). El CIF de la contraparte es el campo que más falla y el más crítico contablemente: recibe verificación reforzada (regla 11).
+11. **NUEVO (2026-06-18, §11.8) — Verificación del CIF de la contraparte en 4 niveles**: (L1) estructura/ dígito de control módulo-23 [ya implementado en `ocr/verification.py`]; (L2) **supplier master** del tenant (si el CIF ya se confirmó antes, se reutiliza su razón social); (L3) **resolución externa CIF→nombre + existencia** (AEAT censal / VIES / BORME) y comparación con el nombre leído por la IA; (L4) caché de resoluciones. Resultado: **CIF inválido o inexistente → bloqueo**; **CIF existe pero el nombre no coincide → aviso mostrando la razón social oficial**.
+12. **NUEVO (2026-06-18, §11.8) — Pantalla de revisión con jerarquía**: todos los campos van **plegados en un desplegable comprimido** EXCEPTO **tres siempre visibles**: **importe total**, **CIF de la contraparte** y **fecha**. El botón **"Confirmar y guardar" se BLOQUEA** si el CIF de la contraparte es inválido/inexistente o si el CIF propio leído contradice el CIF conocido del usuario. Bajo el botón, **aviso en rojo, grande y legible**: *"Revisa bien los datos antes de confirmar: su veracidad es responsabilidad de quien los confirma."* (complementa, no sustituye, el checkbox de la regla 8).
+13. **NUEVO (2026-06-18, §11.8)**: toda resolución/validación del CIF de contraparte (fuente consultada, veredicto, nombre oficial devuelto) se registra junto a la factura y alimenta el `supplier master` y `ocr_corrections` (mejora continua).
 
 ---
 
@@ -244,7 +259,7 @@ La asignación inicial propuesta por Julio (v2-prod en el VPS de la v1) se **inv
 
 ### FASE 1 — POC OCR con facturas reales (≈ 4-6 días) ⚠️ BLOQUEA EL DISEÑO FINAL DEL MÓDULO `ocr`
 - **1.1 Dataset** — CA: 15-30 facturas reales: las 3 aportadas + **exportación de las acumuladas en la v1 de Setex** (crecen a diario; se descargan vía el panel actual o directamente del servidor `72.60.186.89` con permiso de Julio), anotadas a mano con los valores correctos (ground truth) en `docs/ocr-eval/`. Incluir casos difíciles: borrosas, arrugadas, multi-tramo de IVA, con IRPF real y sin IRPF.
-- **1.2 Bench motores** — CA: script que pasa el dataset por Azure prebuilt-invoice, GPT-4o visión y Mistral OCR 3; tabla de precisión por campo (nº factura, CIFs, nombres, fecha, tramos, total), coste y latencia. Informe en `docs/ocr-eval/resultado-poc.md`.
+- **1.2 Bench motores** — CA: script que pasa el dataset por Azure prebuilt-invoice, GPT-4o visión y Mistral OCR 3; tabla de precisión por campo (nº factura, CIFs, nombres, fecha, tramos, total), coste y latencia. Informe en `docs/ocr-eval/resultado-poc.md`. **Refuerzo 2026-06-18 (§11.8)**: medir de forma **separada y destacada la precisión del CIF de la CONTRAPARTE** (el campo de mayor riesgo); el CIF/nombre propios pueden excluirse del scoring porque se conocen del registro.
 - **1.3 Prototipo captura** — CA: página de prueba con auto-captura (blur+encuadre+exposición) funcionando en un móvil Android real; umbral de Laplaciano calibrado con fotos de las facturas del dataset.
 - **1.4 Decisión** — CA: Julio aprueba la combinación de motores ganadora. ADR-007.
 
@@ -261,8 +276,9 @@ La asignación inicial propuesta por Julio (v2-prod en el VPS de la v1) se **inv
 ### SPRINT 2 — Intake + OCR (≈ 2-2,5 semanas) — el corazón
 - **S2.1 Upload seguro** — CA: subida imagen/PDF a MinIO (bucket por tenant), ClamAV, MIME real, tamaño máx., hash SHA-256, detección de duplicado con aviso.
 - **S2.2 Captura guiada PWA** — CA: pantalla de captura idéntica a la actual (marco grande, selector Recibida/Emitida) + auto-captura por frames + rechazo de borrosas + recorte/perspectiva. Probada en Android e iOS reales.
-- **S2.3 Worker OCR** — CA: job arq con los motores ganadores del POC en paralelo (asyncio.gather), árbitro por campo, validaciones deterministas, persistencia en `ocr_extractions`. Regla anti-alucinación verificada con test (factura con CIF tapado → campo null, no inventado).
-- **S2.4 Pantalla de confirmación** — CA: idéntica a la actual (empresa IA / receptor / fecha / total / tramos IVA editables / IRPF / resumen / Confirmar / Repetir foto) + colores de confianza (amarillo=dudoso, rojo=no leído) + checkbox de responsabilidad + regla "tu CIF debe aparecer en la factura" + descuadres marcados.
+- **S2.3 Worker OCR** — CA: job arq con los motores ganadores del POC en paralelo (asyncio.gather), árbitro por campo, validaciones deterministas, persistencia en `ocr_extractions`. Regla anti-alucinación verificada con test (factura con CIF tapado → campo null, no inventado). **Refuerzo 2026-06-18 (§11.8)**: el CIF/nombre **propios** se inyectan desde `companies` (no se "puntúan" como lectura); el foco de extracción y de enrutado por confianza es fecha + importes + **CIF de contraparte**.
+- **S2.4 Pantalla de confirmación** — CA: idéntica a la actual (empresa IA / receptor / fecha / total / tramos IVA editables / IRPF / resumen / Confirmar / Repetir foto) + colores de confianza (amarillo=dudoso, rojo=no leído) + checkbox de responsabilidad + regla "tu CIF debe aparecer en la factura" + descuadres marcados. **Refuerzo 2026-06-18 (§3.6 reglas 11-12, §11.8)**: (a) **3 campos siempre visibles** (total, CIF de contraparte, fecha) y el resto **plegado** en un desplegable; (b) bloque de **veredicto del CIF de contraparte** (válido/ inexistente/ nombre oficial vs leído); (c) botón **"Confirmar y guardar" deshabilitado** si el CIF de contraparte es inválido/inexistente o el CIF propio leído contradice el conocido; (d) **aviso rojo grande** bajo el botón ("Revisa bien los datos… responsabilidad de quien los confirma"). Tests: botón bloqueado en cada condición.
+- **S2.8 Verificación del CIF de la contraparte (NUEVO 2026-06-18, §11.8)** — CA: servicio que, dado el CIF de contraparte leído, ejecuta los 4 niveles (estructura → supplier master del tenant → resolución externa AEAT censal/VIES/BORME con caché en `cif_lookups` → comparación de nombre) y devuelve un veredicto estructurado (`valid/invalid/not_found`, `name_match`, `official_name`, `source`). Adaptadores por fuente con interfaz común y *feature flags* por tenant (qué fuentes usar). Cada confirmación humana actualiza el `counterparties` (supplier master). Tests con dobles de las APIs externas (sin red en CI). El **diseño concreto de fuentes y orden** se cierra en **ADR-0011** tras validar disponibilidad de certificado AEAT y coberturas (ver §11.8).
 - **S2.5 Persistencia + correcciones** — CA: al confirmar se guarda factura + tramos + snapshot en audit_log; toda edición humana genera filas en `ocr_corrections`.
 - **S2.6 Historial usuario** — CA: "Historial de facturas" (últimos 7 días) como en v1.
 - **S2.7 Suite anti-cruce v2** — CA: ampliada a facturas y ficheros (usuario A no puede descargar fichero de B ni adivinando la URL de MinIO — URLs firmadas con expiración).
@@ -347,6 +363,8 @@ Para CADA endpoint que toque datos:
 - [ ] Excel de las 51 empresas de Setex → carpeta `entregas/` que indicará Claude Code.
 - [ ] Facturas reales para el POC (15-30, descargables de la v1) → misma carpeta (PDF paso 7).
 - [ ] Logo Setex: no hace falta entregar nada — se extrae de la v1 (tarea D.2); si Julio tiene el archivo original (PNG/SVG), mejor: entregarlo.
+- [x] **(NUEVO 2026-06-18, §11.8) Certificado electrónico**: **Julio CONFIRMA que dispone de certificado** (2026-06-18) → se usará el servicio **AEAT "Comprobación de NIF de terceros a efectos censales"** como fuente **autoritativa y gratuita** para verificar que el CIF de la contraparte existe y casa con el nombre. Pendiente menor: confirmar si la asesoría puede actuar como colaborador social (ampliaría el uso).
+- [x] **(NUEVO 2026-06-18, §11.8) Decisión sobre API comercial de pago** (eInforma/Axesor): **decidida por Julio (2026-06-18)** → se prioriza la **vía gratuita** (supplier master + AEAT censal + VIES + BORME); se contratará una **API de pago de coste bajo SOLO si** no hay forma gratuita de cubrir un caso (p. ej. autónomos no inscritos en el Mercantil y no resueltos por AEAT). Comparar precios en S2.8 antes de contratar.
 
 ### 9.1 Mapa de secretos (referencias, NUNCA valores)
 | Secreto | Dónde vive |
@@ -386,7 +404,8 @@ Para CADA endpoint que toque datos:
 | ADR-0007 | Motores OCR ganadores (tras Fase 1) | pendiente (arquitectura y candidatos decididos 2026-06-15, ver §11.7; ganador tras bench) |
 | **ADR-0008** | DNS en Hostinger durante el desarrollo (enmienda a ADR-0004) | aceptado |
 | **ADR-0009** | Hardening mínimo del VPS A; construir todo en VPS B | aceptado |
-| **ADR-0010** | Capa de verificación determinista "tipo DNI" (dígitos de control CIF/NIF módulo-23, IBAN módulo-97, consulta VIES/AEAT, cuadre aritmético) común a todos los motores | aceptado (2026-06-15) |
+| **ADR-0010** | Capa de verificación determinista "tipo DNI" (dígitos de control CIF/NIF módulo-23, IBAN módulo-97, consulta VIES/AEAT, cuadre aritmético) común a todos los motores | aceptado (2026-06-15) — ⚠️ falta crear el fichero `docs/adr/0010-*.md` (implementado en código) |
+| ADR-0011 | Verificación del **CIF de la contraparte** (identidad propia conocida; supplier master + resolución externa AEAT/VIES/BORME) | propuesto 2026-06-18 (ver §11.8; se acepta al cerrar fuentes con datos reales) |
 
 ### 11.2 Runbooks — `docs/runbooks/`
 | Runbook | Contenido |
@@ -401,6 +420,7 @@ Para CADA endpoint que toque datos:
 | 2026-06-13 | Proyecto reubicado en `/opt/app-facturas/` (no en `/opt`) | CLAUDE.md | — |
 | 2026-06-14 | Tenant demo renombrado `joseramon` → `tuti` | CLAUDE.md / ADR-0008 | — |
 | 2026-06-14 | Hardening mínimo del VPS A (es producción activa) | ADR-0009 | **R.1** (FASE RETIRADA, +30 días) |
+| 2026-06-18 | Mejora del CIF de contraparte + identidad propia conocida (requisito de Julio sobre la v1) | §11.8 + §3.6 (10-13) + §3.4 + S2.3/S2.4/S2.8 + ADR-0011 | S2.8 (implementación); ADR-0011 (cierre de fuentes) |
 
 ### 11.4 Hallazgos de seguridad abiertos (informativos)
 | Hallazgo | Máquina | Acción |
@@ -440,3 +460,54 @@ Para CADA endpoint que toque datos:
 | 0.6 CI | ✅ | #11 |
 | 0.7 ADRs 0001-0006 | ✅ | (esta PR) |
 | **FASE 0** | ✅ completada | tag `fase-0-done` |
+
+### 11.8 Decisión — CIF de la contraparte e identidad propia conocida (2026-06-18)
+
+> **Origen**: trabajando con la v1, Julio detecta que el OCR falla sobre todo con **CIFs**, y que dos de esos
+> CIFs/nombres (los de la **propia empresa** del usuario) **no hace falta leerlos**: ya están tomados en el
+> **registro** (la empresa puso su nombre y CIF al darse de alta). Esta sección fija cómo se trabaja, tras
+> **investigación de mercado** (cómo lo resuelven los sistemas de facturación con IA y qué fuentes externas
+> existen para España, gratuitas o baratas). Se acepta como **ADR-0011** al cerrar las fuentes con datos reales.
+
+#### 11.8.1 Principio
+1. **La identidad propia no se lee, se conoce.** Nombre y CIF de la empresa del usuario se **inyectan** desde
+   `companies` (registro). El OCR de "su lado" solo (a) confirma que la foto es de SU factura (anti-foto-
+   equivocada) y (b) detecta incoherencia con el selector Recibida/Emitida.
+2. **El esfuerzo del OCR se concentra** en **fecha**, **importes** (total + tramos) y, sobre todo, el **CIF de
+   la CONTRAPARTE** (proveedor si recibida, cliente si emitida) — el campo más frágil y más crítico.
+3. **El CIF de la contraparte se verifica en 4 niveles** (barato/rápido → caro/autoritativo):
+   - **L1 · Estructura** (mód-23, IBAN mód-97): YA implementado en `ocr/verification.py`. CIF estructuralmente inválido → bloquea.
+   - **L2 · Supplier master del tenant** (`counterparties`): si el CIF ya se confirmó antes, se reutiliza su razón social (gratis, mejora con el uso). Es la práctica de Rossum/Veryfi/SAP AP (*vendor master matching*).
+   - **L3 · Resolución externa CIF→nombre + existencia** y comparación con el nombre leído por la IA.
+   - **L4 · Caché** de resoluciones (`cif_lookups`, con TTL) para no repetir llamadas ni gastar cuota.
+4. **Resultado en la UI**: CIF inválido/inexistente → **bloquea** "Confirmar y guardar"; CIF existe pero el
+   nombre **no coincide** → **aviso mostrando la razón social oficial**; coincide → verde.
+
+#### 11.8.2 Fuentes externas investigadas (España)
+| Fuente | Qué aporta | Coste | Cobertura / límite | Rol propuesto |
+|---|---|---|---|---|
+| **Supplier master propio** + `ocr_corrections` | CIF↔nombre ya confirmados por humanos | Gratis | Crece con el uso | **Primera línea** (máximo ROI) |
+| **AEAT — "Comprobación de NIF de terceros a efectos censales"** (modelos 030/036; web service SOAP/REST) | Confirma pareja **NIF+nombre**: IDENTIFICADO / NO IDENTIFICADO / SIMILAR; cubre entidades y personas físicas | Gratis (requiere **certificado electrónico**) | Censo AEAT completo | **Verificador autoritativo** del par CIF+nombre |
+| **VIES** (Comisión Europea, SOAP `checkVatApprox`) | Valida NIF-IVA + devuelve `traderName` | Gratis | ⚠️ Solo operadores dados de alta en el **ROI** (intracomunitarios). Muchos proveedores nacionales NO están → "inválido" pese a CIF correcto | Contrapartes **intra-UE**; NO única fuente nacional |
+| **BORME abierto — LibreBOR / OpenMercantil** | CIF→razón social (Registro Mercantil) | Gratis / freemium | Sociedades inscritas; ⚠️ **autónomos NO** | Enriquecimiento CIF→nombre |
+| **Comercial — eInforma / Axesor / Informa D&B** | CIF→razón social + datos ricos, SLA | De pago (test gratis) | Muy amplia (incl. autónomos) | Fallback premium opcional |
+
+#### 11.8.3 Estrategia recomendada (orden de implementación en S2.8)
+1. **Ahora / gratis / máximo impacto**: *supplier master* por tenant (`counterparties`) + reutilización de CIFs confirmados.
+2. **MVP / gratis (CONFIRMADO — Julio tiene certificado, 2026-06-18)**: **AEAT censal** como verificador autoritativo del par CIF+nombre; **VIES** para contrapartes intracomunitarias.
+3. **Enriquecimiento / gratis**: **LibreBOR / OpenMercantil** para mostrar la razón social oficial cuando AEAT no devuelva nombre.
+4. **De pago, SOLO si hace falta y de coste bajo (decisión de Julio, 2026-06-18)**: **eInforma / Axesor** únicamente para casos que las fuentes gratuitas no cubran (p. ej. autónomos no inscritos); comparar precios antes de contratar.
+- Adaptadores con **interfaz común** y *feature flags* por tenant; todo lo externo va con **caché** (`cif_lookups`) y **timeout** (si la fuente no responde a tiempo → "Revisar manual", nunca bloquea por caída de un tercero).
+
+#### 11.8.4 Pantalla de revisión (concreción de la regla 12)
+- **Siempre visibles** (sin plegar): **importe total**, **CIF de contraparte** (con su veredicto) y **fecha**.
+- **Plegado** en desplegable comprimido: nº factura, nombres, tramos de IVA, IRPF, datos propios, etc.
+- **"Confirmar y guardar" deshabilitado** si: CIF de contraparte inválido o inexistente; o CIF propio leído ≠ CIF conocido del usuario; o descuadre aritmético grave (configurable).
+- **Aviso en rojo, grande y legible, DEBAJO del botón**: *"Revisa bien los datos antes de confirmar: su veracidad es responsabilidad de quien los confirma."* Complementa el checkbox de la regla 8 y queda en `audit_log`.
+
+#### 11.8.5 Cómo encaja con lo que ya hay (no rompe nada)
+- Reutiliza `ocr/verification.py` (L1) tal cual; añade L2-L4 sin tocarlo.
+- `companies` ya tiene `cif` y `name`: la inyección de identidad propia es inmediata.
+- `ocr_corrections` (mejora continua) y `audit_log` ya previstos: el supplier master se nutre de las confirmaciones.
+- Es **aditivo**: nuevas tablas (`counterparties`, `cif_lookups`), nuevos campos en `invoices`, nueva tarea S2.8 y refuerzos de CA en S2.3/S2.4. No altera fases cerradas ni la Fase 1 en curso (solo añade una métrica a 1.2).
+- **Fuentes de la investigación**: ver listado al final de `AUDITORIA_PROYECTO.md` (VIES, AEAT censal/ROI, LibreBOR, OpenMercantil, eInforma, Axesor, Veryfi, Rossum/SAP AP).

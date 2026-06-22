@@ -4,7 +4,7 @@ Plataforma **SaaS multi-asesoría white-label** de digitalización de facturas c
 Backend Python/FastAPI + Frontend React PWA, multi-tenant con aislamiento total por asesoría
 (PostgreSQL Row-Level Security de dos niveles + buckets separados + cifrado por tenant).
 
-> **Fuente de verdad del proyecto**: [`PLAN_MAESTRO_AUTOKEN_FACTURAS_V2_v1.1.md`](./PLAN_MAESTRO_AUTOKEN_FACTURAS_V2_v1.1.md).
+> **Fuente de verdad del proyecto**: [`PLAN_MAESTRO_AUTOKEN_FACTURAS_V2_v1.2.md`](./PLAN_MAESTRO_AUTOKEN_FACTURAS_V2_v1.2.md).
 > Resumen operativo para retomar contexto: [`CLAUDE.md`](./CLAUDE.md).
 
 ## Estructura del monorepo

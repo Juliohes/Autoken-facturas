@@ -6,4 +6,4 @@
 - `ocr-eval/` — Dataset de evaluación OCR con ground-truth anotado (§4, Fase 1).
   **Las imágenes/PDF de facturas reales NO se versionan** (datos sensibles, ver `.gitignore`).
 
-Fuente de verdad: [`../PLAN_MAESTRO_AUTOKEN_FACTURAS_V2_v1.1.md`](../PLAN_MAESTRO_AUTOKEN_FACTURAS_V2_v1.1.md).
+Fuente de verdad: [`../PLAN_MAESTRO_AUTOKEN_FACTURAS_V2_v1.2.md`](../PLAN_MAESTRO_AUTOKEN_FACTURAS_V2_v1.2.md).
