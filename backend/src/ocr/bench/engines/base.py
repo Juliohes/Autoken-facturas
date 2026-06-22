@@ -72,8 +72,8 @@ def encode_image(image_path: Path) -> tuple[str, str]:
     """Devuelve ``(base64, mime)`` de la imagen. Lanza EngineError si el formato no es imagen.
 
     El PDF no se sube directamente a los motores de visión: requiere rasterizado previo a PNG,
-    que se aborda en una tarea aparte (ver issue de rasterización de PDF). Aquí se rechaza con
-    un mensaje claro para que el bench lo registre como caso no soportado por este motor.
+    que se aborda en una tarea aparte (issue #16). Aquí se rechaza con un mensaje claro para que
+    el bench lo registre como caso no soportado por este motor.
     """
     suffix = image_path.suffix.lower()
     if suffix == ".pdf":
