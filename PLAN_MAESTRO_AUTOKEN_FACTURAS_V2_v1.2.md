@@ -432,6 +432,8 @@ Para CADA endpoint que toque datos:
 | # | Título | Motivo |
 |---|---|---|
 | #2 | Migrar DNS a Cloudflare antes del go-live | Pendiente derivado de ADR-0008 |
+| #16 | Rasterizar PDF→PNG para motores de visión (bench) | Derivado de la tarea 1.2 (adaptadores OCR) |
+| #17-#24 | Remediación auditoría externa 2026-06-22 (label `auditoria-externa`) | Ver §11.9 y `docs/audits/2026-06-22-plan-remediacion.md` |
 
 ### 11.7 Decisión de Fase 1 — arquitectura y candidatos OCR (2026-06-15)
 > Tras investigación comparativa (3 análisis IA + verificación web) y revisión con Julio. La arquitectura
@@ -511,3 +513,28 @@ Para CADA endpoint que toque datos:
 - `ocr_corrections` (mejora continua) y `audit_log` ya previstos: el supplier master se nutre de las confirmaciones.
 - Es **aditivo**: nuevas tablas (`counterparties`, `cif_lookups`), nuevos campos en `invoices`, nueva tarea S2.8 y refuerzos de CA en S2.3/S2.4. No altera fases cerradas ni la Fase 1 en curso (solo añade una métrica a 1.2).
 - **Fuentes de la investigación**: ver listado al final de `AUDITORIA_PROYECTO.md` (VIES, AEAT censal/ROI, LibreBOR, OpenMercantil, eInforma, Axesor, Veryfi, Rossum/SAP AP).
+
+### 11.9 Auditoría externa 2026-06-22 (Javi) — registro y plan de remediación
+
+> **Qué es:** auditoría independiente de código y diseño (3 scouts de código: SOLID/tests/seguridad + 3 de
+> diseño: arquitectura/patrones/modelo de datos). **Veredicto: proyecto muy bien gobernado, cero hallazgos
+> críticos explotables hoy.** El riesgo se concentra en puntos de diseño que el plan dejaba en prosa.
+> **Es aditivo**: no elimina ninguna decisión del plan (salvo una matización pendiente de Julio, ARQ-12).
+
+- **Registro inmutable (verbatim):** [`docs/audits/2026-06-22-auditoria-externa-javi.md`](docs/audits/2026-06-22-auditoria-externa-javi.md).
+- **Respuesta de gestión / tracker vivo:** [`docs/audits/2026-06-22-plan-remediacion.md`](docs/audits/2026-06-22-plan-remediacion.md)
+  — cada hallazgo → severidad → respuesta → issue → estado.
+
+**El hallazgo más potente (convergencia de los 3 scouts de diseño):** el aislamiento multi-tenant tiene
+grietas no escritas — *pooling de conexiones* (lectura, ARQ-1), *FK compuestas* (escritura, BD-1) y
+*Repository como punto único del `SET`* (PAT-6). Los tres apuntan a lo mismo: **escribirlo en un ADR antes
+del Sprint 1.**
+
+**Acción adoptada (coincide con la recomendación de la auditoría):** tres ADRs baratos antes de Sprint 1
++ endurecer `verification.py` con Bug-First TDD + lote de fixes rápidos. Issues #17-#24 (label
+`auditoria-externa`). **Decisión pendiente de Julio:** ARQ-12 (portabilidad AWS "sin reescritura" — ver
+§"Decisiones que requieren tu visto bueno" del plan de remediación).
+
+**Mapa a ADRs:** ADR-0001 ampliado (RLS: ARQ-1/4, BD-1/12, PAT-6) · ADR nuevo de datos (BD-2/3/4/5/7,
+ARQ-13) · ADR-0011 contraparte (PAT-1/3/4/5, ARQ-6, BP-6) · + ADR `platform_admin` (ARQ-3, Sprint 4),
+ADR eventos `ocr`→`invoice_intake` (ARQ-8, Sprint 2) y enmienda ADR-0005 RTO/RPO (ARQ-9).
