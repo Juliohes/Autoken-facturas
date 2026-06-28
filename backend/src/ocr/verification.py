@@ -16,6 +16,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
+__all__ = [
+    "CheckResult",
+    "TaxLine",
+    "validate_nif",
+    "validate_nie",
+    "validate_cif",
+    "validate_tax_id",
+    "validate_iban",
+    "check_tax_line",
+    "check_invoice_totals",
+    "DEFAULT_MONEY_TOLERANCE",
+]
+
 # --- Tablas y constantes de los algoritmos oficiales ---------------------------------------
 
 # Letra de control del NIF/NIE: índice = número de control módulo 23.
@@ -36,6 +49,8 @@ _STRIP_CHARS = " -.\t"
 
 # Tolerancia por defecto (en euros) para el cuadre aritmético: absorbe redondeos legales.
 DEFAULT_MONEY_TOLERANCE = Decimal("0.02")
+# Base de un porcentaje: un tipo de IVA del 21% es 21/100 de la base.
+_PERCENT_BASE = Decimal(100)
 
 
 @dataclass(frozen=True)
@@ -161,6 +176,35 @@ def validate_iban(value: str, *, country: str | None = "ES") -> CheckResult:
 # --- Cuadre aritmético ---------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class TaxLine:
+    """Un tramo de impuesto de la factura: base imponible, tipo de IVA % y cuota de IVA.
+
+    Value object inmutable con campos nombrados para no confundir el orden de los importes.
+    Modela solo `(base, iva_pct, cuota)`; recargo de equivalencia, IRPF por línea y
+    descripción/número de línea quedan fuera de alcance (se añadirán sin romper llamadores).
+    """
+
+    base: Decimal
+    iva_pct: Decimal
+    cuota: Decimal
+
+
+def _is_finite(*values: Decimal) -> bool:
+    """True solo si TODOS los importes son `Decimal` finitos (ni NaN ni Infinity).
+
+    Guarda explícita anti-alucinación: el veredicto de finitud no puede depender del
+    estado global mutable (los traps del contexto decimal). Por eso se interroga cada
+    valor con `.is_nan()`/`.is_infinite()` en lugar de confiar en que una operación lance.
+    """
+    return all(not value.is_nan() and not value.is_infinite() for value in values)
+
+
+def _within_tolerance(expected: Decimal, actual: Decimal, tolerance: Decimal) -> bool:
+    """Único punto que define "cuadrar": la diferencia absoluta cabe en la tolerancia."""
+    return abs(expected - actual) <= tolerance
+
+
 def check_tax_line(
     base: Decimal,
     iva_pct: Decimal,
@@ -169,33 +213,61 @@ def check_tax_line(
     tolerance: Decimal = DEFAULT_MONEY_TOLERANCE,
 ) -> CheckResult:
     """Comprueba que base x IVA% = cuota (con tolerancia de redondeo)."""
-    expected = base * iva_pct / Decimal(100)
-    if abs(expected - cuota) > tolerance:
+    if not _is_finite(base, iva_pct, cuota):
+        return CheckResult(False, "Importe no numérico/no finito (NaN o Infinity)")
+    expected = base * iva_pct / _PERCENT_BASE
+    if not _within_tolerance(expected, cuota, tolerance):
         return CheckResult(
             False,
-            f"Descuadre de tramo: {base} x {iva_pct}% = {expected}, pero cuota declarada {cuota}",
+            f"Descuadre: {base} x {iva_pct}% = {expected}, pero cuota declarada {cuota}",
         )
     return CheckResult(True)
 
 
-def check_invoice_totals(
-    lines: list[tuple[Decimal, Decimal]],
+def _check_global_sum(
+    lines: list[TaxLine],
     total: Decimal,
-    *,
-    irpf_cuota: Decimal = Decimal(0),
-    tolerance: Decimal = DEFAULT_MONEY_TOLERANCE,
+    irpf_cuota: Decimal,
+    tolerance: Decimal,
 ) -> CheckResult:
-    """Comprueba el cuadre global: Σbases + Σcuotas IVA − IRPF = total.
+    """Cuadre global de la suma: Σbases + Σcuotas IVA − IRPF = total (con tolerancia).
 
-    `lines` es una lista de tramos (base, cuota_iva). `irpf_cuota` es la retención (>= 0).
+    Helper PRIVADO: el cuadre global aislado nunca es punto de entrada público, para no
+    reabrir el agujero anti-alucinación (validar el total sin validar cada tramo).
     """
-    sum_base = sum((line[0] for line in lines), Decimal(0))
-    sum_iva = sum((line[1] for line in lines), Decimal(0))
+    # Las bases/cuotas ya vienen validadas por tramo; aquí solo falta blindar `total`.
+    if not _is_finite(total):
+        return CheckResult(False, "Total no numérico/no finito (NaN o Infinity)")
+    sum_base = sum((line.base for line in lines), Decimal(0))
+    sum_iva = sum((line.cuota for line in lines), Decimal(0))
     expected = sum_base + sum_iva - irpf_cuota
-    if abs(expected - total) > tolerance:
+    if not _within_tolerance(expected, total, tolerance):
         return CheckResult(
             False,
             f"Descuadre de total: Σbases {sum_base} + ΣIVA {sum_iva} − IRPF {irpf_cuota} "
             f"= {expected}, pero total declarado {total}",
         )
     return CheckResult(True)
+
+
+def check_invoice_totals(
+    lines: list[TaxLine],
+    total: Decimal,
+    *,
+    irpf_cuota: Decimal = Decimal(0),
+    tolerance: Decimal = DEFAULT_MONEY_TOLERANCE,
+) -> CheckResult:
+    """Verifica el cuadre de una factura: cada tramo y el cuadre global del total.
+
+    Primero comprueba cada tramo (`base x IVA% = cuota`); al PRIMER tramo que no cuadre
+    (fail-fast) devuelve el motivo identificando ese tramo (numeración 1-based). Si todos
+    los tramos cuadran, comprueba el cuadre global `Σbases + Σcuotas IVA − IRPF = total`.
+
+    `irpf_cuota` es la retención a descontar. La tolerancia absorbe redondeos en ambos niveles.
+    """
+    for index, line in enumerate(lines, start=1):
+        # Cuadre de tramo: la cuota debe derivarse de base e IVA% (regla anti-alucinación).
+        line_result = check_tax_line(line.base, line.iva_pct, line.cuota, tolerance=tolerance)
+        if not line_result.valid:
+            return CheckResult(False, f"Tramo {index}: {line_result.reason}")
+    return _check_global_sum(lines, total, irpf_cuota, tolerance)
