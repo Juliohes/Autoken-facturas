@@ -5,7 +5,6 @@ from decimal import Decimal
 import pytest
 
 from ocr.verification import (
-    check_invoice_totals,
     check_tax_line,
     validate_cif,
     validate_iban,
@@ -116,17 +115,4 @@ def test_tramo_descuadra() -> None:
     assert not result.valid
     assert "descuadre" in result.reason.lower()
 
-
-def test_total_cuadra_con_irpf() -> None:
-    lines = [(Decimal(1000), Decimal(210))]
-    assert check_invoice_totals(lines, Decimal(1060), irpf_cuota=Decimal(150)).valid
-
-
-def test_total_multitramo_cuadra() -> None:
-    lines = [(Decimal(100), Decimal(21)), (Decimal(200), Decimal(20))]
-    assert check_invoice_totals(lines, Decimal(341)).valid
-
-
-def test_total_descuadra() -> None:
-    lines = [(Decimal(100), Decimal(21))]
-    assert not check_invoice_totals(lines, Decimal(130)).valid
+# Los tests de cuadre global migraron a test_ocr_cuadre.py con la nueva firma TaxLine (spec BP-1).
