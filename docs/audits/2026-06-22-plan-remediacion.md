@@ -90,7 +90,7 @@ correcciones rápidas. Todo es **aditivo** al plan; no se elimina ninguna decisi
 | ARQ-9 | 🟠 | Único dominio de fallo (backup ≠ disponibilidad): declarar RTO/RPO | Aceptado–ADR (enmienda ADR-0005) | — (ADR pendiente) | diferido |
 | ARQ-10 | 🟡 | Semántica del bus `shared/events` (in-process vs Redis) | Aceptado–diferir (S2) | — (S2) | diferido |
 | ARQ-11 | 🟡 | CQRS-light: no sobre-ingenierizar | Aceptado (nota de diseño) | — | nota |
-| ARQ-12 | 🟡 | Portabilidad AWS "sin reescritura" optimista (Caddy on-demand TLS) | **EN DECISIÓN (Julio)** — matiza ADR-0005 / plan línea 223 | — | decisión pendiente |
+| ARQ-12 | 🟡 | Portabilidad AWS "sin reescritura" optimista (Caddy on-demand TLS) | Matizado el texto del plan (decisión Julio 2026-06-22; ADR-0005 sin cambios) | — | cerrado |
 | ARQ-13 | 🟡 | Cifrado por tenant (S5) afecta al esquema de S1: decidir alcance ya | Aceptado–ADR (ADR de datos) | [#18](https://github.com/Juliohes/Autoken-facturas/issues/18) | abierto |
 
 ## 5. Diseño — Patrones
@@ -156,7 +156,9 @@ correcciones rápidas. Todo es **aditivo** al plan; no se elimina ninguna decisi
      TLS/ingress (Caddy on-demand TLS no tiene equivalente directo en ALB)"*. **Aditivo, no borra la decisión.**
   2. Dejarlo como está y registrar la salvedad solo aquí (en este plan de remediación).
   3. Otra redacción que prefieras.
-- **Estado:** *decisión pendiente* — no toco el plan hasta tu confirmación.
+- **Decisión de Julio (2026-06-22):** opción 1 — **matizar el texto del plan**; ADR-0005 sin cambios.
+- **Estado:** ✅ **cerrado**. Plan línea ~238 reescrita a *"portable a otros proveedores (AWS incluido) con
+  adaptación de la capa TLS/ingress (Caddy on-demand TLS no tiene equivalente directo en AWS ALB/ACM)"*.
 
 ---
 

@@ -235,7 +235,7 @@ La asignación inicial propuesta por Julio (v2-prod en el VPS de la v1) se **inv
 | Go-live | **PRODUCCIÓN v2** (`setex.autoken.es`, `panel.autoken.es`, custom `setex-facturas.es`). Staging se apaga temporalmente aquí | v1 en solo-lectura 30 días (red de seguridad y fuente de migración) |
 | +30 días | Producción v2 (definitivo) | Se limpia por completo → **STAGING definitivo** |
 
-- Todo en Docker Compose: `caddy`, `api`, `worker`, `postgres`, `redis`, `minio`, `clamav`. Migrable a cualquier proveedor (AWS incluido) sin reescritura.
+- Todo en Docker Compose: `caddy`, `api`, `worker`, `postgres`, `redis`, `minio`, `clamav`. Portable a otros proveedores (AWS incluido) **con adaptación de la capa TLS/ingress** (el *on-demand TLS* de Caddy —HTTPS automático por subdominio de tenant— no tiene equivalente directo en AWS ALB/ACM). Matizado por la auditoría 2026-06-22 (ARQ-12, §11.9).
 - Datos: producción = datos reales; staging = SOLO sintéticos/de prueba. Backups: dump PostgreSQL cifrado nocturno + sync MinIO → Hetzner Storage Box (off-site), retención 30d/12m, restore testeado mensualmente.
 - Hardening en ambos (tarea 0.3): usuario no-root, SSH solo con clave, root y password-auth deshabilitados, rotación de contraseña root, UFW, fail2ban, unattended-upgrades.
 - KVM 2 es suficiente para arrancar; **señal de upgrade** (a KVM 4, unos clics en Hostinger): RAM sostenida > 75% o cola OCR con esperas > 2 min con varias asesorías activas. Se monitoriza en Grafana.
@@ -532,8 +532,8 @@ del Sprint 1.**
 
 **Acción adoptada (coincide con la recomendación de la auditoría):** tres ADRs baratos antes de Sprint 1
 + endurecer `verification.py` con Bug-First TDD + lote de fixes rápidos. Issues #17-#24 (label
-`auditoria-externa`). **Decisión pendiente de Julio:** ARQ-12 (portabilidad AWS "sin reescritura" — ver
-§"Decisiones que requieren tu visto bueno" del plan de remediación).
+`auditoria-externa`). **ARQ-12 (portabilidad AWS) resuelto** (Julio, 2026-06-22): texto del plan matizado
+("portable con adaptación de la capa TLS/ingress"); ADR-0005 sin cambios.
 
 **Mapa a ADRs:** ADR-0001 ampliado (RLS: ARQ-1/4, BD-1/12, PAT-6) · ADR nuevo de datos (BD-2/3/4/5/7,
 ARQ-13) · ADR-0011 contraparte (PAT-1/3/4/5, ARQ-6, BP-6) · + ADR `platform_admin` (ARQ-3, Sprint 4),
