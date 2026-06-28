@@ -115,4 +115,5 @@ def test_tramo_descuadra() -> None:
     assert not result.valid
     assert "descuadre" in result.reason.lower()
 
+
 # Los tests de cuadre global migraron a test_ocr_cuadre.py con la nueva firma TaxLine (spec BP-1).
