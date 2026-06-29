@@ -511,3 +511,26 @@ Para CADA endpoint que toque datos:
 - `ocr_corrections` (mejora continua) y `audit_log` ya previstos: el supplier master se nutre de las confirmaciones.
 - Es **aditivo**: nuevas tablas (`counterparties`, `cif_lookups`), nuevos campos en `invoices`, nueva tarea S2.8 y refuerzos de CA en S2.3/S2.4. No altera fases cerradas ni la Fase 1 en curso (solo añade una métrica a 1.2).
 - **Fuentes de la investigación**: ver listado al final de `AUDITORIA_PROYECTO.md` (VIES, AEAT censal/ROI, LibreBOR, OpenMercantil, eInforma, Axesor, Veryfi, Rossum/SAP AP).
+
+### 11.9 Backlog de auditoría de código (`Auditoria_Autoken_Javi_22-06-2026.md`)
+> Los comportamientos a implementar salen de hallazgos reales de la auditoría, no inventados. Cada BP se
+> trabaja con el flujo SDD+TDD (spec en `docs/specs/` → tests de comportamiento → implementación → auditoría).
+
+| Hallazgo | Estado | Dónde queda |
+|---|---|---|
+| BP-1 — `check_tax_line` muerto; cuadre de totales laxo | ✅ cerrado (PR #26) | `docs/specs/BP-1-cuadre-aritmetico-por-tramo.md` |
+| BP-2 — clasificación de control del CIF (N/W/R) "demasiado laxa" | ✅ cerrado **como falso positivo** (2026-06-29) | `docs/specs/BP-2-clasificacion-control-cif.md` |
+| BP-3 — service-locator en `health.py` (DIP) | pendiente | — |
+| BP-4 — validadores no defienden contra `None` | pendiente | — |
+| BP-5 — `log_level` traga valores inválidos en silencio | pendiente | — |
+| BP-6 — `CheckResult` no preparado para niveles L2/L3/L4 | pendiente | — |
+
+**BP-2 (decisión, 2026-06-29):** verificado el algoritmo **contra fuente** (Orden EHA/451/2008, manual AEAT
+modelo 036, Wikipedia ES e implementación de referencia `python-stdnum`). Las fuentes son **contradictorias**
+sobre si las claves `N`/`W`/`R` exigen control alfabético; `python-stdnum` lo resuelve aceptando ambos
+("conflicting information… we support either"). Como L1 es la verificación estructural y **un falso positivo
+bloquea "Confirmar y guardar"** (§3.6 regla 12, ADR-0011), endurecer N/W/R a "solo letra" introduciría
+falsos rechazos de CIFs válidos. Se **mantiene** N/W/R como "número o letra"; se conserva la estrictez de
+P/Q/S (letra) y A/B/E/H (número). Limpieza asociada: se elimina la clave `K` de `_CIF_LETTER_ONLY` (era
+código muerto inalcanzable; `K` no es clave de CIF). Sin cambio de comportamiento observable salvo la
+limpieza. Detalle y fuentes: `docs/specs/BP-2-clasificacion-control-cif.md`.
