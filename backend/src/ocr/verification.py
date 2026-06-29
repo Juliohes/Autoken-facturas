@@ -37,11 +37,18 @@ _NIF_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE"
 _NIE_PREFIX = {"X": "0", "Y": "1", "Z": "2"}
 # Letra de control del CIF cuando el control es una letra: índice = dígito de control.
 _CIF_CONTROL_LETTERS = "JABCDEFGHI"
-# Tipos de organización (primera letra del CIF) cuyo control DEBE ser letra.
-_CIF_LETTER_ONLY = frozenset("KPQS")
+# Tipos de organización (primera letra del CIF) cuyo control DEBE ser letra (P, Q, S).
+# Solo estas claves de organismo público han exigido control alfabético de forma estable.
+_CIF_LETTER_ONLY = frozenset("PQS")
 # Tipos cuyo control DEBE ser número.
 _CIF_DIGIT_ONLY = frozenset("ABEH")
-# Tipos válidos de CIF (el resto admite control numérico o letra).
+# Tipos válidos de CIF (el resto admite control numérico o letra). N (entidades extranjeras),
+# W (establecimientos permanentes de no residentes) y R (congregaciones) se dejan a propósito
+# en la rama permisiva "número o letra": las fuentes oficiales son contradictorias sobre su
+# control (BP-2; ver docs/specs/BP-2-clasificacion-control-cif.md) y la implementación de
+# referencia python-stdnum acepta ambos. Exigir letra introduciría falsos rechazos de CIFs
+# N/W válidos, y esta capa L1 bloquea "Confirmar y guardar". K no es clave de CIF (es un NIF
+# especial de persona física), por eso queda fuera de _CIF_TYPES.
 _CIF_TYPES = frozenset("ABCDEFGHJNPQRSUVW")
 
 # Conjunto de caracteres permitidos al "limpiar" un identificador o IBAN.
