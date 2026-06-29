@@ -519,8 +519,8 @@ Para CADA endpoint que toque datos:
 | Hallazgo | Estado | Dónde queda |
 |---|---|---|
 | BP-1 — `check_tax_line` muerto; cuadre de totales laxo | ✅ cerrado (PR #26) | `docs/specs/BP-1-cuadre-aritmetico-por-tramo.md` |
-| BP-2 — clasificación de control del CIF (N/W/R) "demasiado laxa" | ✅ cerrado **como falso positivo** (2026-06-29) | `docs/specs/BP-2-clasificacion-control-cif.md` |
-| BP-3 — service-locator en `health.py` (DIP) | pendiente | — |
+| BP-2 — clasificación de control del CIF (N/W/R) "demasiado laxa" | ✅ cerrado **como falso positivo** (PR #28) | `docs/specs/BP-2-clasificacion-control-cif.md` |
+| BP-3 — service-locator en `health.py` (DIP) | ✅ cerrado (PR #29) | `docs/specs/BP-3-health-inyeccion-settings.md` |
 | BP-4 — validadores no defienden contra `None` | pendiente | — |
 | BP-5 — `log_level` traga valores inválidos en silencio | pendiente | — |
 | BP-6 — `CheckResult` no preparado para niveles L2/L3/L4 | pendiente | — |
@@ -534,3 +534,8 @@ falsos rechazos de CIFs válidos. Se **mantiene** N/W/R como "número o letra"; 
 P/Q/S (letra) y A/B/E/H (número). Limpieza asociada: se elimina la clave `K` de `_CIF_LETTER_ONLY` (era
 código muerto inalcanzable; `K` no es clave de CIF). Sin cambio de comportamiento observable salvo la
 limpieza. Detalle y fuentes: `docs/specs/BP-2-clasificacion-control-cif.md`.
+
+**BP-3 (2026-06-29):** el handler `health()` resolvía `get_settings()` dentro de la función (service locator),
+rompiendo DIP e impidiendo sustituir la configuración en test con `app.dependency_overrides`. Se inyecta vía
+`Depends(get_settings)`. Refactor de testabilidad: el contrato HTTP del healthcheck no cambia. Detalle:
+`docs/specs/BP-3-health-inyeccion-settings.md`.
