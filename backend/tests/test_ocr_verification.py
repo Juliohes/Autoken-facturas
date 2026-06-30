@@ -1,10 +1,12 @@
 """Tests de la capa de verificación determinista "tipo DNI" (ADR-0010)."""
 
+from collections.abc import Callable
 from decimal import Decimal
 
 import pytest
 
 from ocr.verification import (
+    CheckResult,
     check_tax_line,
     validate_cif,
     validate_iban,
@@ -95,6 +97,29 @@ def test_validate_tax_id_detecta_tipo(value: str) -> None:
 
 def test_validate_tax_id_vacio() -> None:
     assert not validate_tax_id("   ").valid
+
+
+# --- BP-4: campo no leído (None) o vacío ---------------------------------------------------
+# La regla anti-alucinación entrega None cuando el OCR no lee un campo. Los validadores deben
+# devolver un veredicto "no válido" tranquilo, nunca lanzar.
+
+_VALIDADORES_DE_TEXTO: list[Callable[[str | None], CheckResult]] = [
+    validate_nif,
+    validate_nie,
+    validate_cif,
+    validate_tax_id,
+    validate_iban,
+]
+
+
+@pytest.mark.parametrize("validador", _VALIDADORES_DE_TEXTO)
+@pytest.mark.parametrize("entrada", [None, "", "   ", " - . "])
+def test_validador_con_campo_no_leido_o_vacio_devuelve_no_valido_sin_lanzar(
+    validador: Callable[[str | None], CheckResult], entrada: str | None
+) -> None:
+    result = validador(entrada)  # no debe lanzar
+    assert result.valid is False
+    assert result.reason
 
 
 # --- IBAN ----------------------------------------------------------------------------------
