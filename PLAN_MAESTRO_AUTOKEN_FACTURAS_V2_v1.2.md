@@ -356,12 +356,13 @@ Para CADA endpoint que toque datos:
 - [x] GitHub: usuario `Juliohes` confirmado → Julio crea el repo privado `Autoken-facturas` (PDF paso 1). Alberto: invitar cuando tenga cuenta (opcional, no bloquea).
 - [x] Dominio: `autoken.es` ya comprado → mover DNS a Cloudflare (PDF paso 3).
 - [x] VPS: `2.24.8.109` (staging→prod) y `72.60.186.89` (v1, futuro staging) identificados → acceso SSH se entrega en la tarea 0.3 (PDF paso 2). ⚠️ Rotar contraseña root tras el hardening.
-- [ ] **Azure Document Intelligence**: crear recurso en la cuenta Azure existente, región **West Europe**, tier S0 (PDF paso 4A) → clave a GitHub Secrets + `.env`.
-- [ ] **Azure OpenAI** (motor LLM de visión, residencia UE, misma factura Azure): crear recurso + despliegue `gpt-4o` (PDF paso 4B). ChatGPT Pro NO sirve (es suscripción de consumidor, no API).
-- [ ] **Mistral La Plateforme**: cuenta + clave API solo para el POC (PDF paso 4C).
-- [ ] SMTP de `soporte@autoken.es`: confirmar buzón con Alberto y obtener credenciales SMTP del proveedor de correo (PDF paso 6).
-- [ ] Excel de las 51 empresas de Setex → carpeta `entregas/` que indicará Claude Code.
-- [ ] Facturas reales para el POC (15-30, descargables de la v1) → misma carpeta (PDF paso 7).
+- [x] **Azure Document Intelligence** ✅ (estado 2026-06-30): recurso `autoken-docintel-we` en **West Europe**; `AZURE_DOCINTEL_ENDPOINT`/`AZURE_DOCINTEL_KEY` en `.env`.
+- [x] **Azure OpenAI** ✅ (estado 2026-06-30): recurso `autoken-openai-sweden` (**Sweden Central**) con **`gpt-5.1` desplegado en Data Zone Standard** (NUNCA Global). ⚠️ `gpt-4o`/`gpt-4.1` quedaron **deprecados por Azure** ("deprecating state, cannot be used for new deployments"); se usa **gpt-5.1** (ver §11.3 y §11.10). `AZURE_OPENAI_ENDPOINT`/`AZURE_OPENAI_KEY`/`AZURE_OPENAI_DEPLOYMENT=gpt-5.1` en `.env`.
+- [x] **Google Cloud / Vertex** ✅ (NUEVO, estado 2026-06-30): proyecto **`autoken-ocr`** con facturación vinculada; **Vertex AI habilitado** (Google lo renombró a "Agent Platform"/"Gemini Enterprise Agent Platform"; el servicio sigue siendo `aiplatform.googleapis.com`). Cuenta de servicio **`vertex-bench`** (rol *Vertex AI User*) con clave JSON en **`secrets/vertex-sa.json`** (fuera de git). Región **`europe-west4`**. Disponibles: **Gemini 3 Pro / 3.1 Flash** y **Claude (Opus 4.8/4.7, Sonnet 4.6, Fable 5)** sin aceptación de términos aparte.
+- [x] **Mistral La Plateforme** ✅ (estado 2026-06-30): cuenta + `MISTRAL_API_KEY` en `.env`.
+- [ ] SMTP de `soporte@autoken.es`: confirmar buzón con Alberto y obtener credenciales SMTP del proveedor de correo (PDF paso 6). *(No bloquea Fase 1.)*
+- [ ] Excel de las 51 empresas de Setex → carpeta `entregas/` que indicará Claude Code. *(No bloquea Fase 1.)*
+- [x] **Facturas reales para el POC** ✅ (estado 2026-06-30): **20 ficheros** en `entregas/facturas/` (14 JPEG de WhatsApp + 4 PNG de capturas + 2 PDF). **Desbloquea el bench (1.2)**.
 - [ ] Logo Setex: no hace falta entregar nada — se extrae de la v1 (tarea D.2); si Julio tiene el archivo original (PNG/SVG), mejor: entregarlo.
 - [x] **(NUEVO 2026-06-18, §11.8) Certificado electrónico**: **Julio CONFIRMA que dispone de certificado** (2026-06-18) → se usará el servicio **AEAT "Comprobación de NIF de terceros a efectos censales"** como fuente **autoritativa y gratuita** para verificar que el CIF de la contraparte existe y casa con el nombre. Pendiente menor: confirmar si la asesoría puede actuar como colaborador social (ampliaría el uso).
 - [x] **(NUEVO 2026-06-18, §11.8) Decisión sobre API comercial de pago** (eInforma/Axesor): **decidida por Julio (2026-06-18)** → se prioriza la **vía gratuita** (supplier master + AEAT censal + VIES + BORME); se contratará una **API de pago de coste bajo SOLO si** no hay forma gratuita de cubrir un caso (p. ej. autónomos no inscritos en el Mercantil y no resueltos por AEAT). Comparar precios en S2.8 antes de contratar.
@@ -372,6 +373,7 @@ Para CADA endpoint que toque datos:
 | `AZURE_DOCINTEL_KEY` / `AZURE_DOCINTEL_ENDPOINT` | GitHub Secrets + `.env` del VPS |
 | `AZURE_OPENAI_KEY` / `AZURE_OPENAI_ENDPOINT` | GitHub Secrets + `.env` del VPS |
 | `MISTRAL_API_KEY` (solo POC) | GitHub Secrets + `.env` del VPS |
+| `GOOGLE_APPLICATION_CREDENTIALS` → JSON de la cuenta de servicio `vertex-bench` | **fichero** en `secrets/vertex-sa.json` del VPS (fuera de git), NUNCA en el repo |
 | `SMTP_HOST/USER/PASSWORD` (soporte@autoken.es) | GitHub Secrets + `.env` del VPS |
 | `POSTGRES_PASSWORD`, `MINIO_KEYS`, `JWT_SECRET`, claves Fernet por tenant | Generados por Claude Code en el VPS, solo en `.env`/volúmenes cifrados |
 | Contraseñas de login de Julio/Alberto | En ningún sitio: se crean en el primer login con 2FA |
@@ -421,6 +423,7 @@ Para CADA endpoint que toque datos:
 | 2026-06-14 | Tenant demo renombrado `joseramon` → `tuti` | CLAUDE.md / ADR-0008 | — |
 | 2026-06-14 | Hardening mínimo del VPS A (es producción activa) | ADR-0009 | **R.1** (FASE RETIRADA, +30 días) |
 | 2026-06-18 | Mejora del CIF de contraparte + identidad propia conocida (requisito de Julio sobre la v1) | §11.8 + §3.6 (10-13) + §3.4 + S2.3/S2.4/S2.8 + ADR-0011 | S2.8 (implementación); ADR-0011 (cierre de fuentes) |
+| 2026-06-30 | Azure **deprecó `gpt-4.1` y `gpt-4o`** (fin de vida ~mar-2026; al intentar desplegar: *"deprecating state, cannot be used for new deployments"*). Verificado en web (Microsoft Learn, model retirements). Se despliega **`gpt-5.1`** (Sweden Central, Data Zone Standard) como candidato GPT del bench. | §11.7 + §11.10 | ADR-0007 (lo confirma el bench) |
 
 ### 11.4 Hallazgos de seguridad abiertos (informativos)
 | Hallazgo | Máquina | Acción |
@@ -443,11 +446,11 @@ Para CADA endpoint que toque datos:
 > **Revisión 2026-06-16**: actualizado el lineup con los modelos líderes a junio 2026 (ranking OCR Arena: #1 Gemini 3 Flash, #2 Gemini 3 Pro, #3 Claude Opus 4.6, #4 GPT-5.2). Cuentas necesarias: 3 (Azure, Google Cloud —cubre Gemini **y** Claude vía Vertex—, Mistral). Qwen3-VL y PaddleOCR self-hosted.
 
 - **Capa LECTURA (bench)**: Azure DocIntel `prebuilt-invoice` v4 (cloud UE, confianza + bounding boxes) · **PaddleOCR-VL self-hosted** (en el servidor, datos no salen, Apache 2.0, ~8,5 GB VRAM o CPU para el POC) · **Qwen3-VL** (mejor VLM OCR open source, JSON de facturas, self-hostable).
-- **Capa 2º LECTOR / semántica (bench)**: **Gemini 3 Flash + Gemini 3 Pro** vía Vertex AI **región UE europe-west4** (retención cero; Flash es nº1 de OCR Arena, barato/rápido = por defecto, Pro para difíciles) · **Claude Opus 4.6** vía Vertex UE (misma cuenta Google; #3 ranking, fuerte en JSON estricto y baja alucinación) · familia GPT en Azure: **`gpt-4.1`** (disponible ya tras cuota), **`gpt-5.1`** cuando se conceda cuota · Mistral OCR 3 (coste 2 $/1.000 págs).
+- **Capa 2º LECTOR / semántica (bench)**: **Gemini 3 Flash + Gemini 3 Pro** vía Vertex AI **región UE europe-west4** (retención cero; Flash es nº1 de OCR Arena, barato/rápido = por defecto, Pro para difíciles) · **Claude** vía Vertex UE (misma cuenta Google; fuerte en JSON estricto y baja alucinación; en Vertex `europe-west4` ya hay **Opus 4.8/4.7, Sonnet 4.6, Fable 5** — el pick exacto del bench, p. ej. Sonnet 4.6 por defecto / Opus 4.8 para difíciles, se fija en 1.2) · familia GPT en Azure: **`gpt-5.1`** (Sweden Central, Data Zone Standard; sustituye a `gpt-4.1`/`gpt-4o`, **deprecados por Azure** 2026-06-30, ver §11.3) · Mistral OCR 3 (coste 2 $/1.000 págs). *(Actualización del candidato OCR de Mistral pendiente del prompt de Julio.)*
 - **Capa VERIFICACIÓN EXACTA "tipo DNI" (ADR-0010, determinista, en TODOS los motores)**: control CIF/NIF/NIE (módulo-23), IBAN (módulo-97), consulta online VIES/AEAT (confirma que el CIF existe y pertenece a la empresa), cuadre aritmético de tramos/total, fecha plausible. Los campos numéricos clave no dependen de la lectura de la IA: se verifican matemáticamente.
 - **Enrutado por confianza**: alta→automático · media→segunda lectura · baja/descuadre→revisión humana.
 - **Residencia UE confirmada** para todos los candidatos (Azure UE, Vertex europe-west4, Mistral UE, PaddleOCR/Qwen en el propio servidor).
-- **Regiones Azure (estado 2026-06-16)**: Document Intelligence en **West Europe** (`autoken-docintel-we`); Azure OpenAI en **Sweden Central** (`autoken-openai-sweden`) porque West Europe daba cuota 0 y gpt-5.1 solo se ofrecía "Global" (rompe RGPD). Tipo de despliegue obligatorio: **Data Zone Standard** o **Standard regional**; NUNCA **Global**. Tener 2 regiones UE no afecta a la residencia. **Pendiente**: aprobación de cuota de Microsoft para `gpt-4.1`/`gpt-5.1` Data Zone Standard en Sweden Central (solicitada 2026-06-16, 30.000 TPM, 1-2 días hábiles).
+- **Regiones Azure (estado 2026-06-16)**: Document Intelligence en **West Europe** (`autoken-docintel-we`); Azure OpenAI en **Sweden Central** (`autoken-openai-sweden`) porque West Europe daba cuota 0 y gpt-5.1 solo se ofrecía "Global" (rompe RGPD). Tipo de despliegue obligatorio: **Data Zone Standard** o **Standard regional**; NUNCA **Global**. Tener 2 regiones UE no afecta a la residencia. **Resuelto (2026-06-30)**: `gpt-5.1` **desplegado** en Sweden Central (Data Zone Standard). `gpt-4.1`/`gpt-4o` quedaron deprecados por Azure (ver §11.3); el candidato GPT del bench es `gpt-5.1`.
 
 ### 11.6 Estado de tareas (Fase 0)
 | Tarea | Estado | PR |
@@ -554,3 +557,31 @@ así que un `log_level` mal escrito (typo) caía a INFO **en silencio**, y `log_
 los cinco niveles estándar) con un `field_validator` que solo unifica la caja (`INFO`/`info`): un nivel
 inexistente lanza `ValidationError` al construir `Settings` (fail-loud al arrancar). `configure_logging` deja
 de usar valor de reserva silencioso. Detalle: `docs/specs/BP-5-log-level-fail-loud.md`.
+
+### 11.10 Entregables y credenciales de Fase 1 — LISTOS (2026-06-30)
+> Estado final de lo que Julio tenía que aportar para arrancar el bench OCR (tarea 1.2). Registrado aquí para
+> no volver a olvidar qué quedó montado y dónde. Las **tres patas de IA** y el **dataset** están listas.
+
+**Dataset (bench 1.2):** 20 facturas reales en `entregas/facturas/` (14 JPEG + 4 PNG + 2 PDF). El ground truth
+se anota en `docs/ocr-eval/` durante 1.1/1.2.
+
+**Credenciales y cuentas (valores reales SOLO en `.env`/`secrets/` del VPS, nunca en el repo):**
+
+| Motor / servicio | Recurso | Región | Variables en `.env` | Estado |
+|---|---|---|---|---|
+| Azure Document Intelligence | `autoken-docintel-we` | West Europe | `AZURE_DOCINTEL_ENDPOINT`, `AZURE_DOCINTEL_KEY` | ✅ en uso |
+| Azure OpenAI (2º lector GPT) | `autoken-openai-sweden`, despliegue `gpt-5.1` (Data Zone Standard) | Sweden Central | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_DEPLOYMENT=gpt-5.1` | ✅ desplegado |
+| Mistral (OCR) | La Plateforme | UE | `MISTRAL_API_KEY` | ✅ key puesta |
+| Google Vertex (Gemini + Claude) | proyecto `autoken-ocr`, SA `vertex-bench` (rol *Vertex AI User*) | `europe-west4` | `GOOGLE_CLOUD_PROJECT=autoken-ocr`, `GOOGLE_CLOUD_LOCATION=europe-west4`, `GOOGLE_APPLICATION_CREDENTIALS=secrets/vertex-sa.json` | ✅ habilitado + facturación vinculada |
+
+**Notas que conviene no olvidar:**
+- `AZURE_OPENAI_API_VERSION`: la fija el código del bench según el modelo (gpt-5.1 requiere una versión de API
+  reciente); no es un secreto ni la pega Julio a mano.
+- **Azure renombró nada; Google sí**: "Vertex AI" aparece en consola como **"Agent Platform" / "Gemini
+  Enterprise Agent Platform"**; el identificador técnico sigue siendo `aiplatform.googleapis.com`. Los modelos
+  de Claude en Vertex **ya no piden aceptar términos** (flujo cambiado respecto a la guía antigua).
+- **`gpt-5.1` sustituye a `gpt-4.1`/`gpt-4o`** (deprecados por Azure, ver §11.3). Modelos de Claude disponibles
+  en Vertex `europe-west4`: Opus 4.8/4.7, Sonnet 4.6, Fable 5.
+- **Self-hosted** (PaddleOCR-VL, Qwen3-VL): los monta Claude Code; no requieren credenciales de Julio.
+- **Pendiente de Julio (no bloquea 1.2):** prompt correcto para integrar el **nuevo OCR de Mistral** como
+  candidato del bench; SMTP de `soporte@autoken.es`; Excel de las 51 empresas.
