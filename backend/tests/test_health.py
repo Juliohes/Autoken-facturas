@@ -1,6 +1,12 @@
 """Tests del endpoint de healthcheck (tarea 0.4)."""
 
+from collections.abc import Iterator
+
 import httpx
+import pytest
+
+from main import app
+from shared.config import AppEnv, Settings, get_settings
 
 
 async def test_health_ok(client: httpx.AsyncClient) -> None:
@@ -37,3 +43,34 @@ async def test_unknown_route_404(client: httpx.AsyncClient) -> None:
     resp = await client.get("/api/v1/does-not-exist")
 
     assert resp.status_code == 404
+
+
+@pytest.fixture
+def override_settings() -> Iterator[None]:
+    """Sustituye `get_settings` por una configuración de prueba y limpia al terminar.
+
+    BP-3: si el handler resolviera `get_settings()` por su cuenta (service locator), este
+    override no tendría efecto. La app es un singleton de módulo, así que se limpia siempre.
+    """
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        app_name="Servicio de prueba",
+        app_version="9.9.9",
+        app_env=AppEnv.PRODUCTION,
+    )
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+
+async def test_health_refleja_settings_inyectados(
+    client: httpx.AsyncClient, override_settings: None
+) -> None:
+    """BP-3 (C1): el endpoint refleja la `Settings` inyectada vía `dependency_overrides`."""
+    resp = await client.get("/api/v1/health")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["service"] == "Servicio de prueba"
+    assert body["version"] == "9.9.9"
+    assert body["environment"] == "production"
