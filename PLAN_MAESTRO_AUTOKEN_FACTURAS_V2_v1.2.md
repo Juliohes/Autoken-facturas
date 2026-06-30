@@ -522,7 +522,7 @@ Para CADA endpoint que toque datos:
 | BP-2 — clasificación de control del CIF (N/W/R) "demasiado laxa" | ✅ cerrado **como falso positivo** (PR #28) | `docs/specs/BP-2-clasificacion-control-cif.md` |
 | BP-3 — service-locator en `health.py` (DIP) | ✅ cerrado (PR #29) | `docs/specs/BP-3-health-inyeccion-settings.md` |
 | BP-4 — validadores no defienden contra `None` | ✅ cerrado (PR #30) | `docs/specs/BP-4-validadores-defienden-none.md` |
-| BP-5 — `log_level` traga valores inválidos en silencio | pendiente | — |
+| BP-5 — `log_level` traga valores inválidos en silencio | ✅ cerrado (PR #31) | `docs/specs/BP-5-log-level-fail-loud.md` |
 | BP-6 — `CheckResult` no preparado para niveles L2/L3/L4 | pendiente | — |
 
 **BP-2 (decisión, 2026-06-29):** verificado el algoritmo **contra fuente** (Orden EHA/451/2008, manual AEAT
@@ -547,3 +547,10 @@ el punto único de normalización: `_normalize(None)` → `""` → veredicto "no
 públicas pasan a aceptar `str | None`. **Decisión de Julio (Opción A):** se cubre `None` y vacío; defender
 contra otros tipos (Opción B) se evaluará al final con datos reales. Detalle:
 `docs/specs/BP-4-validadores-defienden-none.md`.
+
+**BP-5 (2026-06-30):** `configure_logging` resolvía el nivel con `getattr(logging, nivel.upper(), logging.INFO)`,
+así que un `log_level` mal escrito (typo) caía a INFO **en silencio**, y `log_level` era un `str` libre en
+`Settings` (ni se detectaba al arrancar). Ahora `log_level` es un `LogLevel(StrEnum)` (conjunto cerrado de
+los cinco niveles estándar) con un `field_validator` que solo unifica la caja (`INFO`/`info`): un nivel
+inexistente lanza `ValidationError` al construir `Settings` (fail-loud al arrancar). `configure_logging` deja
+de usar valor de reserva silencioso. Detalle: `docs/specs/BP-5-log-level-fail-loud.md`.

@@ -11,10 +11,17 @@ from typing import cast
 
 import structlog
 
+from shared.config import LogLevel
 
-def configure_logging(log_level: str = "info") -> None:
-    """Configura structlog para emitir logs JSON con correlation id."""
-    level = getattr(logging, log_level.upper(), logging.INFO)
+
+def configure_logging(log_level: LogLevel = LogLevel.INFO) -> None:
+    """Configura structlog para emitir logs JSON con correlation id.
+
+    El nivel ya viene validado por `Settings` (conjunto cerrado `LogLevel`), así que se
+    resuelve sin valor de reserva silencioso: un nivel inesperado falla en vez de caer a
+    INFO sin avisar (BP-5).
+    """
+    level = getattr(logging, log_level.upper())
 
     logging.basicConfig(format="%(message)s", stream=sys.stdout, level=level)
 
