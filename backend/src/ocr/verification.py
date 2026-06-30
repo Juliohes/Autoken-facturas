@@ -72,8 +72,15 @@ class CheckResult:
     reason: str = ""
 
 
-def _normalize(value: str) -> str:
-    """Mayúsculas y sin separadores habituales (espacios, guiones, puntos)."""
+def _normalize(value: str | None) -> str:
+    """Mayúsculas y sin separadores habituales (espacios, guiones, puntos).
+
+    Tolera `None` (campo que el OCR no leyó = `null`, regla anti-alucinación): se trata como
+    cadena vacía para que el validador devuelva un veredicto "no válido" tranquilo en vez de
+    lanzar `AttributeError`. Punto único de defensa contra el campo no leído (BP-4).
+    """
+    if value is None:
+        return ""
     cleaned = value.strip().upper()
     return "".join(ch for ch in cleaned if ch not in _STRIP_CHARS)
 
@@ -81,7 +88,7 @@ def _normalize(value: str) -> str:
 # --- Identificadores fiscales españoles ----------------------------------------------------
 
 
-def validate_nif(value: str) -> CheckResult:
+def validate_nif(value: str | None) -> CheckResult:
     """NIF de persona física española: 8 dígitos + letra de control (módulo 23)."""
     nif = _normalize(value)
     if len(nif) != 9 or not nif[:8].isdigit() or not nif[8].isalpha():
@@ -92,7 +99,7 @@ def validate_nif(value: str) -> CheckResult:
     return CheckResult(True)
 
 
-def validate_nie(value: str) -> CheckResult:
+def validate_nie(value: str | None) -> CheckResult:
     """NIE de extranjero: prefijo X/Y/Z + 7 dígitos + letra (mismo algoritmo que el NIF)."""
     nie = _normalize(value)
     if len(nie) != 9 or nie[0] not in _NIE_PREFIX or not nie[1:8].isdigit() or not nie[8].isalpha():
@@ -104,7 +111,7 @@ def validate_nie(value: str) -> CheckResult:
     return CheckResult(True)
 
 
-def validate_cif(value: str) -> CheckResult:
+def validate_cif(value: str | None) -> CheckResult:
     """CIF de entidad: letra de tipo + 7 dígitos + dígito/letra de control."""
     cif = _normalize(value)
     if len(cif) != 9 or cif[0] not in _CIF_TYPES or not cif[1:8].isdigit():
@@ -134,7 +141,7 @@ def validate_cif(value: str) -> CheckResult:
     return CheckResult(True)
 
 
-def validate_tax_id(value: str) -> CheckResult:
+def validate_tax_id(value: str | None) -> CheckResult:
     """Valida un identificador fiscal español detectando si es NIF, NIE o CIF."""
     normalized = _normalize(value)
     if not normalized:
@@ -152,7 +159,7 @@ def validate_tax_id(value: str) -> CheckResult:
 # --- IBAN ----------------------------------------------------------------------------------
 
 
-def validate_iban(value: str, *, country: str | None = "ES") -> CheckResult:
+def validate_iban(value: str | None, *, country: str | None = "ES") -> CheckResult:
     """Valida un IBAN por su checksum ISO 13616 (módulo 97).
 
     Si se indica `country` (por defecto "ES") se exige además ese prefijo y su longitud.

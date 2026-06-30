@@ -521,7 +521,7 @@ Para CADA endpoint que toque datos:
 | BP-1 — `check_tax_line` muerto; cuadre de totales laxo | ✅ cerrado (PR #26) | `docs/specs/BP-1-cuadre-aritmetico-por-tramo.md` |
 | BP-2 — clasificación de control del CIF (N/W/R) "demasiado laxa" | ✅ cerrado **como falso positivo** (PR #28) | `docs/specs/BP-2-clasificacion-control-cif.md` |
 | BP-3 — service-locator en `health.py` (DIP) | ✅ cerrado (PR #29) | `docs/specs/BP-3-health-inyeccion-settings.md` |
-| BP-4 — validadores no defienden contra `None` | pendiente | — |
+| BP-4 — validadores no defienden contra `None` | ✅ cerrado (PR #30) | `docs/specs/BP-4-validadores-defienden-none.md` |
 | BP-5 — `log_level` traga valores inválidos en silencio | pendiente | — |
 | BP-6 — `CheckResult` no preparado para niveles L2/L3/L4 | pendiente | — |
 
@@ -539,3 +539,11 @@ limpieza. Detalle y fuentes: `docs/specs/BP-2-clasificacion-control-cif.md`.
 rompiendo DIP e impidiendo sustituir la configuración en test con `app.dependency_overrides`. Se inyecta vía
 `Depends(get_settings)`. Refactor de testabilidad: el contrato HTTP del healthcheck no cambia. Detalle:
 `docs/specs/BP-3-health-inyeccion-settings.md`.
+
+**BP-4 (2026-06-30):** los validadores de identificadores (`validate_nif/nie/cif/tax_id/iban`) llamaban a
+`_normalize(value)` con `value.strip()`, así que un campo no leído por el OCR (`None`, que es justo lo que
+produce la regla anti-alucinación) lanzaba `AttributeError` en vez de devolver un veredicto. Se defiende en
+el punto único de normalización: `_normalize(None)` → `""` → veredicto "no válido" tranquilo. Las firmas
+públicas pasan a aceptar `str | None`. **Decisión de Julio (Opción A):** se cubre `None` y vacío; defender
+contra otros tipos (Opción B) se evaluará al final con datos reales. Detalle:
+`docs/specs/BP-4-validadores-defienden-none.md`.
