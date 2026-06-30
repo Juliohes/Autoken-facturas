@@ -91,18 +91,20 @@
 - [x] **0.2**: 5 registros A en hPanel de Hostinger creados y verificados (tenant demo = `tuti`).
 - [x] **0.3**: acceso SSH entregado; VPS B endurecido completo, VPS A mínimo.
 - **Fase 1 — candidatos OCR (rev. 2026-06-16, ver plan §11.7 + ADR-0007/0010)**: bench de Azure DocIntel (✅) +
-  **Gemini 3 Flash/Pro** + **Claude Opus 4.6** (ambos vía Vertex UE, misma cuenta Google) + familia GPT en Azure
-  (`gpt-4.1`, `gpt-5.1` tras cuota) + **Mistral OCR 3** + **PaddleOCR-VL** y **Qwen3-VL** self-hosted (los monta
-  Claude Code). Cuentas que necesita Julio: 3 (Azure ✓, Google Cloud, Mistral). Capa de verificación "tipo DNI"
+  **Gemini 3 Flash/Pro** + **Claude** (Opus 4.8/Sonnet 4.6 vía Vertex UE, misma cuenta Google) + familia GPT en
+  Azure (**`gpt-5.1`**; `gpt-4.1`/`gpt-4o` deprecados) + **Mistral OCR** + **PaddleOCR-VL** y **Qwen3-VL**
+  self-hosted (los monta Claude Code). Cuentas que necesita Julio: 3 (Azure ✓, Google Cloud ✓, Mistral ✓). Capa de verificación "tipo DNI"
   (CIF/NIF mód-23, IBAN mód-97, VIES/AEAT, cuadre aritmético) común a todos → **implementada** en
   `backend/src/ocr/verification.py` (PR `feature/adr0010-verification-tipo-dni`, 26 tests verdes).
-- **Azure (estado 2026-06-16)**: DocIntel en West Europe (`autoken-docintel-we`, clave ya en uso), Azure OpenAI
-  en **Sweden Central** (`autoken-openai-sweden`); **cuota solicitada** (gpt-4.1/gpt-5.1 Data Zone Standard,
-  30.000 TPM) pendiente de aprobación (1-2 días). Despliegue obligatorio Data Zone Standard / Standard, NUNCA Global.
-- [ ] Pendientes de Julio para arrancar Fase 1: terminar despliegue gpt-4o + pegar claves en `kk.txt`;
-      cuenta **Google Cloud** (Gemini/Vertex UE); cuenta **Mistral**; **15-30 facturas reales** →
-      `entregas/facturas/` (carpeta vacía, BLOQUEA el bench). PaddleOCR no requiere nada de Julio.
-- [ ] (No bloquea Fase 1) SMTP soporte@autoken.es; Excel 51 empresas → `entregas/`.
+- **Entregables Fase 1 (estado 2026-06-30): TODO LISTO** (detalle en plan **§11.10**). Azure DocIntel
+  (`autoken-docintel-we`, WE) ✓; Azure OpenAI (`autoken-openai-sweden`, Sweden Central) con **`gpt-5.1`
+  desplegado** en Data Zone Standard (NUNCA Global) ✓ — `gpt-4.1`/`gpt-4o` quedaron **deprecados por Azure**
+  (§11.3); Mistral `MISTRAL_API_KEY` ✓; **Google Vertex** proyecto `autoken-ocr` habilitado + facturación +
+  SA `vertex-bench` (JSON en `secrets/vertex-sa.json`), región `europe-west4`, Gemini 3 y Claude (Opus
+  4.8/4.7, Sonnet 4.6, Fable 5) disponibles ✓. **20 facturas** en `entregas/facturas/` ✓ → bench (1.2)
+  desbloqueado. PaddleOCR-VL/Qwen3-VL los monta Claude Code.
+- [ ] Pendiente de Julio (NO bloquea 1.2): prompt para integrar el **nuevo OCR de Mistral** como candidato del
+      bench; SMTP soporte@autoken.es; Excel 51 empresas → `entregas/`.
 
 ### Enmienda 2026-06-18 — CIF de contraparte (plan §11.8, ADR-0011)
 - **Identidad propia conocida**: el nombre/CIF de la empresa del usuario NO se leen por OCR; se inyectan desde
