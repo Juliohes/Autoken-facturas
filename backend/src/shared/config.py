@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     # en staging/producción se inyecta por env var. No se conecta en 0.4.
     database_url: str = "postgresql+asyncpg://autoken_app:autoken@postgres:5432/autoken"
 
+    # OCR — Mistral OCR 4 (cabeza de serie del bench, Fase 1). La API key es un secreto y solo
+    # vive en el `.env`/GitHub Secrets; el modelo y el timeout son configuración no secreta.
+    mistral_api_key: str | None = None
+    mistral_ocr_model: str = "mistral-ocr-4-0"
+    mistral_ocr_timeout: int = 60
+
     @property
     def is_production(self) -> bool:
         return self.app_env is AppEnv.PRODUCTION
