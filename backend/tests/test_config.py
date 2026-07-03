@@ -1,9 +1,25 @@
 """Tests de la configuración de la aplicación (BP-5: log_level fail-loud)."""
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from shared.config import LogLevel, Settings
+
+
+def test_env_file_se_resuelve_a_la_raiz_del_monorepo() -> None:
+    """El `.env` se ancla a la raíz del monorepo, no relativo al cwd.
+
+    Regresión: arrancar el backend desde `backend/` (scripts, uvicorn) debe seguir leyendo el
+    `.env` de la raíz. Antes se cargaba `env_file=".env"` relativo al cwd y no se encontraba la
+    `MISTRAL_API_KEY`, aunque estuviera puesta.
+    """
+    env_file = Path(Settings.model_config["env_file"])  # type: ignore[arg-type]
+    assert env_file.is_absolute()
+    assert env_file.name == ".env"
+    # La raíz es la carpeta que contiene `.env.example` (marcador estable del repo).
+    assert (env_file.parent / ".env.example").is_file()
 
 
 @pytest.mark.parametrize("nivel_invalido", ["warn", "verbose", "trace", "", "123"])
