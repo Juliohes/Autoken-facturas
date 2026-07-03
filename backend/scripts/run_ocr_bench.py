@@ -17,8 +17,9 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from ocr.engines import build_default_reading_engine
+from ocr.engines import build_default_reading_engine, build_docintel_engine
 from ocr.engines.base import OcrEngine
+from ocr.engines.base import OcrError as _OcrError
 from ocr.eval import aggregate_by_engine, load_ground_truth, score_reading
 from shared.config import get_settings
 
@@ -27,11 +28,17 @@ _FACTURAS_DIR = Path(__file__).resolve().parents[2] / "entregas" / "facturas"
 
 
 def _build_engines(names: set[str] | None) -> dict[str, OcrEngine]:
-    """Construye los motores pedidos. Aquí se añadirán DocIntel, Gemini, Claude, gpt-5.1."""
+    """Construye los motores con credenciales disponibles. Luego: Gemini, Claude, gpt-5.1."""
     settings = get_settings()
+    builders = (build_default_reading_engine, build_docintel_engine)
     available: dict[str, OcrEngine] = {}
-    mistral = build_default_reading_engine(settings)
-    available[mistral.name] = mistral
+    for builder in builders:
+        try:
+            engine = builder(settings)
+        except _OcrError as exc:  # sin credenciales: se omite ese motor, no se cae el bench
+            print(f"  (motor omitido: {exc})")
+            continue
+        available[engine.name] = engine
     if names is None:
         return available
     return {name: engine for name, engine in available.items() if name in names}
