@@ -1,0 +1,24 @@
+{
+  "invoice_id": "wa-182153-2",
+  "source_file": "WhatsApp Image 2026-06-16 at 18.21.53 (2).jpeg",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "JUAN MENDEZ ASESORIA INTEGRAL DE EMPRESAS SL",
+      "tax_id": "B06844286"
+    },
+    {
+      "role": "recipient",
+      "name": "ESTUDIO INGHERVI SLU",
+      "tax_id": "B06400980"
+    }
+  ],
+  "issue_date": "2026-01-08",
+  "total_amount": "145.20",
+  "net_amount": "120.00",
+  "tax_amount": "25.20",
+  "counterparty_tax_id": null,
+  "read_confidence": "alta",
+  "notes": "Factura 26/81. tax_amount incluye IVA 21% + recargo equivalencia 10%.",
+  "validated_by_julio": false
+}

@@ -1,0 +1,24 @@
+{
+  "invoice_id": "wa-182206",
+  "source_file": "WhatsApp Image 2026-06-16 at 18.22.06.jpeg",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "Estudio INGHERVI s.l.u.",
+      "tax_id": "B06400980"
+    },
+    {
+      "role": "recipient",
+      "name": "JOSE FELIX RODRIGUEZ DELGADO",
+      "tax_id": "44779513P"
+    }
+  ],
+  "issue_date": "2026-03-25",
+  "total_amount": "907.50",
+  "net_amount": "750.00",
+  "tax_amount": "157.50",
+  "counterparty_tax_id": null,
+  "read_confidence": "alta",
+  "notes": "Factura 26F00007. Emitida por Inghervi. Girada pero legible.",
+  "validated_by_julio": false
+}

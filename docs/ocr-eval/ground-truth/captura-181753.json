@@ -1,0 +1,24 @@
+{
+  "invoice_id": "captura-181753",
+  "source_file": "Captura de pantalla 2026-06-16 181753.png",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "Roberto Ramirez Sanchez, S.L. (ALEX DISTRIBUCIONES)",
+      "tax_id": "B06695381"
+    },
+    {
+      "role": "recipient",
+      "name": "LAREU JIMENEZ, JORGE A.",
+      "tax_id": "08835156M"
+    }
+  ],
+  "issue_date": "2026-06-08",
+  "total_amount": "165.74",
+  "net_amount": "144.08",
+  "tax_amount": "21.66",
+  "counterparty_tax_id": null,
+  "read_confidence": "alta",
+  "notes": "Factura 01F/6.809. Tres tipos de IVA (21/10/4).",
+  "validated_by_julio": false
+}

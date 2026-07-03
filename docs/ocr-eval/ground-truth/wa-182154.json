@@ -1,0 +1,24 @@
+{
+  "invoice_id": "wa-182154",
+  "source_file": "WhatsApp Image 2026-06-16 at 18.21.54.jpeg",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "Ceres Motor, S.L.",
+      "tax_id": "B10191625"
+    },
+    {
+      "role": "recipient",
+      "name": "Estudio Inghervi S.L.",
+      "tax_id": "B06400980"
+    }
+  ],
+  "issue_date": "2026-03-12",
+  "total_amount": "600.00",
+  "net_amount": "495.87",
+  "tax_amount": "104.13",
+  "counterparty_tax_id": null,
+  "read_confidence": "media",
+  "notes": "Factura CB-26-0036 (Mandel Motor/BMW Service). Invertida 180 pero legible.",
+  "validated_by_julio": false
+}

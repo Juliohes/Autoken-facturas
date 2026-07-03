@@ -1,0 +1,24 @@
+{
+  "invoice_id": "wa-182153-1",
+  "source_file": "WhatsApp Image 2026-06-16 at 18.21.53 (1).jpeg",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "Estudio INGHERVI s.l.u.",
+      "tax_id": "B06400980"
+    },
+    {
+      "role": "recipient",
+      "name": "INGENIEROS CONSULTORES GLOBAL ENERGY S.L.",
+      "tax_id": "B06727739"
+    }
+  ],
+  "issue_date": "2026-01-01",
+  "total_amount": "1122.00",
+  "net_amount": "1100.00",
+  "tax_amount": "231.00",
+  "counterparty_tax_id": null,
+  "read_confidence": "alta",
+  "notes": "Factura 26F00001. Base 1100 + IVA 231 - IRPF 209 = 1122 a pagar. tax_amount = IVA.",
+  "validated_by_julio": false
+}

@@ -1,0 +1,24 @@
+{
+  "invoice_id": "captura-181602",
+  "source_file": "Captura de pantalla 2026-06-16 181602.png",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "Coca-Cola European Partners",
+      "tax_id": null
+    },
+    {
+      "role": "recipient",
+      "name": "LAREU JIMENEZ JORGE ANTONIO",
+      "tax_id": "08835156M"
+    }
+  ],
+  "issue_date": "2026-05-27",
+  "total_amount": "163.99",
+  "net_amount": "135.53",
+  "tax_amount": "28.46",
+  "counterparty_tax_id": null,
+  "read_confidence": "media",
+  "notes": "Foto sobre mesa. Emisor Coca-Cola sin CIF visible. Cuadre 135.53+28.46=163.99.",
+  "validated_by_julio": false
+}
