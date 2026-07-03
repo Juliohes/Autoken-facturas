@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     mistral_ocr_model: str = "mistral-ocr-4-0"
     mistral_ocr_timeout: int = 60
 
+    # OCR — Azure Document Intelligence (candidato del bench). Endpoint y clave son secretos; el
+    # modelo (`prebuilt-layout` da markdown con tablas) es configuración no secreta.
+    azure_docintel_endpoint: str | None = None
+    azure_docintel_key: str | None = None
+    azure_docintel_model: str = "prebuilt-layout"
+
     @property
     def is_production(self) -> bool:
         return self.app_env is AppEnv.PRODUCTION
