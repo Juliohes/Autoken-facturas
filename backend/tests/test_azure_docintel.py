@@ -45,9 +45,7 @@ def factura(tmp_path: Path) -> Path:
 
 async def test_extract_devuelve_resultado_normalizado(factura: Path) -> None:  # C1
     page = SimpleNamespace(page_number=1, width=8.5, height=11.0)
-    result_engine = _engine_with_result(
-        _fake_result("# Factura\nTotal: 121,00 EUR", [page])
-    )
+    result_engine = _engine_with_result(_fake_result("# Factura\nTotal: 121,00 EUR", [page]))
 
     result = await result_engine.extract(factura)
 
