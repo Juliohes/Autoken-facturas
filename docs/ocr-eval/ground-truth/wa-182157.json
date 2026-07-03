@@ -1,0 +1,24 @@
+{
+  "invoice_id": "wa-182157",
+  "source_file": "WhatsApp Image 2026-06-16 at 18.21.57.jpeg",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "Ana Maria Rosa Mateos",
+      "tax_id": "08843488B"
+    },
+    {
+      "role": "recipient",
+      "name": "Estudio Inghervi, S.L.U.",
+      "tax_id": "B06400980"
+    }
+  ],
+  "issue_date": "2026-03-11",
+  "total_amount": "986.79",
+  "net_amount": "815.53",
+  "tax_amount": "171.26",
+  "counterparty_tax_id": null,
+  "read_confidence": "alta",
+  "notes": "Factura TeknoWeb 2026 0069. Girada 90.",
+  "validated_by_julio": false
+}

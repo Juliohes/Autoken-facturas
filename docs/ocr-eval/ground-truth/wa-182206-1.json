@@ -1,0 +1,24 @@
+{
+  "invoice_id": "wa-182206-1",
+  "source_file": "WhatsApp Image 2026-06-16 at 18.22.06 (1).jpeg",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "Estudio INGHERVI s.l.u.",
+      "tax_id": "B06400980"
+    },
+    {
+      "role": "recipient",
+      "name": "HIJOS DE FRANCISCO ESCASO S.L.",
+      "tax_id": "B06339923"
+    }
+  ],
+  "issue_date": "2026-04-02",
+  "total_amount": "544.50",
+  "net_amount": "450.00",
+  "tax_amount": "94.50",
+  "counterparty_tax_id": null,
+  "read_confidence": "alta",
+  "notes": "Factura 26F00006. Emitida por Inghervi.",
+  "validated_by_julio": false
+}

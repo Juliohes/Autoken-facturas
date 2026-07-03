@@ -1,0 +1,24 @@
+{
+  "invoice_id": "wa-182205-1",
+  "source_file": "WhatsApp Image 2026-06-16 at 18.22.05 (1).jpeg",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "AYUNTAMIENTO DE BADAJOZ",
+      "tax_id": null
+    },
+    {
+      "role": "recipient",
+      "name": "ESTUDIO INGHERVI SL",
+      "tax_id": "B06400980"
+    }
+  ],
+  "issue_date": null,
+  "total_amount": "113.16",
+  "net_amount": null,
+  "tax_amount": null,
+  "counterparty_tax_id": null,
+  "read_confidence": "media",
+  "notes": "Liquidacion IVTM (impuesto de vehiculos), no factura comercial. Girada 90. Sin fecha de emision ni CIF del ayuntamiento. Sin IVA.",
+  "validated_by_julio": false
+}

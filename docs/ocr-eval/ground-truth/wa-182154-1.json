@@ -1,0 +1,24 @@
+{
+  "invoice_id": "wa-182154-1",
+  "source_file": "WhatsApp Image 2026-06-16 at 18.21.54 (1).jpeg",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "Telefonica Moviles Espana, S.A. (Movistar)",
+      "tax_id": "A78923125"
+    },
+    {
+      "role": "recipient",
+      "name": "ESTUDIO INGHERVI, S.L.",
+      "tax_id": "B06400980"
+    }
+  ],
+  "issue_date": "2026-04-01",
+  "total_amount": "27.89",
+  "net_amount": "23.05",
+  "tax_amount": "4.84",
+  "counterparty_tax_id": null,
+  "read_confidence": "media",
+  "notes": "Girada 90; marca 'NOTA INFORMATIVA' (no es la factura definitiva). CIF Telefonica en pie.",
+  "validated_by_julio": false
+}

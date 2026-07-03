@@ -1,0 +1,24 @@
+{
+  "invoice_id": "wa-182153",
+  "source_file": "WhatsApp Image 2026-06-16 at 18.21.53.jpeg",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "Ana Maria Rosa Mateos (TeknoWeb)",
+      "tax_id": "08843488B"
+    },
+    {
+      "role": "recipient",
+      "name": "ESTUDIO INGHERVI, S.L.U.",
+      "tax_id": "B06400980"
+    }
+  ],
+  "issue_date": "2026-05-18",
+  "total_amount": "156.15",
+  "net_amount": "129.05",
+  "tax_amount": "27.10",
+  "counterparty_tax_id": null,
+  "read_confidence": "alta",
+  "notes": "Factura 2026 0124. Emisor persona fisica (marca TeknoWeb).",
+  "validated_by_julio": false
+}

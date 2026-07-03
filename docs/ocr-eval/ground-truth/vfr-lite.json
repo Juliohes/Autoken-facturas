@@ -1,0 +1,24 @@
+{
+  "invoice_id": "vfr-lite",
+  "source_file": "Factura pago VFR Lite - Julio Hernandez.pdf",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "Boutique Holdings LLC",
+      "tax_id": "39-2932994"
+    },
+    {
+      "role": "recipient",
+      "name": "Julio",
+      "tax_id": null
+    }
+  ],
+  "issue_date": "2026-04-07",
+  "total_amount": "300.00",
+  "net_amount": "300.00",
+  "tax_amount": null,
+  "counterparty_tax_id": null,
+  "read_confidence": "alta",
+  "notes": "PDF nativo. Factura US (Delaware); tax_id emisor es EIN, no CIF/NIF. Sin IVA. Nº I260943.",
+  "validated_by_julio": false
+}

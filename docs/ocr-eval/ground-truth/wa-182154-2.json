@@ -1,0 +1,24 @@
+{
+  "invoice_id": "wa-182154-2",
+  "source_file": "WhatsApp Image 2026-06-16 at 18.21.54 (2).jpeg",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "CERES MOTOR S.L.",
+      "tax_id": null
+    },
+    {
+      "role": "recipient",
+      "name": "ESTUDIO INGHERVI S.L.",
+      "tax_id": "B06400980"
+    }
+  ],
+  "issue_date": "2026-03-12",
+  "total_amount": "64028.42",
+  "net_amount": "52916.05",
+  "tax_amount": "11112.37",
+  "counterparty_tax_id": null,
+  "read_confidence": "media",
+  "notes": "Girada 90. Venta BMW 520d (VNB-26-0030). CIF emisor ambiguo entre cabecera y pie -> null.",
+  "validated_by_julio": false
+}

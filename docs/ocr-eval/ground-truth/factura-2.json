@@ -1,0 +1,24 @@
+{
+  "invoice_id": "factura-2",
+  "source_file": "factura-2.pdf",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "LUMAPA2 BROKERS SL",
+      "tax_id": "B56922321"
+    },
+    {
+      "role": "recipient",
+      "name": "HISPALAR NEW CENTURY S.A.",
+      "tax_id": "A87563888"
+    }
+  ],
+  "issue_date": "2026-05-18",
+  "total_amount": "996.40",
+  "net_amount": "996.40",
+  "tax_amount": "0.00",
+  "counterparty_tax_id": null,
+  "read_confidence": "alta",
+  "notes": "PDF nativo. IVA exento (Art.20.Uno.16 LIVA). Comisiones mediacion de seguros.",
+  "validated_by_julio": false
+}

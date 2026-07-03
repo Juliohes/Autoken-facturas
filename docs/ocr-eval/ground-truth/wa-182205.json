@@ -1,0 +1,24 @@
+{
+  "invoice_id": "wa-182205",
+  "source_file": "WhatsApp Image 2026-06-16 at 18.22.05.jpeg",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "Repsol",
+      "tax_id": null
+    },
+    {
+      "role": "recipient",
+      "name": "ESTUDIO INGHERVY, S.L.",
+      "tax_id": null
+    }
+  ],
+  "issue_date": "2026-01-22",
+  "total_amount": "137.31",
+  "net_amount": null,
+  "tax_amount": "29.30",
+  "counterparty_tax_id": null,
+  "read_confidence": "media",
+  "notes": "Factura de luz Repsol (Nº 61077316943), girada. No se ven CIF de emisor ni receptor en el recorte.",
+  "validated_by_julio": false
+}

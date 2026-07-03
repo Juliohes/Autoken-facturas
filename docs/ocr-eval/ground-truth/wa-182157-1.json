@@ -1,0 +1,24 @@
+{
+  "invoice_id": "wa-182157-1",
+  "source_file": "WhatsApp Image 2026-06-16 at 18.21.57 (1).jpeg",
+  "parties": [
+    {
+      "role": "issuer",
+      "name": "FCC Aqualia, S.A.",
+      "tax_id": "A26019992"
+    },
+    {
+      "role": "recipient",
+      "name": "Estudio Inghervi S.L.",
+      "tax_id": null
+    }
+  ],
+  "issue_date": "2026-03-24",
+  "total_amount": "26.00",
+  "net_amount": null,
+  "tax_amount": "2.31",
+  "counterparty_tax_id": null,
+  "read_confidence": "baja",
+  "notes": "Factura agua (1T2026), baja resolucion y girada. CIF receptor ilegible. Total 26.00 incluye canon saneamiento 0.56.",
+  "validated_by_julio": false
+}
