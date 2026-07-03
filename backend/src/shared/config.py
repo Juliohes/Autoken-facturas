@@ -6,9 +6,24 @@ valores reales de secretos: el .env vive fuera del repo (ver .env.example).
 
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _find_project_root() -> Path:
+    """Raíz del monorepo: la carpeta que contiene `.env.example` (marcador estable del repo).
+
+    Ancla el `.env` a una ruta absoluta para que la configuración funcione con independencia del
+    directorio desde el que se arranque el proceso (uvicorn o scripts lanzados desde `backend/`).
+    En contenedor no se copia `.env.example` y las vars llegan por entorno: el fallback a cwd es
+    inocuo porque pydantic prioriza las variables de entorno sobre el fichero.
+    """
+    for parent in Path(__file__).resolve().parents:
+        if (parent / ".env.example").is_file():
+            return parent
+    return Path.cwd()
 
 
 class AppEnv(StrEnum):
@@ -37,7 +52,7 @@ class Settings(BaseSettings):
     """Ajustes de la aplicación. Los campos se sobreescriben por env vars."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_find_project_root() / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
