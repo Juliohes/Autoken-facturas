@@ -109,6 +109,12 @@ class Settings(BaseSettings):
     azure_openai_deployment: str | None = None
     azure_openai_api_version: str = "2024-12-01-preview"
 
+    # OCR — Claude vía Vertex AI (candidato del bench). Reusa proyecto/credenciales de Google
+    # (mismos que Gemini). La región y el id de modelo deben casar con la disponibilidad en Vertex;
+    # se ajustan en el `.env` si hace falta (Claude no está en todas las regiones).
+    claude_location: str = "europe-west1"
+    claude_model: str = "claude-sonnet-4-6"
+
     @property
     def is_production(self) -> bool:
         return self.app_env is AppEnv.PRODUCTION

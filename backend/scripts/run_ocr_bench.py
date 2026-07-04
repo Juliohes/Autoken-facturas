@@ -20,6 +20,7 @@ from pathlib import Path
 
 from ocr.engines import (
     build_azure_openai_engine,
+    build_claude_engine,
     build_default_reading_engine,
     build_docintel_engine,
     build_gemini_engines,
@@ -34,7 +35,7 @@ _FACTURAS_DIR = Path(__file__).resolve().parents[2] / "entregas" / "facturas"
 
 
 def _build_engines(names: set[str] | None) -> dict[str, OcrEngine]:
-    """Construye los motores con credenciales disponibles. Luego: Claude (Vertex).
+    """Construye los motores con credenciales disponibles (los 6 candidatos del bench).
 
     Cada builder devuelve uno o varios motores (Gemini aporta Flash y Pro). Un builder cuyo motor
     no tenga credenciales lanza `OcrError` y se omite entero, sin caer el bench.
@@ -45,6 +46,7 @@ def _build_engines(names: set[str] | None) -> dict[str, OcrEngine]:
         build_docintel_engine,
         build_gemini_engines,
         build_azure_openai_engine,
+        build_claude_engine,
     )
     available: dict[str, OcrEngine] = {}
     for builder in builders:

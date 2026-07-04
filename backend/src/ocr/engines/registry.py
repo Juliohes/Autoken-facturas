@@ -11,6 +11,7 @@ from __future__ import annotations
 from ocr.engines.azure_docintel import AzureDocIntelEngine
 from ocr.engines.azure_openai import AzureOpenAIEngine
 from ocr.engines.base import OcrEngine
+from ocr.engines.claude_vertex import ClaudeVertexEngine
 from ocr.engines.gemini import GeminiEngine
 from ocr.engines.mistral_ocr4 import MistralOcr4Engine
 from shared.config import Settings
@@ -20,6 +21,7 @@ __all__ = [
     "build_docintel_engine",
     "build_gemini_engines",
     "build_azure_openai_engine",
+    "build_claude_engine",
 ]
 
 
@@ -73,4 +75,15 @@ def build_azure_openai_engine(settings: Settings) -> OcrEngine:
         deployment=settings.azure_openai_deployment,
         name="gpt-5.1",
         api_version=settings.azure_openai_api_version,
+    )
+
+
+def build_claude_engine(settings: Settings) -> OcrEngine:
+    """Construye el motor Claude (Vertex). Lanza `ClaudeOcrError` si faltan las credenciales."""
+    return ClaudeVertexEngine(
+        name="claude-vertex",
+        model=settings.claude_model,
+        project=settings.google_cloud_project,
+        location=settings.claude_location,
+        credentials_path=settings.google_application_credentials,
     )

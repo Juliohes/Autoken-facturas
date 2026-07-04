@@ -7,6 +7,7 @@ from ocr.engines.azure_docintel import (
 )
 from ocr.engines.azure_openai import AzureOpenAIEngine, AzureOpenAIError
 from ocr.engines.base import OcrEngine, OcrError, OcrPage, OcrResult
+from ocr.engines.claude_vertex import ClaudeOcrError, ClaudeVertexEngine
 from ocr.engines.gemini import GeminiEngine, GeminiOcrError
 from ocr.engines.mistral_ocr4 import (
     DEFAULT_MISTRAL_OCR_MODEL,
@@ -35,8 +36,11 @@ __all__ = [
     "GeminiOcrError",
     "AzureOpenAIEngine",
     "AzureOpenAIError",
+    "ClaudeVertexEngine",
+    "ClaudeOcrError",
     "build_default_reading_engine",
     "build_docintel_engine",
     "build_gemini_engines",
     "build_azure_openai_engine",
+    "build_claude_engine",
 ]
