@@ -16,6 +16,7 @@ from ocr.engines.mistral_ocr4 import (
 )
 from ocr.engines.registry import (
     build_azure_openai_engine,
+    build_claude_engine,
     build_default_reading_engine,
     build_docintel_engine,
     build_gemini_engines,
