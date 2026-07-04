@@ -129,6 +129,8 @@ class ClaudeVertexEngine(OcrEngine):
         return self._client
 
     def _make_client(self) -> AsyncAnthropicVertex:
+        # Garantizado por la validación del __init__ cuando no se inyecta cliente.
+        assert self._project is not None
         credentials = service_account.Credentials.from_service_account_file(  # type: ignore[no-untyped-call]
             self._credentials_path or "", scopes=list(_VERTEX_SCOPES)
         )
