@@ -89,6 +89,19 @@ class Settings(BaseSettings):
     azure_docintel_key: str | None = None
     azure_docintel_model: str = "prebuilt-layout"
 
+    # OCR — Google Gemini vía Vertex AI (candidatos del bench: Flash y Pro). El proyecto y la ruta
+    # al JSON de la service account son secretos; la región y los ids de modelo no lo son. Los
+    # nombres de campo mapean a las env vars estándar de Vertex (GOOGLE_CLOUD_*, GOOGLE_APP_*).
+    google_cloud_project: str | None = None
+    google_cloud_location: str = "europe-west4"
+    google_application_credentials: str | None = None
+    # Gemini 3 aún no está en europe-west4: se accede por el endpoint `global` (decisión de Julio,
+    # 2026-07-04). Región propia para no atar el resto de usos Vertex a global. Ids verificados
+    # contra `models.list()` de Vertex; `gemini-3-pro` pelado no existe, el Pro actual es 3.1.
+    gemini_location: str = "global"
+    gemini_flash_model: str = "gemini-3-flash-preview"
+    gemini_pro_model: str = "gemini-3.1-pro-preview"
+
     @property
     def is_production(self) -> bool:
         return self.app_env is AppEnv.PRODUCTION

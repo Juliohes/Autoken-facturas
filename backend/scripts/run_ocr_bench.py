@@ -7,8 +7,9 @@ Uso (desde `backend/`, con el venv activado):
     python scripts/run_ocr_bench.py
     python scripts/run_ocr_bench.py --engines mistral-ocr-4   # subconjunto
 
-Por ahora el único motor cableado es Mistral OCR 4 (cabeza de serie). Los siguientes se añaden en
-`_build_engines` a medida que tengan su adaptador.
+Motores cableados: Mistral OCR 4 (cabeza de serie) y Azure DocIntel. Cada motor sin credenciales en
+el `.env` se omite con un aviso, sin caer el bench. Los siguientes (Gemini, Claude, gpt-5.1) se
+añaden en `_build_engines` a medida que tengan su adaptador.
 """
 
 from __future__ import annotations
@@ -17,7 +18,11 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from ocr.engines import build_default_reading_engine, build_docintel_engine
+from ocr.engines import (
+    build_default_reading_engine,
+    build_docintel_engine,
+    build_gemini_engines,
+)
 from ocr.engines.base import OcrEngine
 from ocr.engines.base import OcrError as _OcrError
 from ocr.eval import aggregate_by_engine, load_ground_truth, score_reading
@@ -28,17 +33,22 @@ _FACTURAS_DIR = Path(__file__).resolve().parents[2] / "entregas" / "facturas"
 
 
 def _build_engines(names: set[str] | None) -> dict[str, OcrEngine]:
-    """Construye los motores con credenciales disponibles. Luego: Gemini, Claude, gpt-5.1."""
+    """Construye los motores con credenciales disponibles. Luego: Claude, gpt-5.1.
+
+    Cada builder devuelve uno o varios motores (Gemini aporta Flash y Pro). Un builder cuyo motor
+    no tenga credenciales lanza `OcrError` y se omite entero, sin caer el bench.
+    """
     settings = get_settings()
-    builders = (build_default_reading_engine, build_docintel_engine)
+    builders = (build_default_reading_engine, build_docintel_engine, build_gemini_engines)
     available: dict[str, OcrEngine] = {}
     for builder in builders:
         try:
-            engine = builder(settings)
+            built = builder(settings)
         except _OcrError as exc:  # sin credenciales: se omite ese motor, no se cae el bench
             print(f"  (motor omitido: {exc})")
             continue
-        available[engine.name] = engine
+        for engine in built if isinstance(built, list) else [built]:
+            available[engine.name] = engine
     if names is None:
         return available
     return {name: engine for name, engine in available.items() if name in names}

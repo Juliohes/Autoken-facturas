@@ -10,10 +10,15 @@ from __future__ import annotations
 
 from ocr.engines.azure_docintel import AzureDocIntelEngine
 from ocr.engines.base import OcrEngine
+from ocr.engines.gemini import GeminiEngine
 from ocr.engines.mistral_ocr4 import MistralOcr4Engine
 from shared.config import Settings
 
-__all__ = ["build_default_reading_engine", "build_docintel_engine"]
+__all__ = [
+    "build_default_reading_engine",
+    "build_docintel_engine",
+    "build_gemini_engines",
+]
 
 
 def build_default_reading_engine(settings: Settings) -> OcrEngine:
@@ -35,3 +40,24 @@ def build_docintel_engine(settings: Settings) -> OcrEngine:
         key=settings.azure_docintel_key,
         model=settings.azure_docintel_model,
     )
+
+
+def build_gemini_engines(settings: Settings) -> list[OcrEngine]:
+    """Construye los dos candidatos Gemini (Flash y Pro) que comparten proyecto/credenciales.
+
+    Lanza `GeminiOcrError` si faltan las credenciales de Vertex (así el runner los omite juntos).
+    """
+    tiers = (
+        ("gemini-3-flash", settings.gemini_flash_model),
+        ("gemini-3-pro", settings.gemini_pro_model),
+    )
+    return [
+        GeminiEngine(
+            name=name,
+            model=model,
+            project=settings.google_cloud_project,
+            location=settings.gemini_location,
+            credentials_path=settings.google_application_credentials,
+        )
+        for name, model in tiers
+    ]
