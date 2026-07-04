@@ -102,6 +102,13 @@ class Settings(BaseSettings):
     gemini_flash_model: str = "gemini-3-flash-preview"
     gemini_pro_model: str = "gemini-3.1-pro-preview"
 
+    # OCR — Azure OpenAI (gpt-5.1, chat-visión). Candidato del bench. Endpoint, clave y despliegue
+    # son secretos; el despliegue debe ser Data Zone Standard / EU (nunca Global), por RGPD.
+    azure_openai_endpoint: str | None = None
+    azure_openai_key: str | None = None
+    azure_openai_deployment: str | None = None
+    azure_openai_api_version: str = "2024-12-01-preview"
+
     @property
     def is_production(self) -> bool:
         return self.app_env is AppEnv.PRODUCTION
