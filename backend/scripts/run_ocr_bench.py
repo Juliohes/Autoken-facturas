@@ -19,6 +19,7 @@ import asyncio
 from pathlib import Path
 
 from ocr.engines import (
+    build_azure_openai_engine,
     build_default_reading_engine,
     build_docintel_engine,
     build_gemini_engines,
@@ -33,13 +34,18 @@ _FACTURAS_DIR = Path(__file__).resolve().parents[2] / "entregas" / "facturas"
 
 
 def _build_engines(names: set[str] | None) -> dict[str, OcrEngine]:
-    """Construye los motores con credenciales disponibles. Luego: Claude, gpt-5.1.
+    """Construye los motores con credenciales disponibles. Luego: Claude (Vertex).
 
     Cada builder devuelve uno o varios motores (Gemini aporta Flash y Pro). Un builder cuyo motor
     no tenga credenciales lanza `OcrError` y se omite entero, sin caer el bench.
     """
     settings = get_settings()
-    builders = (build_default_reading_engine, build_docintel_engine, build_gemini_engines)
+    builders = (
+        build_default_reading_engine,
+        build_docintel_engine,
+        build_gemini_engines,
+        build_azure_openai_engine,
+    )
     available: dict[str, OcrEngine] = {}
     for builder in builders:
         try:

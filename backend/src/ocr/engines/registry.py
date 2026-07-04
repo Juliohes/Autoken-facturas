@@ -9,6 +9,7 @@ registran aquí con la misma interfaz `OcrEngine`.
 from __future__ import annotations
 
 from ocr.engines.azure_docintel import AzureDocIntelEngine
+from ocr.engines.azure_openai import AzureOpenAIEngine
 from ocr.engines.base import OcrEngine
 from ocr.engines.gemini import GeminiEngine
 from ocr.engines.mistral_ocr4 import MistralOcr4Engine
@@ -18,6 +19,7 @@ __all__ = [
     "build_default_reading_engine",
     "build_docintel_engine",
     "build_gemini_engines",
+    "build_azure_openai_engine",
 ]
 
 
@@ -61,3 +63,14 @@ def build_gemini_engines(settings: Settings) -> list[OcrEngine]:
         )
         for name, model in tiers
     ]
+
+
+def build_azure_openai_engine(settings: Settings) -> OcrEngine:
+    """Construye el motor Azure OpenAI (gpt-5.1). Lanza `AzureOpenAIError` si falta la config."""
+    return AzureOpenAIEngine(
+        endpoint=settings.azure_openai_endpoint,
+        key=settings.azure_openai_key,
+        deployment=settings.azure_openai_deployment,
+        name="gpt-5.1",
+        api_version=settings.azure_openai_api_version,
+    )
