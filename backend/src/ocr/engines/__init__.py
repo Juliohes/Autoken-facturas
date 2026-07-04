@@ -6,12 +6,17 @@ from ocr.engines.azure_docintel import (
     AzureDocIntelError,
 )
 from ocr.engines.base import OcrEngine, OcrError, OcrPage, OcrResult
+from ocr.engines.gemini import GeminiEngine, GeminiOcrError
 from ocr.engines.mistral_ocr4 import (
     DEFAULT_MISTRAL_OCR_MODEL,
     MistralOcr4Engine,
     MistralOcrError,
 )
-from ocr.engines.registry import build_default_reading_engine, build_docintel_engine
+from ocr.engines.registry import (
+    build_default_reading_engine,
+    build_docintel_engine,
+    build_gemini_engines,
+)
 
 __all__ = [
     "OcrEngine",
@@ -24,6 +29,9 @@ __all__ = [
     "AzureDocIntelEngine",
     "AzureDocIntelError",
     "DEFAULT_DOCINTEL_MODEL",
+    "GeminiEngine",
+    "GeminiOcrError",
     "build_default_reading_engine",
     "build_docintel_engine",
+    "build_gemini_engines",
 ]
