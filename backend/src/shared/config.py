@@ -110,10 +110,11 @@ class Settings(BaseSettings):
     azure_openai_api_version: str = "2024-12-01-preview"
 
     # OCR — Claude vía Vertex AI (candidato del bench). Reusa proyecto/credenciales de Google
-    # (mismos que Gemini). La región y el id de modelo deben casar con la disponibilidad en Vertex;
-    # se ajustan en el `.env` si hace falta (Claude no está en todas las regiones).
+    # (mismos que Gemini). Ids/regiones verificados contra el listado de publisher models de Vertex
+    # (2026-07-04): en `europe-west1` (UE, RGPD) está `claude-sonnet-4-5`; los más nuevos
+    # (sonnet-4-6, opus-4-8, sonnet-5) solo en `global`. Ajustables en el `.env`.
     claude_location: str = "europe-west1"
-    claude_model: str = "claude-sonnet-4-6"
+    claude_model: str = "claude-sonnet-4-5@20250929"
 
     @property
     def is_production(self) -> bool:

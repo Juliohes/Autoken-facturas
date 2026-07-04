@@ -96,6 +96,9 @@ async def test_la_url_apunta_al_despliegue_y_manda_la_apikey(tmp_path: Path) -> 
     # gpt-5.1 es de razonamiento: max_completion_tokens y sin temperature.
     assert "max_completion_tokens" in payload
     assert "temperature" not in payload
+    # La imagen se manda en alta resolución para no perder el texto pequeño (CIF).
+    image = payload["messages"][0]["content"][1]["image_url"]
+    assert image["detail"] == "high"
 
 
 def test_sin_config_no_se_construye() -> None:

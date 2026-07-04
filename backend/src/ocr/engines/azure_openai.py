@@ -132,12 +132,15 @@ class AzureOpenAIEngine(OcrEngine):
                 "(el PDF se rasterizará en un paso previo, issue #16)"
             )
         encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        # `detail: high`: manda la imagen a más resolución. Sin esto, gpt submuestrea y pierde el
+        # texto pequeño (CIF/NIF), justo lo que más importa (§11.8).
+        image_url = {"url": f"data:{mime};base64,{encoded}", "detail": "high"}
         return [
             {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": self._prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{encoded}"}},
+                    {"type": "image_url", "image_url": image_url},
                 ],
             }
         ]
