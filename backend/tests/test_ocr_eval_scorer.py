@@ -5,7 +5,7 @@ qué campos capturó el motor (recall), tolerando el formato. No se ata al conce
 """
 
 from ocr.eval.models import GroundTruth, Party
-from ocr.eval.scorer import aggregate_by_engine, score_reading
+from ocr.eval.scorer import aggregate_by_engine, field_recall_by_engine, score_reading
 
 _GT = GroundTruth(
     invoice_id="factura-2",
@@ -62,3 +62,13 @@ def test_agregado_por_motor_promedia_recall_de_varias_facturas() -> None:
     assert 0.0 < agg["m"].recall < 1.0
     # recall específico de tax_id: bueno acierta 2/2, malo 1/2 -> 3/4
     assert agg["m"].tax_id_recall == 0.75
+
+
+def test_recall_por_campo_desglosa_cada_tipo_de_campo() -> None:
+    """El desglose por campo da un recall separado para tax_id, fecha y total de cada motor."""
+    bueno = score_reading(_GT, "B56922321 A87563888 18/05/2026 996,40", engine="m")
+    malo = score_reading(_GT, "B56922321 18/05/2026", engine="m")  # falta 1 CIF y el total
+    breakdown = field_recall_by_engine([bueno, malo])
+    assert breakdown["m"]["tax_id"] == 0.75  # 3 de 4 CIF entre las dos facturas
+    assert breakdown["m"]["issue_date"] == 1.0  # la fecha aparece en ambas
+    assert breakdown["m"]["total_amount"] == 0.5  # solo la buena trae el total
