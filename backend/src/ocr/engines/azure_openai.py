@@ -13,8 +13,8 @@ Notas de despliegue:
   del mismo presupuesto que la salida; para transcribir una página completa hace falta holgura
   (`_MAX_OUTPUT_TOKENS` alto) y bajar el esfuerzo de razonamiento (`reasoning_effort=low`): con el
   presupuesto por defecto truncaba la transcripción y se dejaba campos del pie (sobre todo el CIF).
-- Visión por chat/completions acepta imágenes (JPEG/PNG/WebP), no PDF. El PDF se rasterizará en un
-  paso previo común a los motores solo-imagen (issue #16); de momento se rechaza con error tipado.
+- Visión por chat/completions acepta imágenes (JPEG/PNG/WebP), no PDF. El PDF se rasteriza a PNG
+  (una imagen por página) en el paso previo común `ocr.preprocess.rasterize_pdf` (issue #16).
 
 SDK: REST directo con `httpx.AsyncClient`. Endpoint, clave y despliegue son secretos (en el `.env`).
 """
@@ -28,6 +28,7 @@ from typing import Any
 import httpx
 
 from ocr.engines.base import OcrEngine, OcrError, OcrPage, OcrResult
+from ocr.preprocess import RasterizeError, rasterize_pdf
 
 __all__ = ["AzureOpenAIEngine", "AzureOpenAIError", "OCR_PROMPT"]
 
@@ -131,26 +132,37 @@ class AzureOpenAIEngine(OcrEngine):
         )
 
     def _build_messages(self, path: Path) -> list[dict[str, Any]]:
-        """Mensaje de chat-visión: el prompt de transcripción + la imagen como data URI."""
-        mime = _IMAGE_MIME.get(path.suffix.lower())
+        """Mensaje de chat-visión: el prompt + una imagen por página (el PDF se rasteriza antes)."""
+        images = [
+            {"type": "image_url", "image_url": {"url": uri, "detail": "high"}}
+            for uri in self._image_data_uris(path)
+        ]
+        return [{"role": "user", "content": [{"type": "text", "text": self._prompt}, *images]}]
+
+    def _image_data_uris(self, path: Path) -> list[str]:
+        """Data URIs a mandar: la imagen tal cual, o cada página del PDF ya rasterizada.
+
+        gpt-visión no acepta PDF: se rasteriza a PNG en el paso previo común (issue #16). `detail:
+        high` (en el llamador) evita que gpt submuestree y pierda el texto pequeño (CIF/NIF, §11.8).
+        """
+        suffix = path.suffix.lower()
+        if suffix == ".pdf":
+            try:
+                pages = rasterize_pdf(path)
+            except RasterizeError as exc:
+                raise AzureOpenAIError(f"No se pudo rasterizar el PDF {path.name}: {exc}") from exc
+            return [self._data_uri("image/png", png) for png in pages]
+
+        mime = _IMAGE_MIME.get(suffix)
         if mime is None:
             raise AzureOpenAIError(
-                f"Tipo de fichero no soportado por gpt-visión: {path.suffix or '(sin extensión)'} "
-                "(el PDF se rasterizará en un paso previo, issue #16)"
+                f"Tipo de fichero no soportado por gpt-visión: {path.suffix or '(sin extensión)'}"
             )
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-        # `detail: high`: manda la imagen a más resolución. Sin esto, gpt submuestrea y pierde el
-        # texto pequeño (CIF/NIF), justo lo que más importa (§11.8).
-        image_url = {"url": f"data:{mime};base64,{encoded}", "detail": "high"}
-        return [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": self._prompt},
-                    {"type": "image_url", "image_url": image_url},
-                ],
-            }
-        ]
+        return [self._data_uri(mime, path.read_bytes())]
+
+    @staticmethod
+    def _data_uri(mime: str, data: bytes) -> str:
+        return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
     def _parse(self, body: dict[str, Any]) -> OcrResult:
         """Normaliza la respuesta de chat/completions a `OcrResult` (una sola página)."""

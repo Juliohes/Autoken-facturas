@@ -18,6 +18,10 @@ dependencies = [
     "google-genai>=2.0",
     "httpx>=0.27",
     "anthropic[vertex]>=0.40",
+    # Rasterizado de PDF a imagen para los motores de visión solo-imagen (issue #16).
+    # pypdfium2: motor PDFium, licencia permisiva (Apache/BSD), sin binarios de sistema.
+    "pypdfium2>=4",
+    "pillow>=10",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +54,11 @@ strict = true
 mypy_path = "src"
 explicit_package_bases = true
 namespace_packages = true
+
+# pypdfium2 (rasterizado de PDF) no publica stubs ni marcador py.typed.
+[[tool.mypy.overrides]]
+module = "pypdfium2.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
