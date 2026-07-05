@@ -1,7 +1,7 @@
 """Tests del adaptador Azure OpenAI (gpt-5.1) para el bench (1.2), mockeando httpx (sin red).
 
 Comportamiento observable: dada una imagen de factura, el motor devuelve un `OcrResult` con el
-markdown transcrito; rechaza el PDF con error tipado (visión no lo acepta aún); y traduce fallos
+markdown transcrito; rasteriza el PDF a imagen (visión no acepta PDF nativo, #16); y traduce fallos
 de la API a `AzureOpenAIError`.
 """
 
@@ -11,6 +11,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+from PIL import Image
 
 from ocr.engines.azure_openai import AzureOpenAIEngine, AzureOpenAIError
 from shared.config import Settings
@@ -54,12 +55,29 @@ async def test_extract_devuelve_el_markdown_transcrito(tmp_path: Path) -> None:
     assert result.usage == {"prompt_tokens": 10, "completion_tokens": 20}
 
 
-async def test_pdf_se_rechaza_con_error_tipado(tmp_path: Path) -> None:
-    """Visión de gpt no acepta PDF todavía: error claro, no una excepción cruda."""
+async def test_pdf_se_rasteriza_y_se_manda_como_imagen(tmp_path: Path) -> None:
+    """gpt-visión no acepta PDF: se rasteriza a PNG en el paso previo y viaja como imagen (#16)."""
     pdf = tmp_path / "factura.pdf"
+    Image.new("RGB", (200, 280), "white").save(pdf, "PDF")
+    client = _client_returning(_fake_response("# Factura\nB56922321"))
+    engine = _engine(client)
+
+    result = await engine.extract(pdf)
+
+    assert "B56922321" in result.text
+    content = client.post.call_args.kwargs["json"]["messages"][0]["content"]
+    imagenes = [part for part in content if part["type"] == "image_url"]
+    assert imagenes, "el PDF debe viajar como imagen, no rechazarse"
+    assert imagenes[0]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert imagenes[0]["image_url"]["detail"] == "high"
+
+
+async def test_pdf_ilegible_da_error_tipado(tmp_path: Path) -> None:
+    """Un PDF corrupto se traduce a AzureOpenAIError, no a una excepción cruda."""
+    pdf = tmp_path / "roto.pdf"
     pdf.write_bytes(b"%PDF-1.4 fake")
     engine = _engine(_client_returning(_fake_response("x")))
-    with pytest.raises(AzureOpenAIError, match="no soportado"):
+    with pytest.raises(AzureOpenAIError):
         await engine.extract(pdf)
 
 
