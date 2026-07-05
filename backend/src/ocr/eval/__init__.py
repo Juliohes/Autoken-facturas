@@ -7,6 +7,7 @@ from ocr.eval.scorer import (
     FieldResult,
     ReadingScore,
     aggregate_by_engine,
+    field_recall_by_engine,
     score_reading,
 )
 
@@ -18,5 +19,6 @@ __all__ = [
     "EngineAggregate",
     "score_reading",
     "aggregate_by_engine",
+    "field_recall_by_engine",
     "load_ground_truth",
 ]

@@ -94,6 +94,26 @@ def aggregate_by_engine(scores: list[ReadingScore]) -> dict[str, EngineAggregate
     return aggregates
 
 
+def field_recall_by_engine(scores: list[ReadingScore]) -> dict[str, dict[str, float]]:
+    """Recall desglosado por tipo de campo para cada motor.
+
+    Devuelve `{motor: {campo: recall}}` con los campos que el scorer puntúa
+    (`tax_id`, `issue_date`, `total_amount`, `net_amount`, `tax_amount`). Alimenta la tabla de
+    precisión por campo del informe del POC (§1.2), donde el CIF es el campo destacado (§11.8).
+    """
+    by_engine: dict[str, list[FieldResult]] = {}
+    for score in scores:
+        by_engine.setdefault(score.engine, []).extend(score.results)
+
+    breakdown: dict[str, dict[str, float]] = {}
+    for engine, fields in by_engine.items():
+        per_field: dict[str, list[FieldResult]] = {}
+        for result in fields:
+            per_field.setdefault(result.field, []).append(result)
+        breakdown[engine] = {field: _ratio(items) for field, items in per_field.items()}
+    return breakdown
+
+
 def _ratio(results: list[FieldResult]) -> float:
     if not results:
         return 0.0

@@ -9,7 +9,10 @@ sin inventar (regla anti-alucinación). Reusa la lógica de conexión del adapta
 Notas de despliegue:
 - Residencia (plan §3 + ADR-0007): el despliegue debe ser **Data Zone Standard / EU**, nunca Global.
 - gpt-5.1 es un modelo de razonamiento: usa `max_completion_tokens` (no `max_tokens`) y no admite
-  `temperature` distinta de la de por defecto, así que no se envía.
+  `temperature` distinta de la de por defecto, así que no se envía. El razonamiento consume tokens
+  del mismo presupuesto que la salida; para transcribir una página completa hace falta holgura
+  (`_MAX_OUTPUT_TOKENS` alto) y bajar el esfuerzo de razonamiento (`reasoning_effort=low`): con el
+  presupuesto por defecto truncaba la transcripción y se dejaba campos del pie (sobre todo el CIF).
 - Visión por chat/completions acepta imágenes (JPEG/PNG/WebP), no PDF. El PDF se rasterizará en un
   paso previo común a los motores solo-imagen (issue #16); de momento se rechaza con error tipado.
 
@@ -38,7 +41,10 @@ OCR_PROMPT = (
 )
 
 _DEFAULT_TIMEOUT_S = 90.0
-_MAX_OUTPUT_TOKENS = 4000
+# Holgura para razonar + transcribir la página entera sin truncar (ver nota de cabecera).
+_MAX_OUTPUT_TOKENS = 16000
+# Para OCR el razonamiento aporta poco y se come el presupuesto: se pide el mínimo.
+_REASONING_EFFORT = "low"
 
 # Visión de gpt acepta imágenes, no PDF (ver nota de cabecera).
 _IMAGE_MIME = {
@@ -96,6 +102,7 @@ class AzureOpenAIEngine(OcrEngine):
         payload = {
             "messages": self._build_messages(path),
             "max_completion_tokens": _MAX_OUTPUT_TOKENS,
+            "reasoning_effort": _REASONING_EFFORT,
         }
         headers = {"api-key": self._key or "", "Content-Type": "application/json"}
         url = self._chat_completions_url()

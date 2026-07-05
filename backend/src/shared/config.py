@@ -110,10 +110,13 @@ class Settings(BaseSettings):
     azure_openai_api_version: str = "2024-12-01-preview"
 
     # OCR — Claude vía Vertex AI (candidato del bench). Reusa proyecto/credenciales de Google
-    # (mismos que Gemini). Ids/regiones verificados contra el listado de publisher models de Vertex
-    # (2026-07-04): en `europe-west1` (UE, RGPD) está `claude-sonnet-4-5`; los más nuevos
-    # (sonnet-4-6, opus-4-8, sonnet-5) solo en `global`. Ajustables en el `.env`.
-    claude_location: str = "europe-west1"
+    # (mismos que Gemini). CORRECCIÓN 2026-07-05: contra el proyecto real, `europe-west1` y
+    # `europe-west4` dan 404 (no hay publisher model de Anthropic ahí); Claude solo se sirve por el
+    # endpoint `global`, donde el id existe pero el proyecto tiene **cuota 0**
+    # (`global_online_prediction_requests_per_base_model` → 429). Hasta que Julio pida aumento de
+    # cuota para los base models de Anthropic en la consola de GCP, Claude no puede entrar al bench.
+    # Ajustables en el `.env`. Ver §11.10 del plan.
+    claude_location: str = "global"
     claude_model: str = "claude-sonnet-4-5@20250929"
 
     @property
