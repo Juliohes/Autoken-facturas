@@ -62,6 +62,7 @@ class _Record:
     latency_s: float | None = None
     usage: dict[str, Any] | None = None
     error: str | None = None
+    text: str | None = None  # texto crudo del motor: permite RE-PUNTUAR offline sin llamar a la API
     scored: ReadingScore | None = None  # para el agregado por campo
 
 
@@ -118,6 +119,7 @@ async def _measure(engine: OcrEngine, gt: Any) -> _Record:
         tax_id_recall=_tax_id_recall(score),
         latency_s=round(latency, 3),
         usage=result.usage,
+        text=result.text,
         scored=score,
     )
 
@@ -244,6 +246,7 @@ def _write_json(
                 "latency_s": r.latency_s,
                 "usage": r.usage,
                 "error": r.error,
+                "text": r.text,
             }
             for r in records
         ],

@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ocr.eval.models import GroundTruth
-from ocr.eval.normalize import amount_variants, date_variants, normalize_tax_id, normalize_text
+from ocr.eval.normalize import amount_variants, date_matches, normalize_tax_id, normalize_text
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ def score_reading(ground_truth: GroundTruth, text: str, *, engine: str) -> Readi
             results.append(FieldResult("tax_id", party.tax_id, found))
 
     if ground_truth.issue_date is not None:
-        found = any(v in text for v in date_variants(ground_truth.issue_date))
+        found = date_matches(text, ground_truth.issue_date)
         results.append(FieldResult("issue_date", ground_truth.issue_date.isoformat(), found))
 
     amounts = (

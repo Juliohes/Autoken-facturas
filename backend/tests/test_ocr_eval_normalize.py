@@ -11,7 +11,7 @@ import pytest
 
 from ocr.eval.normalize import (
     amount_variants,
-    date_variants,
+    date_matches,
     normalize_tax_id,
     normalize_text,
     parse_amount,
@@ -53,12 +53,41 @@ def test_amount_variants_genera_coma_y_punto() -> None:
     assert "996.40" in variantes
 
 
-def test_date_variants_cubre_formatos_habituales() -> None:
-    variantes = date_variants(date(2026, 5, 18))
-    assert "18/05/2026" in variantes
-    assert "18-05-2026" in variantes
-    assert "18.05.2026" in variantes
-    assert "2026-05-18" in variantes
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "Fecha: 18/05/2026",
+        "18-05-2026",
+        "18.05.2026",
+        "2026-05-18",
+        "18/05/26",  # año a dos cifras
+        "18 de mayo de 2026",  # mes textual español
+        "18 mayo 2026",
+        "Emitida el 18 DE MAYO DE 2026",  # mayúsculas
+        "18 May 2026",  # inglés
+        "May 18, 2026",  # inglés, día después del mes
+    ],
+)
+def test_date_matches_reconoce_formatos_habituales(texto: str) -> None:
+    """La fecha se reconoce en numérico y en texto (mes en palabra), como en las facturas."""
+    assert date_matches(texto, date(2026, 5, 18))
+
+
+def test_date_matches_admite_dia_y_mes_sin_cero_delante() -> None:
+    assert date_matches("5/3/2026", date(2026, 3, 5))
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "17/05/2026",  # otro día
+        "18 de junio de 2026",  # otro mes
+        "18/05/2025",  # otro año
+        "total 180526 euros",  # dígitos sueltos, no una fecha
+    ],
+)
+def test_date_matches_no_casa_una_fecha_distinta(texto: str) -> None:
+    assert not date_matches(texto, date(2026, 5, 18))
 
 
 def test_normalize_text_permite_encontrar_cif_con_puntos_y_espacios() -> None:

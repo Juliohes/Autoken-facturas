@@ -37,6 +37,14 @@ def test_cif_no_leido_baja_el_recall_y_se_marca_ese_campo() -> None:
     assert score.recall < 1.0
 
 
+def test_fecha_en_mes_textual_cuenta_como_leida() -> None:
+    """El motor que escribe la fecha en palabra ('18 de mayo de 2026') no pierde el campo fecha."""
+    texto = "B56922321 A87563888 fecha 18 de mayo de 2026 total 996,40"
+    score = score_reading(_GT, texto, engine="x")
+    fecha = next(r for r in score.results if r.field == "issue_date")
+    assert fecha.found
+
+
 def test_importe_en_formato_punto_tambien_cuenta() -> None:
     """El total escrito con punto decimal se reconoce igual que con coma."""
     texto = "B56922321 A87563888 2026-05-18 total 996.40"

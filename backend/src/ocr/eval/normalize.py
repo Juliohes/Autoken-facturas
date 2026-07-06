@@ -74,11 +74,48 @@ def _group_thousands(digits: str) -> str:
     return f"{int(digits):,}"
 
 
-def date_variants(value: date) -> set[str]:
-    """Formas habituales de escribir una fecha."""
-    return {
-        value.strftime("%d/%m/%Y"),
-        value.strftime("%d-%m-%Y"),
-        value.strftime("%d.%m.%Y"),
-        value.strftime("%Y-%m-%d"),
-    }
+# Nombres de mes (índice 1..12) que aparecen en factura española/inglesa, forma larga y abreviada.
+# Solo se generan los del mes CORRECTO al buscar, así un match laxo nunca casa un mes equivocado.
+_MONTH_NAMES: dict[int, tuple[str, ...]] = {
+    1: ("enero", "ene", "january", "jan"),
+    2: ("febrero", "feb", "february"),
+    3: ("marzo", "mar", "march"),
+    4: ("abril", "abr", "april", "apr"),
+    5: ("mayo", "may", "may"),
+    6: ("junio", "jun", "june"),
+    7: ("julio", "jul", "july"),
+    8: ("agosto", "ago", "august", "aug"),
+    9: ("septiembre", "sept", "sep", "september"),
+    10: ("octubre", "oct", "october"),
+    11: ("noviembre", "nov", "november"),
+    12: ("diciembre", "dic", "december", "dec"),
+}
+
+
+def date_matches(text: str, value: date) -> bool:
+    """¿Aparece la fecha `value` en `text`, en cualquier formato habitual de factura?
+
+    Reconoce numérico con separador `/ - .` (día/mes con o sin cero delante, año a 4 o 2 cifras),
+    ISO `AAAA-MM-DD` y **mes en texto** español/inglés ("18 de mayo de 2026", "May 18, 2026"). Solo
+    se construyen patrones para el día/mes/año exactos del ground truth: un match laxo puede tolerar
+    ruido de separadores, pero nunca casa una fecha distinta.
+    """
+    hay = text.lower()
+    d, m, y = value.day, value.month, value.year
+    sep = r"[/\-.]\s*"
+    day = rf"0?{d}"
+    year = rf"(?:{y}|{y % 100:02d})"
+
+    # Numérico día-mes-año (ES) e ISO año-mes-día. \b evita casar dentro de un número mayor.
+    dmy = rf"\b{day}{sep}0?{m}{sep}{year}\b"
+    iso = rf"\b{y}{sep}0?{m}{sep}0?{d}\b"
+    if re.search(dmy, hay) or re.search(iso, hay):
+        return True
+
+    # Mes en texto: día y año alrededor del nombre del mes (en cualquiera de los dos órdenes).
+    for name in _MONTH_NAMES[m]:
+        before = rf"\b{day}\b.{{0,6}}{name}.{{0,6}}\b{y}\b"  # 18 de mayo de 2026
+        after = rf"{name}\s+{day}\b.{{0,4}}\b{y}\b"  # May 18, 2026
+        if re.search(before, hay) or re.search(after, hay):
+            return True
+    return False
