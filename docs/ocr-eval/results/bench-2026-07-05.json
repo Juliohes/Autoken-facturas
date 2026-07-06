@@ -1,0 +1,2677 @@
+{
+  "generated_at": "2026-07-06T10:46:26+00:00",
+  "dataset": {
+    "invoices": 20,
+    "dir": "entregas/facturas"
+  },
+  "engines_run": [
+    "azure-docintel",
+    "gemini-3-flash",
+    "gemini-3-pro",
+    "gpt-5.1",
+    "mistral-ocr-4"
+  ],
+  "aggregate": {
+    "mistral-ocr-4": {
+      "invoices_scored": 20,
+      "invoices_failed": 0,
+      "recall": 0.8,
+      "tax_id_recall": 0.7742,
+      "field_recall": {
+        "tax_id": 0.7742,
+        "issue_date": 0.6316,
+        "total_amount": 0.85,
+        "net_amount": 0.8235,
+        "tax_amount": 0.9444
+      },
+      "latency_s": {
+        "mean": 3.475,
+        "median": 3.296,
+        "max": 7.544
+      },
+      "usage_totals": {
+        "pages_processed": 20,
+        "doc_size_bytes": 5714523
+      },
+      "errors": []
+    },
+    "azure-docintel": {
+      "invoices_scored": 20,
+      "invoices_failed": 0,
+      "recall": 0.8286,
+      "tax_id_recall": 0.7097,
+      "field_recall": {
+        "tax_id": 0.7097,
+        "issue_date": 0.6316,
+        "total_amount": 1.0,
+        "net_amount": 0.8824,
+        "tax_amount": 1.0
+      },
+      "latency_s": {
+        "mean": 4.525,
+        "median": 4.45,
+        "max": 5.452
+      },
+      "usage_totals": {
+        "pages": 20
+      },
+      "errors": []
+    },
+    "gemini-3-flash": {
+      "invoices_scored": 20,
+      "invoices_failed": 0,
+      "recall": 0.8857,
+      "tax_id_recall": 0.9032,
+      "field_recall": {
+        "tax_id": 0.9032,
+        "issue_date": 0.6316,
+        "total_amount": 1.0,
+        "net_amount": 0.8824,
+        "tax_amount": 1.0
+      },
+      "latency_s": {
+        "mean": 20.191,
+        "median": 20.014,
+        "max": 34.251
+      },
+      "usage_totals": {
+        "candidates_token_count": 15325,
+        "prompt_token_count": 22100,
+        "thoughts_token_count": 55940,
+        "total_token_count": 93365
+      },
+      "errors": []
+    },
+    "gemini-3-pro": {
+      "invoices_scored": 20,
+      "invoices_failed": 0,
+      "recall": 0.8476,
+      "tax_id_recall": 0.9032,
+      "field_recall": {
+        "tax_id": 0.9032,
+        "issue_date": 0.5789,
+        "total_amount": 0.95,
+        "net_amount": 0.8235,
+        "tax_amount": 0.9444
+      },
+      "latency_s": {
+        "mean": 60.938,
+        "median": 27.623,
+        "max": 410.133
+      },
+      "usage_totals": {
+        "candidates_token_count": 76065,
+        "prompt_token_count": 22100,
+        "thoughts_token_count": 107066,
+        "total_token_count": 205231
+      },
+      "errors": []
+    },
+    "gpt-5.1": {
+      "invoices_scored": 20,
+      "invoices_failed": 0,
+      "recall": 0.6095,
+      "tax_id_recall": 0.3871,
+      "field_recall": {
+        "tax_id": 0.3871,
+        "issue_date": 0.5263,
+        "total_amount": 0.85,
+        "net_amount": 0.7647,
+        "tax_amount": 0.6667
+      },
+      "latency_s": {
+        "mean": 17.563,
+        "median": 14.925,
+        "max": 52.895
+      },
+      "usage_totals": {
+        "completion_tokens": 16343,
+        "prompt_tokens": 19600,
+        "total_tokens": 35943
+      },
+      "errors": []
+    }
+  },
+  "per_invoice": [
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "captura-181602",
+      "recall": 0.2,
+      "tax_id_recall": 0.0,
+      "latency_s": 4.564,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 993652
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "captura-181602",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 4.93,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "captura-181602",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 20.232,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 1157,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 1157
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 2598,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 4920,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "captura-181602",
+      "recall": 0.0,
+      "tax_id_recall": 0.0,
+      "latency_s": 391.53,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 61904,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 61904
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 3628,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 66697,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "captura-181602",
+      "recall": 0.8,
+      "tax_id_recall": 0.0,
+      "latency_s": 28.826,
+      "usage": {
+        "completion_tokens": 1392,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 677,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 17,
+          "engine_ttft_ms": 175,
+          "engine_ttlt_ms": 24393,
+          "pre_inference_ms": 962,
+          "service_tbt_ms": 17,
+          "service_ttft_ms": 1247,
+          "service_ttlt_ms": 25518,
+          "total_duration_ms": 24604,
+          "user_visible_ttft_ms": 285
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 2372
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "captura-181644",
+      "recall": 0.6,
+      "tax_id_recall": 0.0,
+      "latency_s": 4.565,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 1058425
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "captura-181644",
+      "recall": 0.8,
+      "tax_id_recall": 0.0,
+      "latency_s": 4.533,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "captura-181644",
+      "recall": 0.8,
+      "tax_id_recall": 0.0,
+      "latency_s": 24.336,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 966,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 966
+          }
+        ],
+        "prompt_token_count": 1121,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1056
+          }
+        ],
+        "thoughts_token_count": 3207,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 5294,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "captura-181644",
+      "recall": 0.8,
+      "tax_id_recall": 0.0,
+      "latency_s": 29.84,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 959,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 959
+          }
+        ],
+        "prompt_token_count": 1121,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1056
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 3032,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 5112,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "captura-181644",
+      "recall": 0.8,
+      "tax_id_recall": 0.0,
+      "latency_s": 32.142,
+      "usage": {
+        "completion_tokens": 1378,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 613,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 21,
+          "engine_ttft_ms": 252,
+          "engine_ttlt_ms": 29355,
+          "pre_inference_ms": 434,
+          "service_tbt_ms": 21,
+          "service_ttft_ms": 879,
+          "service_ttlt_ms": 29977,
+          "total_duration_ms": 29552,
+          "user_visible_ttft_ms": 445
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 2358
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "captura-181738",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 2.968,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 1073887
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "captura-181738",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 4.686,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "captura-181738",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 30.12,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 983,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 983
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 4761,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 6909,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "captura-181738",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 8.106,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 991,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 991
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": null,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 2156,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "captura-181738",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": 1.0,
+      "latency_s": 22.602,
+      "usage": {
+        "completion_tokens": 839,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 11,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 22,
+          "engine_ttft_ms": 142,
+          "engine_ttlt_ms": 18208,
+          "pre_inference_ms": 416,
+          "service_tbt_ms": 22,
+          "service_ttft_ms": 638,
+          "service_ttlt_ms": 18699,
+          "total_duration_ms": 18295,
+          "user_visible_ttft_ms": 222
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1819
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "captura-181753",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 5.13,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 1000232
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "captura-181753",
+      "recall": 0.5,
+      "tax_id_recall": 0.0,
+      "latency_s": 4.562,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "captura-181753",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": 0.5,
+      "latency_s": 22.013,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 1395,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 1395
+          }
+        ],
+        "prompt_token_count": 1145,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1080
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 2879,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 5419,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "captura-181753",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 11.043,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 1392,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 1392
+          }
+        ],
+        "prompt_token_count": 1145,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1080
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": null,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 2537,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "captura-181753",
+      "recall": 0.3333333333333333,
+      "tax_id_recall": 0.0,
+      "latency_s": 52.895,
+      "usage": {
+        "completion_tokens": 2291,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 1147,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 21,
+          "engine_ttft_ms": 125,
+          "engine_ttlt_ms": 49230,
+          "pre_inference_ms": 382,
+          "service_tbt_ms": 21,
+          "service_ttft_ms": 578,
+          "service_ttlt_ms": 49677,
+          "total_duration_ms": 49306,
+          "user_visible_ttft_ms": 196
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 3271
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "factura-2",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 3.761,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 543111
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "factura-2",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 5.452,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "factura-2",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 12.247,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 454,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 454
+          }
+        ],
+        "prompt_token_count": 597,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 532
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 1705,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 2756,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "factura-2",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 4.692,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 455,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 455
+          }
+        ],
+        "prompt_token_count": 597,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 532
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": null,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 1052,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "factura-2",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 16.751,
+      "usage": {
+        "completion_tokens": 750,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 326,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 20,
+          "engine_ttft_ms": 119,
+          "engine_ttlt_ms": 15338,
+          "pre_inference_ms": 237,
+          "service_tbt_ms": 20,
+          "service_ttft_ms": 425,
+          "service_ttlt_ms": 15637,
+          "total_duration_ms": 15409,
+          "user_visible_ttft_ms": 188
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1730
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "vfr-lite",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 1.324,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 31189
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "vfr-lite",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 4.4,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "vfr-lite",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 8.632,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 255,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 255
+          }
+        ],
+        "prompt_token_count": 597,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 532
+          }
+        ],
+        "thoughts_token_count": 1255,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 2107,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "vfr-lite",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 27.116,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 320,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 320
+          }
+        ],
+        "prompt_token_count": 597,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 532
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 3410,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 4327,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "vfr-lite",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 4.412,
+      "usage": {
+        "completion_tokens": 200,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 8,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 16,
+          "engine_ttft_ms": 107,
+          "engine_ttlt_ms": 3227,
+          "pre_inference_ms": 202,
+          "service_tbt_ms": 16,
+          "service_ttft_ms": 383,
+          "service_ttlt_ms": 3498,
+          "total_duration_ms": 3305,
+          "user_visible_ttft_ms": 181
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1180
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182153-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 2.642,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 65017
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182153-1",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 0.5,
+      "latency_s": 4.407,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182153-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 19.882,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 504,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 504
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 2945,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 4614,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182153-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 5.854,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 516,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 516
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": null,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 1681,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182153-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 8.692,
+      "usage": {
+        "completion_tokens": 405,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 6,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 18,
+          "engine_ttft_ms": 129,
+          "engine_ttlt_ms": 7221,
+          "pre_inference_ms": 337,
+          "service_tbt_ms": 18,
+          "service_ttft_ms": 533,
+          "service_ttlt_ms": 7620,
+          "total_duration_ms": 7292,
+          "user_visible_ttft_ms": 196
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1385
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182153-2",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 3.557,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 59514
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182153-2",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": 0.5,
+      "latency_s": 4.411,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182153-2",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 10.812,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 489,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 489
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 1309,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 2963,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182153-2",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 25.181,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 544,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 544
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 2737,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 4446,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182153-2",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": 0.5,
+      "latency_s": 10.959,
+      "usage": {
+        "completion_tokens": 445,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 7,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 16,
+          "engine_ttft_ms": 128,
+          "engine_ttlt_ms": 7278,
+          "pre_inference_ms": 412,
+          "service_tbt_ms": 16,
+          "service_ttft_ms": 653,
+          "service_ttlt_ms": 7804,
+          "total_duration_ms": 7398,
+          "user_visible_ttft_ms": 242
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1425
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182153",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 2.1,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 66363
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182153",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": 0.5,
+      "latency_s": 4.348,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182153",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 30.176,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 542,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 542
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 5527,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 7234,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182153",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 23.494,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 503,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 503
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 2401,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 4069,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182153",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 12.203,
+      "usage": {
+        "completion_tokens": 476,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 10,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 18,
+          "engine_ttft_ms": 128,
+          "engine_ttlt_ms": 8617,
+          "pre_inference_ms": 292,
+          "service_tbt_ms": 18,
+          "service_ttft_ms": 503,
+          "service_ttlt_ms": 8986,
+          "total_duration_ms": 8703,
+          "user_visible_ttft_ms": 211
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1456
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182154-1",
+      "recall": 0.5,
+      "tax_id_recall": 0.0,
+      "latency_s": 4.193,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 65147
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182154-1",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": 0.5,
+      "latency_s": 4.448,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182154-1",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": 0.5,
+      "latency_s": 17.321,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 926,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 926
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 2426,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 4517,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182154-1",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": 0.5,
+      "latency_s": 34.069,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 809,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 809
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 3673,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 5647,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182154-1",
+      "recall": 0.0,
+      "tax_id_recall": 0.0,
+      "latency_s": 6.954,
+      "usage": {
+        "completion_tokens": 365,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 18,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 15,
+          "engine_ttft_ms": 130,
+          "engine_ttlt_ms": 5462,
+          "pre_inference_ms": 413,
+          "service_tbt_ms": 15,
+          "service_ttft_ms": 656,
+          "service_ttlt_ms": 5982,
+          "total_duration_ms": 5580,
+          "user_visible_ttft_ms": 243
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1345
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182154-2",
+      "recall": 0.6,
+      "tax_id_recall": 1.0,
+      "latency_s": 3.073,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 79199
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182154-2",
+      "recall": 0.6,
+      "tax_id_recall": 0.0,
+      "latency_s": 4.36,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182154-2",
+      "recall": 0.8,
+      "tax_id_recall": 1.0,
+      "latency_s": 34.251,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 988,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 988
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 4739,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 6892,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182154-2",
+      "recall": 0.8,
+      "tax_id_recall": 1.0,
+      "latency_s": 41.254,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 990,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 990
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 4595,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 6750,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182154-2",
+      "recall": 0.0,
+      "tax_id_recall": 0.0,
+      "latency_s": 14.99,
+      "usage": {
+        "completion_tokens": 698,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 6,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 19,
+          "engine_ttft_ms": 118,
+          "engine_ttlt_ms": 13657,
+          "pre_inference_ms": 335,
+          "service_tbt_ms": 19,
+          "service_ttft_ms": 548,
+          "service_ttlt_ms": 14083,
+          "total_duration_ms": 13776,
+          "user_visible_ttft_ms": 212
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1678
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182154-3",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 3.373,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 91870
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182154-3",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 4.459,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182154-3",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 33.393,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 831,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 831
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 4759,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 6755,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182154-3",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 33.869,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 808,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 808
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 3604,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 5577,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182154-3",
+      "recall": 0.6,
+      "tax_id_recall": 0.0,
+      "latency_s": 10.866,
+      "usage": {
+        "completion_tokens": 600,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 6,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 16,
+          "engine_ttft_ms": 122,
+          "engine_ttlt_ms": 9448,
+          "pre_inference_ms": 306,
+          "service_tbt_ms": 16,
+          "service_ttft_ms": 643,
+          "service_ttlt_ms": 9940,
+          "total_duration_ms": 9643,
+          "user_visible_ttft_ms": 337
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1580
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182154",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": 0.5,
+      "latency_s": 3.677,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 70989
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182154",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 4.376,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182154",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 25.801,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 684,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 684
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 3541,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 5390,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182154",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 28.131,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 784,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 784
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 2832,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 4781,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182154",
+      "recall": 0.3333333333333333,
+      "tax_id_recall": 0.0,
+      "latency_s": 10.014,
+      "usage": {
+        "completion_tokens": 469,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 11,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 15,
+          "engine_ttft_ms": 128,
+          "engine_ttlt_ms": 7263,
+          "pre_inference_ms": 348,
+          "service_tbt_ms": 15,
+          "service_ttft_ms": 555,
+          "service_ttlt_ms": 7683,
+          "total_duration_ms": 7345,
+          "user_visible_ttft_ms": 207
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1449
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182155",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 2.417,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 71292
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182155",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": 0.5,
+      "latency_s": 4.514,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182155",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 15.68,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 489,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 489
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 1907,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 3561,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182155",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 20.747,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 533,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 533
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 2226,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 3924,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182155",
+      "recall": 0.5,
+      "tax_id_recall": 0.0,
+      "latency_s": 20.969,
+      "usage": {
+        "completion_tokens": 1109,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 751,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 17,
+          "engine_ttft_ms": 119,
+          "engine_ttlt_ms": 18934,
+          "pre_inference_ms": 308,
+          "service_tbt_ms": 17,
+          "service_ttft_ms": 520,
+          "service_ttlt_ms": 19331,
+          "total_duration_ms": 19032,
+          "user_visible_ttft_ms": 212
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 2089
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182157-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 7.544,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 78282
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182157-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 4.444,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182157-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 20.918,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 1270,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 1270
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 2740,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 5175,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182157-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 30.814,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 1198,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 1198
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 2774,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 5137,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182157-1",
+      "recall": 0.25,
+      "tax_id_recall": 0.0,
+      "latency_s": 17.512,
+      "usage": {
+        "completion_tokens": 1145,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 626,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 14,
+          "engine_ttft_ms": 119,
+          "engine_ttlt_ms": 16243,
+          "pre_inference_ms": 302,
+          "service_tbt_ms": 14,
+          "service_ttft_ms": 518,
+          "service_ttlt_ms": 16638,
+          "total_duration_ms": 16344,
+          "user_visible_ttft_ms": 216
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 2125
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182157",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": 0.5,
+      "latency_s": 2.678,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 83155
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182157",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 4.482,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182157",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 15.613,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 725,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 725
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 1648,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 3538,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182157",
+      "recall": 0.8333333333333334,
+      "tax_id_recall": 1.0,
+      "latency_s": 33.836,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 759,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 759
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 3631,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 5555,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182157",
+      "recall": 0.5,
+      "tax_id_recall": 0.0,
+      "latency_s": 13.56,
+      "usage": {
+        "completion_tokens": 492,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 6,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 20,
+          "engine_ttft_ms": 139,
+          "engine_ttlt_ms": 9932,
+          "pre_inference_ms": 309,
+          "service_tbt_ms": 20,
+          "service_ttft_ms": 517,
+          "service_ttlt_ms": 10305,
+          "total_duration_ms": 10006,
+          "user_visible_ttft_ms": 208
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1472
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182205-1",
+      "recall": 0.5,
+      "tax_id_recall": 0.0,
+      "latency_s": 4.107,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 96911
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182205-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 4.453,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182205-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 15.758,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 1166,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 1166
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 1721,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 4052,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182205-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 28.307,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 1089,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 1089
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 2763,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 5017,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182205-1",
+      "recall": 0.5,
+      "tax_id_recall": 0.0,
+      "latency_s": 10.163,
+      "usage": {
+        "completion_tokens": 485,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 11,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 17,
+          "engine_ttft_ms": 129,
+          "engine_ttlt_ms": 8407,
+          "pre_inference_ms": 459,
+          "service_tbt_ms": 17,
+          "service_ttft_ms": 714,
+          "service_ttlt_ms": 9094,
+          "total_duration_ms": 8640,
+          "user_visible_ttft_ms": 255
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1465
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182205",
+      "recall": 1.0,
+      "tax_id_recall": null,
+      "latency_s": 3.218,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 70648
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182205",
+      "recall": 1.0,
+      "tax_id_recall": null,
+      "latency_s": 4.423,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182205",
+      "recall": 1.0,
+      "tax_id_recall": null,
+      "latency_s": 20.145,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 555,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 555
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          },
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          }
+        ],
+        "thoughts_token_count": 2608,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 4328,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182205",
+      "recall": 1.0,
+      "tax_id_recall": null,
+      "latency_s": 25.278,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 591,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 591
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 2847,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 4603,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182205",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": null,
+      "latency_s": 21.913,
+      "usage": {
+        "completion_tokens": 1051,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 604,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 20,
+          "engine_ttft_ms": 127,
+          "engine_ttlt_ms": 20679,
+          "pre_inference_ms": 315,
+          "service_tbt_ms": 20,
+          "service_ttft_ms": 548,
+          "service_ttlt_ms": 21095,
+          "total_duration_ms": 20790,
+          "user_visible_ttft_ms": 233
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 2031
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182206-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 2.656,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 57496
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182206-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 4.355,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182206-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 14.467,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 483,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 483
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 1821,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 3469,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182206-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 5.463,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 483,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 483
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": null,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 1648,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182206-1",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 14.861,
+      "usage": {
+        "completion_tokens": 876,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 444,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 15,
+          "engine_ttft_ms": 132,
+          "engine_ttlt_ms": 13559,
+          "pre_inference_ms": 320,
+          "service_tbt_ms": 15,
+          "service_ttft_ms": 538,
+          "service_ttlt_ms": 13953,
+          "total_duration_ms": 13643,
+          "user_visible_ttft_ms": 218
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1856
+      },
+      "error": null
+    },
+    {
+      "engine": "mistral-ocr-4",
+      "invoice_id": "wa-182206",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 1.959,
+      "usage": {
+        "pages_processed": 1,
+        "doc_size_bytes": 58144
+      },
+      "error": null
+    },
+    {
+      "engine": "azure-docintel",
+      "invoice_id": "wa-182206",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 4.464,
+      "usage": {
+        "pages": 1
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-flash",
+      "invoice_id": "wa-182206",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 12.013,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 463,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 463
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 1844,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 3472,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gemini-3-pro",
+      "invoice_id": "wa-182206",
+      "recall": 1.0,
+      "tax_id_recall": 1.0,
+      "latency_s": 410.133,
+      "usage": {
+        "cache_tokens_details": null,
+        "cached_content_token_count": null,
+        "candidates_token_count": 437,
+        "candidates_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 437
+          }
+        ],
+        "prompt_token_count": 1165,
+        "prompt_tokens_details": [
+          {
+            "modality": "TEXT",
+            "token_count": 65
+          },
+          {
+            "modality": "IMAGE",
+            "token_count": 1100
+          }
+        ],
+        "thoughts_token_count": 62913,
+        "tool_use_prompt_token_count": null,
+        "tool_use_prompt_tokens_details": null,
+        "total_token_count": 64515,
+        "traffic_type": "ON_DEMAND"
+      },
+      "error": null
+    },
+    {
+      "engine": "gpt-5.1",
+      "invoice_id": "wa-182206",
+      "recall": 0.6666666666666666,
+      "tax_id_recall": 0.0,
+      "latency_s": 19.975,
+      "usage": {
+        "completion_tokens": 877,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "reasoning_tokens": 473,
+          "rejected_prediction_tokens": 0
+        },
+        "latency_checkpoint": {
+          "engine_tbt_ms": 18,
+          "engine_ttft_ms": 186,
+          "engine_ttlt_ms": 16140,
+          "pre_inference_ms": 427,
+          "service_tbt_ms": 18,
+          "service_ttft_ms": 724,
+          "service_ttlt_ms": 16649,
+          "total_duration_ms": 16234,
+          "user_visible_ttft_ms": 296
+        },
+        "prompt_tokens": 980,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cached_tokens": 0
+        },
+        "total_tokens": 1857
+      },
+      "error": null
+    }
+  ]
+}
