@@ -14,15 +14,16 @@ contraparte** (§11.8), que es el campo de mayor riesgo fiscal.
 
 Se construyó una capa común (`OcrEngine` + scorer de recall + runner) y se midieron 5 candidatos.
 Detalle numérico en [`docs/ocr-eval/resultado-poc.md`](../ocr-eval/resultado-poc.md); artefacto en
-`docs/ocr-eval/results/bench-2026-07-05.json`.
+`docs/ocr-eval/results/bench-2026-07-06.json` (corrida re-puntuada con el scorer de fecha corregido,
+issue #44).
 
 Resultado (20 facturas, recall global / **CIF**):
 
-- **gemini-3-flash: 88,6 % / 90,3 %** — líder, 100 % en total, 20 s, 93 k tokens.
-- gemini-3-pro: 84,8 % / 90,3 % — mismo CIF pero 3× más lento y ~2,2× más caro que Flash.
-- azure-docintel: 82,9 % / 71,0 % — rapidísimo (4,5 s) y por página, pero flojo en CIF.
-- mistral-ocr-4: 80,0 % / 77,4 % — cabeza de serie de partida; rápido y barato, CIF medio.
-- gpt-5.1: 61,0 % / 38,7 % — el más flojo aun tras optimizarlo (issue #16).
+- **gemini-3-flash: 95,2 % / 90 %** — líder, 100 % en fecha, total y cuota; 21 s, 92 k tokens.
+- gemini-3-pro: 92,4 % / 94 % — mejor CIF, pero 2,7× más lento y ~2,2× más caro que Flash.
+- azure-docintel: 89,5 % / 71 % — rapidísimo (4,8 s) y por página, pero flojo en CIF.
+- mistral-ocr-4: 85,7 % / 77 % — cabeza de serie de partida; rápido y barato, CIF medio.
+- gpt-5.1: 63,8 % / 42 % — el más flojo aun tras optimizarlo (issue #16).
 
 ## Decisión
 
@@ -31,24 +32,28 @@ primer puesto de CIF con Pro, con 100 % en el importe total, a un coste y latenc
 Pro. En el pipeline de producción (doble motor + árbitro, ADR-0003) será el **motor primario de
 lectura**; el segundo motor y el árbitro se deciden en Sprint 2 con este bench como base.
 
-El estado es **propuesto** (no *aceptado*) hasta cerrar tres salvedades, **ninguna de las cuales
-cambia al ganador** (la decisión se apoya en CIF y total, ambos sólidos):
+El estado es **propuesto** (no *aceptado*) hasta cerrar dos salvedades, **ninguna de las cuales
+cambia al ganador** (Flash lidera el global y va al nivel del mejor CIF dentro del ruido de los
+motores generativos):
 
-1. **Fecha del scorer** (issue #44): el recall de fecha (63 % idéntico en 4 motores) está
-   infravalorado por una limitación del scorer, no por los motores. Al corregirlo subirá para todos.
-2. **Ground truth sin validar** por Julio (`validated_by_julio: false`); los 19 CIF españoles pasan
+1. **Ground truth sin validar** por Julio (`validated_by_julio: false`); los 19 CIF españoles pasan
    el mód-23, pero falta su OK.
-3. **Claude sin medir**: cuota 0 en Vertex (429, endpoint `global`); pendiente de aumento de cuota.
+2. **Claude sin medir**: cuota 0 en Vertex (429, endpoint `global`); pendiente de aumento de cuota.
    Diferido por decisión de Julio (2026-07-04). Al habilitarlo se relanza y se revisa este ADR.
+
+> La tercera salvedad de la primera versión de este ADR (recall de fecha infravalorado por el
+> scorer, issue #44) **ya está resuelta**: `date_matches` reconoce mes textual y año a 2 cifras, y
+> la corrida se re-puntuó. La fecha pasó de ~63 % a 95-100 % en los motores de calidad.
 
 ## Alternativas consideradas
 
-- **gemini-3-pro**: mismo CIF que Flash pero sin ninguna ventaja que justifique 3× la latencia y
-  ~2,2× el coste en tokens (más un pico de 410 s). Descartada como primaria.
+- **gemini-3-pro**: CIF al nivel de Flash (94 % vs 90 %, dentro del ruido) pero sin ninguna ventaja
+  que justifique 2,7× la latencia y ~2,2× el coste en tokens (más un pico de 410 s). Descartada como
+  primaria.
 - **azure-docintel** / **mistral-ocr-4**: las más rápidas y baratas (facturan por página), buenas
   candidatas a **segundo motor** del árbitro, pero su recall de CIF (71 % / 77 %) es insuficiente
   como motor primario del campo de mayor riesgo.
-- **gpt-5.1**: descartada como motor de lectura por recall de CIF muy bajo (39 %).
+- **gpt-5.1**: descartada como motor de lectura por recall de CIF muy bajo (42 %).
 - **PaddleOCR-VL / Qwen3-VL self-hosted**: aún no medidos; se evalúan más adelante si se busca
   abaratar con motor propio (no bloquea el POC).
 
@@ -60,7 +65,7 @@ cambia al ganador** (la decisión se apoya en CIF y total, ambos sólidos):
 - **Negativas / riesgos**: dependencia de Vertex (Google) para el motor primario — mitigable con el
   segundo motor del árbitro en otro proveedor (Azure/Mistral). **Residencia de datos**: confirmar
   región UE para Gemini en producción (Vertex `europe-west*`). La decisión es **provisional** hasta
-  cerrar las tres salvedades; se pasará a *aceptado* al re-puntuar con el scorer arreglado (#44) y
-  con el GT validado.
+  cerrar las dos salvedades; se pasará a *aceptado* con el GT validado por Julio y (si se decide)
+  Claude medido.
 - **Multi-tenant / seguridad**: sin impacto directo en aislamiento; el texto de factura es dato de
   tenant y viaja al proveedor de OCR (contemplar en el DPA/residencia).
