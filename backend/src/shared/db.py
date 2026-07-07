@@ -49,6 +49,18 @@ async def dispose_engine() -> None:
 
 
 @asynccontextmanager
+async def session() -> AsyncIterator[AsyncSession]:
+    """Sesión SIN contexto de tenant (RLS activa: 0 filas en tablas de negocio).
+
+    Solo para operaciones que no dependen de un tenant: p. ej. llamar a `resolve_tenant(slug)`
+    (SECURITY DEFINER) durante la resolución del subdominio, antes de tener `app.tenant_id`.
+    """
+    factory = async_sessionmaker(_get_engine(), expire_on_commit=False)
+    async with factory() as db_session:
+        yield db_session
+
+
+@asynccontextmanager
 async def tenant_session(
     tenant_id: UUID, company_id: UUID | None = None
 ) -> AsyncIterator[AsyncSession]:

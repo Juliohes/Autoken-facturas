@@ -11,8 +11,10 @@ from fastapi import FastAPI
 
 from platform_admin.health import router as health_router
 from shared.config import Settings, get_settings
+from shared.db import dispose_engine
 from shared.logging import configure_logging, get_logger
-from shared.middleware import CorrelationIdMiddleware
+from shared.middleware import CorrelationIdMiddleware, TenantResolutionMiddleware
+from tenancy.router import router as tenancy_router
 
 
 def create_app() -> FastAPI:
@@ -25,6 +27,7 @@ def create_app() -> FastAPI:
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         log.info("app_startup", env=settings.app_env.value, version=settings.app_version)
         yield
+        await dispose_engine()  # cierra el pool de BD al parar (issue #50)
         log.info("app_shutdown")
 
     app = FastAPI(
@@ -35,8 +38,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    app.add_middleware(TenantResolutionMiddleware, base_domain=settings.base_domain)
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(health_router, prefix=settings.api_prefix)
+    app.include_router(tenancy_router, prefix=settings.api_prefix)
 
     return app
 

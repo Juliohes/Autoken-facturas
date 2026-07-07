@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     # en staging/producción se inyecta por env var. No se conecta en 0.4.
     database_url: str = "postgresql+asyncpg://autoken_app:autoken@postgres:5432/autoken"
 
+    # Dominio base para extraer el subdominio->tenant (S1.2). `localhost` se acepta además en
+    # desarrollo (p. ej. `ilex.localhost`). Los subdominios de plataforma no resuelven a tenant.
+    base_domain: str = "autoken.es"
+
     # OCR — Mistral OCR 4 (cabeza de serie del bench, Fase 1). La API key es un secreto y solo
     # vive en el `.env`/GitHub Secrets; el modelo y el timeout son configuración no secreta.
     mistral_api_key: str | None = None

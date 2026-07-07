@@ -1,4 +1,4 @@
-"""Middleware transversal: identificador de correlación por petición."""
+"""Middleware transversal: correlación por petición y resolución subdominio->tenant."""
 
 import uuid
 from collections.abc import Awaitable, Callable
@@ -7,6 +7,9 @@ import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
+
+from tenancy.resolution import extract_subdomain, resolve_tenant
 
 CORRELATION_ID_HEADER = "X-Correlation-ID"
 
@@ -30,3 +33,23 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers[CORRELATION_ID_HEADER] = correlation_id
         return response
+
+
+class TenantResolutionMiddleware(BaseHTTPMiddleware):
+    """Resuelve el subdominio del `Host` a su tenant y lo deja en `request.state.tenant`.
+
+    `request.state.tenant` queda a `None` si el host es raíz/plataforma o si el subdominio no
+    corresponde a ningún tenant activo (indistinguible: no se enumera). No fuerza 404 por sí mismo;
+    los endpoints que requieren tenant deciden (p. ej. `/tenants/current` da 404 si es `None`).
+    """
+
+    def __init__(self, app: ASGIApp, base_domain: str) -> None:
+        super().__init__(app)
+        self._base_domain = base_domain
+
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        slug = extract_subdomain(request.headers.get("host", ""), self._base_domain)
+        request.state.tenant = await resolve_tenant(slug) if slug is not None else None
+        return await call_next(request)
