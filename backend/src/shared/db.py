@@ -29,23 +29,40 @@ class Base(DeclarativeBase):
 
 
 _engine: AsyncEngine | None = None
+_sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
 
-def _get_engine() -> AsyncEngine:
-    """Engine perezoso: no se crea en import-time (no acopla el import a `DATABASE_URL`, ni crea el
-    pool antes del fork de workers o del event loop de los tests)."""
-    global _engine
-    if _engine is None:
+def _get_sessionmaker() -> async_sessionmaker[AsyncSession]:
+    """Factoría de sesiones perezosa y reutilizada (el engine no se crea en import-time).
+
+    Perezosa para no acoplar el import a `DATABASE_URL` ni crear el pool antes del fork de workers o
+    del event loop de los tests. Se reutiliza (no se crea una por llamada).
+    """
+    global _engine, _sessionmaker
+    if _sessionmaker is None:
         _engine = create_async_engine(get_settings().database_url, pool_pre_ping=True)
-    return _engine
+        _sessionmaker = async_sessionmaker(_engine, expire_on_commit=False)
+    return _sessionmaker
 
 
 async def dispose_engine() -> None:
     """Cierra el engine y su pool (lifespan de la app; tests tras cambiar `DATABASE_URL`)."""
-    global _engine
+    global _engine, _sessionmaker
     if _engine is not None:
         await _engine.dispose()
         _engine = None
+        _sessionmaker = None
+
+
+@asynccontextmanager
+async def session() -> AsyncIterator[AsyncSession]:
+    """Sesión SIN contexto de tenant (RLS activa: 0 filas en tablas de negocio).
+
+    Solo para operaciones que no dependen de un tenant: p. ej. llamar a `resolve_tenant(slug)`
+    (SECURITY DEFINER) durante la resolución del subdominio, antes de tener `app.tenant_id`.
+    """
+    async with _get_sessionmaker()() as db_session:
+        yield db_session
 
 
 @asynccontextmanager
@@ -57,8 +74,7 @@ async def tenant_session(
     `company_id` a `None` = contexto de asesoría (ve todo el tenant). Fijado = contexto de una
     empresa (ve solo esa). Las variables viven solo en la transacción; no fugan entre peticiones.
     """
-    factory = async_sessionmaker(_get_engine(), expire_on_commit=False)
-    async with factory() as session, session.begin():
+    async with _get_sessionmaker()() as session, session.begin():
         await session.execute(
             text("SELECT set_config('app.tenant_id', :tid, true)"),
             {"tid": str(tenant_id)},
