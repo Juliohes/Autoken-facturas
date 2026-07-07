@@ -38,7 +38,11 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    app.add_middleware(TenantResolutionMiddleware, base_domain=settings.base_domain)
+    app.add_middleware(
+        TenantResolutionMiddleware,
+        base_domain=settings.base_domain,
+        allow_localhost=not settings.is_production,  # `*.localhost` solo fuera de producción
+    )
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(health_router, prefix=settings.api_prefix)
     app.include_router(tenancy_router, prefix=settings.api_prefix)

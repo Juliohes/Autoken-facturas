@@ -34,7 +34,9 @@ async def api() -> AsyncIterator[tuple[httpx.AsyncClient, dict[str, str]]]:
 
     from main import create_app
 
-    transport = httpx.ASGITransport(app=create_app())
+    # raise_app_exceptions=False: una excepción no controlada se convierte en 500 (como en prod),
+    # en vez de propagarse al test (permite comprobar "fallo de BD -> 500").
+    transport = httpx.ASGITransport(app=create_app(), raise_app_exceptions=False)
     try:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             yield client, dsns
@@ -134,3 +136,67 @@ async def test_c7_resolve_tenant_solo_devuelve_activos(
     finally:
         await conn.close()
     assert len(filas) == 0
+
+
+# --- Refuerzos de la auditoría de S1.2 ----------------------------------------------------------
+
+
+async def test_la_funcion_definer_es_propiedad_de_un_rol_bypassrls_no_superusuario(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """H1: `resolve_tenant` la posee un rol con BYPASSRLS y NO superusuario.
+
+    Así funciona igual en producción (no depende de que el owner sea superusuario): si el owner no
+    saltara la RLS, la función daría 0 filas para todo tenant y todos los subdominios darían 404.
+    """
+    conn = await asyncpg.connect(api[1]["admin"])
+    try:
+        row = await conn.fetchrow(
+            "SELECT r.rolbypassrls, r.rolsuper FROM pg_proc p "
+            "JOIN pg_roles r ON r.oid = p.proowner WHERE p.proname = 'resolve_tenant'"
+        )
+    finally:
+        await conn.close()
+    assert row is not None
+    assert row["rolbypassrls"] is True
+    assert row["rolsuper"] is False
+
+
+async def test_fallo_de_bd_al_resolver_da_500_no_404(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Un fallo de infraestructura al resolver NO se enmascara como 'tenant inexistente' (§5)."""
+    client, _ = api
+
+    async def _boom(_slug: str) -> None:
+        raise RuntimeError("BD caída")
+
+    monkeypatch.setattr("shared.middleware.resolve_tenant", _boom)
+    resp = await client.get(_CURRENT, headers=_host("ilex.autoken.es"))
+    assert resp.status_code == 500
+
+
+@pytest.mark.parametrize(
+    ("host", "allow_localhost", "esperado"),
+    [
+        ("ilex.autoken.es", False, "ilex"),
+        ("ILEX.AUTOKEN.ES", False, "ilex"),  # case-insensitive
+        ("ilex.autoken.es.", False, "ilex"),  # FQDN con punto final
+        ("ilex.autoken.es:8000", False, "ilex"),  # puerto ignorado
+        ("a.b.autoken.es", False, "a"),  # multi-etiqueta -> primer nivel
+        ("autoken.es", False, None),  # raíz
+        ("www.autoken.es", False, None),  # reservado
+        ("panel.autoken.es", False, None),  # plataforma
+        ("autoken.es.evil.com", False, None),  # dominio base en medio, no al final
+        ("1.2.3.4", False, None),  # IP
+        ("", False, None),  # host vacío
+        ("ilex.localhost", True, "ilex"),  # localhost solo en desarrollo
+        ("ilex.localhost", False, None),  # en producción, localhost no resuelve
+    ],
+)
+def test_extract_subdomain(host: str, allow_localhost: bool, esperado: str | None) -> None:
+    """`extract_subdomain` cubre los casos límite de la spec §5 (función pura, sin BD)."""
+    from tenancy.resolution import extract_subdomain
+
+    assert extract_subdomain(host, "autoken.es", allow_localhost=allow_localhost) == esperado

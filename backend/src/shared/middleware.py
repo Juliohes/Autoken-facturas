@@ -43,13 +43,18 @@ class TenantResolutionMiddleware(BaseHTTPMiddleware):
     los endpoints que requieren tenant deciden (p. ej. `/tenants/current` da 404 si es `None`).
     """
 
-    def __init__(self, app: ASGIApp, base_domain: str) -> None:
+    def __init__(self, app: ASGIApp, base_domain: str, *, allow_localhost: bool = False) -> None:
         super().__init__(app)
         self._base_domain = base_domain
+        self._allow_localhost = allow_localhost
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        slug = extract_subdomain(request.headers.get("host", ""), self._base_domain)
+        slug = extract_subdomain(
+            request.headers.get("host", ""),
+            self._base_domain,
+            allow_localhost=self._allow_localhost,
+        )
         request.state.tenant = await resolve_tenant(slug) if slug is not None else None
         return await call_next(request)

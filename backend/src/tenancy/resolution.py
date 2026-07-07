@@ -32,16 +32,21 @@ class ResolvedTenant:
     is_demo: bool
 
 
-def extract_subdomain(host: str, base_domain: str) -> str | None:
+def extract_subdomain(host: str, base_domain: str, *, allow_localhost: bool = True) -> str | None:
     """Slug de primer nivel de `host`, o `None` si es raíz, reservado o ajeno al dominio base.
 
-    Ignora el puerto y la caja. `ilex.autoken.es` -> `ilex`; `autoken.es`/`www.autoken.es` -> None;
-    `panel.autoken.es` -> None; una IP o un host que no cuelga del dominio base -> None.
+    Ignora puerto, caja y el punto final del FQDN. `ilex.autoken.es` -> `ilex`;
+    `autoken.es`/`www.autoken.es` -> None; `panel.autoken.es` -> None; una IP o un host que no
+    cuelga del dominio base -> None. `localhost` solo se admite como base en desarrollo
+    (`allow_localhost`), nunca en producción (evita spoofing de `*.localhost` por cabecera Host).
     """
-    hostname = host.split(":", 1)[0].strip().lower()
+    hostname = host.split(":", 1)[0].strip().rstrip(".").lower()
     if not hostname:
         return None
-    for base in (base_domain.lower(), _DEV_BASE):
+    bases = [base_domain.lower()]
+    if allow_localhost:
+        bases.append(_DEV_BASE)
+    for base in bases:
         if hostname == base:
             return None  # dominio raíz: web corporativa, no tenant
         suffix = f".{base}"
