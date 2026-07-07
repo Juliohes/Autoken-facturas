@@ -14,6 +14,10 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from shared.config import get_settings
+from shared.db import Base
+
+# Importa los modelos para que se registren en Base.metadata (autogenerate y target).
+import tenancy.models  # noqa: F401  (efecto secundario: registrar tablas)
 
 config = context.config
 
@@ -23,8 +27,7 @@ if config.config_file_name is not None:
 # Inyecta la URL real desde la configuración de la app (env var).
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
-# En S1.1 se enlazará la metadata de los modelos (Base.metadata).
-target_metadata = None
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:

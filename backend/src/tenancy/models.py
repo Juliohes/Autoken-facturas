@@ -1,0 +1,155 @@
+"""Modelos ORM del núcleo de tenancy (S1.1).
+
+Jerarquía: Plataforma -> Tenant (asesoría) -> Company (empresa cliente) -> User (empleado). Toda
+tabla de negocio lleva `tenant_id` y RLS `FORCE` (ADR-0001); las políticas y los grants viven en la
+migración (no se pueden expresar en el ORM). El esquema aquí y el de la migración deben coincidir.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from uuid import UUID
+
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from shared.db import Base
+
+_ROLES = ("platform_admin", "tenant_admin", "user")
+_USER_STATUS = ("pending", "active")
+_COMPANY_STATUS = ("active", "pending")
+_TENANT_STATUS = ("active", "suspended")
+
+
+def _pk() -> Mapped[UUID]:
+    return mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+
+
+class Tenant(Base):
+    """Asesoría. `slug` es el subdominio (`<slug>.autoken.es`)."""
+
+    __tablename__ = "tenants"
+    __table_args__ = (CheckConstraint(f"status IN {_TENANT_STATUS}", name="tenants_status_valid"),)
+
+    id: Mapped[UUID] = _pk()
+    slug: Mapped[str] = mapped_column(String(63), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    custom_domain: Mapped[str | None] = mapped_column(Text, unique=True)
+    is_demo: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class TenantBranding(Base):
+    """Theming en runtime de una asesoría (logo, colores, nombre de la app)."""
+
+    __tablename__ = "tenant_branding"
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
+    )
+    logo_url: Mapped[str | None] = mapped_column(Text)
+    color_primary: Mapped[str | None] = mapped_column(String(9))
+    color_secondary: Mapped[str | None] = mapped_column(String(9))
+    app_name: Mapped[str | None] = mapped_column(Text)
+    favicon: Mapped[str | None] = mapped_column(Text)
+
+
+class User(Base):
+    """Usuario de un tenant. `role` decide el alcance; `status` gestiona la aprobación (S1.4)."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "email", name="users_tenant_email_unique"),
+        CheckConstraint(f"role IN {_ROLES}", name="users_role_valid"),
+        CheckConstraint(f"status IN {_USER_STATUS}", name="users_status_valid"),
+        Index("ix_users_tenant", "tenant_id", "id"),
+    )
+
+    id: Mapped[UUID] = _pk()
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    email: Mapped[str] = mapped_column(Text, nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
+    totp_secret: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class Company(Base):
+    """Empresa cliente de una asesoría. Se importan desde el Excel de la asesoría (S1.5)."""
+
+    __tablename__ = "companies"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "cif", name="companies_tenant_cif_unique"),
+        CheckConstraint(f"status IN {_COMPANY_STATUS}", name="companies_status_valid"),
+        Index("ix_companies_tenant", "tenant_id", "id"),
+    )
+
+    id: Mapped[UUID] = _pk()
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    cif: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class Membership(Base):
+    """Pertenencia de un usuario a una empresa (un user puede estar en N empresas)."""
+
+    __tablename__ = "memberships"
+    __table_args__ = (Index("ix_memberships_tenant", "tenant_id", "company_id"),)
+
+    user_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), primary_key=True
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+
+
+class AuditLog(Base):
+    """Registro append-only de mutaciones. UPDATE/DELETE revocados al rol runtime (S1.8)."""
+
+    __tablename__ = "audit_log"
+    __table_args__ = (Index("ix_audit_log_tenant", "tenant_id", "at"),)
+
+    id: Mapped[UUID] = _pk()
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    actor_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    entity: Mapped[str] = mapped_column(Text, nullable=False)
+    entity_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    payload_hash: Mapped[str | None] = mapped_column(Text)
+    at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
