@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import asyncpg
 import pytest
@@ -79,7 +79,8 @@ async def db() -> AsyncIterator[dict[str, str]]:
 
     host = _ADMIN_DSN.split("@", 1)[1]
     app_dsn = f"postgresql://autoken_app:{_APP_PASSWORD}@{host}/{_TEST_DB}"
-    yield {"admin": admin_dsn, "app": app_dsn}
+    app_async = f"postgresql+asyncpg://autoken_app:{_APP_PASSWORD}@{host}/{_TEST_DB}"
+    yield {"admin": admin_dsn, "app": app_dsn, "app_async": app_async}
 
 
 async def _seed_company(admin_dsn: str, tenant_id: str, name: str, cif: str) -> str:
@@ -183,12 +184,15 @@ async def test_c5_escribir_en_otro_tenant_se_rechaza(db: dict[str, str]) -> None
 # --- C6: el rol runtime no puede saltarse la RLS ------------------------------------------------
 
 
-async def test_c6_runtime_no_puede_desactivar_rls(db: dict[str, str]) -> None:
-    """C6: el rol runtime no es dueño ni superusuario -> no puede desactivar la RLS."""
+async def test_c6_runtime_no_puede_desactivar_rls_ni_escalar_de_rol(db: dict[str, str]) -> None:
+    """C6: el rol runtime no es dueño ni superusuario -> ni desactiva la RLS ni salta a otro rol."""
     conn = await asyncpg.connect(db["app"])
     try:
         with pytest.raises(asyncpg.PostgresError):
             await conn.execute("ALTER TABLE companies DISABLE ROW LEVEL SECURITY")
+        # Tampoco puede escalar a un rol que sí saltaría la RLS.
+        with pytest.raises(asyncpg.PostgresError):
+            await conn.execute("SET ROLE postgres")
     finally:
         await conn.close()
 
@@ -212,9 +216,15 @@ async def test_c7_audit_log_es_append_only(db: dict[str, str]) -> None:
                 str(uuid4()),
                 str(uuid4()),
             )
-            with pytest.raises(asyncpg.PostgresError):
+        # Cada intento en su propio savepoint: si no, el 1er error aborta la transacción y el 2º
+        # "pasaría" por transacción muerta, no por la revocación real (falso verde).
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            async with conn.transaction():
+                await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_a)
                 await conn.execute("UPDATE audit_log SET action = 'tampered'")
-            with pytest.raises(asyncpg.PostgresError):
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            async with conn.transaction():
+                await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_a)
                 await conn.execute("DELETE FROM audit_log")
     finally:
         await conn.close()
@@ -223,29 +233,38 @@ async def test_c7_audit_log_es_append_only(db: dict[str, str]) -> None:
 # --- C8: guard anti-olvido de RLS ---------------------------------------------------------------
 
 
-async def test_c8_todas_las_tablas_de_negocio_tienen_rls_forzada(db: dict[str, str]) -> None:
-    """C8: toda tabla de negocio nace con RLS habilitada y forzada."""
-    business_tables = {
-        "tenants",
-        "tenant_branding",
-        "users",
-        "companies",
-        "memberships",
-        "audit_log",
-    }
+async def test_c8_toda_tabla_con_tenant_id_tiene_rls_forzada_y_politica(db: dict[str, str]) -> None:
+    """C8: guard anti-olvido dinámico.
+
+    Descubre en la BD toda tabla de negocio (la que tiene columna `tenant_id`, más `tenants`) y
+    exige que TODAS tengan RLS habilitada + forzada y al menos una política. Así una tabla futura
+    sin RLS rompe el test aunque nadie actualice una lista a mano.
+    """
     conn = await asyncpg.connect(db["admin"])
     try:
+        business = {
+            r["table_name"]
+            for r in await conn.fetch(
+                "SELECT table_name FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND column_name = 'tenant_id'"
+            )
+        } | {"tenants"}
         rows = await conn.fetch(
-            "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class "
-            "WHERE relname = ANY($1::text[])",
-            list(business_tables),
+            "SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, "
+            "  (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid) AS n_policies "
+            "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = 'public' AND c.relname = ANY($1::text[])",
+            list(business),
         )
     finally:
         await conn.close()
-    found = {r["relname"] for r in rows}
-    assert business_tables <= found, f"faltan tablas: {business_tables - found}"
-    sin_rls = [r["relname"] for r in rows if not (r["relrowsecurity"] and r["relforcerowsecurity"])]
-    assert not sin_rls, f"tablas de negocio sin RLS forzada: {sin_rls}"
+    assert business >= {"tenants", "companies", "audit_log"}, f"pocas tablas: {business}"
+    problemas = [
+        r["relname"]
+        for r in rows
+        if not (r["relrowsecurity"] and r["relforcerowsecurity"] and r["n_policies"] >= 1)
+    ]
+    assert not problemas, f"tablas de negocio sin RLS forzada o sin política: {problemas}"
 
 
 # --- C9: el esquema companies admite los CIF/NIF reales -----------------------------------------
@@ -258,3 +277,137 @@ async def test_c9_companies_admite_cif_de_sociedad_y_nif_de_autonomo(db: dict[st
     id_aut = await _seed_company(db["admin"], tenant_a, *_NIF_AUTONOMO)
     assert await _companies_visible(db["app"], tenant_id=tenant_a, company_id=None) == 2
     assert id_soc != id_aut
+
+
+# --- Refuerzos de la auditoría de S1.1 ----------------------------------------------------------
+
+
+async def _seed_user(admin_dsn: str, tenant_id: str) -> str:
+    """Inserta un usuario del tenant (como superusuario). Devuelve su id."""
+    conn = await asyncpg.connect(admin_dsn)
+    try:
+        user_id = str(uuid4())
+        await conn.execute(
+            "INSERT INTO users (id, tenant_id, email, role) VALUES ($1, $2, $3, 'user')",
+            user_id,
+            tenant_id,
+            f"u-{user_id[:8]}@example.com",
+        )
+        return user_id
+    finally:
+        await conn.close()
+
+
+async def test_with_check_bloquea_escritura_en_otra_empresa_del_mismo_tenant(
+    db: dict[str, str],
+) -> None:
+    """En contexto de empresa X, insertar una membership de la empresa Y (mismo tenant) se rechaza.
+
+    Cubre el hueco que detectó la auditoría: el WITH CHECK debe incluir el nivel company, no solo
+    el tenant. Sin el arreglo, esta escritura cruzaría la frontera de empresa.
+    """
+    tenant_a = str(uuid4())
+    company_x = await _seed_company(db["admin"], tenant_a, *_CIF_SOCIEDAD)
+    company_y = await _seed_company(db["admin"], tenant_a, *_NIF_AUTONOMO)
+    user_id = await _seed_user(db["admin"], tenant_a)
+    conn = await asyncpg.connect(db["app"])
+    try:
+        async with conn.transaction():
+            await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_a)
+            await conn.execute("SELECT set_config('app.company_id', $1, true)", company_x)
+            # En su propia empresa, permitido.
+            await conn.execute(
+                "INSERT INTO memberships (user_id, company_id, tenant_id) VALUES ($1, $2, $3)",
+                user_id,
+                company_x,
+                tenant_a,
+            )
+            # En otra empresa del mismo tenant, rechazado por el WITH CHECK de company.
+            with pytest.raises(asyncpg.PostgresError):
+                await conn.execute(
+                    "INSERT INTO memberships (user_id, company_id, tenant_id) VALUES ($1, $2, $3)",
+                    user_id,
+                    company_y,
+                    tenant_a,
+                )
+    finally:
+        await conn.close()
+
+
+async def test_runtime_no_puede_borrar_tenant_y_el_audit_log_sobrevive(db: dict[str, str]) -> None:
+    """El rol runtime no tiene DELETE sobre tenants -> no puede vaciar el audit_log por cascada."""
+    tenant_a = str(uuid4())
+    await _seed_company(db["admin"], tenant_a, *_CIF_SOCIEDAD)
+    conn = await asyncpg.connect(db["app"])
+    try:
+        async with conn.transaction():
+            await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_a)
+            await conn.execute(
+                "INSERT INTO audit_log (id, tenant_id, actor_id, action, entity, entity_id) "
+                "VALUES ($1, $2, $3, 'created', 'company', $4)",
+                str(uuid4()),
+                tenant_a,
+                str(uuid4()),
+                str(uuid4()),
+            )
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            async with conn.transaction():
+                await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_a)
+                await conn.execute("DELETE FROM tenants")
+    finally:
+        await conn.close()
+    # La entrada de auditoría sigue ahí (contada como superusuario).
+    admin = await asyncpg.connect(db["admin"])
+    try:
+        assert await admin.fetchval("SELECT count(*) FROM audit_log") == 1
+    finally:
+        await admin.close()
+
+
+async def test_contexto_vacio_falla_cerrado_sin_reventar(db: dict[str, str]) -> None:
+    """Un `app.company_id` vacío ('') se trata como sin contexto de empresa (NULLIF), no un 500."""
+    tenant_a = str(uuid4())
+    await _seed_company(db["admin"], tenant_a, *_CIF_SOCIEDAD)
+    await _seed_company(db["admin"], tenant_a, *_NIF_AUTONOMO)
+    conn = await asyncpg.connect(db["app"])
+    try:
+        async with conn.transaction():
+            await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_a)
+            await conn.execute("SELECT set_config('app.company_id', '', true)")  # vacío, no NULL
+            # No revienta con 'invalid input syntax for uuid'; se comporta como asesoría (ve las 2).
+            assert await conn.fetchval("SELECT count(*) FROM companies") == 2
+    finally:
+        await conn.close()
+
+
+async def test_tenant_session_aisla_de_verdad_por_tenant_y_empresa(db: dict[str, str]) -> None:
+    """El chokepoint real `tenant_session` (SET LOCAL) aísla como los tests de política (C3/C4)."""
+    import os
+
+    from shared import config
+    from shared import db as db_module
+
+    tenant_a, tenant_b = str(uuid4()), str(uuid4())
+    company_x = await _seed_company(db["admin"], tenant_a, *_CIF_SOCIEDAD)
+    await _seed_company(db["admin"], tenant_a, *_NIF_AUTONOMO)  # company Y
+    await _seed_company(db["admin"], tenant_b, "OTRO SL", "B12345674")
+
+    prev = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = db["app_async"]
+    config.get_settings.cache_clear()
+    await db_module.dispose_engine()
+    try:
+        from sqlalchemy import text
+
+        async with db_module.tenant_session(UUID(tenant_a)) as session:  # contexto asesoría
+            assert await session.scalar(text("SELECT count(*) FROM companies")) == 2
+        # Contexto de empresa X: solo ve X.
+        async with db_module.tenant_session(UUID(tenant_a), UUID(company_x)) as session:
+            assert await session.scalar(text("SELECT count(*) FROM companies")) == 1
+    finally:
+        if prev is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = prev
+        config.get_settings.cache_clear()
+        await db_module.dispose_engine()

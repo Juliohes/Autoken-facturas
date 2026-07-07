@@ -24,9 +24,13 @@ depends_on = None
 _APP_ROLE = "autoken_app"
 
 # Tablas con `tenant_id`: aislamiento por tenant + (opcional) por company vía `app.company_id`.
+# `users`, `tenant_branding` y `audit_log` son **tenant-only a propósito**: un usuario pertenece a N
+# empresas (vía `memberships`), no tiene una company única; el branding y la auditoría son de la
+# asesoría entera. El filtrado fino por empresa de esos datos, si hace falta, es del RBAC (S1.6).
 _TENANT_TABLES = ("tenant_branding", "users", "companies", "memberships", "audit_log")
-# Tablas con columna de company para el segundo nivel (el resto solo filtran por tenant).
-_COMPANY_COLUMN = {"companies": "id", "memberships": "company_id"}
+# Columna por la que se acota al nivel empresa (segundo nivel). Para `companies` es su propio `id`
+# (la empresa ES la fila); para `memberships`, la FK `company_id`. El resto no tienen segundo nivel.
+_COMPANY_SCOPE_COLUMN = {"companies": "id", "memberships": "company_id"}
 # Todas las tablas de negocio (para RLS FORCE y el guard C8).
 _BUSINESS_TABLES = ("tenants", *_TENANT_TABLES)
 
@@ -158,31 +162,43 @@ def upgrade() -> None:
     #    con segundo nivel opcional por company cuando la tabla tiene columna de company.
     _enable_rls("tenants", "id", company_column=None)
     for table in _TENANT_TABLES:
-        _enable_rls(table, "tenant_id", company_column=_COMPANY_COLUMN.get(table))
+        _enable_rls(table, "tenant_id", company_column=_COMPANY_SCOPE_COLUMN.get(table))
 
-    # 4) Grants al rol runtime. Todo DML salvo audit_log, que es append-only (solo SELECT/INSERT).
+    # 4) Grants al rol runtime (mínimo privilegio):
+    #    - `tenants`: solo SELECT. El alta/baja/suspensión de asesorías es de plataforma, no de la
+    #      API. Además, dar DELETE aquí permitiría borrar el tenant y arrastrar en cascada su
+    #      `audit_log`, saltándose el append-only.
+    #    - resto de tablas: DML completo salvo `audit_log`, append-only (solo SELECT/INSERT).
     op.execute(f"GRANT USAGE ON SCHEMA public TO {_APP_ROLE}")
-    writable = ", ".join(t for t in _BUSINESS_TABLES if t != "audit_log")
+    op.execute(f"GRANT SELECT ON tenants TO {_APP_ROLE}")
+    writable = ", ".join(t for t in _BUSINESS_TABLES if t not in ("tenants", "audit_log"))
     op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {writable} TO {_APP_ROLE}")
     op.execute(f"GRANT SELECT, INSERT ON audit_log TO {_APP_ROLE}")
 
 
 def _enable_rls(table: str, tenant_column: str, company_column: str | None) -> None:
-    """Activa RLS FORCE en `table` y crea la política de aislamiento (tenant + company opcional)."""
+    """Activa RLS FORCE en `table` y crea la política de aislamiento (tenant + company opcional).
+
+    `NULLIF(..., '')` hace que un contexto vacío (variable sin fijar o `''`) case a NULL y por tanto
+    a 0 filas (falla cerrado), en vez de reventar el cast `''::uuid`. El `WITH CHECK` usa la MISMA
+    expresión que el `USING`: sin eso, una escritura podría cruzar la frontera de company (una fila
+    con `company_id` de otra empresa pasaría el check aunque el USING luego la ocultara).
+    """
     op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
     op.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
-    tenant_match = f"{tenant_column} = current_setting('app.tenant_id', true)::uuid"
+    tenant_setting = "NULLIF(current_setting('app.tenant_id', true), '')"
+    company_setting = "NULLIF(current_setting('app.company_id', true), '')"
+    tenant_match = f"{tenant_column} = {tenant_setting}::uuid"
     if company_column is not None:
         company_match = (
-            f"(current_setting('app.company_id', true) IS NULL "
-            f"OR {company_column} = current_setting('app.company_id', true)::uuid)"
+            f"({company_setting} IS NULL OR {company_column} = {company_setting}::uuid)"
         )
         using = f"{tenant_match} AND {company_match}"
     else:
         using = tenant_match
     op.execute(
         f"CREATE POLICY {table}_tenant_isolation ON {table} "
-        f"USING ({using}) WITH CHECK ({tenant_match})"
+        f"USING ({using}) WITH CHECK ({using})"
     )
 
 
