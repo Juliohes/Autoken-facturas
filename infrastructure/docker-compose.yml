@@ -16,6 +16,11 @@ services:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-autoken_app}:${POSTGRES_PASSWORD:-autoken}@postgres:5432/${POSTGRES_DB:-autoken}
       REDIS_URL: redis://redis:6379/0
+      # IP real del cliente tras el proxy inverso (rate-limit por IP, B1/C22). Deben ir alineados:
+      # `TRUSTED_PROXIES` (lo usa la app para aceptar `X-Forwarded-For`) y `FORWARDED_ALLOW_IPS` (lo
+      # usa uvicorn con `--proxy-headers`). Vacío por defecto = no se confía en XFF (IP = peer).
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
     ports:
       - "8000:8000"
     depends_on:

@@ -9,11 +9,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from identity.router import router as auth_router
 from platform_admin.health import router as health_router
 from shared.config import Settings, get_settings
 from shared.db import dispose_engine
 from shared.logging import configure_logging, get_logger
 from shared.middleware import CorrelationIdMiddleware, TenantResolutionMiddleware
+from shared.redis import dispose_redis
 from tenancy.router import router as tenancy_router
 
 
@@ -28,6 +30,7 @@ def create_app() -> FastAPI:
         log.info("app_startup", env=settings.app_env.value, version=settings.app_version)
         yield
         await dispose_engine()  # cierra el pool de BD al parar (issue #50)
+        await dispose_redis()  # cierra el cliente Redis al parar (S1.3)
         log.info("app_shutdown")
 
     app = FastAPI(
@@ -46,6 +49,7 @@ def create_app() -> FastAPI:
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(health_router, prefix=settings.api_prefix)
     app.include_router(tenancy_router, prefix=settings.api_prefix)
+    app.include_router(auth_router, prefix=settings.api_prefix)
 
     return app
 

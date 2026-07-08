@@ -7,9 +7,18 @@ valores reales de secretos: el .env vive fuera del repo (ver .env.example).
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
+from typing import Self
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Valor por defecto del secreto JWT: SOLO para desarrollo/test. En producción se rechaza al arrancar
+# (ver `_reject_insecure_jwt_secret_in_production`). En constante para que el guard lo compare sin
+# duplicar el literal.
+_DEV_JWT_SECRET = "dev-insecure-jwt-secret-change-me"  # noqa: S105  (solo dev/test)
+# Longitud mínima del secreto en producción: 32 bytes de entropía para HS256 (una clave más corta
+# debilita la firma y facilita falsificar sesiones).
+_MIN_JWT_SECRET_BYTES = 32
 
 
 def _find_project_root() -> Path:
@@ -73,6 +82,27 @@ class Settings(BaseSettings):
         """
         return value.lower() if isinstance(value, str) else value
 
+    @model_validator(mode="after")
+    def _reject_insecure_jwt_secret_in_production(self) -> Self:
+        """En producción, un `jwt_secret` débil hace fallar el arranque (fail-loud), no un warning.
+
+        Un secreto predecible (el default de dev) o demasiado corto permitiría falsificar access
+        tokens y, con ellos, sesiones de cualquier usuario. En development/staging no se aplica: los
+        tests y el arranque local usan el default a propósito.
+        """
+        if self.app_env is AppEnv.PRODUCTION:
+            if self.jwt_secret == _DEV_JWT_SECRET:
+                raise ValueError(
+                    "JWT_SECRET no puede ser el valor por defecto de desarrollo en producción: "
+                    "inyecta un secreto real por la variable de entorno JWT_SECRET."
+                )
+            if len(self.jwt_secret.encode("utf-8")) < _MIN_JWT_SECRET_BYTES:
+                raise ValueError(
+                    f"JWT_SECRET debe tener al menos {_MIN_JWT_SECRET_BYTES} bytes en producción "
+                    "para firmar de forma segura los access token (HS256)."
+                )
+        return self
+
     # Base de datos (asyncpg). En desarrollo se puede dejar por defecto;
     # en staging/producción se inyecta por env var. No se conecta en 0.4.
     database_url: str = "postgresql+asyncpg://autoken_app:autoken@postgres:5432/autoken"
@@ -80,6 +110,39 @@ class Settings(BaseSettings):
     # Dominio base para extraer el subdominio->tenant (S1.2). `localhost` se acepta además en
     # desarrollo (p. ej. `ilex.localhost`). Los subdominios de plataforma no resuelven a tenant.
     base_domain: str = "autoken.es"
+
+    # --- Autenticación S1.3 (identity) ---------------------------------------------------------
+    # Redis: rate-limit de login, rotación del refresh y tokens de activación. La URL no es secreta
+    # (no lleva credenciales en dev/CI); en producción puede incluir password vía env var.
+    redis_url: str = "redis://redis:6379/0"
+
+    # `jwt_secret` firma los access token (HS256). Es SECRETO: en staging/producción llega por env
+    # var `JWT_SECRET` (§9.1); el valor por defecto es solo para desarrollo/test y NUNCA se usa en
+    # producción (una firma predecible permitiría falsificar sesiones).
+    jwt_secret: str = _DEV_JWT_SECRET
+    jwt_access_ttl: int = 15 * 60  # access token de vida corta (15 min), en segundos
+    jwt_refresh_ttl: int = 14 * 24 * 60 * 60  # refresh de vida larga (14 días), en segundos
+
+    # Política de contraseñas y límite de fuerza bruta (por (IP+email) y un tope más grueso por IP).
+    password_min_length: int = 12
+    password_max_length: int = 128  # acota el coste de hashing (DoS) ante contraseñas larguísimas
+    login_max_attempts: int = 5  # fallos por (IP+email) en la ventana antes del 429
+    login_window_seconds: int = 15 * 60  # ventana del rate-limit (15 min)
+    login_ip_max_attempts: int = 20  # tope más grueso por IP (credential spraying)
+
+    activation_ttl: int = 72 * 60 * 60  # token de activación de un solo uso (72 h), en segundos
+
+    # Proxies de confianza (Traefik/Caddy) desde los que se acepta `X-Forwarded-For` para derivar la
+    # IP real del cliente en el rate-limit (C17/C22). Lista separada por comas de IPs exactas del
+    # peer directo. VACÍO por defecto: nunca se confía en XFF, la IP es la del peer. En producción
+    # se fija a la red del proxy con `--proxy-headers --forwarded-allow-ips=<misma lista>`.
+    #
+    # FOOT-GUN: `"*"` (opt-in, nunca el default) confía en el XFF más a la izquierda venga de
+    # donde venga y DESACTIVA la protección anti-spoofing del rate-limit por IP: un atacante rota
+    # la cabecera en cada intento y no llega al tope. Úsalo solo si un proxy de confianza REESCRIBE
+    # siempre `X-Forwarded-For` descartando el que mande el cliente; con una lista de IPs concretas
+    # se toma el primer salto no confiable desde la derecha, que sí es fiable.
+    trusted_proxies: str = ""
 
     # OCR — Mistral OCR 4 (cabeza de serie del bench, Fase 1). La API key es un secreto y solo
     # vive en el `.env`/GitHub Secrets; el modelo y el timeout son configuración no secreta.
@@ -126,6 +189,11 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env is AppEnv.PRODUCTION
+
+    @property
+    def trusted_proxy_set(self) -> frozenset[str]:
+        """`trusted_proxies` como conjunto de IPs (o `{'*'}`); vacío si no hay ninguno."""
+        return frozenset(item.strip() for item in self.trusted_proxies.split(",") if item.strip())
 
 
 @lru_cache
