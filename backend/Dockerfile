@@ -30,4 +30,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS http://localhost:8000/api/v1/health || exit 1
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# `--proxy-headers` habilita el uso de `X-Forwarded-*` detrás del proxy inverso (Traefik/Caddy).
+# uvicorn solo reescribe la IP del cliente si el peer TCP está en `--forwarded-allow-ips`, que toma
+# del entorno `FORWARDED_ALLOW_IPS` (por defecto 127.0.0.1). Debe alinearse con `TRUSTED_PROXIES` de
+# la app (rate-limit por IP real, B1/C22). Ver docker-compose.yml e infra de producción.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

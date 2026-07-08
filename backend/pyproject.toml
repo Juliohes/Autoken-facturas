@@ -22,6 +22,12 @@ dependencies = [
     # pypdfium2: motor PDFium, licencia permisiva (Apache/BSD), sin binarios de sistema.
     "pypdfium2>=4",
     "pillow>=10",
+    # Autenticación S1.3 (identity): hashing Argon2id, JWT HS256, TOTP y Redis (rate-limit +
+    # rotación de refresh + tokens de activación).
+    "argon2-cffi>=23",
+    "pyjwt>=2.9",
+    "pyotp>=2.9",
+    "redis>=5.0",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +50,10 @@ where = ["src"]
 line-length = 100
 src = ["src", "tests"]
 target-version = "py312"
+# El codigo de app vive en `src`/`tests` (unico scope que CI pasa por el linter/formatter). Las
+# migraciones Alembic (SQL crudo verboso, cabeceras generadas) y los scripts sueltos de bench quedan
+# fuera del linter, en coherencia con ese scope de CI (`ruff check/format src tests`).
+extend-exclude = ["migrations", "scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4", "SIM"]

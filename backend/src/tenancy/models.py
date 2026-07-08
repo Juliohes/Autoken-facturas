@@ -20,14 +20,16 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from shared.db import Base
+from tenancy.constants import Role, UserStatus
 
-_ROLES = ("platform_admin", "tenant_admin", "user")
-_USER_STATUS = ("pending", "active")
+_ROLES = tuple(role.value for role in Role)
+_USER_STATUS = tuple(status.value for status in UserStatus)
 _COMPANY_STATUS = ("active", "pending")
 _TENANT_STATUS = ("active", "suspended")
 
@@ -71,19 +73,34 @@ class TenantBranding(Base):
 
 
 class User(Base):
-    """Usuario de un tenant. `role` decide el alcance; `status` gestiona la aprobación (S1.4)."""
+    """Usuario de un tenant. `role` decide el alcance; `status` gestiona la aprobación (S1.4).
+
+    Un `platform_admin` no pertenece a ninguna asesoría (`tenant_id` nulo, S1.3): el CHECK
+    `users_platform_admin_no_tenant` ata rol y pertenencia, y el índice único parcial da email
+    único entre platform_admin (donde `UNIQUE(tenant_id, email)` no basta por los NULL distintos).
+    """
 
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("tenant_id", "email", name="users_tenant_email_unique"),
         CheckConstraint(f"role IN {_ROLES}", name="users_role_valid"),
         CheckConstraint(f"status IN {_USER_STATUS}", name="users_status_valid"),
+        CheckConstraint(
+            "(role = 'platform_admin') = (tenant_id IS NULL)",
+            name="users_platform_admin_no_tenant",
+        ),
         Index("ix_users_tenant", "tenant_id", "id"),
+        Index(
+            "ux_users_platform_email",
+            "email",
+            unique=True,
+            postgresql_where=text("tenant_id IS NULL"),
+        ),
     )
 
     id: Mapped[UUID] = _pk()
-    tenant_id: Mapped[UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    tenant_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
     )
     email: Mapped[str] = mapped_column(Text, nullable=False)
     password_hash: Mapped[str | None] = mapped_column(Text)

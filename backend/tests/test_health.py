@@ -56,6 +56,9 @@ def override_settings() -> Iterator[None]:
         app_name="Servicio de prueba",
         app_version="9.9.9",
         app_env=AppEnv.PRODUCTION,
+        # En producción el guard rechaza un `jwt_secret` default o corto; este test comprueba el
+        # reflejo de settings, no el secreto, así que basta con uno fuerte válido.
+        jwt_secret="prueba-secreto-jwt-fuerte-de-produccion-32b+",
     )
     try:
         yield
