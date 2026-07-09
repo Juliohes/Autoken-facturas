@@ -184,7 +184,12 @@ async def test_fallo_de_bd_al_resolver_da_500_no_404(
         ("ILEX.AUTOKEN.ES", False, "ilex"),  # case-insensitive
         ("ilex.autoken.es.", False, "ilex"),  # FQDN con punto final
         ("ilex.autoken.es:8000", False, "ilex"),  # puerto ignorado
-        ("a.b.autoken.es", False, "a"),  # multi-etiqueta -> primer nivel
+        # Prefijo multi-etiqueta bajo el dominio base -> rechazado (auditoría S1.6 A1): no se
+        # colapsa a la primera etiqueta, que era la conducta insegura (un `Host` manipulado como
+        # `a.b.autoken.es` no debe pasar por el tenant `a`).
+        ("a.b.autoken.es", False, None),
+        ("panel.foo.autoken.es", False, None),  # no es el panel canónico
+        ("ilex.x.autoken.es", False, None),  # no es el tenant `ilex`
         ("autoken.es", False, None),  # raíz
         ("www.autoken.es", False, None),  # reservado
         ("panel.autoken.es", False, None),  # plataforma

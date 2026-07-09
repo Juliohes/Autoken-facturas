@@ -9,7 +9,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
-from tenancy.resolution import extract_subdomain, resolve_tenant
+from tenancy.resolution import extract_subdomain, is_platform_host, resolve_tenant
 
 CORRELATION_ID_HEADER = "X-Correlation-ID"
 
@@ -51,10 +51,11 @@ class TenantResolutionMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        slug = extract_subdomain(
-            request.headers.get("host", ""),
-            self._base_domain,
-            allow_localhost=self._allow_localhost,
-        )
+        host = request.headers.get("host", "")
+        slug = extract_subdomain(host, self._base_domain, allow_localhost=self._allow_localhost)
         request.state.tenant = await resolve_tenant(slug) if slug is not None else None
+        # El host de plataforma (panel) es el único donde entra un `platform_admin` (S1.6 C8).
+        request.state.is_platform_host = is_platform_host(
+            host, self._base_domain, allow_localhost=self._allow_localhost
+        )
         return await call_next(request)

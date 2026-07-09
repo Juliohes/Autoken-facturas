@@ -13,6 +13,7 @@ Las escrituras de la activación pasan por las funciones acotadas `activation_se
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,8 +48,22 @@ class IdentityRow:
     role: str
 
 
-async def load_for_login(resolved: ResolvedTenant | None, email: str) -> AuthUser | None:
-    """Localiza al usuario por email: en el tenant del subdominio, o el platform_admin en panel."""
+@dataclass(frozen=True)
+class CompanyRef:
+    """Referencia mínima a una empresa (id + nombre) para el contexto de un `user`."""
+
+    id: UUID
+    name: str
+
+
+async def load_for_login(
+    resolved: ResolvedTenant | None, email: str, *, platform_login: bool
+) -> AuthUser | None:
+    """Localiza al usuario por email: en el tenant del subdominio, o el platform_admin en panel.
+
+    `platform_login` (host de plataforma, S1.6 C8) habilita el camino a `platform_admin`. En un host
+    no-tenant que no sea `panel` no hay contexto ni platform: no hay usuario que cargar (login 401).
+    """
     if resolved is not None:
         async with tenant_session(resolved.id) as sess:
             row = (
@@ -58,7 +73,7 @@ async def load_for_login(resolved: ResolvedTenant | None, email: str) -> AuthUse
                 )
             ).first()
         tenant_id: str | None = str(resolved.id)
-    else:
+    elif platform_login:
         async with db_session() as sess:
             row = (
                 await sess.execute(
@@ -67,6 +82,8 @@ async def load_for_login(resolved: ResolvedTenant | None, email: str) -> AuthUse
                 )
             ).first()
         tenant_id = None
+    else:
+        return None
     if row is None:
         return None
     return AuthUser(
@@ -90,6 +107,41 @@ async def read_identity(session: AsyncSession, user_id: str) -> IdentityRow | No
     if row is None:
         return None
     return IdentityRow(id=str(row.id), email=row.email, role=row.role)
+
+
+class MisconfiguredUserCompany(Exception):
+    """El `user` no resuelve a un contexto de empresa único: 0 o >1 empresas activas (1-A)."""
+
+
+async def resolve_user_company(tenant_id: UUID, user_id: str) -> CompanyRef:
+    """Empresa activa única de un `user` para su contexto de empresa (invariante 1-A estricta).
+
+    Se lee en **contexto de asesoría** (`app.company_id` sin fijar): así se ven todas las
+    memberships del tenant para contar cuántas empresas activas tiene el usuario.
+
+    En el mundo real un empleado nace con su empresa (S1.4); tener **exactamente una** empresa
+    activa es la única configuración válida, con independencia de si la asesoría tiene otras
+    empresas:
+
+    - Exactamente una empresa activa -> se devuelve (contexto de empresa).
+    - 0 o >1 -> cuenta mal configurada (`MisconfiguredUserCompany`); el llamante responde 403 sin
+      servir datos (nunca un contexto ambiguo).
+    """
+    async with tenant_session(tenant_id) as sess:
+        rows = (
+            await sess.execute(
+                text(
+                    "SELECT c.id, c.name FROM memberships m "
+                    "JOIN companies c ON c.id = m.company_id "
+                    "WHERE m.user_id = :uid AND c.status = 'active'"
+                ),
+                {"uid": user_id},
+            )
+        ).all()
+    if len(rows) != 1:
+        raise MisconfiguredUserCompany
+    row = rows[0]
+    return CompanyRef(id=row.id, name=row.name)
 
 
 async def set_activation_password(user_id: str, password_hash: str) -> IdentityRow | None:
