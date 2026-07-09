@@ -26,7 +26,12 @@ async def test_c9_access_token_identifica_y_token_manipulado_da_401(authapi: Api
     assert ok.status_code == 200
     assert ok.json().get("email") == "ana@ilex.es"
 
-    tampered = token[:-1] + ("a" if token[-1] != "a" else "b")
+    # Se altera el PAYLOAD (no el último char de la firma): así la firma HMAC deja de cuadrar de
+    # forma determinista. Cambiar solo el último char base64 de la firma es flaky (por los bits de
+    # relleno, a veces decodifica a los mismos bytes y el token sigue siendo válido).
+    header, payload, signature = token.split(".")
+    tampered_payload = ("A" if payload[0] != "A" else "B") + payload[1:]
+    tampered = f"{header}.{tampered_payload}.{signature}"
     bad = await client.get(ME, headers={**host("ilex.localhost"), **bearer(tampered)})
     assert bad.status_code == 401
 
