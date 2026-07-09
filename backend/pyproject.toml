@@ -28,6 +28,10 @@ dependencies = [
     "pyjwt>=2.9",
     "pyotp>=2.9",
     "redis>=5.0",
+    # Importación en bloque de la cartera de empresas desde el Excel del cliente (companies, S1.5).
+    "openpyxl>=3.1",
+    # Parseo de multipart/form-data para la subida del Excel (`POST /companies/import`).
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -68,6 +72,11 @@ namespace_packages = true
 # pypdfium2 (rasterizado de PDF) no publica stubs ni marcador py.typed.
 [[tool.mypy.overrides]]
 module = "pypdfium2.*"
+ignore_missing_imports = true
+
+# openpyxl (importación del Excel de empresas) no publica marcador py.typed.
+[[tool.mypy.overrides]]
+module = "openpyxl.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -23,6 +23,7 @@ __all__ = [
     "validate_nie",
     "validate_cif",
     "validate_tax_id",
+    "normalize_tax_id",
     "validate_iban",
     "check_tax_line",
     "check_invoice_totals",
@@ -139,6 +140,16 @@ def validate_cif(value: str | None) -> CheckResult:
     if not ok:
         return CheckResult(False, "Dígito de control de CIF incorrecto")
     return CheckResult(True)
+
+
+def normalize_tax_id(value: str | None) -> str:
+    """Forma canónica de un identificador fiscal: mayúsculas y sin separadores.
+
+    Punto único de normalización (misma regla que usa la validación): permite que dos escrituras
+    del mismo CIF con distinto formato ("a-39.031.620" y "A39031620") colapsen a la misma clave de
+    unicidad. `None`/vacío -> cadena vacía.
+    """
+    return _normalize(value)
 
 
 def validate_tax_id(value: str | None) -> CheckResult:

@@ -132,6 +132,14 @@ class Settings(BaseSettings):
 
     activation_ttl: int = 72 * 60 * 60  # token de activación de un solo uso (72 h), en segundos
 
+    # --- Importación de empresas S1.5 (companies) ----------------------------------------------
+    # Guardarraíles anti-DoS por memoria del `POST /companies/import` (proceso compartido por todas
+    # las asesorías): un `.xlsx` manipulado (zip-bomb) o gigantesco no debe tumbar el backend. Tope
+    # de tamaño del fichero subido (se rechaza con 413 antes de parsear) y tope de filas de datos a
+    # procesar (corta el parseo y marca el informe como truncado).
+    companies_import_max_bytes: int = 5 * 1024 * 1024  # 5 MB
+    companies_import_max_rows: int = 5_000
+
     # Proxies de confianza (Traefik/Caddy) desde los que se acepta `X-Forwarded-For` para derivar la
     # IP real del cliente en el rate-limit (C17/C22). Lista separada por comas de IPs exactas del
     # peer directo. VACÍO por defecto: nunca se confía en XFF, la IP es la del peer. En producción
