@@ -1,8 +1,9 @@
 """Utilidades de test para el contexto `companies` (S1.5).
 
-No es un módulo de tests (prefijo `_`): constantes de CIF/NIF (reales del Excel de Setex, para no
-chocar con el validador de dígito de control), siembra de un `tenant_admin`, obtención de su token y
-un constructor de ficheros `.xlsx` en memoria para los tests de importación.
+No es un módulo de tests (prefijo `_`): constantes de CIF/NIF, un generador de NIFs válidos
+(dígito de control correcto) para los tests de importación masiva, siembra de un `tenant_admin`,
+obtención de su token y un constructor de ficheros `.xlsx` en memoria. NO depende de datos reales de
+clientes: el Excel de Setex vive en `entregas/` (gitignored) y no está disponible en CI.
 """
 
 from __future__ import annotations
@@ -16,15 +17,26 @@ from tests._dbtest import seed_tenant, seed_user
 
 COMPANIES = "/api/v1/companies"
 IMPORT = "/api/v1/companies/import"
-REAL_XLSX = "/opt/app-facturas/entregas/Empresas_CIF_NIF.xlsx"
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-# Identificadores fiscales VÁLIDOS (dígito de control correcto), tomados del Excel real.
-VALID_CIF = "A39031620"  # 3L INTERNACIONAL (sociedad)
-VALID_CIF_2 = "B06183446"  # AGRICOLA CIPRIANO, S.L.
-VALID_NIF = "76072394D"  # ALBERTO CAÑA REGALADO (autónomo)
+# Identificadores fiscales VÁLIDOS de prueba (dígito de control correcto; forma real de CIF y NIF).
+VALID_CIF = "A39031620"  # CIF de sociedad
+VALID_CIF_2 = "B06183446"  # CIF de sociedad
+VALID_NIF = "76072394D"  # NIF de autónomo
 # INVÁLIDO: mismo número de NIF con la letra de control equivocada (la correcta es D).
 INVALID_TAXID = "76072394X"
+
+_NIF_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE"
+
+
+def valid_nif(number: int) -> str:
+    """NIF válido (letra de control correcta) para un número dado; genera identificadores únicos.
+
+    Usa el mismo algoritmo módulo-23 que `validate_tax_id`, así que el resultado siempre pasa la
+    validación. Permite construir importaciones de N empresas sin el Excel real (gitignored).
+    """
+    body = number % 100_000_000
+    return f"{body:08d}{_NIF_LETTERS[body % 23]}"
 
 
 async def seed_admin(

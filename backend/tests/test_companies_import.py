@@ -15,7 +15,6 @@ from tests._companies import (
     COMPANIES,
     IMPORT,
     INVALID_TAXID,
-    REAL_XLSX,
     VALID_CIF,
     VALID_CIF_2,
     VALID_NIF,
@@ -23,6 +22,7 @@ from tests._companies import (
     admin_token,
     build_xlsx,
     seed_admin,
+    valid_nif,
 )
 from tests._dbtest import seed_company
 
@@ -34,24 +34,27 @@ def _auth(token: str) -> dict[str, str]:
 
 
 async def test_c9_importar_excel_valido_crea_todas(authapi: Api) -> None:
-    """C9: importar el Excel de Setex (60 filas válidas) -> 60 creadas (active), sin errores."""
+    """C9: importar un Excel con muchas filas válidas -> todas creadas (active), sin errores.
+
+    Se genera un Excel sintético con NIFs válidos (no se usa el Excel real de Setex, que vive en
+    `entregas/` gitignored y no está en CI). El comportamiento es el mismo: todas las filas válidas
+    se crean.
+    """
     client, dsns = authapi
     await seed_admin(dsns)
     token = await admin_token(client)
-    with open(REAL_XLSX, "rb") as fh:
-        contenido = fh.read()
+    filas = [(f"Empresa {i}", valid_nif(10_000_000 + i)) for i in range(30)]
+    xlsx = build_xlsx(filas)
     resp = await client.post(
-        IMPORT,
-        files={"file": ("Empresas_CIF_NIF.xlsx", contenido, XLSX_MIME)},
-        headers=_auth(token),
+        IMPORT, files={"file": ("empresas.xlsx", xlsx, XLSX_MIME)}, headers=_auth(token)
     )
     assert resp.status_code == 200
     informe = resp.json()
-    assert informe["created"] == 60
+    assert informe["created"] == 30
     assert informe["invalid"] == []
     assert informe["duplicates"] == []
     lista = await client.get(COMPANIES, headers=_auth(token))
-    assert len(lista.json()) == 60
+    assert len(lista.json()) == 30
 
 
 async def test_c10_exito_parcial_reporta_las_invalidas(authapi: Api) -> None:
