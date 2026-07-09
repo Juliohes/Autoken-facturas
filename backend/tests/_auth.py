@@ -98,8 +98,15 @@ async def seed_active_user(
     password_hash: str = USER_PASSWORD_HASH,
     totp_secret: str | None = None,
 ) -> tuple[str, str]:
-    """Siembra un tenant y un usuario activos con contraseña. Devuelve (tenant_id, user_id)."""
-    from tests._dbtest import seed_tenant, seed_user
+    """Siembra un tenant y un usuario activos con contraseña. Devuelve (tenant_id, user_id).
+
+    Un `user` (empleado) nace con su empresa (S1.4): la invariante 1-A estricta exige
+    exactamente una empresa activa por empleado (0 o >1 -> 403). Para que el fixture sea válido,
+    cuando `role` es `user` se siembra además una empresa activa y su membership. Los roles de
+    asesoría/plataforma (`tenant_admin`/`platform_admin`) no se acotan a una empresa y no la
+    necesitan.
+    """
+    from tests._dbtest import seed_company, seed_membership, seed_tenant, seed_user
 
     tenant_id = await seed_tenant(dsns["admin"], slug, name)
     user_id = await seed_user(
@@ -110,4 +117,11 @@ async def seed_active_user(
         password_hash=password_hash,
         totp_secret=totp_secret,
     )
+    if role == "user":
+        company_id = await seed_company(
+            dsns["admin"], tenant_id=tenant_id, name=f"{name} Empresa", cif="A39031620"
+        )
+        await seed_membership(
+            dsns["admin"], user_id=user_id, company_id=company_id, tenant_id=tenant_id
+        )
     return tenant_id, user_id

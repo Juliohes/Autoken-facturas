@@ -137,11 +137,13 @@ async def login(request: Request, body: LoginRequest) -> JSONResponse:
     """Autentica email + contraseña (+ TOTP si aplica): access token + cookie de refresh."""
     settings = get_settings()
     resolved: ResolvedTenant | None = getattr(request.state, "tenant", None)
+    platform_login: bool = getattr(request.state, "is_platform_host", False)
     ip = _client_ip(request, settings)
     with _redis_guard():
         result = await service.authenticate(
             get_redis(),
             resolved=resolved,
+            platform_login=platform_login,
             ip=ip,
             email=body.email,
             password=body.password,
@@ -237,9 +239,24 @@ async def activate_confirm(body: ActivateConfirmRequest) -> dict[str, str]:
 
 
 @router.get("/me")
-async def me(identity: Annotated[AuthContext, Depends(current_identity)]) -> dict[str, str]:
-    """Testigo protegido: la identidad del token, leída bajo el contexto del tenant (RLS)."""
+async def me(identity: Annotated[AuthContext, Depends(current_identity)]) -> dict[str, object]:
+    """Testigo protegido: la identidad del token, leída bajo el contexto del tenant (RLS).
+
+    Incluye `company` (id y nombre) para un `user` acotado a su empresa; `null` para un
+    `tenant_admin` (contexto de asesoría, ve todo el tenant). Ver spec S1.6 (C5/C6).
+    """
     row = await repository.read_identity(identity.session, str(identity.user_id))
     if row is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    return {"id": row.id, "email": row.email, "role": row.role, "tenant": identity.tenant_slug}
+    company = (
+        {"id": str(identity.company.id), "name": identity.company.name}
+        if identity.company is not None
+        else None
+    )
+    return {
+        "id": row.id,
+        "email": row.email,
+        "role": row.role,
+        "tenant": identity.tenant_slug,
+        "company": company,
+    }

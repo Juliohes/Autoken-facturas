@@ -53,7 +53,14 @@ def encode_access_token(
 def decode_access_token(token: str, *, secret: str) -> AccessClaims:
     """Valida firma/exp y devuelve las claims tipadas. Lanza `InvalidAccessToken` si no vale."""
     try:
-        claims: dict[str, Any] = jwt.decode(token, secret, algorithms=[_ALGORITHM])
+        # Algoritmo FIJADO a HS256 (nunca se acepta `alg` del token, ni `none`); `exp` y `sub`
+        # obligatorios (un token sin expiración o sin sujeto se rechaza, defensa en profundidad).
+        claims: dict[str, Any] = jwt.decode(
+            token,
+            secret,
+            algorithms=[_ALGORITHM],
+            options={"require": ["exp", "sub"]},
+        )
     except jwt.PyJWTError as exc:
         raise InvalidAccessToken(str(exc)) from exc
     if claims.get("type") != "access":

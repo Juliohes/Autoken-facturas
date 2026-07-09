@@ -128,3 +128,42 @@ async def suspend_tenant(admin_dsn: str, tenant_id: str) -> None:
         await conn.execute("UPDATE tenants SET status = 'suspended' WHERE id = $1", tenant_id)
     finally:
         await conn.close()
+
+
+async def seed_company(
+    admin_dsn: str,
+    *,
+    tenant_id: str,
+    name: str,
+    cif: str,
+    status: str = "active",
+) -> str:
+    """Inserta una empresa del tenant (como superusuario, saltando RLS) y devuelve su id."""
+    conn = await asyncpg.connect(admin_dsn)
+    try:
+        company_id = str(uuid4())
+        await conn.execute(
+            "INSERT INTO companies (id, tenant_id, name, cif, status) VALUES ($1, $2, $3, $4, $5)",
+            company_id,
+            tenant_id,
+            name,
+            cif,
+            status,
+        )
+        return company_id
+    finally:
+        await conn.close()
+
+
+async def seed_membership(admin_dsn: str, *, user_id: str, company_id: str, tenant_id: str) -> None:
+    """Vincula un usuario a una empresa (membership), como superusuario (saltando RLS)."""
+    conn = await asyncpg.connect(admin_dsn)
+    try:
+        await conn.execute(
+            "INSERT INTO memberships (user_id, company_id, tenant_id) VALUES ($1, $2, $3)",
+            user_id,
+            company_id,
+            tenant_id,
+        )
+    finally:
+        await conn.close()

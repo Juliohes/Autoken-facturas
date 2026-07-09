@@ -60,6 +60,7 @@ async def authenticate(
     redis: aioredis.Redis,
     *,
     resolved: ResolvedTenant | None,
+    platform_login: bool,
     ip: str,
     email: str,
     password: str,
@@ -82,7 +83,7 @@ async def authenticate(
             redis, ip, email, window_seconds=settings.login_window_seconds
         )
 
-    user = await load_for_login(resolved, email)
+    user = await load_for_login(resolved, email, platform_login=platform_login)
 
     # La política de contraseña acota la longitud ANTES de hashear (defensa DoS). Si pasa, se hashea
     # siempre (con hash señuelo si no hay usuario) para no filtrar por latencia si el email existe.
