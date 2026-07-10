@@ -72,6 +72,26 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      # La suite anti-cruce (S1.7) corre contra Postgres real (RLS) + Redis, igual que el job backend.
+      # El superusuario de bootstrap es `postgres`; el rol runtime `autoken_app` lo crea la migración
+      # (si el superusuario fuera `autoken_app`, saltaría la RLS e invalidaría el gate).
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -82,6 +102,10 @@ jobs:
       - name: Instalar dependencias
         run: pip install -e ".[dev]"
       - name: Suite anti-cruce de tenants (gate bloqueante, plan §8)
+        env:
+          TEST_DATABASE_ADMIN_DSN: postgresql://postgres:postgres@localhost:5432
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
+          REDIS_URL: redis://localhost:6379/0
         run: pytest -m isolation -q
 
   frontend:
