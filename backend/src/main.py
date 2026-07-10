@@ -14,7 +14,8 @@ from identity.registration_router import router as registration_router
 from identity.router import router as auth_router
 from platform_admin.health import router as health_router
 from shared.config import Settings, get_settings
-from shared.db import dispose_engine
+from shared.db import dispose_engine, get_engine
+from shared.db_security import assert_runtime_role_cannot_bypass_rls
 from shared.logging import configure_logging, get_logger
 from shared.middleware import CorrelationIdMiddleware, TenantResolutionMiddleware
 from shared.redis import dispose_redis
@@ -31,6 +32,11 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         log.info("app_startup", env=settings.app_env.value, version=settings.app_version)
+        if settings.is_production:
+            # Guardarraíl de arranque (#50, ADR-0014): la app NO debe conectarse como superusuario
+            # ni con BYPASSRLS, o la RLS se saltaría y caería el aislamiento multi-tenant. Solo en
+            # producción, para no exigir conexión a BD en dev/test. Si falla, la app no levanta.
+            await assert_runtime_role_cannot_bypass_rls(get_engine())
         yield
         await dispose_engine()  # cierra el pool de BD al parar (issue #50)
         await dispose_redis()  # cierra el cliente Redis al parar (S1.3)
@@ -48,6 +54,8 @@ def create_app() -> FastAPI:
         TenantResolutionMiddleware,
         base_domain=settings.base_domain,
         allow_localhost=not settings.is_production,  # `*.localhost` solo fuera de producción
+        cache_ttl_seconds=settings.subdomain_cache_ttl_seconds,
+        cache_max_size=settings.subdomain_cache_max_size,
     )
     app.add_middleware(CorrelationIdMiddleware)
     # Cabeceras de seguridad en todas las respuestas (defensa en profundidad); HSTS solo en prod.

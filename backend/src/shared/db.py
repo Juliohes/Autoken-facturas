@@ -45,6 +45,18 @@ def _get_sessionmaker() -> async_sessionmaker[AsyncSession]:
     return _sessionmaker
 
 
+def get_engine() -> AsyncEngine:
+    """Devuelve el engine async de la app (perezoso y reutilizado).
+
+    Fuerza la creación perezosa vía `_get_sessionmaker` y expone el engine para chequeos de
+    arranque que necesitan la conexión REAL de la app (p. ej. el guardarraíl de RLS, ADR-0014).
+    """
+    _get_sessionmaker()
+    if _engine is None:  # pragma: no cover - `_get_sessionmaker` siempre lo crea
+        raise RuntimeError("el engine no se inicializó")
+    return _engine
+
+
 async def dispose_engine() -> None:
     """Cierra el engine y su pool (lifespan de la app; tests tras cambiar `DATABASE_URL`)."""
     global _engine, _sessionmaker

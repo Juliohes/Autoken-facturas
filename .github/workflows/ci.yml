@@ -57,6 +57,24 @@ jobs:
         run: ruff format --check src tests
       - name: Mypy (tipos)
         run: mypy src
+      - name: Guard de deriva ORM<->migración (#49)
+        # Aplica las migraciones a una BD limpia y comprueba que el esquema ORM no tiene deriva
+        # respecto a ellas: un modelo cambiado sin su migración (o al revés) rompe el CI. Usa
+        # `compare_type`/`compare_server_default` de env.py; verificado limpio contra el head actual.
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/autoken_drift
+        run: |
+          python - <<'PY'
+          import asyncio, asyncpg
+          async def main():
+              conn = await asyncpg.connect("postgresql://postgres:postgres@localhost:5432/postgres")
+              await conn.execute("DROP DATABASE IF EXISTS autoken_drift")
+              await conn.execute("CREATE DATABASE autoken_drift")
+              await conn.close()
+          asyncio.run(main())
+          PY
+          python -m alembic upgrade head
+          python -m alembic check
       - name: Pytest
         env:
           # DSN del superusuario para que los tests creen su BD efímera y corran las migraciones.

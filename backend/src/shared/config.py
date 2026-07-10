@@ -111,6 +111,13 @@ class Settings(BaseSettings):
     # desarrollo (p. ej. `ilex.localhost`). Los subdominios de plataforma no resuelven a tenant.
     base_domain: str = "autoken.es"
 
+    # Caché de resolución subdominio->tenant (#52, ADR-0014). Blinda la BD frente al DoS y la
+    # enumeración pre-auth cacheando el veredicto NEGATIVO (slug que no resuelve) con TTL corto y
+    # cota LRU. Los positivos no se cachean (revocación instantánea de tenants suspendidos). TTL
+    # bajo a propósito: acota la staleness de un tenant recién creado a unos segundos.
+    subdomain_cache_ttl_seconds: int = 30
+    subdomain_cache_max_size: int = 1024
+
     # --- Autenticación S1.3 (identity) ---------------------------------------------------------
     # Redis: rate-limit de login, rotación del refresh y tokens de activación. La URL no es secreta
     # (no lleva credenciales en dev/CI); en producción puede incluir password vía env var.

@@ -3,7 +3,7 @@
 El router HTTP es fino: traduce peticiones a estas operaciones y sus excepciones de dominio a
 códigos HTTP. Aquí viven las reglas: identificador fiscal válido (dígito de control), unicidad por
 asesoría, borrado seguro y estado. La persistencia se delega en `repository`; la validación del CIF
-en `ocr.verification`; la traza en `shared.audit`. La importación del Excel vive en `importer.py`.
+en `shared.tax_id`; la traza en `shared.audit`. La importación del Excel vive en `importer.py`.
 """
 
 from __future__ import annotations
@@ -17,9 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from companies import repository
 from companies.repository import CompanyRecord
-from ocr.verification import normalize_tax_id, validate_tax_id
 from shared.audit import write_audit
 from shared.integrity import violates_unique_constraint
+from shared.tax_id import normalize_tax_id, validate_tax_id
 from tenancy.constants import CompanyStatus
 
 # Entidad y acciones de auditoría del contexto `companies`, en constantes (no literales sueltos):
@@ -70,7 +70,7 @@ class CompanyHasMembers(CompanyError):
 def validated_cif(raw: str | None) -> str:
     """Devuelve la forma canónica del CIF/NIF si es válido; si no, lanza `InvalidTaxId`.
 
-    Reutiliza el validador "tipo DNI" (`ocr.verification`): normaliza y comprueba el dígito de
+    Reutiliza el validador "tipo DNI" (`shared.tax_id`): normaliza y comprueba el dígito de
     control de NIF/NIE/CIF. La forma canónica (mayúsculas, sin separadores) es la que se persiste,
     para que la unicidad no dependa del formato con el que se teclee el identificador.
     """

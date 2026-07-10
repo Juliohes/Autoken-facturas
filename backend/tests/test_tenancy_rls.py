@@ -19,10 +19,11 @@ from uuid import UUID, uuid4
 import asyncpg
 import pytest
 
+from tests._dbtest import TEST_DB as _TEST_DB  # nombre único por worker (#56)
+
 _ADMIN_DSN = os.environ.get(
     "TEST_DATABASE_ADMIN_DSN", "postgresql://postgres:postgres@localhost:5432"
 )
-_TEST_DB = "autoken_test"
 _APP_PASSWORD = "apptest"  # noqa: S105  (solo para la BD efímera de test)
 
 # Nombres reales del Excel de empresas (entregas/Empresas_CIF_NIF.xlsx) para C9.
