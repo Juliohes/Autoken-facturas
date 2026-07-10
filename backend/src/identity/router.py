@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from identity import activation, repository, service, sessions
+from identity.client_ip import client_ip
 from identity.dependencies import AuthContext, current_identity
 from identity.passwords import validate_password_policy
 from identity.tokens import encode_access_token
@@ -71,34 +72,6 @@ def _redis_guard() -> Iterator[None]:
         raise HTTPException(status_code=503, detail="Service unavailable") from exc
 
 
-def _client_ip(request: Request, settings: Settings) -> str:
-    """IP real del cliente para el rate-limit (C17/C22), a prueba de proxy inverso (B1).
-
-    `request.client.host` es la IP del **peer directo**: tras Traefik/Caddy sería la del proxy, la
-    misma para todos (un fallo de cualquiera bloquearía a toda la plataforma). Se deriva la IP real
-    de `X-Forwarded-For` SOLO si la petición viene de un proxy de confianza (`trusted_proxies`);
-    nunca se confía en XFF crudo de una fuente no confiable (evita spoofing del rate-limit).
-    """
-    peer = request.client.host if request.client is not None else "unknown"
-    trusted = settings.trusted_proxy_set
-    if not trusted:
-        return peer  # sin proxies de confianza configurados: la IP es la del peer directo
-    trust_all = "*" in trusted
-    if not trust_all and peer not in trusted:
-        return peer  # la petición no viene de un proxy de confianza: se ignora XFF
-    forwarded = [
-        p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()
-    ]
-    if not forwarded:
-        return peer
-    if trust_all:
-        return forwarded[0]  # se confía en toda la cadena: el cliente original es el primero
-    for candidate in reversed(forwarded):
-        if candidate not in trusted:
-            return candidate  # primer salto no-confiable desde la derecha = cliente real
-    return forwarded[0]
-
-
 def _set_refresh_cookie(response: JSONResponse, token: str, settings: Settings) -> None:
     response.set_cookie(
         _REFRESH_COOKIE,
@@ -138,7 +111,7 @@ async def login(request: Request, body: LoginRequest) -> JSONResponse:
     settings = get_settings()
     resolved: ResolvedTenant | None = getattr(request.state, "tenant", None)
     platform_login: bool = getattr(request.state, "is_platform_host", False)
-    ip = _client_ip(request, settings)
+    ip = client_ip(request, settings)
     with _redis_guard():
         result = await service.authenticate(
             get_redis(),

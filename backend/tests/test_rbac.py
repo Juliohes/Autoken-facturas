@@ -264,6 +264,9 @@ _PUBLIC_ROUTES = frozenset(
         ("POST", "/api/v1/auth/logout"),
         ("POST", "/api/v1/auth/activate"),
         ("POST", "/api/v1/auth/activate/confirm"),
+        # Registro autoservicio (S1.4): público en el subdominio a propósito (no hay token; el
+        # contexto se abre desde el host). Se acota por RLS del subdominio + rate-limit por IP.
+        ("POST", "/api/v1/register"),
     }
 )
 # Rutas abiertas a propósito a cualquier usuario autenticado (exigen identidad, pero no restringen

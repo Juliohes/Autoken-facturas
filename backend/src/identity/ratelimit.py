@@ -35,6 +35,10 @@ def _ip_key(ip: str) -> str:
     return f"login:ipfail:{ip}"
 
 
+def _register_ip_key(ip: str) -> str:
+    return f"register:ip:{ip}"
+
+
 async def is_blocked(
     redis: aioredis.Redis, ip: str, email: str, *, max_per_email: int, max_per_ip: int
 ) -> bool:
@@ -61,3 +65,16 @@ async def record_failure(
 async def reset(redis: aioredis.Redis, ip: str, email: str) -> None:
     """Borra el contador por (IP+email) tras un login correcto."""
     await redis.delete(_ip_email_key(ip, email))
+
+
+async def register_attempt_exceeds_ip(
+    redis: aioredis.Redis, ip: str, *, max_per_ip: int, window_seconds: int
+) -> bool:
+    """Cuenta un intento de registro por IP (anti-spam, S1.4 C14) y dice si supera el tope.
+
+    Reutiliza el script atómico `INCR`+`EXPIRE` de S1.3 (la clave nunca queda sin TTL, así que
+    pasada la ventana se vuelve a permitir). Devuelve True cuando el contador de la ventana
+    **supera** `max_per_ip`: el intento que lo rebasa recibe 429; los primeros se permiten.
+    """
+    count = await redis.eval(_RECORD_FAILURE_LUA, 1, _register_ip_key(ip), str(window_seconds))
+    return int(count) > max_per_ip
