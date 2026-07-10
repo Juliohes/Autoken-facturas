@@ -24,3 +24,14 @@ class UserStatus(StrEnum):
 
     PENDING = "pending"
     ACTIVE = "active"
+
+
+class CompanyStatus(StrEnum):
+    """Estado de una empresa. El CHECK de `companies` (migración 0001) lo restringe a este conjunto.
+
+    `pending` la crea un registro autoservicio (S1.4) hasta que el `tenant_admin` la aprueba;
+    `active` es el estado de las empresas dadas de alta o importadas por el admin.
+    """
+
+    ACTIVE = "active"
+    PENDING = "pending"

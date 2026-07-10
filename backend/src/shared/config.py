@@ -132,6 +132,18 @@ class Settings(BaseSettings):
 
     activation_ttl: int = 72 * 60 * 60  # token de activación de un solo uso (72 h), en segundos
 
+    # --- Registro con aprobación S1.4 (identity + notifications) --------------------------------
+    # Anti-spam del registro público (`POST /register`): tope de altas por IP en una ventana
+    # (reutiliza la infra de rate-limit en Redis de S1.3). Al superarlo, los siguientes reciben 429.
+    register_max_per_ip: int = 20
+    register_window_seconds: int = 60 * 60  # ventana del rate-limit de registro (1 h)
+
+    # Notificaciones (aviso al `tenant_admin` de un registro pendiente). El envío real por SMTP está
+    # diferido (spec S1.4 §6): SIN `smtp_host` se usa el grabador en memoria (RecordingNotifier);
+    # cuando existan las credenciales de soporte@autoken.es se cablea el transporte SMTP. Secreto:
+    # llega por env var en el VPS (§9.1), nunca en el repo.
+    smtp_host: str | None = None
+
     # --- Importación de empresas S1.5 (companies) ----------------------------------------------
     # Guardarraíles anti-DoS por memoria del `POST /companies/import` (proceso compartido por todas
     # las asesorías): un `.xlsx` manipulado (zip-bomb) o gigantesco no debe tumbar el backend. Tope

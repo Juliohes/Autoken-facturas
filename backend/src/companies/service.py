@@ -19,9 +19,8 @@ from companies import repository
 from companies.repository import CompanyRecord
 from ocr.verification import normalize_tax_id, validate_tax_id
 from shared.audit import write_audit
-
-# Estado con el que un `tenant_admin` da de alta o importa una empresa (decisión 1-A de la spec).
-ACTIVE_STATUS = "active"
+from shared.integrity import violates_unique_constraint
+from tenancy.constants import CompanyStatus
 
 # Entidad y acciones de auditoría del contexto `companies`, en constantes (no literales sueltos):
 # las comparte el CRUD (`service`) y la importación (`importer`) para que la traza sea coherente.
@@ -39,16 +38,9 @@ def is_cif_unique_violation(exc: IntegrityError) -> bool:
     """True si la `IntegrityError` viene del UNIQUE `(tenant_id, cif)` (y no de otra restricción).
 
     Distingue el choque de CIF de cualquier otra violación de integridad para no enmascararla:
-    solo la del UNIQUE de empresa se traduce a `DuplicateCif` (409); el resto se deja propagar. El
-    nombre de la restricción lo expone el error nativo de asyncpg (`constraint_name`), que
-    SQLAlchemy envuelve: se recorre la cadena de causas (`__cause__`) hasta encontrarlo.
+    solo la del UNIQUE de empresa se traduce a `DuplicateCif` (409); el resto se deja propagar.
     """
-    current: BaseException | None = exc
-    while current is not None:
-        if getattr(current, "constraint_name", None) == _CIF_UNIQUE_CONSTRAINT:
-            return True
-        current = current.__cause__
-    return False
+    return violates_unique_constraint(exc, _CIF_UNIQUE_CONSTRAINT)
 
 
 class CompanyError(Exception):
@@ -103,7 +95,7 @@ async def persist_new_company(
     llama (pre-check por CIF ya conocido); el UNIQUE `(tenant_id, cif)` es la red última.
     """
     record = await repository.insert_company(
-        session, name=name, cif=canonical_cif, status=ACTIVE_STATUS, notes=notes
+        session, name=name, cif=canonical_cif, status=CompanyStatus.ACTIVE.value, notes=notes
     )
     await write_audit(
         session,

@@ -15,6 +15,8 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tenancy.constants import CompanyStatus
+
 # `tenant_id` de las escrituras derivado del contexto de la sesión (coherente con la RLS).
 _TENANT_FROM_CONTEXT = "NULLIF(current_setting('app.tenant_id', true), '')::uuid"
 
@@ -54,6 +56,23 @@ async def get_company(session: AsyncSession, company_id: UUID) -> CompanyRecord 
         await session.execute(
             text("SELECT id, name, cif, status, notes FROM companies WHERE id = :id"),
             {"id": str(company_id)},
+        )
+    ).first()
+    if row is None:
+        return None
+    return CompanyRecord(id=row.id, name=row.name, cif=row.cif, status=row.status, notes=row.notes)
+
+
+async def get_company_by_cif(session: AsyncSession, cif: str) -> CompanyRecord | None:
+    """Lee una empresa por su CIF canónico dentro del contexto (RLS oculta las de otro tenant).
+
+    La usa el registro con aprobación (S1.4, regla 1-A): si el CIF ya existe en la asesoría, el
+    usuario se vincula a esa empresa en vez de crear otra. Devuelve `None` si no hay ninguna.
+    """
+    row = (
+        await session.execute(
+            text("SELECT id, name, cif, status, notes FROM companies WHERE cif = :cif"),
+            {"cif": cif},
         )
     ).first()
     if row is None:
@@ -127,6 +146,23 @@ async def update_company(
         )
     ).one()
     return CompanyRecord(id=row.id, name=row.name, cif=row.cif, status=row.status, notes=row.notes)
+
+
+async def activate_pending_company(session: AsyncSession, company_id: UUID) -> None:
+    """Activa una empresa PENDIENTE del contexto (aprobación de un registro, S1.4 regla 3-A).
+
+    Solo toca la fila si está `pending`: una empresa ya `active` (vínculo 1-A a una existente) se
+    deja igual. El SQL de `companies` vive aquí (simetría con el resto de escrituras del contexto),
+    no en `identity`; la RLS impide tocar empresas de otro tenant.
+    """
+    await session.execute(
+        text("UPDATE companies SET status = :active WHERE id = :id AND status = :pending"),
+        {
+            "active": CompanyStatus.ACTIVE.value,
+            "pending": CompanyStatus.PENDING.value,
+            "id": str(company_id),
+        },
+    )
 
 
 async def delete_company(session: AsyncSession, company_id: UUID) -> None:

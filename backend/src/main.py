@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from companies.router import router as companies_router
+from identity.registration_router import router as registration_router
 from identity.router import router as auth_router
 from platform_admin.health import router as health_router
 from shared.config import Settings, get_settings
@@ -54,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix=settings.api_prefix)
     app.include_router(tenancy_router, prefix=settings.api_prefix)
     app.include_router(auth_router, prefix=settings.api_prefix)
+    app.include_router(registration_router, prefix=settings.api_prefix)
     app.include_router(companies_router, prefix=settings.api_prefix)
 
     return app
