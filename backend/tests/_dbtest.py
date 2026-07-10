@@ -17,7 +17,25 @@ import asyncpg
 ADMIN_DSN = os.environ.get(
     "TEST_DATABASE_ADMIN_DSN", "postgresql://postgres:postgres@localhost:5432"
 )
-TEST_DB = "autoken_test"
+
+
+def _worker_suffix() -> str:
+    """Sufijo único por worker para aislar la BD efímera en ejecución paralela (#56).
+
+    Bajo `pytest-xdist` cada worker exporta `PYTEST_XDIST_WORKER` (gw0, gw1...): se usa tal cual.
+    Sin xdist (ejecución en un solo proceso) no hay colisión posible entre procesos, pero se
+    ancla igualmente al PID para que dos ejecuciones simultáneas de la suite en la misma máquina
+    no compartan la BD `autoken_test`. Así la suite corre en paralelo sin el flake y se puede
+    retirar el `-p no:randomly`.
+    """
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    return worker if worker else f"p{os.getpid()}"
+
+
+# Nombre de la BD efímera de test, único por worker (#56): evita que dos workers dropeen/creen la
+# misma base a la vez. Los identificadores de BD de Postgres van sin comillas aquí porque el sufijo
+# es alfanumérico controlado (worker id o PID), no entrada externa.
+TEST_DB = f"autoken_test_{_worker_suffix()}"
 APP_PASSWORD = "apptest"  # noqa: S105  (solo para la BD efímera de test)
 
 
