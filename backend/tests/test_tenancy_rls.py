@@ -335,6 +335,74 @@ async def test_with_check_bloquea_escritura_en_otra_empresa_del_mismo_tenant(
         await conn.close()
 
 
+async def _seed_uploaded_file(
+    admin_dsn: str, tenant_id: str, company_id: str, user_id: str, sha256: str
+) -> str:
+    """Inserta (como superusuario) un fichero de intake de una empresa. Devuelve su id."""
+    conn = await asyncpg.connect(admin_dsn)
+    try:
+        file_id = str(uuid4())
+        await conn.execute(
+            "INSERT INTO uploaded_files (id, tenant_id, company_id, uploaded_by, storage_bucket, "
+            "storage_key, content_type, size_bytes, sha256) "
+            "VALUES ($1, $2, $3, $4, $5, $6, 'image/jpeg', 10, $7)",
+            file_id,
+            tenant_id,
+            company_id,
+            user_id,
+            f"tenant-{tenant_id}",
+            f"{company_id}/{sha256}",
+            sha256,
+        )
+        return file_id
+    finally:
+        await conn.close()
+
+
+async def test_uploaded_files_rls_acota_por_empresa_ademas_de_por_tenant(
+    db: dict[str, str],
+) -> None:
+    """`uploaded_files` aplica RLS de DOS niveles (tenant + empresa), como `companies` (S2.1 B1).
+
+    En contexto de empresa X: solo se ve el fichero de X (lectura acotada) y no se puede escribir
+    uno de la empresa Y del mismo tenant (WITH CHECK de company). En asesoría se ven ambos.
+    """
+    tenant_a = str(uuid4())
+    company_x = await _seed_company(db["admin"], tenant_a, *_CIF_SOCIEDAD)
+    company_y = await _seed_company(db["admin"], tenant_a, *_NIF_AUTONOMO)
+    user_id = await _seed_user(db["admin"], tenant_a)
+    await _seed_uploaded_file(db["admin"], tenant_a, company_x, user_id, "a" * 64)
+    await _seed_uploaded_file(db["admin"], tenant_a, company_y, user_id, "b" * 64)
+
+    conn = await asyncpg.connect(db["app"])
+    try:
+        async with conn.transaction():
+            await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_a)
+            await conn.execute("SELECT set_config('app.company_id', $1, true)", company_x)
+            # Lectura acotada por empresa: solo el fichero de X (no el de Y del mismo tenant).
+            assert await conn.fetchval("SELECT count(*) FROM uploaded_files") == 1
+            # Escritura cruzada de empresa: insertar un fichero de Y se rechaza por el WITH CHECK.
+            with pytest.raises(asyncpg.PostgresError):
+                await conn.execute(
+                    "INSERT INTO uploaded_files (id, tenant_id, company_id, uploaded_by, "
+                    "storage_bucket, storage_key, content_type, size_bytes, sha256) "
+                    "VALUES ($1, $2, $3, $4, $5, $6, 'image/jpeg', 10, $7)",
+                    str(uuid4()),
+                    tenant_a,
+                    company_y,
+                    user_id,
+                    f"tenant-{tenant_a}",
+                    f"{company_y}/{'c' * 64}",
+                    "c" * 64,
+                )
+        # En contexto de asesoría (sin company_id) se ven los dos ficheros del tenant.
+        async with conn.transaction():
+            await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_a)
+            assert await conn.fetchval("SELECT count(*) FROM uploaded_files") == 2
+    finally:
+        await conn.close()
+
+
 async def test_runtime_no_puede_borrar_tenant_y_el_audit_log_sobrevive(db: dict[str, str]) -> None:
     """El rol runtime no tiene DELETE sobre tenants -> no puede vaciar el audit_log por cascada."""
     tenant_a = str(uuid4())

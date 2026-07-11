@@ -1,7 +1,6 @@
 # Docker Compose — Autoken Facturas v2
-# Esqueleto de la Fase 0: api + postgres + redis. El resto de servicios
-# (worker, minio, clamav, caddy) se añaden en sprints posteriores.
-# Los secretos se inyectan vía .env (no versionado). Ver ../.env.example.
+# api + postgres + redis + minio + clamav. El resto de servicios (worker, caddy) se añaden en
+# sprints posteriores. Los secretos se inyectan vía .env (no versionado). Ver ../.env.example.
 
 services:
   api:
@@ -16,6 +15,15 @@ services:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-autoken_app}:${POSTGRES_PASSWORD:-autoken}@postgres:5432/${POSTGRES_DB:-autoken}
       REDIS_URL: redis://redis:6379/0
+      # Object storage MinIO (intake S2.1): bucket por tenant. Credenciales por .env en staging/prod.
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      # Antivirus fail-closed (intake S2.1): en el contenedor se usa ClamAV real vía el daemon clamd.
+      VIRUS_SCANNER_BACKEND: ${VIRUS_SCANNER_BACKEND:-clamd}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
       # IP real del cliente tras el proxy inverso (rate-limit por IP, B1/C22). Deben ir alineados:
       # `TRUSTED_PROXIES` (lo usa la app para aceptar `X-Forwarded-For`) y `FORWARDED_ALLOW_IPS` (lo
       # usa uvicorn con `--proxy-headers`). Vacío por defecto = no se confía en XFF (IP = peer).
@@ -27,6 +35,10 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      clamav:
         condition: service_healthy
     restart: unless-stopped
 
@@ -54,5 +66,35 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Object storage S3-compatible (intake S2.1, ADR-0015): un bucket por tenant (`tenant-<id>`) como
+  # frontera de aislamiento. Las credenciales root se inyectan por .env en staging/producción.
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Antivirus (intake S2.1, ADR-0015): daemon ClamAV que escucha en 3310 (fail-closed: si no
+  # responde, la subida se rechaza con 503). La primera arrancada descarga la base de firmas.
+  clamav:
+    image: clamav/clamav:stable
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
 volumes:
   postgres-data:
+  minio-data:

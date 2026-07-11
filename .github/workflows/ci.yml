@@ -42,6 +42,11 @@ jobs:
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s --health-timeout 5s --health-retries 5
+      # Object storage del intake (S2.1): MinIO se levanta como step con `docker run` (ver más abajo),
+      # no como service container, porque la imagen oficial `minio/minio` necesita el argumento
+      # `server /data` y los service containers de Actions no permiten pasar comando/argumentos.
+      # ClamAV NO hace falta en CI: los tests usan el scanner de firma (EICAR en proceso) y el
+      # monkeypatch del daemon caído.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -75,6 +80,17 @@ jobs:
           PY
           python -m alembic upgrade head
           python -m alembic check
+      - name: Levantar MinIO (object storage del intake, S2.1)
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio server /data
+          # Espera a que el endpoint de salud responda antes de correr los tests.
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:9000/minio/health/live; then echo "minio listo"; break; fi
+            if [ "$i" = "30" ]; then echo "minio no arrancó a tiempo" >&2; docker logs minio; exit 1; fi
+            sleep 1
+          done
       - name: Pytest
         env:
           # DSN del superusuario para que los tests creen su BD efímera y corran las migraciones.
@@ -82,6 +98,11 @@ jobs:
           # Conexión por defecto de la app (engine perezoso); el cableado del rol runtime es de S1.2.
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
           REDIS_URL: redis://localhost:6379/0
+          # Object storage del intake (S2.1): MinIO del service container (bucket por tenant).
+          MINIO_ENDPOINT: localhost:9000
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+          MINIO_SECURE: "false"
         run: pytest -q
 
   tenant-isolation:

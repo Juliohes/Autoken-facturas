@@ -213,6 +213,28 @@ class Settings(BaseSettings):
     claude_location: str = "global"
     claude_model: str = "claude-sonnet-4-5@20250929"
 
+    # --- Intake seguro de ficheros S2.1 (invoice_intake) ---------------------------------------
+    # Object storage MinIO (bucket por tenant, ADR-0015). Endpoint/credenciales son secretos en
+    # producción (llegan por env var, §9.1); los valores por defecto son SOLO para desarrollo/CI,
+    # donde se levanta un MinIO local con las credenciales estándar `minioadmin`. `minio_secure`
+    # activa TLS (true en producción tras el proxy).
+    minio_endpoint: str = "localhost:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin"  # noqa: S105  (solo default de dev/CI)
+    minio_secure: bool = False
+
+    # Tamaño máximo del fichero de intake (se rechaza con 413 antes de procesarlo). No es una regla
+    # de dominio: es un guardarraíl anti-DoS configurable. Por defecto 15 MiB.
+    max_upload_bytes: int = 15 * 1024 * 1024
+
+    # Antivirus (fail-closed, ADR-0015). `virus_scanner_backend` fuerza el backend (`signature` o
+    # `clamd`); sin fijar, se usa el scanner de firma en dev/CI (detecta EICAR en proceso, sin red)
+    # y ClamAV real (clamd) en producción. Host/puerto del daemon clamd (solo aplican al backend
+    # `clamd`).
+    virus_scanner_backend: str | None = None
+    clamav_host: str = "clamav"
+    clamav_port: int = 3310
+
     @property
     def is_production(self) -> bool:
         return self.app_env is AppEnv.PRODUCTION
