@@ -56,6 +56,11 @@ jobs:
           cache-dependency-path: backend/pyproject.toml
       - name: Instalar dependencias
         run: pip install -e ".[dev]"
+      - name: Instalar arq (worker OCR, sin deps para no degradar redis)
+        # El worker (S2.3) usa arq; su smoke test (tests/test_ocr_worker_wiring.py) verifica en CI la
+        # compatibilidad arq/redis 8. arq declara `redis<6` (metadato conservador), así que se instala
+        # con `--no-deps` para conservar redis 8; sus deps reales (click, redis) ya están por `.[dev]`.
+        run: pip install --no-deps "arq>=0.26"
       - name: Ruff (lint)
         run: ruff check src tests
       - name: Ruff (formato)
