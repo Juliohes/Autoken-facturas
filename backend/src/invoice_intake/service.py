@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from invoice_intake import mime, repository, scanner, storage
+from jobs import queue
 from shared.audit import write_audit
 from shared.db import tenant_session
 from tenancy.constants import Role
@@ -130,7 +131,7 @@ async def create_upload(
     # y sin fila (C12a). Se usa `storage.put_object` como atributo de módulo (monkeypatch C12a).
     await asyncio.to_thread(storage.put_object, bucket, key, content, len(content), real_mime)
 
-    return await _persist_or_compensate(
+    record = await _persist_or_compensate(
         session=session,
         tenant_id=tenant_id,
         user_id=user_id,
@@ -141,6 +142,10 @@ async def create_upload(
         content_type=real_mime,
         size_bytes=len(content),
     )
+    # Encola el OCR del fichero (S2.3) best-effort: si el worker/Redis no está, el fichero se queda
+    # en `pending_ocr` y se reprocesará; el encolado NUNCA hace fallar la subida ya persistida.
+    await queue.enqueue_ocr(tenant_id, company_id, record.id)
+    return record
 
 
 async def _persist_or_compensate(

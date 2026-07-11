@@ -17,6 +17,11 @@ RUN apt-get update \
 COPY pyproject.toml ./
 COPY src ./src
 RUN pip install .
+# Worker OCR S2.3 (arq) horneado en la imagen (la usa el servicio `worker` de docker-compose). Se
+# instala con `--no-deps` para NO degradar redis: arq declara `redis<6` pero opera con el redis 8 de
+# la app (compatibilidad verificada por el smoke test tests/test_ocr_worker_wiring.py); sus otras deps
+# (click) ya vienen con uvicorn. Ver el extra `worker` en pyproject.toml.
+RUN pip install --no-deps "arq>=0.26"
 
 # Usuario no-root
 RUN useradd --create-home --uid 10001 appuser
