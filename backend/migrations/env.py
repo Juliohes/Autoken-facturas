@@ -17,7 +17,8 @@ from shared.config import get_settings
 from shared.db import Base
 
 # Importa los modelos para que se registren en Base.metadata (autogenerate y target).
-import tenancy.models  # noqa: F401  (efecto secundario: registrar tablas)
+import invoice_intake.models  # noqa: F401  (efecto secundario: registrar `uploaded_files`)
+import tenancy.models  # noqa: F401  (efecto secundario: registrar tablas del núcleo)
 
 config = context.config
 

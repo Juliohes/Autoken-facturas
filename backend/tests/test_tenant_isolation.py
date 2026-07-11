@@ -22,6 +22,7 @@ import pytest
 from tests._auth import USER_PASSWORD, USER_PASSWORD_HASH, bearer, host, login
 from tests._companies import VALID_CIF, VALID_CIF_2, XLSX_MIME, build_xlsx
 from tests._dbtest import seed_company, seed_tenant, seed_user
+from tests._intake import JPEG, JPEG_CT, upload_parts
 
 pytestmark = pytest.mark.isolation
 
@@ -49,6 +50,7 @@ _PROTECTED_ROUTES = {
     ("PATCH", f"{API}/companies/{{company_id}}"),
     ("DELETE", f"{API}/companies/{{company_id}}"),
     ("POST", f"{API}/companies/import"),
+    ("POST", f"{API}/uploads"),
     ("GET", f"{API}/registrations"),
     ("POST", f"{API}/registrations/{{user_id}}/approve"),
     ("POST", f"{API}/registrations/{{user_id}}/reject"),
@@ -71,6 +73,11 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
             "POST",
             f"{API}/companies/import",
             {"files": {"file": ("x.xlsx", build_xlsx([]), XLSX_MIME)}},
+        ),
+        (
+            "POST",
+            f"{API}/uploads",
+            upload_parts(JPEG, dummy_id, filename="f.jpg", content_type=JPEG_CT),
         ),
         ("GET", f"{API}/registrations", {}),
         ("POST", f"{API}/registrations/{dummy_id}/approve", {}),

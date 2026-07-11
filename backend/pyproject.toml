@@ -32,6 +32,11 @@ dependencies = [
     "openpyxl>=3.1",
     # Parseo de multipart/form-data para la subida del Excel (`POST /companies/import`).
     "python-multipart>=0.0.9",
+    # Intake seguro de ficheros S2.1 (invoice_intake, ADR-0015): object storage MinIO (bucket por
+    # tenant), sniff de MIME real por número mágico (no por Content-Type), cliente clamd (antivirus).
+    "minio>=7.2",
+    "filetype>=1.2",
+    "clamd>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -77,6 +82,16 @@ ignore_missing_imports = true
 # openpyxl (importación del Excel de empresas) no publica marcador py.typed.
 [[tool.mypy.overrides]]
 module = "openpyxl.*"
+ignore_missing_imports = true
+
+# filetype (sniff de MIME por número mágico) no publica marcador py.typed.
+[[tool.mypy.overrides]]
+module = "filetype.*"
+ignore_missing_imports = true
+
+# clamd (cliente del daemon ClamAV) no publica marcador py.typed.
+[[tool.mypy.overrides]]
+module = "clamd.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

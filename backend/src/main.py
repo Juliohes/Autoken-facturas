@@ -12,6 +12,9 @@ from fastapi import FastAPI
 from companies.router import router as companies_router
 from identity.registration_router import router as registration_router
 from identity.router import router as auth_router
+from invoice_intake.router import duplicate_upload_handler
+from invoice_intake.router import router as intake_router
+from invoice_intake.service import DuplicateUpload
 from platform_admin.health import router as health_router
 from shared.config import Settings, get_settings
 from shared.db import dispose_engine, get_engine
@@ -65,6 +68,12 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix=settings.api_prefix)
     app.include_router(registration_router, prefix=settings.api_prefix)
     app.include_router(companies_router, prefix=settings.api_prefix)
+    app.include_router(intake_router, prefix=settings.api_prefix)
+
+    # Un duplicado de intake (S2.1 C8/C14) responde 409 con `duplicate_of`; se maneja a nivel de app
+    # para que la excepción propague desde el endpoint y la dependencia deshaga antes la
+    # transacción (rollback tras la carrera del UNIQUE) antes de emitir la respuesta.
+    app.add_exception_handler(DuplicateUpload, duplicate_upload_handler)
 
     return app
 

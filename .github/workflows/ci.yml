@@ -42,6 +42,18 @@ jobs:
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s --health-timeout 5s --health-retries 5
+      # Object storage del intake (S2.1). Imagen bitnami: arranca `minio server` sin `command` (los
+      # service containers de Actions no permiten pasar argumentos). ClamAV NO hace falta en CI: los
+      # tests usan el scanner de firma (EICAR en proceso) y el monkeypatch del daemon caído.
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports: ["9000:9000"]
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -82,6 +94,11 @@ jobs:
           # Conexión por defecto de la app (engine perezoso); el cableado del rol runtime es de S1.2.
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
           REDIS_URL: redis://localhost:6379/0
+          # Object storage del intake (S2.1): MinIO del service container (bucket por tenant).
+          MINIO_ENDPOINT: localhost:9000
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+          MINIO_SECURE: "false"
         run: pytest -q
 
   tenant-isolation:
