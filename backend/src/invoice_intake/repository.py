@@ -17,6 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from invoice_intake.constants import FileStatus
 from shared.integrity import violates_unique_constraint
 
 # `tenant_id` de la escritura derivado del contexto de la sesión (coherente con la RLS).
@@ -39,6 +40,51 @@ class UploadedFileRecord:
     status: str
     scan_status: str
     created_at: datetime
+
+
+@dataclass(frozen=True)
+class UploadedFileLocation:
+    """Ubicación del objeto de un fichero de intake en MinIO (bucket/clave) + su MIME real."""
+
+    bucket: str
+    key: str
+    content_type: str
+
+
+async def get_file_location(session: AsyncSession, file_id: UUID) -> UploadedFileLocation | None:
+    """Ubicación en MinIO de un fichero de intake, visible en el contexto (RLS), o `None`.
+
+    La usa el worker OCR (S2.3) para localizar el objeto antes de descargarlo. El SQL de
+    `uploaded_files` vive en su contexto (`invoice_intake`), no en `ocr`: la máquina de estados y la
+    ubicación del fichero son dominio del intake.
+    """
+    row = (
+        await session.execute(
+            text(
+                "SELECT storage_bucket, storage_key, content_type FROM uploaded_files "
+                "WHERE id = :id"
+            ),
+            {"id": str(file_id)},
+        )
+    ).first()
+    if row is None:
+        return None
+    return UploadedFileLocation(
+        bucket=row.storage_bucket, key=row.storage_key, content_type=row.content_type
+    )
+
+
+async def transition_status(session: AsyncSession, file_id: UUID, status: FileStatus) -> None:
+    """Transiciona `uploaded_files.status` del fichero del contexto (RLS acota e impide cruzar).
+
+    Punto único de la transición de estado del intake. El rol runtime solo tiene `UPDATE (status)`
+    en `uploaded_files` (migración 0005): no reescribe `sha256`/`storage_key` (append-only del
+    resto). El worker OCR (S2.3) la invoca; nunca escribe SQL de `uploaded_files` desde `ocr`.
+    """
+    await session.execute(
+        text("UPDATE uploaded_files SET status = :status WHERE id = :id"),
+        {"status": status.value, "id": str(file_id)},
+    )
 
 
 def is_duplicate_violation(exc: IntegrityError) -> bool:

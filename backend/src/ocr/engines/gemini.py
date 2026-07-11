@@ -108,6 +108,15 @@ class GeminiEngine(OcrEngine):
 
         return self._parse(response)
 
+    def ensure_client(self) -> Any:
+        """Cliente Vertex (perezoso), público para reutilizar credenciales/transporte.
+
+        Otros adaptadores del módulo OCR (p. ej. el extractor a JSON estructurado de S2.3) arman
+        la MISMA conexión Vertex sin duplicar el manejo de la service account: componen un
+        `GeminiEngine` y le piden su cliente por aquí.
+        """
+        return self._ensure_client()
+
     def _ensure_client(self) -> Any:
         """Devuelve el cliente, construyéndolo la primera vez (perezoso)."""
         if self._client is None:

@@ -227,6 +227,11 @@ class Settings(BaseSettings):
     # de dominio: es un guardarraíl anti-DoS configurable. Por defecto 15 MiB.
     max_upload_bytes: int = 15 * 1024 * 1024
 
+    # --- Worker OCR S2.3 (jobs, arq) -----------------------------------------------------------
+    # Cola de arq en la que la API encola `run_ocr` tras una subida aceptada y de la que el worker
+    # consume. No es secreto; se comparte el mismo Redis que el resto de la app.
+    ocr_queue_name: str = "autoken:queue:ocr"
+
     # Antivirus (fail-closed, ADR-0015). `virus_scanner_backend` fuerza el backend (`signature` o
     # `clamd`); sin fijar, se usa el scanner de firma en dev/CI (detecta EICAR en proceso, sin red)
     # y ClamAV real (clamd) en producción. Host/puerto del daemon clamd (solo aplican al backend

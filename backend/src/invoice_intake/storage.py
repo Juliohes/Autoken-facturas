@@ -85,6 +85,24 @@ def put_object(bucket: str, key: str, data: bytes, length: int, content_type: st
         raise StorageUnavailable(f"No se pudo almacenar el objeto en MinIO: {exc}") from exc
 
 
+def get_object(bucket: str, key: str) -> bytes:
+    """Descarga el objeto `bucket/key` y devuelve sus bytes. Fallo/ausencia -> `StorageUnavailable`.
+
+    Lo usa el worker OCR (S2.3) para leer la factura antes de extraerla. Un objeto borrado/corrupto
+    o un almacén caído se traduce a `StorageUnavailable` (nunca bytes a medias ni fallo silencioso).
+    """
+    client = _client()
+    try:
+        response = client.get_object(bucket, key)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()
+    except (Urllib3HTTPError, S3Error, ConnectionError, OSError) as exc:
+        raise StorageUnavailable(f"No se pudo descargar el objeto de MinIO: {exc}") from exc
+
+
 def object_exists(bucket: str, key: str) -> bool:
     """True si el objeto `bucket/key` existe. Inexistente -> False; almacén caído -> excepción."""
     client = _client()

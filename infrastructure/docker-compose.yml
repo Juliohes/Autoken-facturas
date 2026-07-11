@@ -1,5 +1,5 @@
 # Docker Compose — Autoken Facturas v2
-# api + postgres + redis + minio + clamav. El resto de servicios (worker, caddy) se añaden en
+# api + worker + postgres + redis + minio + clamav. El resto de servicios (caddy) se añaden en
 # sprints posteriores. Los secretos se inyectan vía .env (no versionado). Ver ../.env.example.
 
 services:
@@ -39,6 +39,47 @@ services:
       minio:
         condition: service_healthy
       clamav:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Worker OCR S2.3 (jobs, arq): misma imagen del backend, arranca el consumidor de la cola en vez de
+  # uvicorn. Comparte Postgres/Redis/MinIO con la API. Encola la API (best-effort) tras cada subida y
+  # el worker procesa `run_ocr` (extracción gemini-3-flash + validaciones + estado). Las credenciales
+  # de Vertex/Gemini y del resto de servicios llegan por .env (no versionado).
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: autoken/api:dev
+    command: ["arq", "jobs.worker.WorkerSettings"]
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-autoken_app}:${POSTGRES_PASSWORD:-autoken}@postgres:5432/${POSTGRES_DB:-autoken}
+      REDIS_URL: redis://redis:6379/0
+      OCR_QUEUE_NAME: ${OCR_QUEUE_NAME:-autoken:queue:ocr}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      # Vertex/Gemini: el worker es el ÚNICO proceso que llama al motor real (gemini-3-flash) en
+      # staging/prod. Sin estas variables + el SA montado, cada fichero caería a `ocr_failed`. El
+      # proyecto y la región no son secretos; el JSON de la service account SÍ (montado read-only).
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      GEMINI_LOCATION: ${GEMINI_LOCATION:-global}
+      GEMINI_FLASH_MODEL: ${GEMINI_FLASH_MODEL:-gemini-3-flash-preview}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/vertex-sa.json
+    volumes:
+      # Service account de Vertex (secreto, NO versionado): vive en `secrets/vertex-sa.json` del VPS.
+      - ../secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     restart: unless-stopped
 

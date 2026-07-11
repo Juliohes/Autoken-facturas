@@ -40,6 +40,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Worker OCR S2.3 (jobs): cola de trabajos asíncronos sobre Redis (arq). Va en un extra `worker`
+# (no en las deps base) a propósito: arq declara `redis<6`, pero la app funciona con redis 8 y ese
+# tope solo es metadato conservador. Que arq OPERA con redis 8 no es un supuesto: lo VERIFICA el smoke
+# test `tests/test_ocr_worker_wiring.py` (encola+consume un job). Manteniéndolo fuera de la base se
+# evita que un `pip install .[dev]` degrade redis y rompa el tipado del resto de la app. La imagen del
+# worker lo instala con `pip install --no-deps` (ver Dockerfile), conservando redis 8.
+worker = ["arq>=0.26"]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
@@ -92,6 +99,11 @@ ignore_missing_imports = true
 # clamd (cliente del daemon ClamAV) no publica marcador py.typed.
 [[tool.mypy.overrides]]
 module = "clamd.*"
+ignore_missing_imports = true
+
+# arq (cola de trabajos del worker OCR) no publica marcador py.typed.
+[[tool.mypy.overrides]]
+module = "arq.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
