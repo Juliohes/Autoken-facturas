@@ -22,6 +22,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -52,6 +53,10 @@ class Tenant(Base):
     custom_domain: Mapped[str | None] = mapped_column(Text, unique=True)
     is_demo: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="active")
+    # Feature flags de fuentes de verificación del CIF de contraparte (S2.8, ADR-0011): lista de
+    # fuentes habilitadas para el tenant. `NULL` = conjunto por defecto (supplier_master + aeat +
+    # vies + borme). Las políticas/grants no cambian; la migración 0006 añade la columna.
+    cif_sources: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
