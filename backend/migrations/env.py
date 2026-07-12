@@ -17,6 +17,7 @@ from shared.config import get_settings
 from shared.db import Base
 
 # Importa los modelos para que se registren en Base.metadata (autogenerate y target).
+import counterparty.models  # noqa: F401  (efecto secundario: registrar `counterparties`/`cif_lookups`)
 import invoice_intake.models  # noqa: F401  (efecto secundario: registrar `uploaded_files`)
 import ocr.models  # noqa: F401  (efecto secundario: registrar `ocr_extractions`)
 import tenancy.models  # noqa: F401  (efecto secundario: registrar tablas del núcleo)

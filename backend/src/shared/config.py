@@ -240,6 +240,34 @@ class Settings(BaseSettings):
     clamav_host: str = "clamav"
     clamav_port: int = 3310
 
+    # --- Verificación del CIF de contraparte S2.8 (counterparty, ADR-0011) ----------------------
+    # Fuentes externas (L3) tras la interfaz `CifResolver`. En CI los resolvers van doblados; estos
+    # ajustes solo se usan al construir los clientes REALES (staging). Endpoints y timeouts no son
+    # secretos; el certificado de AEAT y su contraseña SÍ (llegan por env var en el VPS, §9.1).
+    #
+    # AEAT censal (VNifV2, SOAP mutual-TLS): fuente autoritativa del par CIF+nombre. El certificado
+    # electrónico de Julio se monta como fichero PEM (cert+clave) en `secrets/` (gitignored); su
+    # contraseña protege la clave privada. El endpoint (preproducción vs producción) se confirma en
+    # staging. Sin certificado/endpoint el resolver no se construye (fuente no disponible).
+    aeat_endpoint: str | None = None
+    aeat_cert_path: str | None = None
+    aeat_cert_password: str | None = None
+    aeat_timeout: int = 10  # segundos
+
+    # VIES (`checkVatApprox`, SOAP público de la Comisión Europea): determinante solo intra-UE.
+    vies_endpoint: str = "https://ec.europa.eu/taxation_customs/vies/services/checkVatService.wsdl"
+    vies_timeout: int = (
+        10  # segundos (el VIES cae a menudo: timeout corto -> unverified, no bloqueo)
+    )
+
+    # BORME (OpenMercantil/LibreBOR, HTTP público): enriquece CIF->razón social de sociedades.
+    borme_base_url: str | None = None
+    borme_timeout: int = 10  # segundos
+
+    # TTL de la caché global de resoluciones (`cif_lookups`, L4). Los datos de registros públicos
+    # cambian rara vez; 30 días equilibra frescura y ahorro de cuota/latencia.
+    cif_cache_ttl_seconds: int = 30 * 24 * 60 * 60
+
     @property
     def is_production(self) -> bool:
         return self.app_env is AppEnv.PRODUCTION

@@ -37,6 +37,10 @@ dependencies = [
     "minio>=7.2",
     "filetype>=1.2",
     "clamd>=1.0",
+    # Verificación del CIF de contraparte S2.8 (counterparty, ADR-0011): cliente SOAP para AEAT
+    # censal (mutual-TLS) y VIES. BORME usa httpx (ya presente). Solo se ejerce en staging; en CI
+    # los resolvers van doblados. zeep no publica marcador py.typed (ver override de mypy).
+    "zeep>=4.2",
 ]
 
 [project.optional-dependencies]
@@ -105,6 +109,19 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "arq.*"
 ignore_missing_imports = true
+
+# zeep (cliente SOAP de AEAT censal y VIES, S2.8) no publica marcador py.typed. `follow_imports=skip`
+# lo trata como Any (evita `no-untyped-call` en modo strict sobre `Client`/`Transport`).
+[[tool.mypy.overrides]]
+module = "zeep.*"
+ignore_missing_imports = true
+follow_imports = "skip"
+
+# requests (transporte del cliente SOAP zeep con el certificado cliente de AEAT) no trae stubs.
+[[tool.mypy.overrides]]
+module = "requests.*"
+ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
