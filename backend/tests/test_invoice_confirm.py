@@ -248,6 +248,28 @@ async def test_c11_is_test_solo_admin(authapi: Api) -> None:
     assert (await fetch_invoice(dsns, file_id=admin["file_id"]))["is_test"] is True
 
 
+async def test_c15_correccion_de_tramo_de_iva(authapi: Api) -> None:
+    """C15 (issue #70): cambiar la base de un tramo de IVA genera una corrección de ese tramo."""
+    client, dsns = authapi
+    # Baseline OCR: tramo 21% con base 100.00 / cuota 21.00 (defaults del seed).
+    s = await seed_confirmable(dsns, client)
+
+    resp = await client.post(
+        confirm_url(s["file_id"]),
+        headers=auth(s["token"]),
+        json=confirm_body(tax_lines=[{"iva_pct": "21", "base": "90.00", "cuota": "21.00"}]),
+    )
+    assert resp.status_code == 201, resp.text
+    inv = await fetch_invoice(dsns, file_id=s["file_id"])
+
+    corrections = await fetch_corrections(dsns, invoice_id=str(inv["id"]))
+    by_field = {c["field"]: c for c in corrections}
+    assert "tax_line[21].base" in by_field
+    assert by_field["tax_line[21].base"]["ai_value"] == "100.00"
+    assert by_field["tax_line[21].base"]["human_value"] == "90.00"
+    assert "tax_line[21].cuota" not in by_field  # la cuota no cambió
+
+
 # --- Datos de revisión (GET para S2.4) -----------------------------------------------------------
 async def test_c12_review_devuelve_campos_confianzas_y_veredicto(authapi: Api) -> None:
     """C12: GET review -> 200 con campos, confianzas, veredicto de contraparte e identidad."""
