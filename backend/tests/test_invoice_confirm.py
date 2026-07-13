@@ -333,3 +333,21 @@ async def test_c14_review_solo_para_ficheros_ya_leidos(authapi: Api) -> None:
     assert resp.status_code == 409, (
         resp.text
     )  # existe en su tenant pero aún no hay datos de revisión
+
+
+async def test_c13b_review_expone_blocking_reasons(authapi: Api) -> None:
+    """C13 (S2.4): review expone `blocking_reasons` (misma lógica que las guardas de confirm)."""
+    client, dsns = authapi
+    # CIF de contraparte estructuralmente inválido -> motivo counterparty_cif_invalid.
+    bad = await seed_confirmable(
+        dsns, client, slug="ilex", counterparty_cif=INVALID_CIF, seed_master=False
+    )
+    r_bad = await client.get(review_url(bad["file_id"]), headers=auth(bad["token"]))
+    assert r_bad.status_code == 200, r_bad.text
+    assert "counterparty_cif_invalid" in r_bad.json()["blocking_reasons"]
+
+    # Todo correcto y confirmable -> lista vacía.
+    ok = await seed_confirmable(dsns, client, slug="dos", email="ana@dos.es")
+    r_ok = await client.get(review_url(ok["file_id"]), headers=auth(ok["token"], "dos.localhost"))
+    assert r_ok.status_code == 200, r_ok.text
+    assert r_ok.json()["blocking_reasons"] == []
