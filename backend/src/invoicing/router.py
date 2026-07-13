@@ -85,6 +85,7 @@ async def review_upload(identity: Reviewer, file_id: UUID) -> dict[str, object]:
         "counterparty_verdict": data.counterparty_verdict,
         "own": data.own,
         "warnings": data.warnings,
+        "blocking_reasons": data.blocking_reasons,
     }
 
 

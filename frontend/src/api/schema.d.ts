@@ -14,6 +14,9 @@ export interface paths {
         /**
          * Health
          * @description Devuelve el estado del servicio (liveness).
+         *
+         *     `Settings` se recibe por inyección de dependencias (DIP), no resolviéndola dentro del
+         *     handler: así es sustituible en test vía `app.dependency_overrides` (BP-3).
          */
         get: operations["health_api_v1_health_get"];
         put?: never;
@@ -24,10 +27,515 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tenants/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Current Tenant
+         * @description Datos públicos del tenant resuelto por el subdominio (para el login/branding).
+         *
+         *     404 neutro si el host no corresponde a un tenant activo (inexistente, suspendido o no-tenant):
+         *     la respuesta es idéntica en todos esos casos, no se revela qué tenants existen.
+         */
+        get: operations["current_tenant_api_v1_tenants_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login
+         * @description Autentica email + contraseña (+ TOTP si aplica): access token + cookie de refresh.
+         */
+        post: operations["login_api_v1_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh
+         * @description Rota el refresh de la cookie: nuevo access + nueva cookie; el anterior queda invalidado.
+         */
+        post: operations["refresh_api_v1_auth_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout
+         * @description Revoca la familia del refresh y borra la cookie. Idempotente sin cookie.
+         */
+        post: operations["logout_api_v1_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate
+         * @description Fija la contraseña y genera el secreto TOTP; devuelve la URI `otpauth://` para el QR.
+         */
+        post: operations["activate_api_v1_auth_activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/activate/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate Confirm
+         * @description Confirma el TOTP: enrola el segundo factor y consume el token de activación (un solo uso).
+         */
+        post: operations["activate_confirm_api_v1_auth_activate_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Me
+         * @description Testigo protegido: la identidad del token, leída bajo el contexto del tenant (RLS).
+         *
+         *     Incluye `company` (id y nombre) para un `user` acotado a su empresa; `null` para un
+         *     `tenant_admin` (contexto de asesoría, ve todo el tenant). Ver spec S1.6 (C5/C6).
+         */
+        get: operations["me_api_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register
+         * @description Alta autoservicio en el subdominio. CIF/contraseña inválidos -> 422; tope por IP -> 429.
+         *
+         *     Respuesta **genérica e idéntica** exista o no ya el email (anti-enumeración): un email duplicado
+         *     no crea nada pero responde igual que un alta correcta.
+         */
+        post: operations["register_api_v1_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Registrations
+         * @description Lista los registros pendientes de la asesoría (solo `tenant_admin`; la RLS acota).
+         */
+        get: operations["list_registrations_api_v1_registrations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/registrations/{user_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Registration
+         * @description Aprueba un registro: activa usuario + empresa. Idempotente; de otro tenant -> 404.
+         */
+        post: operations["approve_registration_api_v1_registrations__user_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/registrations/{user_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Registration
+         * @description Rechaza un registro pendiente: borra el usuario y su empresa huérfana. Otro tenant -> 404.
+         */
+        post: operations["reject_registration_api_v1_registrations__user_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/companies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Companies
+         * @description Lista las empresas de la asesoría (solo `tenant_admin`; la RLS acota lo visible).
+         */
+        get: operations["list_companies_api_v1_companies_get"];
+        put?: never;
+        /**
+         * Create Company
+         * @description Da de alta una empresa `active`. CIF inválido -> 422; CIF ya existente -> 409.
+         */
+        post: operations["create_company_api_v1_companies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/companies/{company_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Company
+         * @description Borra una empresa sin dependencias. Con usuarios -> 409; de otro tenant -> 404.
+         */
+        delete: operations["delete_company_api_v1_companies__company_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Company
+         * @description Edita una empresa. CIF inválido -> 422; CIF duplicado -> 409; de otro tenant -> 404.
+         */
+        patch: operations["update_company_api_v1_companies__company_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/companies/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Companies
+         * @description Importa un `.xlsx` (multipart `file`). Fichero/columnas inválidos -> 400 controlado.
+         *
+         *     Guardarraíles anti-DoS por memoria (fichero compartido por todas las asesorías): se rechaza con
+         *     413 el fichero que supera `companies_import_max_bytes` ANTES de parsearlo (lectura acotada, sin
+         *     materializar un `.xlsx` gigante o zip-bomb en memoria), y el parseo corta a
+         *     `companies_import_max_rows` filas.
+         */
+        post: operations["import_companies_api_v1_companies_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload File
+         * @description Sube un fichero de factura a una empresa. Ver spec S2.1 para los códigos (201/4xx/503).
+         *
+         *     Orden: pertenencia (403/404) -> tamaño (413) -> el servicio hace el resto (415/422/409/503/201).
+         */
+        post: operations["upload_file_api_v1_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/uploads/{file_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Review Upload
+         * @description Datos de revisión de un fichero ya leído (S2.4). 200 con datos; 403/404/409 por acceso.
+         */
+        get: operations["review_upload_api_v1_uploads__file_id__review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/uploads/{file_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Upload
+         * @description Confirma un fichero y persiste su factura (S2.5). 201 con el id; 4xx según las guardas.
+         */
+        post: operations["confirm_upload_api_v1_uploads__file_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ActivateConfirmRequest
+         * @description Cuerpo de `POST /auth/activate/confirm`.
+         */
+        ActivateConfirmRequest: {
+            /** Token */
+            token: string;
+            /** Totp Code */
+            totp_code: string;
+        };
+        /**
+         * ActivateRequest
+         * @description Cuerpo de `POST /auth/activate`. La política de contraseña la valida el endpoint.
+         */
+        ActivateRequest: {
+            /** Token */
+            token: string;
+            /** Password */
+            password: string;
+        };
+        /**
+         * ApprovalResponse
+         * @description Respuesta de la aprobación de un registro.
+         */
+        ApprovalResponse: {
+            /** Status */
+            status: string;
+        };
+        /** Body_import_companies_api_v1_companies_import_post */
+        Body_import_companies_api_v1_companies_import_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_upload_file_api_v1_uploads_post */
+        Body_upload_file_api_v1_uploads_post: {
+            /** File */
+            file: string;
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+        };
+        /**
+         * CompanyCreate
+         * @description Cuerpo de `POST /companies`.
+         */
+        CompanyCreate: {
+            /** Name */
+            name: string;
+            /** Cif */
+            cif: string;
+            /** Notes */
+            notes?: string | null;
+        };
+        /**
+         * CompanyOut
+         * @description Empresa en la respuesta (alta, edición y listado).
+         */
+        CompanyOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Cif */
+            cif: string;
+            /** Status */
+            status: string;
+        };
+        /**
+         * CompanyUpdate
+         * @description Cuerpo de `PATCH /companies/{id}` (patch parcial: solo los campos presentes cambian).
+         */
+        CompanyUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Cif */
+            cif?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Status */
+            status?: ("active" | "pending") | null;
+        };
+        /**
+         * ConfirmIn
+         * @description Cuerpo de la confirmación (S2.5): datos confirmados por el humano.
+         */
+        ConfirmIn: {
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "recibida" | "emitida";
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Counterparty Tax Id */
+            counterparty_tax_id?: string | null;
+            /** Counterparty Name */
+            counterparty_name?: string | null;
+            /** Net Amount */
+            net_amount?: number | string | null;
+            /** Tax Amount */
+            tax_amount?: number | string | null;
+            /** Total Amount */
+            total_amount?: number | string | null;
+            /** Irpf Amount */
+            irpf_amount?: number | string | null;
+            /**
+             * Tax Lines
+             * @default []
+             */
+            tax_lines: components["schemas"]["TaxLineIn"][];
+            /**
+             * Responsibility Accepted
+             * @default false
+             */
+            responsibility_accepted: boolean;
+            /**
+             * Is Test
+             * @default false
+             */
+            is_test: boolean;
+        };
+        /**
+         * DuplicateRowOut
+         * @description Fila omitida por CIF ya existente en el informe: número de fila (1-based) y CIF.
+         */
+        DuplicateRowOut: {
+            /** Row */
+            row: number;
+            /** Cif */
+            cif: string;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
         /**
          * HealthResponse
          * @description Respuesta del healthcheck.
@@ -41,6 +549,140 @@ export interface components {
             version: string;
             /** Environment */
             environment: string;
+        };
+        /**
+         * ImportReportOut
+         * @description Informe de la importación del Excel.
+         */
+        ImportReportOut: {
+            /** Created */
+            created: number;
+            /** Invalid */
+            invalid: components["schemas"]["InvalidRowOut"][];
+            /** Duplicates */
+            duplicates: components["schemas"]["DuplicateRowOut"][];
+            /** Truncated */
+            truncated: boolean;
+        };
+        /**
+         * InvalidRowOut
+         * @description Fila rechazada en el informe de importación: número de fila (1-based) y motivo.
+         */
+        InvalidRowOut: {
+            /** Row */
+            row: number;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * LoginRequest
+         * @description Cuerpo de `POST /auth/login`.
+         */
+        LoginRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+            /** Totp Code */
+            totp_code?: string | null;
+        };
+        /**
+         * RegisterRequest
+         * @description Cuerpo de `POST /register`.
+         */
+        RegisterRequest: {
+            /** Email */
+            email: string;
+            /** Company Name */
+            company_name: string;
+            /** Cif */
+            cif: string;
+            /** Password */
+            password: string;
+        };
+        /**
+         * RegisterResponse
+         * @description Respuesta genérica del registro (idéntica exista o no el email: anti-enumeración).
+         */
+        RegisterResponse: {
+            /** Status */
+            status: string;
+        };
+        /**
+         * RegistrationOut
+         * @description Un registro pendiente en el listado del admin (email + empresa + señal de unión a existente).
+         *
+         *     `joins_existing_company` avisa a la pantalla de aprobación de que el CIF casaba con una empresa
+         *     ya activa (el usuario se une a ella, no crea empresa nueva): defensa ante secuestro por CIF.
+         */
+        RegistrationOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Email */
+            email: string;
+            /** Company */
+            company: string | null;
+            /** Joins Existing Company */
+            joins_existing_company: boolean;
+        };
+        /**
+         * TaxLineIn
+         * @description Un tramo de IVA confirmado del body de `confirm`.
+         */
+        TaxLineIn: {
+            /** Iva Pct */
+            iva_pct?: number | string | null;
+            /** Base */
+            base?: number | string | null;
+            /** Cuota */
+            cuota?: number | string | null;
+        };
+        /**
+         * UploadOut
+         * @description Fichero de intake creado (respuesta 201).
+         */
+        UploadOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /** Content Type */
+            content_type: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Sha256 */
+            sha256: string;
+            /** Status */
+            status: string;
+            /** Scan Status */
+            scan_status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
     };
     responses: never;
@@ -67,6 +709,559 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    current_tenant_api_v1_tenants_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    login_api_v1_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_api_v1_auth_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    logout_api_v1_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    activate_api_v1_auth_activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_confirm_api_v1_auth_activate_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivateConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    me_api_v1_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    register_api_v1_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegisterResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_registrations_api_v1_registrations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationOut"][];
+                };
+            };
+        };
+    };
+    approve_registration_api_v1_registrations__user_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_registration_api_v1_registrations__user_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_companies_api_v1_companies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyOut"][];
+                };
+            };
+        };
+    };
+    create_company_api_v1_companies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompanyCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_company_api_v1_companies__company_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_company_api_v1_companies__company_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompanyUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_companies_api_v1_companies_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_companies_api_v1_companies_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_file_api_v1_uploads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_file_api_v1_uploads_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_upload_api_v1_uploads__file_id__review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_upload_api_v1_uploads__file_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -40,8 +40,6 @@ from tenancy.constants import Role
 
 # Estados del fichero desde los que se puede revisar/confirmar (spec §2/§5): ya hay datos del OCR.
 _CONFIRMABLE_STATES = frozenset({FileStatus.OCR_DONE.value, FileStatus.NEEDS_REVIEW.value})
-# Veredictos del CIF de contraparte que BLOQUEAN el guardado (spec §4, regla dura, C3).
-_BLOCKING_CIF_STATES = frozenset({CifStatus.INVALID, CifStatus.NOT_FOUND})
 
 AUDIT_ACTION_CONFIRM = "invoice.confirm"
 _AUDIT_ENTITY = "invoice"
@@ -114,6 +112,9 @@ class ReviewData:
     counterparty_verdict: dict[str, object]
     own: dict[str, object]
     warnings: list[str]
+    # Motivos por los que el servidor bloquearía el guardado (mismas guardas que `confirm`): la
+    # pantalla deshabilita el botón si NO está vacía. Lista vacía = confirmable (S2.4 §2, C13).
+    blocking_reasons: list[str]
 
 
 def _is_admin(role: str) -> bool:
@@ -124,6 +125,40 @@ def _is_admin(role: str) -> bool:
     existe).
     """
     return role == Role.TENANT_ADMIN.value
+
+
+# Motivos de bloqueo del guardado (los consume la pantalla S2.4 y los reimpone `confirm`). Definidos
+# UNA vez para que el botón y las guardas del servidor no puedan discrepar (única fuente de verdad).
+REASON_CIF_INVALID = "counterparty_cif_invalid"
+REASON_CIF_NOT_FOUND = "counterparty_cif_not_found"
+REASON_OWN_TAX_ID_MISSING = "own_tax_id_missing"
+
+
+def _counterparty_reason(verdict: CounterpartyVerdict) -> str | None:
+    """Motivo de bloqueo por el CIF de contraparte, o `None` si no bloquea (C3/C4/C5)."""
+    if verdict.status == CifStatus.INVALID:
+        return REASON_CIF_INVALID
+    if verdict.status == CifStatus.NOT_FOUND:
+        return REASON_CIF_NOT_FOUND
+    return None
+
+
+def _own_tax_id_blocks(own_tax_id_present: bool, role: str) -> bool:
+    """El CIF propio ausente bloquea, salvo que el actor sea admin (regla 2, C6)."""
+    return not own_tax_id_present and not _is_admin(role)
+
+
+def _blocking_reasons(
+    verdict: CounterpartyVerdict, own_tax_id_present: bool, role: str
+) -> list[str]:
+    """Motivos por los que el servidor bloquearía el guardado (misma lógica que `confirm`)."""
+    reasons: list[str] = []
+    cif_reason = _counterparty_reason(verdict)
+    if cif_reason is not None:
+        reasons.append(cif_reason)
+    if _own_tax_id_blocks(own_tax_id_present, role):
+        reasons.append(REASON_OWN_TAX_ID_MISSING)
+    return reasons
 
 
 async def _load_file(identity: AuthContext, file_id: UUID) -> intake_repo.UploadedFileContext:
@@ -225,6 +260,7 @@ async def review(identity: AuthContext, file_id: UUID) -> ReviewData:
             "name": own.name if own is not None else None,
         },
         warnings=warnings,
+        blocking_reasons=_blocking_reasons(verdict, extraction.own_tax_id_present, identity.role),
     )
 
 
@@ -249,8 +285,8 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
 
     # Guardas locales baratas y deterministas ANTES de la reverificación (que puede tocar red L3):
     # un usuario que no acepta la responsabilidad o sin el CIF propio no dispara lookups externos.
-    # CIF propio ausente bloquea, salvo admin (regla 2, C4).
-    if not extraction.own_tax_id_present and not _is_admin(identity.role):
+    # CIF propio ausente bloquea, salvo admin (regla 2, C4). Mismo predicado que `blocking_reasons`.
+    if _own_tax_id_blocks(extraction.own_tax_id_present, identity.role):
         raise OwnTaxIdMissing
     # Sin aceptar la responsabilidad no hay factura (regla 8, C5).
     if not command.responsibility_accepted:
@@ -260,7 +296,7 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
     verdict = await verify_counterparty(
         identity.tenant_id, command.counterparty_tax_id, command.counterparty_name
     )
-    if verdict.status in _BLOCKING_CIF_STATES:
+    if _counterparty_reason(verdict) is not None:
         raise CounterpartyBlocked
 
     # Descuadre = aviso, no bloqueo (regla 5, C6): se guarda con el resultado registrado.

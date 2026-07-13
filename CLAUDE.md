@@ -22,6 +22,12 @@
     este `CLAUDE.md` es solo el resumen de arranque. Al cerrar cada tarea, actualizar §11 del plan.
 12. **Commit + push por tarea (Julio, 2026-06-14)**: cada tarea deja **commit y `git push`** a GitHub (rama
     feature publicada + PR). En tareas largas, commits incrementales y push temprano para no perder trabajo.
+13. **Comunicación con Julio (Julio, 2026-07-13)**: cada vez que se explique algo hecho, añadir **debajo** de
+    la explicación técnica un bloque **"En cristiano (para quien no sabe de software)"** en lenguaje llano que
+    enseñe los conceptos (endpoint, migración, RLS, test, middleware...). Julio aprende software con el
+    proyecto. Además: **commit + push por feature**, **guardar/checkpoint cada tarea**, **nada de monolitos**
+    y **revisar SOLID en todo** lo que se programa. No preguntar de más: continuar con autonomía; solo
+    preguntar lo imprescindible (decisiones de dominio/producto que no se puedan resolver solo).
 
 ## 2. Git y commits (sección 2 del plan)
 - **Repo**: privado `Juliohes/Autoken-facturas` (monorepo: `backend/`, `frontend/`, `infrastructure/`, `docs/`).

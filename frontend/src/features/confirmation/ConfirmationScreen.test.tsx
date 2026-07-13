@@ -1,0 +1,321 @@
+// Tests de comportamiento de la pantalla de confirmación (S2.4), C1-C12. El
+// cliente de API está mockeado: se inyectan las respuestas de `review`/`confirm`
+// de cada escenario (sin navegador ni backend reales; jsdom).
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+
+import { api } from '../../api/client'
+import { ConfirmationScreen, RESPONSIBILITY_NOTICE } from './ConfirmationScreen'
+import type { ReviewResponse } from './types'
+
+vi.mock('../../api/client', () => ({
+  api: { GET: vi.fn(), POST: vi.fn() },
+}))
+
+type AsyncMock = Mock<(...args: never[]) => Promise<unknown>>
+const getMock = api.GET as unknown as AsyncMock
+const postMock = api.POST as unknown as AsyncMock
+
+function makeReview(over: Partial<ReviewResponse> = {}): ReviewResponse {
+  return {
+    fields: {
+      issue_date: '2026-01-15',
+      total_amount: '100.00',
+      net_amount: '82.64',
+      tax_amount: '17.36',
+      counterparty_tax_id: 'B12345678',
+      counterparty_name: 'Proveedor SL',
+      tax_lines: [],
+    },
+    confidences: {},
+    counterparty_verdict: { status: 'valid', name_match: true, official_name: null },
+    own: { cif: 'A11111111', name: 'Mi Empresa SL' },
+    warnings: [],
+    blocking_reasons: [],
+    ...over,
+  }
+}
+
+function renderScreen() {
+  const onConfirmed = vi.fn()
+  const onRetry = vi.fn()
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <ConfirmationScreen fileId="file-1" onConfirmed={onConfirmed} onRetry={onRetry} />
+    </QueryClientProvider>,
+  )
+  return { onConfirmed, onRetry }
+}
+
+/** Marca la responsabilidad y espera a que el botón se habilite. */
+async function acceptResponsibility(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('checkbox'))
+}
+
+beforeEach(() => {
+  getMock.mockReset()
+  postMock.mockReset()
+  getMock.mockResolvedValue({ data: makeReview(), error: undefined })
+  postMock.mockResolvedValue({ data: { id: 'inv-1' }, error: undefined })
+})
+
+describe('ConfirmationScreen (S2.4)', () => {
+  it('C1: total, CIF de contraparte (con veredicto) y fecha visibles; el resto plegado', async () => {
+    renderScreen()
+
+    // Siempre visibles y fuera del desplegable.
+    const total = await screen.findByLabelText('Importe total')
+    const cif = screen.getByLabelText('CIF de contraparte')
+    const fecha = screen.getByLabelText('Fecha')
+    expect(total).toBeInTheDocument()
+    expect(cif).toBeInTheDocument()
+    expect(fecha).toBeInTheDocument()
+    expect(screen.getByTestId('counterparty-verdict')).toBeInTheDocument()
+
+    // El resto vive dentro de un <details> plegado por defecto.
+    const details = screen.getByTestId('more-fields')
+    expect(details).not.toHaveAttribute('open')
+    expect(details).not.toContainElement(total)
+    expect(within(details).getByLabelText('Nombre de la contraparte')).toBeInTheDocument()
+    expect(within(details).getByLabelText('Base imponible')).toBeInTheDocument()
+    expect(within(details).getByLabelText('IRPF (retención)')).toBeInTheDocument()
+  })
+
+  it('C2: media = dudoso (amarillo), baja/ausente = no leído (rojo), alta sin marca', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({
+        confidences: { total_amount: 'media', issue_date: 'baja', counterparty_tax_id: 'alta' },
+      }),
+      error: undefined,
+    })
+    renderScreen()
+
+    const totalMark = await screen.findByTestId('mark-total_amount')
+    expect(totalMark).toHaveAttribute('data-mark', 'dudoso')
+    expect(totalMark).toHaveTextContent('Dudoso')
+
+    const dateMark = screen.getByTestId('mark-issue_date')
+    expect(dateMark).toHaveAttribute('data-mark', 'no_leido')
+    expect(dateMark).toHaveTextContent('No leído')
+
+    // `alta` no lleva marca de aviso.
+    expect(screen.queryByTestId('mark-counterparty_tax_id')).not.toBeInTheDocument()
+  })
+
+  it('C3: veredicto valid+name_match -> verde', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({
+        counterparty_verdict: { status: 'valid', name_match: true, official_name: null },
+      }),
+      error: undefined,
+    })
+    renderScreen()
+    const block = await screen.findByTestId('counterparty-verdict')
+    expect(block).toHaveAttribute('data-tone', 'ok')
+    expect(block).toHaveTextContent(/verificado/i)
+  })
+
+  it('C3: veredicto valid+name_match=false -> aviso con la razón social oficial', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({
+        counterparty_verdict: {
+          status: 'valid',
+          name_match: false,
+          official_name: 'ACME SOCIEDAD LIMITADA',
+        },
+      }),
+      error: undefined,
+    })
+    renderScreen()
+    const block = await screen.findByTestId('counterparty-verdict')
+    expect(block).toHaveAttribute('data-tone', 'warn')
+    expect(block).toHaveTextContent('ACME SOCIEDAD LIMITADA')
+  })
+
+  it('C3: veredicto invalid/not_found -> rojo; unverified -> aviso revisar manual', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({
+        counterparty_verdict: { status: 'invalid', name_match: null, official_name: null },
+      }),
+      error: undefined,
+    })
+    const { onConfirmed } = renderScreen()
+    await waitFor(() => expect(onConfirmed).not.toHaveBeenCalled())
+    expect(await screen.findByTestId('counterparty-verdict')).toHaveAttribute('data-tone', 'error')
+
+    // not_found -> rojo.
+    getMock.mockResolvedValue({
+      data: makeReview({
+        counterparty_verdict: { status: 'not_found', name_match: null, official_name: null },
+      }),
+      error: undefined,
+    })
+    renderScreen()
+    await waitFor(() =>
+      expect(screen.getAllByTestId('counterparty-verdict').at(-1)).toHaveAttribute(
+        'data-tone',
+        'error',
+      ),
+    )
+
+    // unverified -> aviso "revisar manual".
+    getMock.mockResolvedValue({
+      data: makeReview({
+        counterparty_verdict: { status: 'unverified', name_match: null, official_name: null },
+      }),
+      error: undefined,
+    })
+    renderScreen()
+    await waitFor(() => {
+      const last = screen.getAllByTestId('counterparty-verdict').at(-1)
+      expect(last).toHaveAttribute('data-tone', 'warn')
+      expect(last).toHaveTextContent(/revisar manual/i)
+    })
+  })
+
+  it('C4: counterparty_cif_invalid deshabilita el botón (con checkbox marcado)', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({ blocking_reasons: ['counterparty_cif_invalid'] }),
+      error: undefined,
+    })
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByLabelText('Importe total')
+    await acceptResponsibility(user)
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+  })
+
+  it('C5: counterparty_cif_not_found deshabilita el botón (con checkbox marcado)', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({ blocking_reasons: ['counterparty_cif_not_found'] }),
+      error: undefined,
+    })
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByLabelText('Importe total')
+    await acceptResponsibility(user)
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+  })
+
+  it('C6: own_tax_id_missing deshabilita el botón (con checkbox marcado)', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({ blocking_reasons: ['own_tax_id_missing'] }),
+      error: undefined,
+    })
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByLabelText('Importe total')
+    await acceptResponsibility(user)
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+  })
+
+  it('C7: sin aceptar responsabilidad el botón está deshabilitado; al marcarlo se habilita', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByLabelText('Importe total')
+
+    const button = screen.getByRole('button', { name: 'Confirmar y guardar' })
+    expect(button).toBeDisabled()
+
+    await acceptResponsibility(user)
+    expect(button).toBeEnabled()
+  })
+
+  it('C8: sin bloqueos y con responsabilidad, confirma y llama onConfirmed al 201', async () => {
+    const user = userEvent.setup()
+    const { onConfirmed } = renderScreen()
+    await screen.findByLabelText('Importe total')
+    await acceptResponsibility(user)
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
+
+    expect(postMock).toHaveBeenCalledWith(
+      '/api/v1/uploads/{file_id}/confirm',
+      expect.objectContaining({
+        params: { path: { file_id: 'file-1' } },
+        body: expect.objectContaining({
+          direction: 'recibida',
+          total_amount: '100.00',
+          counterparty_tax_id: 'B12345678',
+          issue_date: '2026-01-15',
+          responsibility_accepted: true,
+        }),
+      }),
+    )
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1))
+  })
+
+  it('C9: aviso rojo de responsabilidad siempre bajo el botón', async () => {
+    renderScreen()
+    expect(await screen.findByText(RESPONSIBILITY_NOTICE)).toBeInTheDocument()
+  })
+
+  it('C10: warnings con descuadre muestra aviso "Revisar" (no bloquea)', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({ warnings: ['descuadre'] }),
+      error: undefined,
+    })
+    const user = userEvent.setup()
+    renderScreen()
+    expect(await screen.findByTestId('warning-imbalance')).toHaveTextContent(/revisar/i)
+
+    // El descuadre NO bloquea: con la responsabilidad marcada el botón se habilita.
+    await acceptResponsibility(user)
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeEnabled()
+  })
+
+  it('C11: "Repetir foto" invoca onRetry', async () => {
+    const user = userEvent.setup()
+    const { onRetry } = renderScreen()
+    await screen.findByLabelText('Importe total')
+    await user.click(screen.getByRole('button', { name: 'Repetir foto' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+
+  it('C12: un 4xx del servidor se muestra legible, no pierde lo editado ni navega a éxito', async () => {
+    postMock.mockResolvedValue({
+      data: undefined,
+      error: { detail: 'El CIF de contraparte no es válido o no consta' },
+    })
+    const user = userEvent.setup()
+    const { onConfirmed } = renderScreen()
+    await screen.findByLabelText('Importe total')
+
+    // El humano edita un valor antes de confirmar.
+    const total = screen.getByLabelText('Importe total')
+    await user.clear(total)
+    await user.type(total, '250.00')
+
+    await acceptResponsibility(user)
+    await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
+
+    // Error legible mostrado; no se navega a éxito; el valor editado se conserva.
+    expect(await screen.findByTestId('confirm-error')).toHaveTextContent(
+      'El CIF de contraparte no es válido o no consta',
+    )
+    expect(onConfirmed).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Importe total')).toHaveValue('250.00')
+  })
+
+  it('extra: el botón se deshabilita mientras el confirm está en vuelo (anti doble envío)', async () => {
+    let resolvePost: (value: unknown) => void = () => {}
+    postMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePost = resolve
+      }),
+    )
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByLabelText('Importe total')
+    await acceptResponsibility(user)
+
+    const button = screen.getByRole('button', { name: 'Confirmar y guardar' })
+    await user.click(button)
+    await waitFor(() => expect(button).toBeDisabled())
+
+    resolvePost({ data: { id: 'inv-1' }, error: undefined })
+  })
+})
