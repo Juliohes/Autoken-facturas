@@ -4,10 +4,11 @@ import uuid
 from collections.abc import Awaitable, Callable
 
 import structlog
+from starlette.datastructures import Headers
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
-from starlette.types import ASGIApp
+from starlette.responses import PlainTextResponse, Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from tenancy.resolution import (
     ResolvedTenant,
@@ -18,6 +19,34 @@ from tenancy.resolution import (
 from tenancy.resolution_cache import NegativeTenantResolutionCache
 
 CORRELATION_ID_HEADER = "X-Correlation-ID"
+
+
+class RequestSizeLimitMiddleware:
+    """Rechaza con 413 una petición cuyo `Content-Length` supera el máximo, antes de leer el cuerpo.
+
+    Guardarraíl anti-DoS de disco (issue #66): Starlette/python-multipart vuelca el cuerpo a un
+    fichero temporal durante el parseo, así que comprobar el `Content-Length` en el borde (antes de
+    tocar el cuerpo, la auth o el enrutado) evita materializar un cuerpo gigante. Un cliente sin
+    `Content-Length` (chunked) no se caza aquí: el endpoint de subida sigue acotando los bytes
+    leídos en memoria (S2.1 C5) y el proxy inverso debe poner su propia cota en producción. Es ASGI
+    puro (no `BaseHTTPMiddleware`) para responder sin instanciar la petición ni su cuerpo.
+    """
+
+    def __init__(self, app: ASGIApp, *, max_body_bytes: int) -> None:
+        self._app = app
+        self._max_body_bytes = max_body_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            declared = Headers(scope=scope).get("content-length")
+            if declared is not None and declared.isdigit() and int(declared) > self._max_body_bytes:
+                response = PlainTextResponse(
+                    f"El cuerpo de la petición supera el máximo ({self._max_body_bytes} bytes)",
+                    status_code=413,
+                )
+                await response(scope, receive, send)
+                return
+        await self._app(scope, receive, send)
 
 
 async def _resolve_uncached(slug: str) -> ResolvedTenant | None:

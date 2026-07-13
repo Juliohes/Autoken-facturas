@@ -227,6 +227,13 @@ class Settings(BaseSettings):
     # de dominio: es un guardarraíl anti-DoS configurable. Por defecto 15 MiB.
     max_upload_bytes: int = 15 * 1024 * 1024
 
+    # Cota del tamaño total del CUERPO de la petición (issue #66): un middleware la rechaza con 413
+    # por `Content-Length` ANTES de que Starlette/python-multipart vuelque el cuerpo a disco
+    # (defensa anti-DoS de disco). Debe superar `max_upload_bytes` para dejar hueco al envoltorio
+    # multipart (boundaries + el campo `company_id`). Por defecto 16 MiB. En prod, el proxy inverso
+    # debe poner además su propia cota (defensa en profundidad).
+    max_request_body_bytes: int = 16 * 1024 * 1024
+
     # --- Worker OCR S2.3 (jobs, arq) -----------------------------------------------------------
     # Cola de arq en la que la API encola `run_ocr` tras una subida aceptada y de la que el worker
     # consume. No es secreto; se comparte el mismo Redis que el resto de la app.

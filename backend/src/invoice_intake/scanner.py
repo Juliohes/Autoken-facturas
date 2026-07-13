@@ -20,6 +20,7 @@ inyectar el "daemon caído" con `monkeypatch.setattr(scanner, "scan", ...)` (C7)
 from __future__ import annotations
 
 import io
+from functools import lru_cache
 from typing import Protocol
 
 import clamd
@@ -77,21 +78,29 @@ class ClamdScanner:
             raise ScanInfected(f"ClamAV detectó una amenaza: {signature}")
 
 
-def _select_scanner() -> VirusScanner:
-    """Elige el backend según la configuración (allowlist explícita).
+@lru_cache(maxsize=4)
+def _scanner_for(backend: str, host: str, port: int) -> VirusScanner:
+    """Backend de antivirus memoizado por configuración (issue #67): se reutiliza entre peticiones.
 
-    `virus_scanner_backend` lo fuerza; sin fijar, `signature` fuera de producción y `clamd` en
-    producción. Un backend desconocido es un error de configuración (fail-loud), no un fallback.
+    `SignatureScanner` no tiene estado; `ClamdScanner` guarda host/port y abre el socket en cada
+    scan, así que reutilizar la instancia no comparte conexiones. Un backend desconocido es error de
+    configuración (fail-loud), no un fallback silencioso.
     """
+    if backend == "signature":
+        return SignatureScanner()
+    if backend == "clamd":
+        return ClamdScanner(host, port)
+    raise ScannerUnavailable(f"Backend de antivirus desconocido: {backend!r}")
+
+
+def _select_scanner() -> VirusScanner:
+    """Elige el backend según la configuración: `virus_scanner_backend` lo fuerza; sin fijar,
+    `signature` fuera de producción y `clamd` en producción."""
     settings = get_settings()
     backend = settings.virus_scanner_backend
     if backend is None:
         backend = "clamd" if settings.is_production else "signature"
-    if backend == "signature":
-        return SignatureScanner()
-    if backend == "clamd":
-        return ClamdScanner(settings.clamav_host, settings.clamav_port)
-    raise ScannerUnavailable(f"Backend de antivirus desconocido: {backend!r}")
+    return _scanner_for(backend, settings.clamav_host, settings.clamav_port)
 
 
 def scan(content: bytes) -> None:
