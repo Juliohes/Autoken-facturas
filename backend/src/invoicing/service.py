@@ -260,9 +260,7 @@ async def review(identity: AuthContext, file_id: UUID) -> ReviewData:
             "name": own.name if own is not None else None,
         },
         warnings=warnings,
-        blocking_reasons=_blocking_reasons(
-            verdict, extraction.own_tax_id_present, identity.role
-        ),
+        blocking_reasons=_blocking_reasons(verdict, extraction.own_tax_id_present, identity.role),
     )
 
 
