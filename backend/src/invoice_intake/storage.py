@@ -12,6 +12,7 @@ Aislamiento: cada asesoría tiene su **propio bucket** `tenant-{tenant_id}`; la 
 from __future__ import annotations
 
 import io
+from functools import lru_cache
 
 from minio import Minio
 from minio.error import S3Error
@@ -47,14 +48,25 @@ class StorageUnavailable(StorageError):
     """El object storage no está disponible o falló la operación (503). Sin estado a medias."""
 
 
+@lru_cache(maxsize=8)
+def _client_for(endpoint: str, access_key: str, secret_key: str, secure: bool) -> Minio:
+    """Cliente MinIO memoizado por configuración: se reutiliza entre peticiones (issue #67).
+
+    El cliente MinIO es un envoltorio HTTP con pool de conexiones interno y sin estado por petición;
+    reconstruirlo por cada operación era coste inútil. Se cachea por la tupla de configuración, de
+    modo que un cambio de endpoint/credenciales (p. ej. entre entornos) construye uno nuevo.
+    """
+    return Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
+
+
 def _client() -> Minio:
-    """Construye el cliente MinIO desde la configuración (endpoint/credenciales por env en prod)."""
+    """Cliente MinIO para la configuración actual (endpoint/credenciales por env en prod)."""
     settings = get_settings()
-    return Minio(
+    return _client_for(
         settings.minio_endpoint,
-        access_key=settings.minio_access_key,
-        secret_key=settings.minio_secret_key,
-        secure=settings.minio_secure,
+        settings.minio_access_key,
+        settings.minio_secret_key,
+        settings.minio_secure,
     )
 
 

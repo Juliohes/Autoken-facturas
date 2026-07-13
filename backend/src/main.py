@@ -21,7 +21,11 @@ from shared.config import Settings, get_settings
 from shared.db import dispose_engine, get_engine
 from shared.db_security import assert_runtime_role_cannot_bypass_rls
 from shared.logging import configure_logging, get_logger
-from shared.middleware import CorrelationIdMiddleware, TenantResolutionMiddleware
+from shared.middleware import (
+    CorrelationIdMiddleware,
+    RequestSizeLimitMiddleware,
+    TenantResolutionMiddleware,
+)
 from shared.redis import dispose_redis
 from shared.security_headers import SecurityHeadersMiddleware
 from tenancy.router import router as tenancy_router
@@ -64,6 +68,9 @@ def create_app() -> FastAPI:
     app.add_middleware(CorrelationIdMiddleware)
     # Cabeceras de seguridad en todas las respuestas (defensa en profundidad); HSTS solo en prod.
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.is_production)
+    # Cota del cuerpo de la petición (issue #66): el más externo, para rechazar (413) un cuerpo
+    # gigante por `Content-Length` antes de auth, enrutado o volcado a disco del multipart.
+    app.add_middleware(RequestSizeLimitMiddleware, max_body_bytes=settings.max_request_body_bytes)
     app.include_router(health_router, prefix=settings.api_prefix)
     app.include_router(tenancy_router, prefix=settings.api_prefix)
     app.include_router(auth_router, prefix=settings.api_prefix)

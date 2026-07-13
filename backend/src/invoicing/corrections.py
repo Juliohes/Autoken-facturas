@@ -6,15 +6,14 @@ el cliente (spec §4). La comparación es por tipo (spec): `Decimal` para import
 fecha, CIF normalizado y nombre con espacios colapsados. Los valores se guardan como texto
 (`ai_value`/`human_value`).
 
-Se comparan los campos escalares de la factura (fecha, importes, CIF y nombre de contraparte). Los
-tramos de IVA (`tax_lines`) NO generan corrección todavía: requieren un emparejamiento por tipo de
-IVA entre el OCR (`[{base, rate, cuota}]`) y la confirmación (`[{iva_pct, base, cuota}]`) que se
-aborda por separado; hasta entonces su valor confirmado se persiste en `invoice_tax_lines`, no en el
-dataset de correcciones. Ver issue #70.
+Se comparan los campos escalares de la factura (fecha, importes, CIF y nombre de contraparte) y los
+**tramos de IVA**: se emparejan por tipo de IVA (`iva_pct`) entre el OCR y la confirmación, y se
+registra una corrección por `base`/`cuota` que difiere, más las altas/bajas de tramo (issue #70).
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -32,8 +31,17 @@ class Correction:
 
 
 @dataclass(frozen=True)
+class TaxLineFields:
+    """Un tramo de IVA para el diff: tipo (`iva_pct`) + base + cuota, tipados."""
+
+    iva_pct: Decimal
+    base: Decimal
+    cuota: Decimal
+
+
+@dataclass(frozen=True)
 class ConfirmedFields:
-    """Valores escalares confirmados por el humano, tipados, para comparar con el baseline OCR."""
+    """Valores confirmados por el humano, tipados, para comparar con el baseline OCR."""
 
     issue_date: date | None
     total_amount: Decimal | None
@@ -41,11 +49,12 @@ class ConfirmedFields:
     tax_amount: Decimal | None
     counterparty_tax_id: str | None
     counterparty_name: str | None
+    tax_lines: tuple[TaxLineFields, ...] = ()
 
 
 @dataclass(frozen=True)
 class BaselineFields:
-    """Valores escalares que persistió el OCR (S2.3): el baseline del diff."""
+    """Valores que persistió el OCR (S2.3): el baseline del diff."""
 
     issue_date: date | None
     total_amount: Decimal | None
@@ -53,6 +62,7 @@ class BaselineFields:
     tax_amount: Decimal | None
     counterparty_tax_id: str | None
     counterparty_name: str | None
+    tax_lines: tuple[TaxLineFields, ...] = ()
 
 
 def _norm_name(value: str | None) -> str | None:
@@ -104,4 +114,40 @@ def diff_corrections(baseline: BaselineFields, confirmed: ConfirmedFields) -> li
     if _norm_name(baseline.counterparty_name) != _norm_name(confirmed.counterparty_name):
         add("counterparty_name", baseline.counterparty_name, confirmed.counterparty_name)
 
+    _diff_tax_lines(baseline.tax_lines, confirmed.tax_lines, add)
     return corrections
+
+
+def _pct_label(pct: Decimal) -> str:
+    """Etiqueta canónica del tipo de IVA para el nombre del campo (21, no 21.00)."""
+    normalized = pct.normalize()
+    # `normalize()` de un entero da notación exponencial (2E+1); `quantize` a entero lo evita.
+    return str(
+        normalized.quantize(Decimal(1)) if normalized == normalized.to_integral() else normalized
+    )
+
+
+def _diff_tax_lines(
+    baseline: tuple[TaxLineFields, ...],
+    confirmed: tuple[TaxLineFields, ...],
+    add: Callable[[str, object | None, object | None], None],
+) -> None:
+    """Empareja tramos por `iva_pct` y registra la corrección de `base`/`cuota` que difiere.
+
+    Un tramo presente solo en la confirmación es un alta (ai `None`); solo en el OCR, una baja
+    (human `None`). El nombre del campo lleva el tipo de IVA: `tax_line[21].base`.
+    """
+    by_pct_base: dict[Decimal, tuple[Decimal | None, Decimal | None]] = {
+        line.iva_pct: (line.base, line.cuota) for line in baseline
+    }
+    by_pct_conf: dict[Decimal, tuple[Decimal | None, Decimal | None]] = {
+        line.iva_pct: (line.base, line.cuota) for line in confirmed
+    }
+    for pct in sorted(set(by_pct_base) | set(by_pct_conf)):
+        label = _pct_label(pct)
+        base_ai, cuota_ai = by_pct_base.get(pct, (None, None))
+        base_human, cuota_human = by_pct_conf.get(pct, (None, None))
+        if base_ai != base_human:
+            add(f"tax_line[{label}].base", base_ai, base_human)
+        if cuota_ai != cuota_human:
+            add(f"tax_line[{label}].cuota", cuota_ai, cuota_human)
