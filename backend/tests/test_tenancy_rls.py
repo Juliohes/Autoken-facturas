@@ -469,6 +469,70 @@ async def test_ocr_extractions_rls_acota_por_empresa_ademas_de_por_tenant(
         await conn.close()
 
 
+async def _seed_invoice(
+    admin_dsn: str, tenant_id: str, company_id: str, file_id: str, user_id: str
+) -> str:
+    """Inserta (como superusuario) una factura confirmada de una empresa. Devuelve su id (S2.5)."""
+    conn = await asyncpg.connect(admin_dsn)
+    try:
+        invoice_id = str(uuid4())
+        await conn.execute(
+            "INSERT INTO invoices (id, tenant_id, company_id, uploaded_file_id, direction, "
+            "counterparty_cif_status, snapshot, status, confirmed_by) "
+            "VALUES ($1, $2, $3, $4, 'recibida', 'valid', '{}'::jsonb, 'confirmed', $5)",
+            invoice_id,
+            tenant_id,
+            company_id,
+            file_id,
+            user_id,
+        )
+        return invoice_id
+    finally:
+        await conn.close()
+
+
+async def test_invoices_rls_acota_por_empresa_ademas_de_por_tenant(db: dict[str, str]) -> None:
+    """`invoices` aplica RLS de DOS niveles (tenant + empresa), como `ocr_extractions` (S2.5).
+
+    En contexto de empresa X: solo se ve la factura de X (lectura acotada) y no se puede escribir
+    una de la empresa Y del mismo tenant (WITH CHECK de company). En asesoría se ven ambas.
+    """
+    tenant_a = str(uuid4())
+    company_x = await _seed_company(db["admin"], tenant_a, *_CIF_SOCIEDAD)
+    company_y = await _seed_company(db["admin"], tenant_a, *_NIF_AUTONOMO)
+    user_id = await _seed_user(db["admin"], tenant_a)
+    file_x = await _seed_uploaded_file(db["admin"], tenant_a, company_x, user_id, "a" * 64)
+    file_y = await _seed_uploaded_file(db["admin"], tenant_a, company_y, user_id, "b" * 64)
+    await _seed_invoice(db["admin"], tenant_a, company_x, file_x, user_id)
+    await _seed_invoice(db["admin"], tenant_a, company_y, file_y, user_id)
+
+    conn = await asyncpg.connect(db["app"])
+    try:
+        async with conn.transaction():
+            await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_a)
+            await conn.execute("SELECT set_config('app.company_id', $1, true)", company_x)
+            # Lectura acotada por empresa: solo la factura de X (no la de Y del mismo tenant).
+            assert await conn.fetchval("SELECT count(*) FROM invoices") == 1
+            # Escritura cruzada: insertar una factura de Y se rechaza por el WITH CHECK de company.
+            with pytest.raises(asyncpg.PostgresError):
+                await conn.execute(
+                    "INSERT INTO invoices (id, tenant_id, company_id, uploaded_file_id, direction, "
+                    "counterparty_cif_status, snapshot, status, confirmed_by) "
+                    "VALUES ($1, $2, $3, $4, 'recibida', 'valid', '{}'::jsonb, 'confirmed', $5)",
+                    str(uuid4()),
+                    tenant_a,
+                    company_y,
+                    file_y,
+                    user_id,
+                )
+        # En contexto de asesoría (sin company_id) se ven las dos facturas del tenant.
+        async with conn.transaction():
+            await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_a)
+            assert await conn.fetchval("SELECT count(*) FROM invoices") == 2
+    finally:
+        await conn.close()
+
+
 async def test_runtime_no_puede_borrar_tenant_y_el_audit_log_sobrevive(db: dict[str, str]) -> None:
     """El rol runtime no tiene DELETE sobre tenants -> no puede vaciar el audit_log por cascada."""
     tenant_a = str(uuid4())

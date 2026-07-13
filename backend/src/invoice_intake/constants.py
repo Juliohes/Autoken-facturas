@@ -18,10 +18,12 @@ class FileStatus(StrEnum):
 
     `pending_ocr` (recién subido, S2.1) -> `ocr_done` (OCR con todo alto y válido) / `needs_review`
     (algo dudoso/no leído/validación KO) / `ocr_failed` (el motor falló). El worker (S2.3) es quien
-    hace la transición desde `pending_ocr`.
+    hace la transición desde `pending_ocr`. Al confirmar (S2.5), un fichero en `ocr_done`/
+    `needs_review` pasa a `confirmed` (ya tiene factura persistida).
     """
 
     PENDING_OCR = "pending_ocr"
     OCR_DONE = "ocr_done"
     NEEDS_REVIEW = "needs_review"
     OCR_FAILED = "ocr_failed"
+    CONFIRMED = "confirmed"
