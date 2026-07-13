@@ -14,6 +14,7 @@ extracción; no toca la máquina de estados del fichero.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -46,6 +47,59 @@ _UPSERT = text(
     f" validations = EXCLUDED.validations, engine = EXCLUDED.engine, model = EXCLUDED.model, "
     f" raw = EXCLUDED.raw, status = EXCLUDED.status, updated_at = now()"
 )
+
+
+@dataclass(frozen=True)
+class ExtractionRecord:
+    """Extracción OCR vigente de un fichero (S2.3): baseline de la revisión y del diff.
+
+    `tax_lines` conserva el formato persistido por el worker (`[{base, rate, cuota}]`). Los
+    importes son `Decimal` (o `None` si el campo no se leyó, regla anti-alucinación).
+    """
+
+    issue_date: date | None
+    total_amount: Decimal | None
+    net_amount: Decimal | None
+    tax_amount: Decimal | None
+    tax_lines: list[dict[str, Any]]
+    counterparty_tax_id: str | None
+    counterparty_name: str | None
+    own_tax_id_present: bool
+    confidences: dict[str, Any]
+    status: str
+
+
+async def get_extraction(session: AsyncSession, uploaded_file_id: UUID) -> ExtractionRecord | None:
+    """Lee la extracción vigente de un fichero en el contexto (RLS), o `None` si no hay.
+
+    La usan la pantalla de revisión (S2.4) y la confirmación (S2.5): el baseline del OCR (S2.3) para
+    pintar los campos con su confianza y para el diff de `ocr_corrections` (campos que el humano
+    cambió respecto a lo que leyó la IA).
+    """
+    row = (
+        await session.execute(
+            text(
+                "SELECT issue_date, total_amount, net_amount, tax_amount, tax_lines, "
+                "counterparty_tax_id, counterparty_name, own_tax_id_present, confidences, status "
+                "FROM ocr_extractions WHERE uploaded_file_id = :fid"
+            ),
+            {"fid": str(uploaded_file_id)},
+        )
+    ).first()
+    if row is None:
+        return None
+    return ExtractionRecord(
+        issue_date=row.issue_date,
+        total_amount=row.total_amount,
+        net_amount=row.net_amount,
+        tax_amount=row.tax_amount,
+        tax_lines=list(row.tax_lines),
+        counterparty_tax_id=row.counterparty_tax_id,
+        counterparty_name=row.counterparty_name,
+        own_tax_id_present=row.own_tax_id_present,
+        confidences=dict(row.confidences),
+        status=row.status,
+    )
 
 
 async def upsert_extraction(

@@ -12,14 +12,19 @@ inyectan dobles; en producción (`resolvers=None`) se construyen los reales desd
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.config import Settings, get_settings
 from shared.db import tenant_session
 from shared.logging import get_logger
 from shared.tax_id import normalize_tax_id, validate_tax_id
 
+from .constants import CifStatus
 from .names import compare_names
 from .repository import (
     get_fresh_lookup,
@@ -117,7 +122,7 @@ async def verify_counterparty(
     structure = validate_tax_id(cif)
     if not structure.valid:
         return CounterpartyVerdict(
-            status="invalid",
+            status=CifStatus.INVALID,
             name_match=None,
             official_name=None,
             source="structure",
@@ -132,7 +137,7 @@ async def verify_counterparty(
         master = await get_supplier_master(session, cif=canonical)
         if master is not None:
             return CounterpartyVerdict(
-                status="valid",
+                status=CifStatus.VALID,
                 name_match=compare_names(name_read, master.name),
                 official_name=master.name,
                 source=_SUPPLIER_MASTER,
@@ -185,7 +190,7 @@ async def verify_counterparty(
                 # `name_match` se calcula SIEMPRE localmente (ruta fresca y cacheada por igual), así
                 # el veredicto no depende de si hubo caché ni del matching propio de la fuente.
                 return CounterpartyVerdict(
-                    status="valid",
+                    status=CifStatus.VALID,
                     name_match=compare_names(name_read, official_name),
                     official_name=official_name,
                     source=source,
@@ -195,7 +200,7 @@ async def verify_counterparty(
             # exists=False: solo la fuente AUTORITATIVA en negativo produce not_found (C6/C10).
             if resolver.negative_authoritative:
                 return CounterpartyVerdict(
-                    status="not_found",
+                    status=CifStatus.NOT_FOUND,
                     name_match=None,
                     official_name=official_name,
                     source=source,
@@ -206,7 +211,7 @@ async def verify_counterparty(
 
         # Agotadas las fuentes sin veredicto: revisar manual. Nunca invalid/not_found por un 3.º.
         return CounterpartyVerdict(
-            status="unverified",
+            status=CifStatus.UNVERIFIED,
             name_match=None,
             official_name=None,
             source="none",
@@ -215,13 +220,38 @@ async def verify_counterparty(
         )
 
 
+@asynccontextmanager
+async def _session_for(
+    tenant_id: str | UUID, session: AsyncSession | None
+) -> AsyncIterator[AsyncSession]:
+    """Cede la sesión inyectada (participa en la transacción del llamante) o abre una propia.
+
+    Con `session` inyectada (p. ej. la de la petición en `invoicing.confirm`), el upsert corre en la
+    MISMA transacción que el resto de la confirmación (atomicidad, spec S2.5 §4). Sin ella (llamada
+    suelta de S2.8), se abre una `tenant_session` con el contexto del tenant, como hasta ahora.
+    """
+    if session is not None:
+        yield session
+    else:
+        async with tenant_session(_as_uuid(tenant_id)) as own:
+            yield own
+
+
 async def record_confirmation(
-    tenant_id: str | UUID, cif: str, name: str, *, source: str = "human"
+    tenant_id: str | UUID,
+    cif: str,
+    name: str,
+    *,
+    source: str = "human",
+    session: AsyncSession | None = None,
 ) -> None:
     """Registra una confirmación humana en el supplier master del tenant (upsert, C12).
 
     Alimenta L2: una verificación posterior de ese CIF en el mismo tenant acertará sin red. Aislado
     por tenant (RLS): lo que una asesoría confirma NO lo heredan las demás.
+
+    `session` inyectada -> el upsert participa en esa transacción (la de la petición, para que la
+    confirmación sea atómica, S2.5 §4); `None` -> abre su propia `tenant_session` (uso suelto S2.8).
 
     Valida la estructura del CIF (mód-23) ANTES de sembrar: no se mete basura estructural en
     `counterparties` (el master es fuente autoritativa de L2). Un CIF inválido se rechaza con
@@ -233,5 +263,5 @@ async def record_confirmation(
             f"No se puede confirmar un CIF estructuralmente inválido: {structure.reason}"
         )
     canonical = normalize_tax_id(cif)
-    async with tenant_session(_as_uuid(tenant_id)) as session:
-        await upsert_supplier_master(session, cif=canonical, name=name, name_source=source)
+    async with _session_for(tenant_id, session) as sess:
+        await upsert_supplier_master(sess, cif=canonical, name=name, name_source=source)

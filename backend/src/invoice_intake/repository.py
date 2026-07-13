@@ -43,6 +43,15 @@ class UploadedFileRecord:
 
 
 @dataclass(frozen=True)
+class UploadedFileContext:
+    """Contexto mínimo de un fichero de intake para autorizar/confirmar (S2.5): empresa + estado."""
+
+    id: UUID
+    company_id: UUID
+    status: str
+
+
+@dataclass(frozen=True)
 class UploadedFileLocation:
     """Ubicación del objeto de un fichero de intake en MinIO (bucket/clave) + su MIME real."""
 
@@ -72,6 +81,25 @@ async def get_file_location(session: AsyncSession, file_id: UUID) -> UploadedFil
     return UploadedFileLocation(
         bucket=row.storage_bucket, key=row.storage_key, content_type=row.content_type
     )
+
+
+async def get_file_context(session: AsyncSession, file_id: UUID) -> UploadedFileContext | None:
+    """Empresa y estado de un fichero de intake visible en el contexto (RLS), o `None`.
+
+    La usa `invoicing` (S2.5) para autorizar el review/confirm (distinguir 403 vs 404 según si el
+    fichero es visible en el contexto de la petición o solo en asesoría) y para comprobar que el
+    fichero está en un estado confirmable. El SQL de `uploaded_files` vive en su contexto
+    (`invoice_intake`), no en `invoicing`.
+    """
+    row = (
+        await session.execute(
+            text("SELECT id, company_id, status FROM uploaded_files WHERE id = :id"),
+            {"id": str(file_id)},
+        )
+    ).first()
+    if row is None:
+        return None
+    return UploadedFileContext(id=row.id, company_id=row.company_id, status=row.status)
 
 
 async def transition_status(session: AsyncSession, file_id: UUID, status: FileStatus) -> None:
