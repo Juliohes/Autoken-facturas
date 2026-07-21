@@ -22,6 +22,7 @@ from counterparty.constants import CifStatus
 from counterparty.service import CounterpartyVerdict, record_confirmation, verify_counterparty
 from identity.dependencies import AuthContext
 from invoice_intake import repository as intake_repo
+from invoice_intake import service as intake_service
 from invoice_intake.constants import FileStatus
 from invoicing import repository
 from invoicing.corrections import (
@@ -35,7 +36,6 @@ from ocr import repository as ocr_repo
 from ocr.repository import ExtractionRecord
 from ocr.verification import TaxLine, check_invoice_totals
 from shared.audit import write_audit
-from shared.db import tenant_session
 from tenancy.constants import Role
 
 # Estados del fichero desde los que se puede revisar/confirmar (spec §2/§5): ya hay datos del OCR.
@@ -182,19 +182,19 @@ def _blocking_reasons(
 async def _load_file(identity: AuthContext, file_id: UUID) -> intake_repo.UploadedFileContext:
     """Carga el fichero autorizando por contexto (RLS): 403 empresa ajena del tenant, 404 otro.
 
-    Reutiliza el patrón de `invoice_intake.authorize_upload`: si el fichero es visible en el
-    contexto de la petición (empresa del `user` o asesoría del `tenant_admin`), el actor está
-    autorizado. Si no, se abre una sesión de asesoría (ve todo el tenant) para distinguir un fichero
-    de una empresa hermana del propio tenant (403) de uno de otro tenant/inexistente (404).
+    Delega en `invoice_intake.service.authorize_file_access` (S2.7): misma pregunta que la descarga
+    de fichero, una sola implementación en el módulo dueño de `uploaded_files`. Traduce las
+    excepciones de `invoice_intake` a las propias de `invoicing` (el router de este módulo solo
+    conoce `CompanyForbidden`/`FileNotVisible`).
     """
-    ctx = await intake_repo.get_file_context(identity.session, file_id)
-    if ctx is not None:
-        return ctx
-    async with tenant_session(identity.tenant_id) as sess:
-        in_tenant = await intake_repo.get_file_context(sess, file_id)
-    if in_tenant is not None:
-        raise CompanyForbidden
-    raise FileNotVisible
+    try:
+        return await intake_service.authorize_file_access(
+            identity.session, tenant_id=identity.tenant_id, file_id=file_id
+        )
+    except intake_service.FileForbidden as exc:
+        raise CompanyForbidden from exc
+    except intake_service.FileNotVisible as exc:
+        raise FileNotVisible from exc
 
 
 def _balance_ok(

@@ -1,4 +1,5 @@
-"""Endpoint HTTP del intake seguro (S2.1): `POST /api/v1/uploads`.
+"""Endpoints HTTP del intake seguro: `POST /api/v1/uploads` (S2.1) y
+`GET /api/v1/uploads/{file_id}/download-url` (S2.7).
 
 Capa HTTP **fina**: autentica y autoriza (portero de roles + pertenencia a la empresa), lee el
 fichero de forma acotada (guardarraíl de tamaño), y traduce el resultado o la excepción de dominio
@@ -26,6 +27,9 @@ router = APIRouter(prefix="/uploads", tags=["intake"])
 # Identidad autenticada autorizada a subir: empleado (`user`) o administrador de la asesoría
 # (`tenant_admin`). La pertenencia fina a la empresa destino la comprueba el servicio (C10).
 Uploader = Annotated[AuthContext, Depends(require_roles(Role.USER, Role.TENANT_ADMIN))]
+
+# Mismo conjunto de roles que `Uploader`; nombre propio porque descargar no es "subir" (S2.7).
+Downloader = Uploader
 
 
 class UploadOut(BaseModel):
@@ -119,3 +123,34 @@ async def upload_file(
         scan_status=record.scan_status,
         created_at=record.created_at,
     )
+
+
+class DownloadUrlOut(BaseModel):
+    """URL firmada de descarga de un fichero (respuesta 200, S2.7)."""
+
+    url: str
+    expires_in: int
+
+
+@router.get("/{file_id}/download-url")
+async def download_url(identity: Downloader, file_id: UUID) -> DownloadUrlOut:
+    """URL firmada (5 min) para descargar un fichero de intake. Ver spec S2.7 para los códigos.
+
+    Autorización idéntica a `review`/`confirm` (S2.5): 403 empresa hermana del propio tenant, 404
+    otro tenant/inexistente. La descarga no depende del estado del fichero (spec S2.7 §5).
+    """
+    try:
+        url = await service.get_download_url(
+            identity.session, tenant_id=identity.tenant_id, file_id=file_id
+        )
+    except service.FileForbidden as exc:
+        raise HTTPException(
+            status_code=403, detail="No perteneces a la empresa del fichero"
+        ) from exc
+    except service.FileNotVisible as exc:
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
+    except storage.StorageUnavailable as exc:
+        raise HTTPException(
+            status_code=503, detail="Almacenamiento no disponible, reintenta"
+        ) from exc
+    return DownloadUrlOut(url=url, expires_in=service.DOWNLOAD_URL_TTL_SECONDS)
