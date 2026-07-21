@@ -12,6 +12,7 @@ Aislamiento: cada asesoría tiene su **propio bucket** `tenant-{tenant_id}`; la 
 from __future__ import annotations
 
 import io
+from datetime import timedelta
 from functools import lru_cache
 
 from minio import Minio
@@ -113,6 +114,20 @@ def get_object(bucket: str, key: str) -> bytes:
             response.release_conn()
     except (Urllib3HTTPError, S3Error, ConnectionError, OSError) as exc:
         raise StorageUnavailable(f"No se pudo descargar el objeto de MinIO: {exc}") from exc
+
+
+def presigned_get_url(bucket: str, key: str, expires_seconds: int) -> str:
+    """URL de descarga firmada de `bucket/key`, válida `expires_seconds` (S2.7, ADR-0015).
+
+    Único camino sancionado para que un cliente descargue el objeto sin credenciales de MinIO ni
+    pasar el fichero entero por la API (spec S2.7 §1). Fallo -> `StorageUnavailable` (503), igual
+    que el resto de operaciones del almacén.
+    """
+    client = _client()
+    try:
+        return client.presigned_get_object(bucket, key, expires=timedelta(seconds=expires_seconds))
+    except (Urllib3HTTPError, S3Error, ConnectionError, OSError) as exc:
+        raise StorageUnavailable(f"No se pudo generar la URL de descarga: {exc}") from exc
 
 
 def object_exists(bucket: str, key: str) -> bool:

@@ -28,6 +28,10 @@ from tenancy.constants import Role
 _AUDIT_ENTITY = "uploaded_file"
 AUDIT_ACTION_UPLOAD = "intake.upload"
 
+# Expiración fija y corta de la URL firmada de descarga (S2.7 spec §4): no configurable por el
+# cliente. Pensada para que el navegador cargue la imagen al momento, no para compartir el enlace.
+DOWNLOAD_URL_TTL_SECONDS = 300
+
 
 class IntakeError(Exception):
     """Raíz de los errores de dominio del intake."""
@@ -55,6 +59,14 @@ class DuplicateUpload(IntakeError):
     def __init__(self, duplicate_of: UUID) -> None:
         super().__init__(f"Fichero duplicado en la empresa (original {duplicate_of})")
         self.duplicate_of = duplicate_of
+
+
+class FileForbidden(IntakeError):
+    """El fichero pertenece a otra empresa del propio tenant (-> 403)."""
+
+
+class FileNotVisible(IntakeError):
+    """El fichero no existe en el contexto del actor (inexistente u otro tenant) (-> 404)."""
 
 
 def _sha256(content: bytes) -> str:
@@ -95,6 +107,43 @@ async def authorize_upload(
     if exists:
         raise NotAMember
     raise CompanyNotInContext
+
+
+async def authorize_file_access(
+    session: AsyncSession, *, tenant_id: UUID, file_id: UUID
+) -> repository.UploadedFileContext:
+    """Autoriza el acceso a un fichero ya existente por su visibilidad en el contexto (RLS).
+
+    Misma pregunta ("¿es visible este fichero para el actor?") que usan
+    `invoicing.service._load_file` (S2.5, review/confirm) y la descarga (S2.7): visible en la
+    sesión de la petición -> autorizado; visible solo en el tenant (empresa hermana) ->
+    `FileForbidden` (403); ni eso -> `FileNotVisible` (404, inexistente u otro tenant). Una sola
+    implementación, en el módulo dueño de `uploaded_files`.
+    """
+    ctx = await repository.get_file_context(session, file_id)
+    if ctx is not None:
+        return ctx
+    async with tenant_session(tenant_id) as sess:
+        in_tenant = await repository.get_file_context(sess, file_id)
+    if in_tenant is not None:
+        raise FileForbidden
+    raise FileNotVisible
+
+
+async def get_download_url(session: AsyncSession, *, tenant_id: UUID, file_id: UUID) -> str:
+    """URL de descarga firmada del fichero (S2.7): autoriza, localiza y firma en una operación.
+
+    Autorización idéntica a `authorize_file_access` (403/404 vía `FileForbidden`/`FileNotVisible`);
+    solo si el fichero es visible se toca MinIO (spec §4: nunca se genera una URL de un fichero que
+    el actor no puede ver). Puede lanzar `storage.StorageUnavailable` (-> 503) si MinIO falla al
+    firmar.
+    """
+    ctx = await authorize_file_access(session, tenant_id=tenant_id, file_id=file_id)
+    location = await repository.get_file_location(session, ctx.id)
+    assert location is not None  # ctx ya confirmó que la fila existe en esta misma sesión
+    return await asyncio.to_thread(
+        storage.presigned_get_url, location.bucket, location.key, DOWNLOAD_URL_TTL_SECONDS
+    )
 
 
 async def create_upload(
