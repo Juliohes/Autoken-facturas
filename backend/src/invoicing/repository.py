@@ -9,11 +9,13 @@ petición. Todas las escrituras participan en la transacción de la petición (a
 from __future__ import annotations
 
 import json
-from datetime import date
+from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+import structlog
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,12 +23,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from invoicing.corrections import Correction
 from shared.integrity import violates_unique_constraint
 
+logger = structlog.get_logger("invoicing")
+
 # `tenant_id` de las escrituras derivado del contexto de la sesión (coherente con la RLS).
 _TENANT_FROM_CONTEXT = "NULLIF(current_setting('app.tenant_id', true), '')::uuid"
 
 # Nombre del UNIQUE `(uploaded_file_id)` (migración 0007): red última de "una factura por fichero",
 # resistente a la carrera de dos confirmaciones concurrentes (C9). Traduce su violación a un 409.
 _UPLOADED_FILE_UNIQUE = "invoices_uploaded_file_unique"
+
+# Ventana móvil del historial (S2.6 spec §2/§4): facturas confirmadas en los últimos N días.
+HISTORY_WINDOW_DAYS = 7
+
+# Cota defensiva de resultados del historial (S2.6 spec §4): la ventana de 7 días ya acota el
+# volumen; esta cota es la red última contra una lista sin fin.
+HISTORY_LIMIT = 200
+
+
+@dataclass(frozen=True)
+class HistoryEntry:
+    """Una entrada del historial de facturas confirmadas (S2.6, spec §2)."""
+
+    id: UUID
+    issue_date: date | None
+    direction: str
+    counterparty_tax_id: str | None
+    counterparty_name: str | None
+    counterparty_cif_status: str
+    total_amount: Decimal | None
+    confirmed_at: datetime
 
 
 def is_duplicate_invoice(exc: IntegrityError) -> bool:
@@ -163,3 +188,42 @@ async def insert_corrections(
                 "corrected_by": str(corrected_by),
             },
         )
+
+
+async def list_history(session: AsyncSession) -> list[HistoryEntry]:
+    """Facturas confirmadas de los últimos 7 días del contexto (S2.6), la más reciente primero.
+
+    Sin filtro de `tenant_id`/`company_id` por parámetro: la RLS de dos niveles de `invoices`
+    (migración 0007) ya acota el resultado al contexto de la sesión (spec §4, anti-cruce de
+    tenants). Excluye `is_test` (regla 3) y aplica la cota defensiva `HISTORY_LIMIT`; si se alcanza,
+    se registra (spec §5: nunca se trunca en silencio como si fuera todo).
+    """
+    rows = (
+        await session.execute(
+            text(
+                "SELECT id, issue_date, direction, counterparty_tax_id, counterparty_name, "
+                " counterparty_cif_status, total_amount, confirmed_at "
+                "FROM invoices "
+                "WHERE is_test = false AND confirmed_at >= "
+                f"now() - interval '{HISTORY_WINDOW_DAYS} days' "
+                "ORDER BY confirmed_at DESC "
+                "LIMIT :limit"
+            ),
+            {"limit": HISTORY_LIMIT},
+        )
+    ).all()
+    if len(rows) == HISTORY_LIMIT:
+        logger.warning("invoice_history.limit_reached", limit=HISTORY_LIMIT)
+    return [
+        HistoryEntry(
+            id=row.id,
+            issue_date=row.issue_date,
+            direction=row.direction,
+            counterparty_tax_id=row.counterparty_tax_id,
+            counterparty_name=row.counterparty_name,
+            counterparty_cif_status=row.counterparty_cif_status,
+            total_amount=row.total_amount,
+            confirmed_at=row.confirmed_at,
+        )
+        for row in rows
+    ]

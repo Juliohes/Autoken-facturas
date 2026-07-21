@@ -1,1 +1,1565 @@
-{"openapi": "3.1.0", "info": {"title": "Autoken Facturas v2", "version": "0.1.0"}, "paths": {"/api/v1/health": {"get": {"tags": ["health"], "summary": "Health", "description": "Devuelve el estado del servicio (liveness).\n\n`Settings` se recibe por inyecci\u00f3n de dependencias (DIP), no resolvi\u00e9ndola dentro del\nhandler: as\u00ed es sustituible en test v\u00eda `app.dependency_overrides` (BP-3).", "operationId": "health_api_v1_health_get", "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HealthResponse"}}}}}}}, "/api/v1/tenants/current": {"get": {"tags": ["tenancy"], "summary": "Current Tenant", "description": "Datos p\u00fablicos del tenant resuelto por el subdominio (para el login/branding).\n\n404 neutro si el host no corresponde a un tenant activo (inexistente, suspendido o no-tenant):\nla respuesta es id\u00e9ntica en todos esos casos, no se revela qu\u00e9 tenants existen.", "operationId": "current_tenant_api_v1_tenants_current_get", "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"additionalProperties": true, "type": "object", "title": "Response Current Tenant Api V1 Tenants Current Get"}}}}}}}, "/api/v1/auth/login": {"post": {"tags": ["auth"], "summary": "Login", "description": "Autentica email + contrase\u00f1a (+ TOTP si aplica): access token + cookie de refresh.", "operationId": "login_api_v1_auth_login_post", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/LoginRequest"}}}, "required": true}, "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/api/v1/auth/refresh": {"post": {"tags": ["auth"], "summary": "Refresh", "description": "Rota el refresh de la cookie: nuevo access + nueva cookie; el anterior queda invalidado.", "operationId": "refresh_api_v1_auth_refresh_post", "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {}}}}}}}, "/api/v1/auth/logout": {"post": {"tags": ["auth"], "summary": "Logout", "description": "Revoca la familia del refresh y borra la cookie. Idempotente sin cookie.", "operationId": "logout_api_v1_auth_logout_post", "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {}}}}}}}, "/api/v1/auth/activate": {"post": {"tags": ["auth"], "summary": "Activate", "description": "Fija la contrase\u00f1a y genera el secreto TOTP; devuelve la URI `otpauth://` para el QR.", "operationId": "activate_api_v1_auth_activate_post", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivateRequest"}}}, "required": true}, "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"additionalProperties": {"type": "string"}, "type": "object", "title": "Response Activate Api V1 Auth Activate Post"}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/api/v1/auth/activate/confirm": {"post": {"tags": ["auth"], "summary": "Activate Confirm", "description": "Confirma el TOTP: enrola el segundo factor y consume el token de activaci\u00f3n (un solo uso).", "operationId": "activate_confirm_api_v1_auth_activate_confirm_post", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivateConfirmRequest"}}}, "required": true}, "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"additionalProperties": {"type": "string"}, "type": "object", "title": "Response Activate Confirm Api V1 Auth Activate Confirm Post"}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/api/v1/auth/me": {"get": {"tags": ["auth"], "summary": "Me", "description": "Testigo protegido: la identidad del token, le\u00edda bajo el contexto del tenant (RLS).\n\nIncluye `company` (id y nombre) para un `user` acotado a su empresa; `null` para un\n`tenant_admin` (contexto de asesor\u00eda, ve todo el tenant). Ver spec S1.6 (C5/C6).", "operationId": "me_api_v1_auth_me_get", "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"additionalProperties": true, "type": "object", "title": "Response Me Api V1 Auth Me Get"}}}}}}}, "/api/v1/register": {"post": {"tags": ["registration"], "summary": "Register", "description": "Alta autoservicio en el subdominio. CIF/contrase\u00f1a inv\u00e1lidos -> 422; tope por IP -> 429.\n\nRespuesta **gen\u00e9rica e id\u00e9ntica** exista o no ya el email (anti-enumeraci\u00f3n): un email duplicado\nno crea nada pero responde igual que un alta correcta.", "operationId": "register_api_v1_register_post", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/RegisterRequest"}}}, "required": true}, "responses": {"201": {"description": "Successful Response", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RegisterResponse"}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/api/v1/registrations": {"get": {"tags": ["registration"], "summary": "List Registrations", "description": "Lista los registros pendientes de la asesor\u00eda (solo `tenant_admin`; la RLS acota).", "operationId": "list_registrations_api_v1_registrations_get", "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"items": {"$ref": "#/components/schemas/RegistrationOut"}, "type": "array", "title": "Response List Registrations Api V1 Registrations Get"}}}}}}}, "/api/v1/registrations/{user_id}/approve": {"post": {"tags": ["registration"], "summary": "Approve Registration", "description": "Aprueba un registro: activa usuario + empresa. Idempotente; de otro tenant -> 404.", "operationId": "approve_registration_api_v1_registrations__user_id__approve_post", "parameters": [{"name": "user_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid", "title": "User Id"}}], "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ApprovalResponse"}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/api/v1/registrations/{user_id}/reject": {"post": {"tags": ["registration"], "summary": "Reject Registration", "description": "Rechaza un registro pendiente: borra el usuario y su empresa hu\u00e9rfana. Otro tenant -> 404.", "operationId": "reject_registration_api_v1_registrations__user_id__reject_post", "parameters": [{"name": "user_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid", "title": "User Id"}}], "responses": {"204": {"description": "Successful Response"}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/api/v1/companies": {"get": {"tags": ["companies"], "summary": "List Companies", "description": "Lista las empresas de la asesor\u00eda (solo `tenant_admin`; la RLS acota lo visible).", "operationId": "list_companies_api_v1_companies_get", "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"items": {"$ref": "#/components/schemas/CompanyOut"}, "type": "array", "title": "Response List Companies Api V1 Companies Get"}}}}}}, "post": {"tags": ["companies"], "summary": "Create Company", "description": "Da de alta una empresa `active`. CIF inv\u00e1lido -> 422; CIF ya existente -> 409.", "operationId": "create_company_api_v1_companies_post", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/CompanyCreate"}}}, "required": true}, "responses": {"201": {"description": "Successful Response", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CompanyOut"}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/api/v1/companies/{company_id}": {"patch": {"tags": ["companies"], "summary": "Update Company", "description": "Edita una empresa. CIF inv\u00e1lido -> 422; CIF duplicado -> 409; de otro tenant -> 404.", "operationId": "update_company_api_v1_companies__company_id__patch", "parameters": [{"name": "company_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid", "title": "Company Id"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CompanyUpdate"}}}}, "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CompanyOut"}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}, "delete": {"tags": ["companies"], "summary": "Delete Company", "description": "Borra una empresa sin dependencias. Con usuarios -> 409; de otro tenant -> 404.", "operationId": "delete_company_api_v1_companies__company_id__delete", "parameters": [{"name": "company_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid", "title": "Company Id"}}], "responses": {"204": {"description": "Successful Response"}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/api/v1/companies/import": {"post": {"tags": ["companies"], "summary": "Import Companies", "description": "Importa un `.xlsx` (multipart `file`). Fichero/columnas inv\u00e1lidos -> 400 controlado.\n\nGuardarra\u00edles anti-DoS por memoria (fichero compartido por todas las asesor\u00edas): se rechaza con\n413 el fichero que supera `companies_import_max_bytes` ANTES de parsearlo (lectura acotada, sin\nmaterializar un `.xlsx` gigante o zip-bomb en memoria), y el parseo corta a\n`companies_import_max_rows` filas.", "operationId": "import_companies_api_v1_companies_import_post", "requestBody": {"content": {"multipart/form-data": {"schema": {"$ref": "#/components/schemas/Body_import_companies_api_v1_companies_import_post"}}}, "required": true}, "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportReportOut"}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/api/v1/uploads": {"post": {"tags": ["intake"], "summary": "Upload File", "description": "Sube un fichero de factura a una empresa. Ver spec S2.1 para los c\u00f3digos (201/4xx/503).\n\nOrden: pertenencia (403/404) -> tama\u00f1o (413) -> el servicio hace el resto (415/422/409/503/201).", "operationId": "upload_file_api_v1_uploads_post", "requestBody": {"content": {"multipart/form-data": {"schema": {"$ref": "#/components/schemas/Body_upload_file_api_v1_uploads_post"}}}, "required": true}, "responses": {"201": {"description": "Successful Response", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadOut"}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/api/v1/uploads/{file_id}/review": {"get": {"tags": ["invoicing"], "summary": "Review Upload", "description": "Datos de revisi\u00f3n de un fichero ya le\u00eddo (S2.4). 200 con datos; 403/404/409 por acceso.", "operationId": "review_upload_api_v1_uploads__file_id__review_get", "parameters": [{"name": "file_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid", "title": "File Id"}}], "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"type": "object", "additionalProperties": true, "title": "Response Review Upload Api V1 Uploads  File Id  Review Get"}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/api/v1/uploads/{file_id}/confirm": {"post": {"tags": ["invoicing"], "summary": "Confirm Upload", "description": "Confirma un fichero y persiste su factura (S2.5). 201 con el id; 4xx seg\u00fan las guardas.", "operationId": "confirm_upload_api_v1_uploads__file_id__confirm_post", "parameters": [{"name": "file_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid", "title": "File Id"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ConfirmIn"}}}}, "responses": {"201": {"description": "Successful Response", "content": {"application/json": {"schema": {"type": "object", "additionalProperties": true, "title": "Response Confirm Upload Api V1 Uploads  File Id  Confirm Post"}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}}, "components": {"schemas": {"ActivateConfirmRequest": {"properties": {"token": {"type": "string", "title": "Token"}, "totp_code": {"type": "string", "title": "Totp Code"}}, "type": "object", "required": ["token", "totp_code"], "title": "ActivateConfirmRequest", "description": "Cuerpo de `POST /auth/activate/confirm`."}, "ActivateRequest": {"properties": {"token": {"type": "string", "title": "Token"}, "password": {"type": "string", "title": "Password"}}, "type": "object", "required": ["token", "password"], "title": "ActivateRequest", "description": "Cuerpo de `POST /auth/activate`. La pol\u00edtica de contrase\u00f1a la valida el endpoint."}, "ApprovalResponse": {"properties": {"status": {"type": "string", "title": "Status"}}, "type": "object", "required": ["status"], "title": "ApprovalResponse", "description": "Respuesta de la aprobaci\u00f3n de un registro."}, "Body_import_companies_api_v1_companies_import_post": {"properties": {"file": {"type": "string", "contentMediaType": "application/octet-stream", "title": "File"}}, "type": "object", "required": ["file"], "title": "Body_import_companies_api_v1_companies_import_post"}, "Body_upload_file_api_v1_uploads_post": {"properties": {"file": {"type": "string", "contentMediaType": "application/octet-stream", "title": "File"}, "company_id": {"type": "string", "format": "uuid", "title": "Company Id"}}, "type": "object", "required": ["file", "company_id"], "title": "Body_upload_file_api_v1_uploads_post"}, "CompanyCreate": {"properties": {"name": {"type": "string", "title": "Name"}, "cif": {"type": "string", "title": "Cif"}, "notes": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Notes"}}, "type": "object", "required": ["name", "cif"], "title": "CompanyCreate", "description": "Cuerpo de `POST /companies`."}, "CompanyOut": {"properties": {"id": {"type": "string", "format": "uuid", "title": "Id"}, "name": {"type": "string", "title": "Name"}, "cif": {"type": "string", "title": "Cif"}, "status": {"type": "string", "title": "Status"}}, "type": "object", "required": ["id", "name", "cif", "status"], "title": "CompanyOut", "description": "Empresa en la respuesta (alta, edici\u00f3n y listado)."}, "CompanyUpdate": {"properties": {"name": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Name"}, "cif": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Cif"}, "notes": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Notes"}, "status": {"anyOf": [{"type": "string", "enum": ["active", "pending"]}, {"type": "null"}], "title": "Status"}}, "type": "object", "title": "CompanyUpdate", "description": "Cuerpo de `PATCH /companies/{id}` (patch parcial: solo los campos presentes cambian)."}, "ConfirmIn": {"properties": {"direction": {"type": "string", "enum": ["recibida", "emitida"], "title": "Direction"}, "issue_date": {"anyOf": [{"type": "string", "format": "date"}, {"type": "null"}], "title": "Issue Date"}, "counterparty_tax_id": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Counterparty Tax Id"}, "counterparty_name": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Counterparty Name"}, "net_amount": {"anyOf": [{"type": "number"}, {"type": "string", "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"}, {"type": "null"}], "title": "Net Amount"}, "tax_amount": {"anyOf": [{"type": "number"}, {"type": "string", "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"}, {"type": "null"}], "title": "Tax Amount"}, "total_amount": {"anyOf": [{"type": "number"}, {"type": "string", "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"}, {"type": "null"}], "title": "Total Amount"}, "irpf_amount": {"anyOf": [{"type": "number"}, {"type": "string", "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"}, {"type": "null"}], "title": "Irpf Amount"}, "tax_lines": {"items": {"$ref": "#/components/schemas/TaxLineIn"}, "type": "array", "title": "Tax Lines", "default": []}, "responsibility_accepted": {"type": "boolean", "title": "Responsibility Accepted", "default": false}, "is_test": {"type": "boolean", "title": "Is Test", "default": false}}, "type": "object", "required": ["direction"], "title": "ConfirmIn", "description": "Cuerpo de la confirmaci\u00f3n (S2.5): datos confirmados por el humano."}, "DuplicateRowOut": {"properties": {"row": {"type": "integer", "title": "Row"}, "cif": {"type": "string", "title": "Cif"}}, "type": "object", "required": ["row", "cif"], "title": "DuplicateRowOut", "description": "Fila omitida por CIF ya existente en el informe: n\u00famero de fila (1-based) y CIF."}, "HTTPValidationError": {"properties": {"detail": {"items": {"$ref": "#/components/schemas/ValidationError"}, "type": "array", "title": "Detail"}}, "type": "object", "title": "HTTPValidationError"}, "HealthResponse": {"properties": {"status": {"type": "string", "title": "Status"}, "service": {"type": "string", "title": "Service"}, "version": {"type": "string", "title": "Version"}, "environment": {"type": "string", "title": "Environment"}}, "type": "object", "required": ["status", "service", "version", "environment"], "title": "HealthResponse", "description": "Respuesta del healthcheck."}, "ImportReportOut": {"properties": {"created": {"type": "integer", "title": "Created"}, "invalid": {"items": {"$ref": "#/components/schemas/InvalidRowOut"}, "type": "array", "title": "Invalid"}, "duplicates": {"items": {"$ref": "#/components/schemas/DuplicateRowOut"}, "type": "array", "title": "Duplicates"}, "truncated": {"type": "boolean", "title": "Truncated"}}, "type": "object", "required": ["created", "invalid", "duplicates", "truncated"], "title": "ImportReportOut", "description": "Informe de la importaci\u00f3n del Excel."}, "InvalidRowOut": {"properties": {"row": {"type": "integer", "title": "Row"}, "reason": {"type": "string", "title": "Reason"}}, "type": "object", "required": ["row", "reason"], "title": "InvalidRowOut", "description": "Fila rechazada en el informe de importaci\u00f3n: n\u00famero de fila (1-based) y motivo."}, "LoginRequest": {"properties": {"email": {"type": "string", "title": "Email"}, "password": {"type": "string", "title": "Password"}, "totp_code": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Totp Code"}}, "type": "object", "required": ["email", "password"], "title": "LoginRequest", "description": "Cuerpo de `POST /auth/login`."}, "RegisterRequest": {"properties": {"email": {"type": "string", "title": "Email"}, "company_name": {"type": "string", "title": "Company Name"}, "cif": {"type": "string", "title": "Cif"}, "password": {"type": "string", "title": "Password"}}, "type": "object", "required": ["email", "company_name", "cif", "password"], "title": "RegisterRequest", "description": "Cuerpo de `POST /register`."}, "RegisterResponse": {"properties": {"status": {"type": "string", "title": "Status"}}, "type": "object", "required": ["status"], "title": "RegisterResponse", "description": "Respuesta gen\u00e9rica del registro (id\u00e9ntica exista o no el email: anti-enumeraci\u00f3n)."}, "RegistrationOut": {"properties": {"id": {"type": "string", "format": "uuid", "title": "Id"}, "email": {"type": "string", "title": "Email"}, "company": {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "Company"}, "joins_existing_company": {"type": "boolean", "title": "Joins Existing Company"}}, "type": "object", "required": ["id", "email", "company", "joins_existing_company"], "title": "RegistrationOut", "description": "Un registro pendiente en el listado del admin (email + empresa + se\u00f1al de uni\u00f3n a existente).\n\n`joins_existing_company` avisa a la pantalla de aprobaci\u00f3n de que el CIF casaba con una empresa\nya activa (el usuario se une a ella, no crea empresa nueva): defensa ante secuestro por CIF."}, "TaxLineIn": {"properties": {"iva_pct": {"anyOf": [{"type": "number"}, {"type": "string", "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"}, {"type": "null"}], "title": "Iva Pct"}, "base": {"anyOf": [{"type": "number"}, {"type": "string", "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"}, {"type": "null"}], "title": "Base"}, "cuota": {"anyOf": [{"type": "number"}, {"type": "string", "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"}, {"type": "null"}], "title": "Cuota"}}, "type": "object", "title": "TaxLineIn", "description": "Un tramo de IVA confirmado del body de `confirm`."}, "UploadOut": {"properties": {"id": {"type": "string", "format": "uuid", "title": "Id"}, "company_id": {"type": "string", "format": "uuid", "title": "Company Id"}, "content_type": {"type": "string", "title": "Content Type"}, "size_bytes": {"type": "integer", "title": "Size Bytes"}, "sha256": {"type": "string", "title": "Sha256"}, "status": {"type": "string", "title": "Status"}, "scan_status": {"type": "string", "title": "Scan Status"}, "created_at": {"type": "string", "format": "date-time", "title": "Created At"}}, "type": "object", "required": ["id", "company_id", "content_type", "size_bytes", "sha256", "status", "scan_status", "created_at"], "title": "UploadOut", "description": "Fichero de intake creado (respuesta 201)."}, "ValidationError": {"properties": {"loc": {"items": {"anyOf": [{"type": "string"}, {"type": "integer"}]}, "type": "array", "title": "Location"}, "msg": {"type": "string", "title": "Message"}, "type": {"type": "string", "title": "Error Type"}, "input": {"title": "Input"}, "ctx": {"type": "object", "title": "Context"}}, "type": "object", "required": ["loc", "msg", "type"], "title": "ValidationError"}}}}
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Autoken Facturas v2",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "description": "Devuelve el estado del servicio (liveness).\n\n`Settings` se recibe por inyecci\u00f3n de dependencias (DIP), no resolvi\u00e9ndola dentro del\nhandler: as\u00ed es sustituible en test v\u00eda `app.dependency_overrides` (BP-3).",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/current": {
+      "get": {
+        "tags": [
+          "tenancy"
+        ],
+        "summary": "Current Tenant",
+        "description": "Datos p\u00fablicos del tenant resuelto por el subdominio (para el login/branding).\n\n404 neutro si el host no corresponde a un tenant activo (inexistente, suspendido o no-tenant):\nla respuesta es id\u00e9ntica en todos esos casos, no se revela qu\u00e9 tenants existen.",
+        "operationId": "current_tenant_api_v1_tenants_current_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Current Tenant Api V1 Tenants Current Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "description": "Autentica email + contrase\u00f1a (+ TOTP si aplica): access token + cookie de refresh.",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Refresh",
+        "description": "Rota el refresh de la cookie: nuevo access + nueva cookie; el anterior queda invalidado.",
+        "operationId": "refresh_api_v1_auth_refresh_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "description": "Revoca la familia del refresh y borra la cookie. Idempotente sin cookie.",
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/activate": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Activate",
+        "description": "Fija la contrase\u00f1a y genera el secreto TOTP; devuelve la URI `otpauth://` para el QR.",
+        "operationId": "activate_api_v1_auth_activate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Activate Api V1 Auth Activate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/activate/confirm": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Activate Confirm",
+        "description": "Confirma el TOTP: enrola el segundo factor y consume el token de activaci\u00f3n (un solo uso).",
+        "operationId": "activate_confirm_api_v1_auth_activate_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivateConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Activate Confirm Api V1 Auth Activate Confirm Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me",
+        "description": "Testigo protegido: la identidad del token, le\u00edda bajo el contexto del tenant (RLS).\n\nIncluye `company` (id y nombre) para un `user` acotado a su empresa; `null` para un\n`tenant_admin` (contexto de asesor\u00eda, ve todo el tenant). Ver spec S1.6 (C5/C6).",
+        "operationId": "me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Me Api V1 Auth Me Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/register": {
+      "post": {
+        "tags": [
+          "registration"
+        ],
+        "summary": "Register",
+        "description": "Alta autoservicio en el subdominio. CIF/contrase\u00f1a inv\u00e1lidos -> 422; tope por IP -> 429.\n\nRespuesta **gen\u00e9rica e id\u00e9ntica** exista o no ya el email (anti-enumeraci\u00f3n): un email duplicado\nno crea nada pero responde igual que un alta correcta.",
+        "operationId": "register_api_v1_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/registrations": {
+      "get": {
+        "tags": [
+          "registration"
+        ],
+        "summary": "List Registrations",
+        "description": "Lista los registros pendientes de la asesor\u00eda (solo `tenant_admin`; la RLS acota).",
+        "operationId": "list_registrations_api_v1_registrations_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RegistrationOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Registrations Api V1 Registrations Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/registrations/{user_id}/approve": {
+      "post": {
+        "tags": [
+          "registration"
+        ],
+        "summary": "Approve Registration",
+        "description": "Aprueba un registro: activa usuario + empresa. Idempotente; de otro tenant -> 404.",
+        "operationId": "approve_registration_api_v1_registrations__user_id__approve_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/registrations/{user_id}/reject": {
+      "post": {
+        "tags": [
+          "registration"
+        ],
+        "summary": "Reject Registration",
+        "description": "Rechaza un registro pendiente: borra el usuario y su empresa hu\u00e9rfana. Otro tenant -> 404.",
+        "operationId": "reject_registration_api_v1_registrations__user_id__reject_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/companies": {
+      "get": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "List Companies",
+        "description": "Lista las empresas de la asesor\u00eda (solo `tenant_admin`; la RLS acota lo visible).",
+        "operationId": "list_companies_api_v1_companies_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CompanyOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Companies Api V1 Companies Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Create Company",
+        "description": "Da de alta una empresa `active`. CIF inv\u00e1lido -> 422; CIF ya existente -> 409.",
+        "operationId": "create_company_api_v1_companies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/companies/{company_id}": {
+      "patch": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Update Company",
+        "description": "Edita una empresa. CIF inv\u00e1lido -> 422; CIF duplicado -> 409; de otro tenant -> 404.",
+        "operationId": "update_company_api_v1_companies__company_id__patch",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Delete Company",
+        "description": "Borra una empresa sin dependencias. Con usuarios -> 409; de otro tenant -> 404.",
+        "operationId": "delete_company_api_v1_companies__company_id__delete",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/companies/import": {
+      "post": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Import Companies",
+        "description": "Importa un `.xlsx` (multipart `file`). Fichero/columnas inv\u00e1lidos -> 400 controlado.\n\nGuardarra\u00edles anti-DoS por memoria (fichero compartido por todas las asesor\u00edas): se rechaza con\n413 el fichero que supera `companies_import_max_bytes` ANTES de parsearlo (lectura acotada, sin\nmaterializar un `.xlsx` gigante o zip-bomb en memoria), y el parseo corta a\n`companies_import_max_rows` filas.",
+        "operationId": "import_companies_api_v1_companies_import_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_companies_api_v1_companies_import_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportReportOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads": {
+      "post": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Upload File",
+        "description": "Sube un fichero de factura a una empresa. Ver spec S2.1 para los c\u00f3digos (201/4xx/503).\n\nOrden: pertenencia (403/404) -> tama\u00f1o (413) -> el servicio hace el resto (415/422/409/503/201).",
+        "operationId": "upload_file_api_v1_uploads_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_file_api_v1_uploads_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{file_id}/review": {
+      "get": {
+        "tags": [
+          "invoicing"
+        ],
+        "summary": "Review Upload",
+        "description": "Datos de revisi\u00f3n de un fichero ya le\u00eddo (S2.4). 200 con datos; 403/404/409 por acceso.",
+        "operationId": "review_upload_api_v1_uploads__file_id__review_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Review Upload Api V1 Uploads  File Id  Review Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{file_id}/confirm": {
+      "post": {
+        "tags": [
+          "invoicing"
+        ],
+        "summary": "Confirm Upload",
+        "description": "Confirma un fichero y persiste su factura (S2.5). 201 con el id; 4xx seg\u00fan las guardas.",
+        "operationId": "confirm_upload_api_v1_uploads__file_id__confirm_post",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Confirm Upload Api V1 Uploads  File Id  Confirm Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoices/history": {
+      "get": {
+        "tags": [
+          "invoicing"
+        ],
+        "summary": "Invoice History",
+        "description": "Facturas confirmadas de los \u00faltimos 7 d\u00edas del contexto del usuario (S2.6). Solo lectura.",
+        "operationId": "invoice_history_api_v1_invoices_history_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActivateConfirmRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "totp_code": {
+            "type": "string",
+            "title": "Totp Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "totp_code"
+        ],
+        "title": "ActivateConfirmRequest",
+        "description": "Cuerpo de `POST /auth/activate/confirm`."
+      },
+      "ActivateRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "ActivateRequest",
+        "description": "Cuerpo de `POST /auth/activate`. La pol\u00edtica de contrase\u00f1a la valida el endpoint."
+      },
+      "ApprovalResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ApprovalResponse",
+        "description": "Respuesta de la aprobaci\u00f3n de un registro."
+      },
+      "Body_import_companies_api_v1_companies_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_companies_api_v1_companies_import_post"
+      },
+      "Body_upload_file_api_v1_uploads_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "company_id"
+        ],
+        "title": "Body_upload_file_api_v1_uploads_post"
+      },
+      "CompanyCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "cif": {
+            "type": "string",
+            "title": "Cif"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "cif"
+        ],
+        "title": "CompanyCreate",
+        "description": "Cuerpo de `POST /companies`."
+      },
+      "CompanyOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "cif": {
+            "type": "string",
+            "title": "Cif"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "cif",
+          "status"
+        ],
+        "title": "CompanyOut",
+        "description": "Empresa en la respuesta (alta, edici\u00f3n y listado)."
+      },
+      "CompanyUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "cif": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cif"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "pending"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "title": "CompanyUpdate",
+        "description": "Cuerpo de `PATCH /companies/{id}` (patch parcial: solo los campos presentes cambian)."
+      },
+      "ConfirmIn": {
+        "properties": {
+          "direction": {
+            "type": "string",
+            "enum": [
+              "recibida",
+              "emitida"
+            ],
+            "title": "Direction"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "counterparty_tax_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Tax Id"
+          },
+          "counterparty_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Name"
+          },
+          "net_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Amount"
+          },
+          "tax_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Amount"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
+          },
+          "irpf_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Irpf Amount"
+          },
+          "tax_lines": {
+            "items": {
+              "$ref": "#/components/schemas/TaxLineIn"
+            },
+            "type": "array",
+            "title": "Tax Lines",
+            "default": []
+          },
+          "responsibility_accepted": {
+            "type": "boolean",
+            "title": "Responsibility Accepted",
+            "default": false
+          },
+          "is_test": {
+            "type": "boolean",
+            "title": "Is Test",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "direction"
+        ],
+        "title": "ConfirmIn",
+        "description": "Cuerpo de la confirmaci\u00f3n (S2.5): datos confirmados por el humano."
+      },
+      "DuplicateRowOut": {
+        "properties": {
+          "row": {
+            "type": "integer",
+            "title": "Row"
+          },
+          "cif": {
+            "type": "string",
+            "title": "Cif"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row",
+          "cif"
+        ],
+        "title": "DuplicateRowOut",
+        "description": "Fila omitida por CIF ya existente en el informe: n\u00famero de fila (1-based) y CIF."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "service",
+          "version",
+          "environment"
+        ],
+        "title": "HealthResponse",
+        "description": "Respuesta del healthcheck."
+      },
+      "HistoryEntryOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "direction": {
+            "type": "string",
+            "title": "Direction"
+          },
+          "counterparty_tax_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Tax Id"
+          },
+          "counterparty_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Name"
+          },
+          "counterparty_cif_status": {
+            "type": "string",
+            "title": "Counterparty Cif Status"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
+          },
+          "confirmed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Confirmed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "issue_date",
+          "direction",
+          "counterparty_tax_id",
+          "counterparty_name",
+          "counterparty_cif_status",
+          "total_amount",
+          "confirmed_at"
+        ],
+        "title": "HistoryEntryOut",
+        "description": "Una entrada del historial de facturas confirmadas (S2.6, spec \u00a72)."
+      },
+      "HistoryOut": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryEntryOut"
+            },
+            "type": "array",
+            "title": "Entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "title": "HistoryOut",
+        "description": "Respuesta de `GET /invoices/history`: lista, m\u00e1s reciente primero (spec \u00a72/\u00a73)."
+      },
+      "ImportReportOut": {
+        "properties": {
+          "created": {
+            "type": "integer",
+            "title": "Created"
+          },
+          "invalid": {
+            "items": {
+              "$ref": "#/components/schemas/InvalidRowOut"
+            },
+            "type": "array",
+            "title": "Invalid"
+          },
+          "duplicates": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateRowOut"
+            },
+            "type": "array",
+            "title": "Duplicates"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "created",
+          "invalid",
+          "duplicates",
+          "truncated"
+        ],
+        "title": "ImportReportOut",
+        "description": "Informe de la importaci\u00f3n del Excel."
+      },
+      "InvalidRowOut": {
+        "properties": {
+          "row": {
+            "type": "integer",
+            "title": "Row"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row",
+          "reason"
+        ],
+        "title": "InvalidRowOut",
+        "description": "Fila rechazada en el informe de importaci\u00f3n: n\u00famero de fila (1-based) y motivo."
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "totp_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Totp Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "description": "Cuerpo de `POST /auth/login`."
+      },
+      "RegisterRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "cif": {
+            "type": "string",
+            "title": "Cif"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "company_name",
+          "cif",
+          "password"
+        ],
+        "title": "RegisterRequest",
+        "description": "Cuerpo de `POST /register`."
+      },
+      "RegisterResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "RegisterResponse",
+        "description": "Respuesta gen\u00e9rica del registro (id\u00e9ntica exista o no el email: anti-enumeraci\u00f3n)."
+      },
+      "RegistrationOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "joins_existing_company": {
+            "type": "boolean",
+            "title": "Joins Existing Company"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "company",
+          "joins_existing_company"
+        ],
+        "title": "RegistrationOut",
+        "description": "Un registro pendiente en el listado del admin (email + empresa + se\u00f1al de uni\u00f3n a existente).\n\n`joins_existing_company` avisa a la pantalla de aprobaci\u00f3n de que el CIF casaba con una empresa\nya activa (el usuario se une a ella, no crea empresa nueva): defensa ante secuestro por CIF."
+      },
+      "TaxLineIn": {
+        "properties": {
+          "iva_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iva Pct"
+          },
+          "base": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
+          "cuota": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuota"
+          }
+        },
+        "type": "object",
+        "title": "TaxLineIn",
+        "description": "Un tramo de IVA confirmado del body de `confirm`."
+      },
+      "UploadOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "scan_status": {
+            "type": "string",
+            "title": "Scan Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "company_id",
+          "content_type",
+          "size_bytes",
+          "sha256",
+          "status",
+          "scan_status",
+          "created_at"
+        ],
+        "title": "UploadOut",
+        "description": "Fichero de intake creado (respuesta 201)."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

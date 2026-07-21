@@ -7,7 +7,7 @@ respuesta HTTP. No contiene SQL ni reglas de negocio.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal, NoReturn
 from uuid import UUID
@@ -22,9 +22,17 @@ from tenancy.constants import Role
 
 router = APIRouter(prefix="/uploads", tags=["invoicing"])
 
+# Historial de facturas (S2.6): mismo prefijo de recurso `invoices`, router aparte porque
+# `router` ya lleva el prefijo `/uploads` (una `APIRouter` tiene un único prefijo).
+history_router = APIRouter(prefix="/invoices", tags=["invoicing"])
+
 # Identidad autorizada a revisar/confirmar: empleado (`user`) o admin de asesoría (`tenant_admin`).
 # La pertenencia fina a la empresa del fichero la comprueba el servicio (403 vs 404, C10/C13).
 Reviewer = Annotated[AuthContext, Depends(require_roles(Role.USER, Role.TENANT_ADMIN))]
+
+# Mismo conjunto de roles que `Reviewer` (S2.6 no añade un rol nuevo), con su propio nombre: ver el
+# historial no "revisa" un fichero, así que el gate se nombra por lo que autoriza aquí.
+HistoryViewer = Reviewer
 
 
 class TaxLineIn(BaseModel):
@@ -113,3 +121,43 @@ async def confirm_upload(identity: Reviewer, file_id: UUID, body: ConfirmIn) -> 
     except service.InvoicingError as exc:
         _raise_http(exc)
     return {"id": str(invoice_id)}
+
+
+class HistoryEntryOut(BaseModel):
+    """Una entrada del historial de facturas confirmadas (S2.6, spec §2)."""
+
+    id: UUID
+    issue_date: date | None
+    direction: str
+    counterparty_tax_id: str | None
+    counterparty_name: str | None
+    counterparty_cif_status: str
+    total_amount: Decimal | None
+    confirmed_at: datetime
+
+
+class HistoryOut(BaseModel):
+    """Respuesta de `GET /invoices/history`: lista, más reciente primero (spec §2/§3)."""
+
+    entries: list[HistoryEntryOut]
+
+
+@history_router.get("/history")
+async def invoice_history(identity: HistoryViewer) -> HistoryOut:
+    """Facturas confirmadas de los últimos 7 días del contexto del usuario (S2.6). Solo lectura."""
+    entries = await service.history(identity)
+    return HistoryOut(
+        entries=[
+            HistoryEntryOut(
+                id=entry.id,
+                issue_date=entry.issue_date,
+                direction=entry.direction,
+                counterparty_tax_id=entry.counterparty_tax_id,
+                counterparty_name=entry.counterparty_name,
+                counterparty_cif_status=entry.counterparty_cif_status,
+                total_amount=entry.total_amount,
+                confirmed_at=entry.confirmed_at,
+            )
+            for entry in entries
+        ]
+    )

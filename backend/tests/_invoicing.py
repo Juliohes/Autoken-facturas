@@ -17,7 +17,7 @@ Contrato que el `implementer` debe respetar (lo fija esta fase roja):
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
 import asyncpg
@@ -40,6 +40,10 @@ def review_url(file_id: str) -> str:
 
 def confirm_url(file_id: str) -> str:
     return f"/api/v1/uploads/{file_id}/confirm"
+
+
+def history_url() -> str:
+    return "/api/v1/invoices/history"
 
 
 def auth(token: str, hostname: str = "ilex.localhost") -> dict[str, str]:
@@ -173,6 +177,74 @@ def confirm_body(
         "responsibility_accepted": responsibility_accepted,
         "is_test": is_test,
     }
+
+
+async def seed_invoice(
+    dsns: dict[str, str],
+    *,
+    tenant_id: str,
+    company_id: str,
+    days_ago: float = 0,
+    confirmed_at: datetime | None = None,
+    is_test: bool = False,
+    counterparty_tax_id: str = COUNTERPARTY_CIF,
+    counterparty_name: str = "Proveedor SA",
+    total_amount: str = "121.00",
+) -> str:
+    """Inserta una factura confirmada directamente (S2.6), con `confirmed_at` elegido.
+
+    El `confirmed_at` real lo fija el servidor al confirmar (S2.5); para probar la ventana de 7 días
+    del historial se siembra la fila con la fecha deseada (spec S2.6 §7), en vez de pasar por el
+    endpoint `confirm`. Crea su propio usuario y `uploaded_file` (FK) para no acoplarse a otro seed.
+    Devuelve el id de la factura.
+    """
+    when = confirmed_at or (datetime.now(UTC) - timedelta(days=days_ago))
+    user_id = await seed_user(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        email=f"seed-invoice-{uuid4()}@example.com",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    # Contenido único por fichero (sufijo aleatorio): el UNIQUE (company_id, sha256) de
+    # `uploaded_files` chocaría si dos facturas de la misma empresa reusaran el JPEG por defecto.
+    from tests._intake import JPEG, JPEG_CT  # noqa: PLC0415
+
+    file_id = await seed_uploaded_file(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        uploaded_by=user_id,
+        content=JPEG + uuid4().bytes,
+        content_type=JPEG_CT,
+        status="confirmed",
+    )
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        row = await conn.fetchrow(
+            "INSERT INTO invoices "
+            "(tenant_id, company_id, uploaded_file_id, direction, issue_date, "
+            " counterparty_tax_id, counterparty_name, counterparty_cif_status, "
+            " net_amount, tax_amount, total_amount, is_test, balance_ok, snapshot, status, "
+            " confirmed_by, confirmed_at) "
+            "VALUES ($1,$2,$3,'recibida',$4::date,$5,$6,'valid',$7::numeric,$8::numeric,"
+            " $9::numeric,$10,true,'{}'::jsonb,'confirmed',$11,$12) "
+            "RETURNING id",
+            tenant_id,
+            company_id,
+            file_id,
+            date(2026, 5, 10),
+            counterparty_tax_id,
+            counterparty_name,
+            "100.00",
+            "21.00",
+            total_amount,
+            is_test,
+            user_id,
+            when,
+        )
+        return str(row["id"])
+    finally:
+        await conn.close()
 
 
 # --- Consultas de efecto (superusuario) ----------------------------------------------------------
