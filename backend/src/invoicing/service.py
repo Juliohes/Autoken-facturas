@@ -11,7 +11,7 @@ descuadre aritmético AVISA pero no bloquea (regla 5).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -115,6 +115,24 @@ class ReviewData:
     # Motivos por los que el servidor bloquearía el guardado (mismas guardas que `confirm`): la
     # pantalla deshabilita el botón si NO está vacía. Lista vacía = confirmable (S2.4 §2, C13).
     blocking_reasons: list[str]
+
+
+@dataclass(frozen=True)
+class HistoryItem:
+    """Una entrada del historial de facturas confirmadas (S2.6), contrato propio del servicio.
+
+    No reexporta `repository.HistoryEntry` tal cual: el router no debe depender de la forma interna
+    de la capa de persistencia (misma separación que `ReviewData` frente a `ExtractionRecord`).
+    """
+
+    id: UUID
+    issue_date: date | None
+    direction: str
+    counterparty_tax_id: str | None
+    counterparty_name: str | None
+    counterparty_cif_status: str
+    total_amount: Decimal | None
+    confirmed_at: datetime
 
 
 def _is_admin(role: str) -> bool:
@@ -370,6 +388,28 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
         session=identity.session,
     )
     return invoice_id
+
+
+async def history(identity: AuthContext) -> list[HistoryItem]:
+    """Historial de facturas confirmadas de los últimos 7 días del contexto (S2.6). Solo lectura.
+
+    Sin autorización adicional por fichero (a diferencia de `review`/`confirm`): la RLS de dos
+    niveles ya acota el resultado al tenant/empresa de la sesión (spec §4).
+    """
+    entries = await repository.list_history(identity.session)
+    return [
+        HistoryItem(
+            id=entry.id,
+            issue_date=entry.issue_date,
+            direction=entry.direction,
+            counterparty_tax_id=entry.counterparty_tax_id,
+            counterparty_name=entry.counterparty_name,
+            counterparty_cif_status=entry.counterparty_cif_status,
+            total_amount=entry.total_amount,
+            confirmed_at=entry.confirmed_at,
+        )
+        for entry in entries
+    ]
 
 
 def _diff(extraction: ExtractionRecord, command: ConfirmCommand) -> list[Correction]:

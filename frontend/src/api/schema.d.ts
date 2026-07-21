@@ -391,6 +391,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoices/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Invoice History
+         * @description Facturas confirmadas de los últimos 7 días del contexto del usuario (S2.6). Solo lectura.
+         */
+        get: operations["invoice_history_api_v1_invoices_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -549,6 +569,42 @@ export interface components {
             version: string;
             /** Environment */
             environment: string;
+        };
+        /**
+         * HistoryEntryOut
+         * @description Una entrada del historial de facturas confirmadas (S2.6, spec §2).
+         */
+        HistoryEntryOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Issue Date */
+            issue_date: string | null;
+            /** Direction */
+            direction: string;
+            /** Counterparty Tax Id */
+            counterparty_tax_id: string | null;
+            /** Counterparty Name */
+            counterparty_name: string | null;
+            /** Counterparty Cif Status */
+            counterparty_cif_status: string;
+            /** Total Amount */
+            total_amount: string | null;
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+        };
+        /**
+         * HistoryOut
+         * @description Respuesta de `GET /invoices/history`: lista, más reciente primero (spec §2/§3).
+         */
+        HistoryOut: {
+            /** Entries */
+            entries: components["schemas"]["HistoryEntryOut"][];
         };
         /**
          * ImportReportOut
@@ -1262,6 +1318,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invoice_history_api_v1_invoices_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryOut"];
                 };
             };
         };
