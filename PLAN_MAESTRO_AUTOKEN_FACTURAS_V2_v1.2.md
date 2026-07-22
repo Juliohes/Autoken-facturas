@@ -590,15 +590,18 @@ se anota en `docs/ocr-eval/` durante 1.1/1.2.
 
 > **Hallazgo de gobernanza**: este documento y `CLAUDE.md` llevaban desde 2026-07-02 sin actualizarse (§11
 > incumplido) pese a que `develop` ya tenía Sprint 1 y Sprint 2 completos hasta **S2.7** (b420e45). Se
-> reconcilia aquí y se actualiza el "Estado actual" de `CLAUDE.md`. Hay además una rama sin mergear
-> `docs/guia-en-cristiano` (creada hoy) que añade la regla 13-bis (`docs/GUIA_EN_CRISTIANO.md`) — pendiente de
-> que Julio la revise/mergee; esta sesión no la ha tocado.
+> reconcilia aquí y se actualiza el "Estado actual" de `CLAUDE.md`.
+>
+> **Actualización (misma sesión, tras el merge de esta rama)**: dos sesiones de Julio trabajaron en paralelo
+> el 2026-07-22; la otra cerró y mergeó S3.1 (panel de facturas, PR #77) y `docs/guia-en-cristiano` (regla
+> 13-bis, `docs/GUIA_EN_CRISTIANO.md`) mientras esta rama esperaba revisión. Se actualiza aquí el estado para
+> no reintroducir la misma desactualización que motivó este hallazgo.
 
-**Estado real verificado (git log, 2026-07-22):** Sprint 1 (tenancy/identity/companies) y Sprint 2
-(intake+OCR) completos hasta **S2.7** (descarga con URL firmada + anti-cruce v2, PR #75). Falta **S2.2**
-(captura guiada PWA) y el resto de Sprint 2 relacionado con captura real de cámara — hoy no existe ningún
-componente de cámara en el frontend, solo el placeholder `onRetry` en `ConfirmationScreen`. Sprint 3 (panel de
-asesoría) y Sprint 4 (panel de plataforma) **no iniciados** — `platform_admin/` solo tiene el healthcheck.
+**Estado real verificado (git log, 2026-07-22):** Sprint 1 (tenancy/identity/companies) completo. Sprint 2
+(intake+OCR) completo salvo **S2.2** (captura guiada PWA) — hoy no existe ningún componente de cámara en el
+frontend, solo el placeholder `onRetry` en `ConfirmationScreen`. **Sprint 3 (panel de asesoría) arrancado**:
+S3.1 (panel de facturas) cerrado y mergeado (PR #77); quedan S3.2-S3.5. Sprint 4 (panel de plataforma) **no
+iniciado** — `platform_admin/` solo tiene el healthcheck.
 
 **Nuevas tareas decididas hoy (petición de Julio, alcance ampliado sobre lo ya planificado):**
 
@@ -609,7 +612,7 @@ asesoría) y Sprint 4 (panel de plataforma) **no iniciados** — `platform_admin
 | **S4.8** Panel ranking multi-modelo | Expone `ocr/eval/*` + motores vía API; solo visible en panel admin-tech | **Activo automáticamente para TODAS las facturas** (nuevas y ya existentes, backfill retroactivo), con el **mismo interruptor admin-tech** para apagarlo. |
 | Motor **Kimi K3** (Moonshot AI) | Investigado (2,8T parámetros, visión nativa, real, lanzado jul-2026) | **Aparcado, no se integra.** Sus servidores están en Singapur (política de privacidad oficial: datos usados para "optimizar modelos", sin DPA/SCC explícito) — **incumple la decisión ya cerrada de "residencia UE confirmada para todos los candidatos" (§11.7)**. No se reconsidera salvo DPA formal o autoalojamiento (inviable a corto plazo: 2,8T parámetros). |
 | Candidatos alternativos investigados | **dots.ocr** (rednote-hilab, 3B/1.7B backbone, MIT+addendum, **autoalojable → sin transferencia de datos a terceros, resuelve RGPD de raíz**, fuerte en extracción estructurada de facturas/tablas por benchmark OmniDocBench); Qwen2.5-VL 72B / InternVL3 76B (autoalojables, top en DocVQA); GLM-OCR (mencionado en rankings recientes, pendiente de investigar residencia/API) | Se añaden como candidatos futuros del bench (`ocr/eval`), ninguno integrado aún — próxima tarea de bench cuando Julio lo priorice. |
-| Formato IVA sin decimal superfluo | `frontend/src/features/confirmation/percentage.ts` (`formatIvaPercentage`), aplicado solo a `iva_pct` en `taxLineToForm`; `base`/`cuota` sin cambios | Implementado y testeado en esta sesión (rama `feature/2.9-ivapct-formato`). |
+| Formato IVA sin decimal superfluo | `frontend/src/features/confirmation/percentage.ts` (`formatIvaPercentage`), aplicado solo a `iva_pct` en `taxLineToForm`; `base`/`cuota` sin cambios | Implementado, testeado y mergeado (PR #78). |
 
 **Diseño pendiente de construir (próxima tarea, bloqueante de S2.9/S2.10/S4.8):** mecanismo de interruptor
 global (`feature_flags` o `platform_settings`) + rol/permiso **admin-tech** (solo Julio) para activar/desactivar

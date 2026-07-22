@@ -67,13 +67,17 @@
 ---
 
 ## Estado actual (reconciliado 2026-07-22 — ver PLAN MAESTRO §11.11)
-- **Fase real (git log)**: Sprint 1 (tenancy/identity/companies) y Sprint 2 (intake+OCR) completos hasta
-  **S2.7** (`b420e45`, PR #75). Este archivo llevaba desde 2026-07-02 sin reflejarlo — corregido hoy.
+- **Fase real (git log)**: Sprint 1 (tenancy/identity/companies) completo. Sprint 2 (intake+OCR) completo
+  salvo S2.2. **Sprint 3 (panel de asesoría) arrancado**: S3.1 (panel de facturas) cerrado y mergeado
+  (`0df4138`, PR #77). Este archivo llevaba desde 2026-07-02 sin reflejar el estado real — corregido hoy.
 - **Falta de Sprint 2**: **S2.2** (captura guiada PWA, `getUserMedia`+OpenCV.js, ADR-0002) — sin empezar, no
   hay ningún componente de cámara en frontend hoy.
-- **Sprint 3 (panel de asesoría) y Sprint 4 (panel de plataforma)**: no iniciados. `platform_admin/` solo
-  tiene el healthcheck.
-- **Nuevas tareas decididas por Julio hoy (2026-07-22, detalle en plan §11.11)**:
+- **Sprint 3**: S3.1 hecho; quedan S3.2 (export Excel), S3.3 (edición auditada), S3.4 (gestión
+  empresas/usuarios), S3.5 (facturas de prueba). **Sprint 4 (panel de plataforma)**: no iniciado;
+  `platform_admin/` solo tiene el healthcheck.
+- **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
+  cada tarea.
+- **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11), aún sin construir**:
   - **S2.9/S2.10**: preprocesado de imagen (contraste/brillo/saturación máx.) + comparativa original-vs-realzada,
     **activo automáticamente en todas las facturas** (nuevas + backfill retroactivo de las existentes), con
     interruptor admin-tech (solo Julio) para apagarlo — experimento de coste acotado en el tiempo.
@@ -82,10 +86,8 @@
   - **Kimi K3 aparcado**: servidores en Singapur, sin DPA/SCC — incumple la decisión ya cerrada de residencia
     UE (§11.7). Candidatos alternativos investigados: **dots.ocr** (autoalojable, resuelve RGPD de raíz),
     Qwen2.5-VL 72B, InternVL3 76B.
-  - **Formato IVA sin ".0"/",0" superfluo**: implementado (`percentage.ts`, rama `feature/2.9-ivapct-formato`).
+  - **Formato IVA sin ".0"/",0" superfluo**: implementado (`percentage.ts`, PR #78).
 - **Pendiente de construir**: interruptor global (feature flag) + rol admin-tech, prerrequisito de S2.9/S2.10/S4.8.
-- Hay una rama sin mergear `docs/guia-en-cristiano` (creada hoy) con la regla 13-bis — pendiente de que Julio
-  la revise.
 
 ---
 
