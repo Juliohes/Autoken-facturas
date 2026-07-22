@@ -585,3 +585,41 @@ se anota en `docs/ocr-eval/` durante 1.1/1.2.
 - **Self-hosted** (PaddleOCR-VL, Qwen3-VL): los monta Claude Code; no requieren credenciales de Julio.
 - **Pendiente de Julio (no bloquea 1.2):** prompt correcto para integrar el **nuevo OCR de Mistral** como
   candidato del bench; SMTP de `soporte@autoken.es`; Excel de las 51 empresas.
+
+### 11.11 Reconciliación de estado + nuevas decisiones (Julio, 2026-07-22)
+
+> **Hallazgo de gobernanza**: este documento y `CLAUDE.md` llevaban desde 2026-07-02 sin actualizarse (§11
+> incumplido) pese a que `develop` ya tenía Sprint 1 y Sprint 2 completos hasta **S2.7** (b420e45). Se
+> reconcilia aquí y se actualiza el "Estado actual" de `CLAUDE.md`. Hay además una rama sin mergear
+> `docs/guia-en-cristiano` (creada hoy) que añade la regla 13-bis (`docs/GUIA_EN_CRISTIANO.md`) — pendiente de
+> que Julio la revise/mergee; esta sesión no la ha tocado.
+
+**Estado real verificado (git log, 2026-07-22):** Sprint 1 (tenancy/identity/companies) y Sprint 2
+(intake+OCR) completos hasta **S2.7** (descarga con URL firmada + anti-cruce v2, PR #75). Falta **S2.2**
+(captura guiada PWA) y el resto de Sprint 2 relacionado con captura real de cámara — hoy no existe ningún
+componente de cámara en el frontend, solo el placeholder `onRetry` en `ConfirmationScreen`. Sprint 3 (panel de
+asesoría) y Sprint 4 (panel de plataforma) **no iniciados** — `platform_admin/` solo tiene el healthcheck.
+
+**Nuevas tareas decididas hoy (petición de Julio, alcance ampliado sobre lo ya planificado):**
+
+| Tarea | Alcance | Decisión de Julio (2026-07-22) |
+|---|---|---|
+| **S2.9** Preprocesado de imagen (contraste/brillo/saturación) | `ocr/preprocess/enhance.py` (Pillow `ImageEnhance`), parámetros tuneados empíricamente contra el bench de 20 facturas (ground truth ya existente) | — |
+| **S2.10** Comparativa original vs. realzada | Tabla nueva `ocr_comparison_runs` (aislada de `ocr_extractions`, no rompe el UNIQUE por fichero ya en producción) | **Activo automáticamente para TODAS las facturas** (nuevas y ya existentes, backfill retroactivo). Julio quiere un **interruptor en un panel admin-tech** (solo él) para apagarlo cuando deje de necesitarlo — es un experimento de unos días, no permanente, por coste. |
+| **S4.8** Panel ranking multi-modelo | Expone `ocr/eval/*` + motores vía API; solo visible en panel admin-tech | **Activo automáticamente para TODAS las facturas** (nuevas y ya existentes, backfill retroactivo), con el **mismo interruptor admin-tech** para apagarlo. |
+| Motor **Kimi K3** (Moonshot AI) | Investigado (2,8T parámetros, visión nativa, real, lanzado jul-2026) | **Aparcado, no se integra.** Sus servidores están en Singapur (política de privacidad oficial: datos usados para "optimizar modelos", sin DPA/SCC explícito) — **incumple la decisión ya cerrada de "residencia UE confirmada para todos los candidatos" (§11.7)**. No se reconsidera salvo DPA formal o autoalojamiento (inviable a corto plazo: 2,8T parámetros). |
+| Candidatos alternativos investigados | **dots.ocr** (rednote-hilab, 3B/1.7B backbone, MIT+addendum, **autoalojable → sin transferencia de datos a terceros, resuelve RGPD de raíz**, fuerte en extracción estructurada de facturas/tablas por benchmark OmniDocBench); Qwen2.5-VL 72B / InternVL3 76B (autoalojables, top en DocVQA); GLM-OCR (mencionado en rankings recientes, pendiente de investigar residencia/API) | Se añaden como candidatos futuros del bench (`ocr/eval`), ninguno integrado aún — próxima tarea de bench cuando Julio lo priorice. |
+| Formato IVA sin decimal superfluo | `frontend/src/features/confirmation/percentage.ts` (`formatIvaPercentage`), aplicado solo a `iva_pct` en `taxLineToForm`; `base`/`cuota` sin cambios | Implementado y testeado en esta sesión (rama `feature/2.9-ivapct-formato`). |
+
+**Diseño pendiente de construir (próxima tarea, bloqueante de S2.9/S2.10/S4.8):** mecanismo de interruptor
+global (`feature_flags` o `platform_settings`) + rol/permiso **admin-tech** (solo Julio) para activar/desactivar
+bloque 1 (comparativa imagen) y bloque 3 (multi-modelo) sin tocar código ni desplegar. Dado que Julio pide que
+esto corra **automático sobre todas las facturas incluidas las ya existentes**, el job de backfill se ejecutará
+**limitado (throttled)**, no todas las facturas de golpe, para no disparar coste ni límites de tasa de los
+proveedores en un instante.
+
+**Advertencia de coste (relevante para el interruptor)**: con el interruptor en ON, cada factura nueva dispara
+2 llamadas OCR extra (comparativa) + N llamadas OCR extra (una por motor del panel multi-modelo, hoy N≈5-6:
+Azure DocIntel, Azure OpenAI gpt-5.1, Gemini 3 Flash/Pro, Claude Vertex, Mistral OCR4). El backfill sobre las
+facturas ya existentes multiplica esto por el volumen histórico. Julio es consciente y lo quiere así por unos
+días — el interruptor existe precisamente para no dejarlo así de forma indefinida.
