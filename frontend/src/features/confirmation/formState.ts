@@ -1,5 +1,6 @@
 // Estado editable del formulario de confirmación y su proyección al body de
 // `POST confirm` (spec §2, C8). Lógica pura, separada del componente y testeable.
+import { formatIvaPercentage } from './percentage'
 import type { ConfirmBody, ReviewFields, ReviewResponse, ReviewTaxLine } from './types'
 
 /** Un tramo de IVA editable en el formulario (strings de los inputs). */
@@ -51,10 +52,15 @@ export function reviewToFormState(fields: ReviewFields): ConfirmFormState {
   }
 }
 
-/** Adapta un tramo del OCR (`base/rate/cuota`) al tramo editable (`iva_pct/base/cuota`). */
+/**
+ * Adapta un tramo del OCR (`base/rate/cuota`) al tramo editable (`iva_pct/base/cuota`).
+ * `iva_pct` usa `formatIvaPercentage` (nunca ".0"/",0" superfluo, ej. "21%" no "21,0%",
+ * petición de Julio 2026-07-22); `base`/`cuota` siguen con `taxCellToInput` sin tocar,
+ * conservan siempre sus decimales reales.
+ */
 function taxLineToForm(line: ReviewTaxLine): TaxLineForm {
   return {
-    iva_pct: taxCellToInput(line.rate),
+    iva_pct: formatIvaPercentage(line.rate),
     base: taxCellToInput(line.base),
     cuota: taxCellToInput(line.cuota),
   }
