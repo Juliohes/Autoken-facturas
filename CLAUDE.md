@@ -28,6 +28,13 @@
     proyecto. Además: **commit + push por feature**, **guardar/checkpoint cada tarea**, **nada de monolitos**
     y **revisar SOLID en todo** lo que se programa. No preguntar de más: continuar con autonomía; solo
     preguntar lo imprescindible (decisiones de dominio/producto que no se puedan resolver solo).
+13-bis. **Guía en cristiano viva (Julio, 2026-07-22)**: `docs/GUIA_EN_CRISTIANO.md` es el registro
+    permanente de qué hace la app y cómo está construida por dentro, explicado en lenguaje llano. **Al
+    cerrar cada tarea/iteración** (spec aprobada, código en verde, PR mergeado), añadir ahí una entrada
+    resumen en cristiano de lo construido (qué es, para qué sirve, sin jerga sin explicar). No es opcional
+    ni se pregunta: se hace siempre, como el commit+push. Es distinto del `CLAUDE.md`/PLAN MAESTRO (que son
+    la fuente técnica) y del bloque "En cristiano" de cada respuesta (que es efímero, de esa conversación);
+    este archivo es el resumen acumulado y consultable de todo el proyecto.
 
 ## 2. Git y commits (sección 2 del plan)
 - **Repo**: privado `Juliohes/Autoken-facturas` (monorepo: `backend/`, `frontend/`, `infrastructure/`, `docs/`).
