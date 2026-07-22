@@ -1,8 +1,8 @@
-"""Lógica de dominio del panel de facturas (S3.1): orquesta el listado filtrado y paginado.
+"""Lógica de dominio del panel de facturas (S3.1) y su export a Excel (S3.2).
 
-El router HTTP es fino: traduce la petición a `list_invoices` y sus excepciones de dominio a
-códigos HTTP. Aquí vive la validación del rango de fechas y la codificación/decodificación del
-cursor de paginación (opaco para el cliente, spec §2).
+El router HTTP es fino: traduce la petición a `list_invoices`/`export_invoices` y sus excepciones
+de dominio a códigos HTTP. Aquí vive la validación del rango de fechas (compartida por ambos) y la
+codificación/decodificación del cursor de paginación (opaco para el cliente, spec S3.1 §2).
 """
 
 from __future__ import annotations
@@ -83,6 +83,49 @@ class PanelPage:
     next_cursor: str | None
 
 
+@dataclass(frozen=True)
+class ExportItem:
+    """Una fila del export a Excel (S3.2), contrato propio del servicio.
+
+    No reexporta `repository.ExportRow` tal cual, mismo criterio que `InvoiceItem` (S3.1).
+    """
+
+    company_name: str
+    issue_date: date | None
+    counterparty_tax_id: str | None
+    counterparty_name: str | None
+    counterparty_cif_status: str
+    net_amount: Decimal | None
+    tax_amount: Decimal | None
+    total_amount: Decimal | None
+    irpf_amount: Decimal | None
+    tax_lines: list[TaxLineItem]
+    uploaded_at: datetime
+    confirmed_by_email: str
+
+
+def _validate_date_range(filters: PanelFilters) -> None:
+    """`date_from` posterior a `date_to` -> `InvalidDateRange` (compartido por panel y export)."""
+    if (
+        filters.date_from is not None
+        and filters.date_to is not None
+        and filters.date_from > filters.date_to
+    ):
+        raise InvalidDateRange
+
+
+def _repo_filters(filters: PanelFilters) -> repository.Filters:
+    """Traduce los filtros del servicio a los del repositorio (compartido por panel y export)."""
+    return repository.Filters(
+        date_from=filters.date_from,
+        date_to=filters.date_to,
+        q=filters.q,
+        confirmed_by=filters.confirmed_by,
+        cif_status=filters.cif_status,
+        company_id=filters.company_id,
+    )
+
+
 def _to_item(row: repository.InvoiceRow) -> InvoiceItem:
     return InvoiceItem(
         id=row.id,
@@ -105,6 +148,25 @@ def _to_item(row: repository.InvoiceRow) -> InvoiceItem:
     )
 
 
+def _to_export_item(row: repository.ExportRow) -> ExportItem:
+    return ExportItem(
+        company_name=row.company_name,
+        issue_date=row.issue_date,
+        counterparty_tax_id=row.counterparty_tax_id,
+        counterparty_name=row.counterparty_name,
+        counterparty_cif_status=row.counterparty_cif_status,
+        net_amount=row.net_amount,
+        tax_amount=row.tax_amount,
+        total_amount=row.total_amount,
+        irpf_amount=row.irpf_amount,
+        tax_lines=[
+            TaxLineItem(iva_pct=t.iva_pct, base=t.base, cuota=t.cuota) for t in row.tax_lines
+        ],
+        uploaded_at=row.uploaded_at,
+        confirmed_by_email=row.confirmed_by_email,
+    )
+
+
 def _encode_cursor(confirmed_at: datetime, invoice_id: UUID) -> str:
     """Codifica el cursor como opaco (base64) para que el cliente no lo interprete ni lo module."""
     raw = f"{confirmed_at.isoformat()}|{invoice_id}"
@@ -124,28 +186,21 @@ async def list_invoices(
     identity: AuthContext, filters: PanelFilters, cursor: str | None
 ) -> PanelPage:
     """Página de facturas confirmadas de la asesoría del `tenant_admin` (S3.1). Solo lectura."""
-    if (
-        filters.date_from is not None
-        and filters.date_to is not None
-        and filters.date_from > filters.date_to
-    ):
-        raise InvalidDateRange
-
+    _validate_date_range(filters)
     decoded_cursor = _decode_cursor(cursor) if cursor is not None else None
 
-    repo_filters = repository.Filters(
-        date_from=filters.date_from,
-        date_to=filters.date_to,
-        q=filters.q,
-        confirmed_by=filters.confirmed_by,
-        cif_status=filters.cif_status,
-        company_id=filters.company_id,
-    )
     rows = await repository.list_invoices(
-        identity.session, filters=repo_filters, cursor=decoded_cursor
+        identity.session, filters=_repo_filters(filters), cursor=decoded_cursor
     )
 
     has_more = len(rows) > repository.PAGE_SIZE
     page = rows[: repository.PAGE_SIZE]
     next_cursor = _encode_cursor(page[-1].confirmed_at, page[-1].id) if has_more and page else None
     return PanelPage(items=[_to_item(row) for row in page], next_cursor=next_cursor)
+
+
+async def export_invoices(identity: AuthContext, filters: PanelFilters) -> list[ExportItem]:
+    """Todas las facturas que casan los filtros, sin paginar, para el export a Excel (S3.2)."""
+    _validate_date_range(filters)
+    rows = await repository.list_for_export(identity.session, filters=_repo_filters(filters))
+    return [_to_export_item(row) for row in rows]

@@ -14,11 +14,22 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
+import structlog
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+logger = structlog.get_logger("reporting")
+
 # Tamaño de página fijo (spec S3.1 §4): no configurable por el cliente.
 PAGE_SIZE = 50
+
+# Cota defensiva de filas del export a Excel (S3.2 spec §2/§4): no pagina, así que necesita su
+# propia red última contra un fichero sin fin.
+EXPORT_LIMIT = 5000
+
+# Orden fijo, compartido por el panel (S3.1) y el export (S3.2): más reciente primero, con `id`
+# como desempate estable (base también del cursor de paginación del panel).
+_ORDER_BY = "ORDER BY i.confirmed_at DESC, i.id DESC"
 
 
 @dataclass(frozen=True)
@@ -49,6 +60,31 @@ class InvoiceRow:
     uploaded_file_id: UUID
     uploaded_at: datetime
     tax_lines: list[TaxLineRow]
+
+
+@dataclass(frozen=True)
+class ExportRow:
+    """Una fila del export a Excel (S3.2): como `InvoiceRow`, más empresa y confirmador (email).
+
+    Ambos campos vienen de un `JOIN` a `companies`/`users` (contextos `companies`/`identity`): el
+    panel (S3.1) no los necesita (la empresa ya está implícita en el filtro; el id de usuario no se
+    muestra), pero un Excel que puede mezclar varias empresas sí necesita el nombre, y "el id de
+    usuario" no es legible para un humano. Sin `id`: a diferencia de `InvoiceRow` (que lo expone
+    para el cursor de paginación del panel), el export no pagina y ningún consumidor lo necesita.
+    """
+
+    company_name: str
+    issue_date: date | None
+    counterparty_tax_id: str | None
+    counterparty_name: str | None
+    counterparty_cif_status: str
+    net_amount: Decimal | None
+    tax_amount: Decimal | None
+    total_amount: Decimal | None
+    irpf_amount: Decimal | None
+    tax_lines: list[TaxLineRow]
+    uploaded_at: datetime
+    confirmed_by_email: str
 
 
 @dataclass(frozen=True)
@@ -138,7 +174,7 @@ async def list_invoices(
                 "FROM invoices i "
                 "JOIN uploaded_files uf ON uf.id = i.uploaded_file_id "
                 f"WHERE {where} "
-                "ORDER BY i.confirmed_at DESC, i.id DESC "
+                f"{_ORDER_BY} "
                 "LIMIT :limit"
             ),
             params,
@@ -163,6 +199,55 @@ async def list_invoices(
             uploaded_file_id=row.uploaded_file_id,
             uploaded_at=row.uploaded_at,
             tax_lines=tax_lines_by_invoice.get(row.id, []),
+        )
+        for row in rows
+    ]
+
+
+async def list_for_export(session: AsyncSession, *, filters: Filters) -> list[ExportRow]:
+    """Todas las facturas que casan los filtros, sin paginar, hasta `EXPORT_LIMIT` (S3.2 §2/§4).
+
+    A diferencia de `list_invoices` (panel, paginado), el export trae todo de una vez: no acepta
+    cursor. Si se alcanza la cota, se registra (spec §5: nunca se trunca en silencio).
+    """
+    where, params = _build_where(filters, cursor=None)
+    params["limit"] = EXPORT_LIMIT
+    rows = (
+        await session.execute(
+            text(
+                "SELECT i.id, c.name AS company_name, i.issue_date, i.counterparty_tax_id, "
+                " i.counterparty_name, i.counterparty_cif_status, i.net_amount, i.tax_amount, "
+                " i.total_amount, i.irpf_amount, uf.created_at AS uploaded_at, "
+                " u.email AS confirmed_by_email "
+                "FROM invoices i "
+                "JOIN uploaded_files uf ON uf.id = i.uploaded_file_id "
+                "JOIN companies c ON c.id = i.company_id "
+                "JOIN users u ON u.id = i.confirmed_by "
+                f"WHERE {where} "
+                f"{_ORDER_BY} "
+                "LIMIT :limit"
+            ),
+            params,
+        )
+    ).all()
+    if len(rows) == EXPORT_LIMIT:
+        logger.warning("reporting.export.limit_reached", limit=EXPORT_LIMIT)
+
+    tax_lines_by_invoice = await _tax_lines_for(session, [row.id for row in rows])
+    return [
+        ExportRow(
+            company_name=row.company_name,
+            issue_date=row.issue_date,
+            counterparty_tax_id=row.counterparty_tax_id,
+            counterparty_name=row.counterparty_name,
+            counterparty_cif_status=row.counterparty_cif_status,
+            net_amount=row.net_amount,
+            tax_amount=row.tax_amount,
+            total_amount=row.total_amount,
+            irpf_amount=row.irpf_amount,
+            tax_lines=tax_lines_by_invoice.get(row.id, []),
+            uploaded_at=row.uploaded_at,
+            confirmed_by_email=row.confirmed_by_email,
         )
         for row in rows
     ]

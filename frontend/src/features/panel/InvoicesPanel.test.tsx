@@ -46,12 +46,18 @@ function mockRoutes({
   panel = makePage([makeRow()]),
   companies = [{ id: 'c1', name: 'Empresa Uno', cif: 'A11111111', status: 'active' }],
   downloadUrl = { url: 'https://minio.local/signed', expires_in: 300 },
+  exportBlob = new Blob(['xlsx'], { type: 'application/vnd.ms-excel' }),
 }: {
   panel?: PanelPage
   companies?: unknown[]
   downloadUrl?: { url: string; expires_in: number }
+  exportBlob?: Blob
 } = {}) {
   getMock.mockImplementation((path: string) => {
+    // El export vive bajo el mismo prefijo que el panel: se comprueba primero (más específico).
+    if (path.includes('/reporting/invoices/export')) {
+      return Promise.resolve({ data: exportBlob, error: undefined })
+    }
     if (path.includes('/reporting/invoices')) {
       return Promise.resolve({ data: panel, error: undefined })
     }
@@ -134,6 +140,36 @@ describe('InvoicesPanel (S3.1)', () => {
       'noopener,noreferrer',
     )
     openSpy.mockRestore()
+  })
+
+  it('C10: "Descargar Excel" pide el export con los filtros aplicados (sin cursor)', async () => {
+    mockRoutes()
+    const user = userEvent.setup()
+    const createObjectURLSpy = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:mock-url')
+    const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+
+    await user.click(screen.getByRole('button', { name: 'Descargar Excel' }))
+
+    await waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith(
+        '/api/v1/reporting/invoices/export',
+        expect.objectContaining({ params: { query: {} }, parseAs: 'blob' }),
+      )
+    })
+    expect(clickSpy).toHaveBeenCalledTimes(1)
+    expect(createObjectURLSpy).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURLSpy).toHaveBeenCalledTimes(1)
+
+    createObjectURLSpy.mockRestore()
+    revokeObjectURLSpy.mockRestore()
+    clickSpy.mockRestore()
   })
 
   it('C15: "Cargar más" añade filas sin perder las ya visibles', async () => {

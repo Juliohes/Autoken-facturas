@@ -14,21 +14,12 @@ import httpx
 
 from tests._auth import USER_PASSWORD, USER_PASSWORD_HASH, login
 from tests._dbtest import seed_company, seed_tenant, seed_user
-from tests._intake import seed_tenant_admin, token_for
 from tests._invoicing import auth, seed_invoice
+from tests._reporting import seed_admin_with_company as _admin
 
 Api = tuple[httpx.AsyncClient, dict[str, str]]
 
 PANEL_URL = "/api/v1/reporting/invoices"
-
-
-async def _admin(dsns: dict[str, str], client: httpx.AsyncClient, *, slug: str = "ilex"):
-    tenant_id, admin_id = await seed_tenant_admin(dsns, slug=slug, email=f"admin@{slug}.es")
-    company_id = await seed_company(
-        dsns["admin"], tenant_id=tenant_id, name="Empresa", cif="A39031620"
-    )
-    token = await token_for(client, email=f"admin@{slug}.es", hostname=f"{slug}.localhost")
-    return tenant_id, admin_id, company_id, token
 
 
 async def test_c1_panel_lista_facturas_de_toda_la_asesoria(authapi: Api) -> None:

@@ -454,6 +454,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reporting/invoices/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Invoices
+         * @description Excel con todas las facturas que casan los filtros, sin paginar (S3.2). Ver spec S3.2.
+         *
+         *     Mismos filtros que `list_invoices`; no acepta `cursor` (el export no pagina, spec §5).
+         */
+        get: operations["export_invoices_api_v1_reporting_invoices_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1523,6 +1545,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PanelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_invoices_api_v1_reporting_invoices_export_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                q?: string | null;
+                confirmed_by?: string | null;
+                cif_status?: string | null;
+                company_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
