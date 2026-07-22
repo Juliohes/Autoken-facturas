@@ -351,6 +351,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/uploads/{file_id}/download-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Url
+         * @description URL firmada (5 min) para descargar un fichero de intake. Ver spec S2.7 para los códigos.
+         *
+         *     Autorización idéntica a `review`/`confirm` (S2.5): 403 empresa hermana del propio tenant, 404
+         *     otro tenant/inexistente. La descarga no depende del estado del fichero (spec S2.7 §5).
+         */
+        get: operations["download_url_api_v1_uploads__file_id__download_url_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/uploads/{file_id}/review": {
         parameters: {
             query?: never;
@@ -403,6 +426,26 @@ export interface paths {
          * @description Facturas confirmadas de los últimos 7 días del contexto del usuario (S2.6). Solo lectura.
          */
         get: operations["invoice_history_api_v1_invoices_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reporting/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Invoices
+         * @description Facturas confirmadas de la asesoría, filtradas y paginadas (S3.1). Ver spec S3.1.
+         */
+        get: operations["list_invoices_api_v1_reporting_invoices_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -542,6 +585,16 @@ export interface components {
             is_test: boolean;
         };
         /**
+         * DownloadUrlOut
+         * @description URL firmada de descarga de un fichero (respuesta 200, S2.7).
+         */
+        DownloadUrlOut: {
+            /** Url */
+            url: string;
+            /** Expires In */
+            expires_in: number;
+        };
+        /**
          * DuplicateRowOut
          * @description Fila omitida por CIF ya existente en el informe: número de fila (1-based) y CIF.
          */
@@ -631,6 +684,57 @@ export interface components {
             reason: string;
         };
         /**
+         * InvoiceRowOut
+         * @description Una fila del panel de facturas (spec §2/§3 C8).
+         */
+        InvoiceRowOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Issue Date */
+            issue_date: string | null;
+            /** Direction */
+            direction: string;
+            /** Counterparty Tax Id */
+            counterparty_tax_id: string | null;
+            /** Counterparty Name */
+            counterparty_name: string | null;
+            /** Counterparty Cif Status */
+            counterparty_cif_status: string;
+            /** Net Amount */
+            net_amount: string | null;
+            /** Tax Amount */
+            tax_amount: string | null;
+            /** Total Amount */
+            total_amount: string | null;
+            /** Irpf Amount */
+            irpf_amount: string | null;
+            /** Tax Lines */
+            tax_lines: components["schemas"]["TaxLineOut"][];
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /**
+             * Confirmed By
+             * Format: uuid
+             */
+            confirmed_by: string;
+            /**
+             * Uploaded File Id
+             * Format: uuid
+             */
+            uploaded_file_id: string;
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+        };
+        /**
          * LoginRequest
          * @description Cuerpo de `POST /auth/login`.
          */
@@ -641,6 +745,16 @@ export interface components {
             password: string;
             /** Totp Code */
             totp_code?: string | null;
+        };
+        /**
+         * PanelOut
+         * @description Respuesta de `GET /reporting/invoices`: una página del panel (spec §2).
+         */
+        PanelOut: {
+            /** Items */
+            items: components["schemas"]["InvoiceRowOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
         };
         /**
          * RegisterRequest
@@ -695,6 +809,18 @@ export interface components {
             base?: number | string | null;
             /** Cuota */
             cuota?: number | string | null;
+        };
+        /**
+         * TaxLineOut
+         * @description Un tramo de IVA de la fila del panel.
+         */
+        TaxLineOut: {
+            /** Iva Pct */
+            iva_pct: string | null;
+            /** Base */
+            base: string | null;
+            /** Cuota */
+            cuota: string | null;
         };
         /**
          * UploadOut
@@ -1252,6 +1378,37 @@ export interface operations {
             };
         };
     };
+    download_url_api_v1_uploads__file_id__download_url_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadUrlOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     review_upload_api_v1_uploads__file_id__review_get: {
         parameters: {
             query?: never;
@@ -1338,6 +1495,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HistoryOut"];
+                };
+            };
+        };
+    };
+    list_invoices_api_v1_reporting_invoices_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                q?: string | null;
+                confirmed_by?: string | null;
+                cif_status?: string | null;
+                company_id?: string | null;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PanelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
