@@ -635,6 +635,50 @@
         }
       }
     },
+    "/api/v1/uploads/{file_id}/download-url": {
+      "get": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Download Url",
+        "description": "URL firmada (5 min) para descargar un fichero de intake. Ver spec S2.7 para los c\u00f3digos.\n\nAutorizaci\u00f3n id\u00e9ntica a `review`/`confirm` (S2.5): 403 empresa hermana del propio tenant, 404\notro tenant/inexistente. La descarga no depende del estado del fichero (spec S2.7 \u00a75).",
+        "operationId": "download_url_api_v1_uploads__file_id__download_url_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadUrlOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/uploads/{file_id}/review": {
       "get": {
         "tags": [
@@ -752,6 +796,156 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HistoryOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reporting/invoices": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "List Invoices",
+        "description": "Facturas confirmadas de la asesor\u00eda, filtradas y paginadas (S3.1). Ver spec S3.1.",
+        "operationId": "list_invoices_api_v1_reporting_invoices_get",
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "confirmed_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Confirmed By"
+            }
+          },
+          {
+            "name": "cif_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cif Status"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanelOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1093,6 +1287,25 @@
         "title": "ConfirmIn",
         "description": "Cuerpo de la confirmaci\u00f3n (S2.5): datos confirmados por el humano."
       },
+      "DownloadUrlOut": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "expires_in"
+        ],
+        "title": "DownloadUrlOut",
+        "description": "URL firmada de descarga de un fichero (respuesta 200, S2.7)."
+      },
       "DuplicateRowOut": {
         "properties": {
           "row": {
@@ -1306,6 +1519,152 @@
         "title": "InvalidRowOut",
         "description": "Fila rechazada en el informe de importaci\u00f3n: n\u00famero de fila (1-based) y motivo."
       },
+      "InvoiceRowOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "direction": {
+            "type": "string",
+            "title": "Direction"
+          },
+          "counterparty_tax_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Tax Id"
+          },
+          "counterparty_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Name"
+          },
+          "counterparty_cif_status": {
+            "type": "string",
+            "title": "Counterparty Cif Status"
+          },
+          "net_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Amount"
+          },
+          "tax_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Amount"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
+          },
+          "irpf_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Irpf Amount"
+          },
+          "tax_lines": {
+            "items": {
+              "$ref": "#/components/schemas/TaxLineOut"
+            },
+            "type": "array",
+            "title": "Tax Lines"
+          },
+          "confirmed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Confirmed At"
+          },
+          "confirmed_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Confirmed By"
+          },
+          "uploaded_file_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uploaded File Id"
+          },
+          "uploaded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Uploaded At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "issue_date",
+          "direction",
+          "counterparty_tax_id",
+          "counterparty_name",
+          "counterparty_cif_status",
+          "net_amount",
+          "tax_amount",
+          "total_amount",
+          "irpf_amount",
+          "tax_lines",
+          "confirmed_at",
+          "confirmed_by",
+          "uploaded_file_id",
+          "uploaded_at"
+        ],
+        "title": "InvoiceRowOut",
+        "description": "Una fila del panel de facturas (spec \u00a72/\u00a73 C8)."
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -1335,6 +1694,35 @@
         ],
         "title": "LoginRequest",
         "description": "Cuerpo de `POST /auth/login`."
+      },
+      "PanelOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InvoiceRowOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "PanelOut",
+        "description": "Respuesta de `GET /reporting/invoices`: una p\u00e1gina del panel (spec \u00a72)."
       },
       "RegisterRequest": {
         "properties": {
@@ -1467,6 +1855,54 @@
         "type": "object",
         "title": "TaxLineIn",
         "description": "Un tramo de IVA confirmado del body de `confirm`."
+      },
+      "TaxLineOut": {
+        "properties": {
+          "iva_pct": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iva Pct"
+          },
+          "base": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
+          "cuota": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuota"
+          }
+        },
+        "type": "object",
+        "required": [
+          "iva_pct",
+          "base",
+          "cuota"
+        ],
+        "title": "TaxLineOut",
+        "description": "Un tramo de IVA de la fila del panel."
       },
       "UploadOut": {
         "properties": {

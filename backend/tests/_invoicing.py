@@ -189,17 +189,25 @@ async def seed_invoice(
     is_test: bool = False,
     counterparty_tax_id: str = COUNTERPARTY_CIF,
     counterparty_name: str = "Proveedor SA",
+    counterparty_cif_status: str = "valid",
+    issue_date: str = "2026-05-10",
+    net_amount: str = "100.00",
+    tax_amount: str = "21.00",
     total_amount: str = "121.00",
+    irpf_amount: str | None = None,
+    tax_lines: list[dict] | None = None,
+    confirmed_by: str | None = None,
 ) -> str:
-    """Inserta una factura confirmada directamente (S2.6), con `confirmed_at` elegido.
+    """Inserta una factura confirmada directamente (S2.6/S3.1), con los campos elegidos.
 
-    El `confirmed_at` real lo fija el servidor al confirmar (S2.5); para probar la ventana de 7 días
-    del historial se siembra la fila con la fecha deseada (spec S2.6 §7), en vez de pasar por el
-    endpoint `confirm`. Crea su propio usuario y `uploaded_file` (FK) para no acoplarse a otro seed.
-    Devuelve el id de la factura.
+    El valor real lo fija el servidor al confirmar (S2.5); para probar ventanas de tiempo, filtros
+    y paginación (S2.6 §7, S3.1 §7) se siembra la fila directamente, en vez de pasar por el
+    endpoint `confirm`. Crea su propio usuario y `uploaded_file` (FK) para no acoplarse a otro
+    seed, salvo que se pase `confirmed_by` (filtro "usuario" del panel, S3.1 C4). `tax_lines`, si
+    se da, siembra también `invoice_tax_lines` (S3.1 C8). Devuelve el id de la factura.
     """
     when = confirmed_at or (datetime.now(UTC) - timedelta(days=days_ago))
-    user_id = await seed_user(
+    confirmer = confirmed_by or await seed_user(
         dsns["admin"],
         tenant_id=tenant_id,
         email=f"seed-invoice-{uuid4()}@example.com",
@@ -213,7 +221,7 @@ async def seed_invoice(
         dsns,
         tenant_id=tenant_id,
         company_id=company_id,
-        uploaded_by=user_id,
+        uploaded_by=confirmer,
         content=JPEG + uuid4().bytes,
         content_type=JPEG_CT,
         status="confirmed",
@@ -224,25 +232,39 @@ async def seed_invoice(
             "INSERT INTO invoices "
             "(tenant_id, company_id, uploaded_file_id, direction, issue_date, "
             " counterparty_tax_id, counterparty_name, counterparty_cif_status, "
-            " net_amount, tax_amount, total_amount, is_test, balance_ok, snapshot, status, "
-            " confirmed_by, confirmed_at) "
-            "VALUES ($1,$2,$3,'recibida',$4::date,$5,$6,'valid',$7::numeric,$8::numeric,"
-            " $9::numeric,$10,true,'{}'::jsonb,'confirmed',$11,$12) "
+            " net_amount, tax_amount, total_amount, irpf_amount, is_test, balance_ok, snapshot, "
+            " status, confirmed_by, confirmed_at) "
+            "VALUES ($1,$2,$3,'recibida',$4::date,$5,$6,$7,$8::numeric,$9::numeric,"
+            " $10::numeric,$11::numeric,$12,true,'{}'::jsonb,'confirmed',$13,$14) "
             "RETURNING id",
             tenant_id,
             company_id,
             file_id,
-            date(2026, 5, 10),
+            date.fromisoformat(issue_date),
             counterparty_tax_id,
             counterparty_name,
-            "100.00",
-            "21.00",
+            counterparty_cif_status,
+            net_amount,
+            tax_amount,
             total_amount,
+            irpf_amount,
             is_test,
-            user_id,
+            confirmer,
             when,
         )
-        return str(row["id"])
+        invoice_id = str(row["id"])
+        for line in tax_lines or []:
+            await conn.execute(
+                "INSERT INTO invoice_tax_lines (tenant_id, company_id, invoice_id, iva_pct, "
+                "base, cuota) VALUES ($1,$2,$3,$4::numeric,$5::numeric,$6::numeric)",
+                tenant_id,
+                company_id,
+                invoice_id,
+                line.get("iva_pct"),
+                line.get("base"),
+                line.get("cuota"),
+            )
+        return invoice_id
     finally:
         await conn.close()
 

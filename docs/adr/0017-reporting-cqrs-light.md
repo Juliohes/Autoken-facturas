@@ -1,0 +1,66 @@
+# ADR-0017: `reporting` como contexto de solo lectura (CQRS-light)
+
+- **Estado**: aceptado
+- **Fecha**: 2026-07-22
+- **Decisores**: Julio (+ Claude Code)
+
+## Contexto
+
+El panel de facturas de la asesoría (S3.1) necesita listar `invoices` filtradas (fecha, proveedor/CIF,
+usuario, estado del CIF), ordenadas y paginadas, con sus tramos de IVA (`invoice_tax_lines`) y la fecha de
+subida del fichero (`uploaded_files.created_at`). Ninguna de esas tres tablas la posee el contexto
+`reporting`: `invoices`/`invoice_tax_lines` son de `invoicing` (S2.5), `uploaded_files` es de
+`invoice_intake` (S2.1).
+
+El patrón que ya usa el resto del backend para cruzar contextos es llamar a las funciones públicas del
+módulo dueño (p. ej. `invoicing.service._load_file` delega en `invoice_intake.service.authorize_file_access`,
+S2.7). Ese patrón sirve para **coordinar escrituras y reglas de negocio** entre contextos. Para una
+**lectura filtrada, ordenada y paginada con un JOIN** (el caso de `reporting`), llamar función a función
+across contexts obligaría a traer TODAS las filas de cada contexto a Python y filtrar/paginar en memoria, o
+a que `invoicing`/`invoice_intake` expusieran endpoints de lectura a medida de `reporting` (acoplando su
+diseño a un consumidor).
+
+Esto ya estaba anticipado en el backlog de auditoría del proyecto (`Auditoria_Autoken_Javi_22-06-2026.md`,
+PAT-9): *"CQRS-light (S3): read models planos en `reporting/`, queries de solo-lectura → DTOs Pydantic. Nada
+de event-sourcing ni bases separadas."*
+
+## Decisión
+
+`reporting` es un contexto de **solo lectura**: sus repositorios (`reporting/repository.py`) consultan
+directamente por SQL las tablas de otros contextos (`invoices`, `invoice_tax_lines`, `uploaded_files`),
+filtradas/ordenadas/paginadas para sus propios casos de uso (paneles, informes), sin pasar por los
+repositorios de `invoicing`/`invoice_intake`. A cambio, `reporting`:
+
+- **Nunca escribe** en ninguna tabla que no posea (ni `INSERT`/`UPDATE`/`DELETE`); el guardarraíl es
+  disciplina de código, reforzado por revisión (auditoría 3 lentes) en cada tarea de `reporting`.
+- Traduce las filas crudas a un **contrato propio del servicio** (p. ej. `reporting.service.InvoiceItem`),
+  nunca reexporta el dataclass del repositorio hasta el router (mismo criterio que el resto del backend,
+  p. ej. `invoicing.service.HistoryItem`, S2.6).
+- Sigue bajo la **RLS de dos niveles** (ADR-0001): la sesión ya llega con `app.tenant_id`/`app.company_id`
+  fijados; ninguna consulta de `reporting` pasa esos valores por parámetro. La RLS actúa a nivel de tabla en
+  Postgres, con independencia de qué módulo Python emite el `SELECT`.
+- No es event-sourcing ni una base de lectura separada: son "read models planos", SQL directo contra las
+  mismas tablas transaccionales, sin infraestructura nueva (Fowler, *CQRS*: "para saber dónde parar").
+
+## Alternativas consideradas
+
+- **Reutilizar los repositorios de `invoicing`/`invoice_intake` función a función**: descartado para este
+  caso de uso. Sirve para coordinar una operación puntual (una fila, una autorización), no para un listado
+  filtrado/ordenado/paginado con JOIN: montarlo así habría significado traer todas las facturas a Python y
+  paginar en memoria, o forzar a `invoicing` a exponer una API de consulta genérica que no necesita para su
+  propio dominio (acoplamiento inverso).
+- **Vistas SQL o proyecciones materializadas**: descartado por prematuro; el volumen actual no lo justifica
+  y añade una pieza de infraestructura (refresco, consistencia) sin necesidad demostrada.
+
+## Consecuencias
+
+- **Positivas**: consultas de listado eficientes (un `SELECT`+`JOIN` con `LIMIT`, no N llamadas a otros
+  contextos); `reporting` puede evolucionar sus vistas de lectura sin tocar `invoicing`/`invoice_intake`.
+- **Negativas**: el esquema de `invoices`/`invoice_tax_lines` queda referenciado en SQL crudo en más de un
+  sitio (el ORM de `invoicing`, protegido por el guard `alembic check` de CI, y ahora `reporting`); una
+  migración futura que renombre/quite una columna de esas tablas debe revisar también
+  `reporting/repository.py` (no hay guard automático para esto, a diferencia del ORM). Mitigación: los tests
+  de `reporting` cubren todos los campos de cada fila, así que un desajuste rompe tests, no produce datos
+  corruptos en silencio.
+- Todo nuevo contexto de lectura agregada (futuros informes, export) que necesite cruzar tablas de varios
+  contextos sigue este mismo patrón, no el de llamar función a función.
