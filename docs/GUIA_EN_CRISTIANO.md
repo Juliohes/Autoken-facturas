@@ -116,16 +116,26 @@ los datos de otra.
 **Con S2.7 el Sprint 2 queda completo**, salvo la captura guiada en el móvil (S2.2), que necesita probarse
 en un teléfono real y queda pendiente hasta disponer de uno.
 
+### Sprint 3 — El panel de la asesoría (en marcha, julio 2026)
+
+- **S3.1 — Panel de facturas** (22/07/2026): la pantalla donde el administrador de la asesoría ve **todas**
+  las facturas confirmadas de **todas** sus empresas-cliente (no solo la última semana de un empleado, eso
+  es S2.6), con buscador y filtros (por fechas, por proveedor/CIF, por quién la confirmó, por si el
+  proveedor quedó verificado, por empresa), y un botón "Ver" para abrir la foto original de cualquier
+  factura (reutiliza el enlace temporal de S2.7). Es exclusivo del administrador; el empleado sigue con su
+  historial de 7 días. Como puede haber muchísimas facturas, la lista se trae "por tandas" (botón "Cargar
+  más") en vez de todas de golpe.
+
 ## 5. Qué queda por delante
 
-- **Sprint 3**: el panel de la asesoría — la pantalla donde ven TODAS sus facturas con filtros, exportan a
-  Excel, y pueden corregir algo si hace falta (con registro de quién cambió qué).
+- **Sprint 3** (en marcha): export a Excel (S3.2), edición de una factura con registro de quién cambió qué
+  (S3.3), gestión de empresas y usuarios desde el panel (S3.4), y marcar/purgar facturas de prueba (S3.5).
 - **Sprint 4**: panel de la plataforma (dar de alta asesorías nuevas en minutos) y personalización visual
   por asesoría (cada una con su logo y colores).
 - **Sprint 5**: refuerzo de seguridad y pruebas de carga antes de dar el paso final.
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
 
-**Avance estimado hacia producción a día de hoy: ≈48-49%** (contando tareas del plan completo, sin contar
+**Avance estimado hacia producción a día de hoy: ≈50%** (25 de 50 tareas del plan completo, sin contar
 el módulo de Verifactu ni la limpieza final del servidor viejo, que van en paralelo y no bloquean el
 lanzamiento).
