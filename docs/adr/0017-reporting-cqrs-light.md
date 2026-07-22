@@ -27,9 +27,10 @@ de event-sourcing ni bases separadas."*
 ## Decisión
 
 `reporting` es un contexto de **solo lectura**: sus repositorios (`reporting/repository.py`) consultan
-directamente por SQL las tablas de otros contextos (`invoices`, `invoice_tax_lines`, `uploaded_files`),
+directamente por SQL las tablas de otros contextos (`invoices`, `invoice_tax_lines`, `uploaded_files`, y
+desde S3.2 también `companies` y `users` para el export a Excel — ver enmienda abajo),
 filtradas/ordenadas/paginadas para sus propios casos de uso (paneles, informes), sin pasar por los
-repositorios de `invoicing`/`invoice_intake`. A cambio, `reporting`:
+repositorios de `invoicing`/`invoice_intake`/`companies`/`identity`. A cambio, `reporting`:
 
 - **Nunca escribe** en ninguna tabla que no posea (ni `INSERT`/`UPDATE`/`DELETE`); el guardarraíl es
   disciplina de código, reforzado por revisión (auditoría 3 lentes) en cada tarea de `reporting`.
@@ -64,3 +65,14 @@ repositorios de `invoicing`/`invoice_intake`. A cambio, `reporting`:
   corruptos en silencio.
 - Todo nuevo contexto de lectura agregada (futuros informes, export) que necesite cruzar tablas de varios
   contextos sigue este mismo patrón, no el de llamar función a función.
+
+## Enmienda (2026-07-22, S3.2): export a Excel amplía el conjunto de tablas leídas
+
+El export a Excel del panel (S3.2, `reporting.repository.list_for_export`) añade `JOIN`a `companies`
+(nombre de la empresa, para una fila que puede mezclar varias empresas de la asesoría) y a `users` (email de
+quien confirmó, más legible en un Excel que su id). El patrón no cambia: sigue siendo solo lectura, sigue
+protegido por la RLS de dos niveles propia de `companies`/`users` (independiente de la de `invoices`,
+migración 0001), y sigue traduciendo a un DTO propio del servicio (`ExportItem`, nunca `ExportRow` hasta el
+router). Se deja constancia aquí para que la advertencia de "Consecuencias" (una migración de esquema debe
+revisar también `reporting/repository.py`) se entienda extendida a `companies.name` y `users.email`, no solo
+a `invoices`/`invoice_tax_lines`/`uploaded_files`.

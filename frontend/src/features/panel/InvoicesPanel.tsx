@@ -6,6 +6,7 @@ import { useState } from 'react'
 
 import { useCompanyOptions } from './useCompanyOptions'
 import { useDownloadUrl } from './useDownloadUrl'
+import { useExportInvoices } from './useExportInvoices'
 import { useInvoicesPanel } from './useInvoicesPanel'
 import type { InvoiceRow, PanelFilters } from './types'
 
@@ -29,6 +30,7 @@ export function InvoicesPanel() {
   const panel = useInvoicesPanel(filters)
   const companies = useCompanyOptions()
   const downloadUrl = useDownloadUrl()
+  const exportInvoices = useExportInvoices()
 
   const set = (patch: Partial<PanelFilters>) =>
     setRawFilters((prev) => ({ ...prev, ...patch }))
@@ -38,6 +40,8 @@ export function InvoicesPanel() {
       onSuccess: (url) => window.open(url, '_blank', 'noopener,noreferrer'),
     })
   }
+
+  const handleExport = () => exportInvoices.mutate(filters)
 
   const rows = panel.data?.pages.flatMap((page) => page.items) ?? []
 
@@ -103,6 +107,20 @@ export function InvoicesPanel() {
           </select>
         </label>
       </div>
+
+      <button
+        type="button"
+        onClick={handleExport}
+        disabled={exportInvoices.isPending}
+        className="rounded-md border border-slate-600 px-4 py-2 text-slate-100 disabled:opacity-40"
+      >
+        {exportInvoices.isPending ? 'Generando…' : 'Descargar Excel'}
+      </button>
+      {exportInvoices.isError && (
+        <p role="alert" className="text-sm text-red-400">
+          No se pudo generar el Excel. Inténtalo de nuevo.
+        </p>
+      )}
 
       {panel.isLoading && <p className="text-slate-400">Cargando…</p>}
 

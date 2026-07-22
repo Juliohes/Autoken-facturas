@@ -1,23 +1,25 @@
-"""Endpoint HTTP del panel de facturas de la asesoría (S3.1): `GET /api/v1/reporting/invoices`.
+"""Endpoints HTTP del panel de facturas de la asesoría: `GET /api/v1/reporting/invoices` (S3.1) y
+su export a Excel, `GET /api/v1/reporting/invoices/export` (S3.2).
 
 Capa HTTP fina: autentica y autoriza (`tenant_admin`, portero de roles), tipa los filtros de la
 query string y traduce el resultado o la excepción de dominio de `reporting.service` a la
-respuesta HTTP. No contiene SQL ni reglas de negocio.
+respuesta HTTP. No contiene SQL ni reglas de negocio; el Excel se construye en `reporting.xlsx`.
 """
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from identity.authz import require_roles
 from identity.dependencies import AuthContext
-from reporting import service
+from reporting import service, xlsx
 from tenancy.constants import Role
 
 router = APIRouter(prefix="/reporting", tags=["reporting"])
@@ -25,6 +27,8 @@ router = APIRouter(prefix="/reporting", tags=["reporting"])
 # El panel es exclusivo de `tenant_admin` (decisión de dominio, spec S3.1 §6): el empleado (`user`)
 # se queda con el historial de 7 días de S2.6.
 TenantAdmin = Annotated[AuthContext, Depends(require_roles(Role.TENANT_ADMIN))]
+
+_XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 class TaxLineOut(BaseModel):
@@ -62,6 +66,26 @@ class PanelOut(BaseModel):
     next_cursor: str | None
 
 
+def _filters_from_query(
+    *,
+    date_from: date | None,
+    date_to: date | None,
+    q: str | None,
+    confirmed_by: UUID | None,
+    cif_status: str | None,
+    company_id: UUID | None,
+) -> service.PanelFilters:
+    """Tipa los filtros de la query string a `PanelFilters` (compartido por panel y export)."""
+    return service.PanelFilters(
+        date_from=date_from,
+        date_to=date_to,
+        q=q,
+        confirmed_by=confirmed_by,
+        cif_status=cif_status,
+        company_id=company_id,
+    )
+
+
 @router.get("/invoices")
 async def list_invoices(
     identity: TenantAdmin,
@@ -74,7 +98,7 @@ async def list_invoices(
     cursor: str | None = None,
 ) -> PanelOut:
     """Facturas confirmadas de la asesoría, filtradas y paginadas (S3.1). Ver spec S3.1."""
-    filters = service.PanelFilters(
+    filters = _filters_from_query(
         date_from=date_from,
         date_to=date_to,
         q=q,
@@ -115,4 +139,44 @@ async def list_invoices(
             for row in page.items
         ],
         next_cursor=page.next_cursor,
+    )
+
+
+@router.get("/invoices/export")
+async def export_invoices(
+    identity: TenantAdmin,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    q: str | None = None,
+    confirmed_by: UUID | None = None,
+    cif_status: str | None = None,
+    company_id: UUID | None = None,
+) -> Response:
+    """Excel con todas las facturas que casan los filtros, sin paginar (S3.2). Ver spec S3.2.
+
+    Mismos filtros que `list_invoices`; no acepta `cursor` (el export no pagina, spec §5).
+    """
+    filters = _filters_from_query(
+        date_from=date_from,
+        date_to=date_to,
+        q=q,
+        confirmed_by=confirmed_by,
+        cif_status=cif_status,
+        company_id=company_id,
+    )
+    try:
+        items = await service.export_invoices(identity, filters)
+    except service.InvalidDateRange as exc:
+        raise HTTPException(
+            status_code=422, detail="date_from no puede ser posterior a date_to"
+        ) from exc
+
+    # `build_export_workbook` es CPU-bound (hasta EXPORT_LIMIT filas): fuera del hilo del event
+    # loop para no bloquear las peticiones de otros tenants mientras se genera (spec: solo lectura,
+    # pero un export grande no debe degradar el resto del servicio).
+    content = await asyncio.to_thread(xlsx.build_export_workbook, items)
+    return Response(
+        content=content,
+        media_type=_XLSX_MEDIA_TYPE,
+        headers={"Content-Disposition": 'attachment; filename="facturas.xlsx"'},
     )
