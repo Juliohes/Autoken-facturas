@@ -87,9 +87,7 @@ async def test_c3_invoice_count_excluye_facturas_de_prueba(authapi: Api) -> None
     await seed_invoice(dsns, tenant_id=tenant_id, company_id=company_id, days_ago=2)
     await seed_invoice(dsns, tenant_id=tenant_id, company_id=company_id, days_ago=1)
     await seed_invoice(dsns, tenant_id=tenant_id, company_id=company_id, days_ago=0)
-    await seed_invoice(
-        dsns, tenant_id=tenant_id, company_id=company_id, days_ago=-10, is_test=True
-    )
+    await seed_invoice(dsns, tenant_id=tenant_id, company_id=company_id, days_ago=-10, is_test=True)
     token = await token_for(client, email="admin@ilex.es", hostname="ilex.localhost")
 
     resp = await client.get(URL, headers=auth(token, "ilex.localhost"))
