@@ -157,11 +157,24 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   de más por debajo antes de contarlas bien (el resultado final salía correcto, pero por un camino más
   costoso de lo necesario); se separó en dos cuentas independientes antes de unirlas a la empresa, un cruce
   más simple y que envejece mejor según crezca el histórico de facturas.
+- **S3.5 — Facturas de prueba** (23/07/2026, cierra Sprint 3): un administrador ya podía decirle al
+  sistema "esta factura es solo una prueba" al confirmarla, pero solo por detrás — la pantalla no tenía
+  casilla para marcarlo, y esas pruebas se quedaban acumuladas para siempre sin forma de limpiarlas. Ahora
+  la pantalla de confirmación muestra una casilla "Factura de prueba" (solo la ve un administrador, nunca
+  un empleado) y hay un botón "Purgar facturas de prueba" que borra de golpe todas las de la asesoría —
+  la factura, sus datos asociados y la foto original — sin poder tocar nunca una factura real (esa
+  condición está fija por dentro del programa, no depende de lo que mande la pantalla). Para saber quién
+  es administrador, la aplicación tuvo que empezar a preguntarle al servidor "¿quién eres?" por primera
+  vez desde una pantalla (antes ninguna pantalla lo hacía). La auditoría encontró un detalle de eficiencia
+  (borrar muchas fotos de golpe iba a mantener la operación "a medio hacer" más tiempo del necesario) y se
+  corrigió: ahora los datos se borran primero de forma segura, y las fotos se limpian justo después,
+  sin alargar la operación principal.
 
 ## 5. Qué queda por delante
 
-- **Sprint 3** (en marcha): pantalla para editar una factura desde el panel (falta el frontend de S3.3), y
-  marcar/purgar facturas de prueba (S3.5).
+- **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
+  facturas (S3.3 solo trajo la capacidad de corregir con seguridad, no la pantalla para hacerlo cómodo),
+  si hace falta más adelante.
 - **Pendiente transversal, detectado el 23/07/2026**: las pantallas construidas hasta ahora (historial,
   confirmación, panel de facturas, empresas) existen y están probadas cada una por su cuenta, pero la
   aplicación todavía no tiene "esqueleto" que las una: no hay login real en pantalla, ni menú, ni forma de
@@ -178,6 +191,6 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   falta construir un interruptor (solo para Julio) que permita apagar este modo experimental sin tocar
   código, porque cuesta dinero real en llamadas a las IAs.
 
-**Avance estimado hacia producción a día de hoy: ≈55%** (28 de 51 tareas del plan "core", sin contar el
+**Avance estimado hacia producción a día de hoy: ≈57%** (29 de 51 tareas del plan "core", sin contar el
 módulo de Verifactu, la limpieza final del servidor viejo, ni la ampliación del 22/07 —aún no tiene número
-de tarea fijo—, que van en paralelo y no bloquean el lanzamiento).
+de tarea fijo—, que van en paralelo y no bloquean el lanzamiento). **Sprint 3 completo.**

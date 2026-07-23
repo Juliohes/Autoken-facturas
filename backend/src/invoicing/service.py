@@ -173,6 +173,13 @@ class EditResult:
     balance_ok: bool | None
 
 
+@dataclass(frozen=True)
+class PurgeResult:
+    """Resultado de purgar las facturas de prueba (S3.5): cuántas se borraron."""
+
+    purged: int
+
+
 def _is_admin(role: str) -> bool:
     """True si el rol exime de las guardas de admin (CIF propio ausente, marcar `is_test`).
 
@@ -647,6 +654,40 @@ async def edit_invoice(
         payload={edit.field: {"old": edit.ai_value, "new": edit.human_value} for edit in edits},
     )
     return _edit_result(invoice_id, merged, cif_status=cif_status, balance_ok=balance_ok)
+
+
+AUDIT_ACTION_PURGE_TEST = "invoice.purge_test"
+
+
+async def purge_test_invoices(identity: AuthContext) -> PurgeResult:
+    """Borra TODAS las facturas de prueba visibles en el contexto, de una vez (S3.5).
+
+    La condición `is_test = true` es fija en el repositorio, nunca un parámetro de esta función ni
+    del endpoint (spec S3.5 regla 2): estructuralmente no puede alcanzar una factura real. Cada
+    factura purgada deja su propia entrada `invoice.purge_test` en `audit_log` (regla 6, no una fila
+    agregada); su fichero subido se borra a través de `invoice_intake` (dueño de `uploaded_files` y
+    de MinIO), misma llamada cruzada de contexto que `_load_file` usa para autorizar (S2.5/S2.7). El
+    borrado del OBJETO en MinIO se agenda para después del commit (`schedule_storage_cleanup`): la
+    fila de Postgres se borra ya, dentro de esta transacción; la red a MinIO no la alarga.
+    """
+    purged = await repository.purge_test_invoices(identity.session)
+    locations = []
+    for item in purged:
+        await write_audit(
+            identity.session,
+            actor_id=identity.user_id,
+            action=AUDIT_ACTION_PURGE_TEST,
+            entity=_AUDIT_ENTITY,
+            entity_id=item.id,
+            payload={"uploaded_file_id": str(item.uploaded_file_id)},
+        )
+        location = await intake_service.delete_uploaded_file_row(
+            identity.session, item.uploaded_file_id
+        )
+        if location is not None:
+            locations.append(location)
+    intake_service.schedule_storage_cleanup(identity.session, locations)
+    return PurgeResult(purged=len(purged))
 
 
 def _diff(extraction: ExtractionRecord, command: ConfirmCommand) -> list[Correction]:

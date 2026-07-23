@@ -5,6 +5,7 @@ import { useState, type FormEvent } from 'react'
 
 import { CompanyTableRow } from './CompanyTableRow'
 import { PendingRegistrations } from './PendingRegistrations'
+import { PurgeTestInvoices } from './PurgeTestInvoices'
 import { useCompaniesPanel } from './useCompaniesPanel'
 import { useCreateCompany } from './useCreateCompany'
 import { useDeleteCompany } from './useDeleteCompany'
@@ -150,6 +151,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
       )}
 
       <PendingRegistrations />
+      <PurgeTestInvoices />
     </section>
   )
 }

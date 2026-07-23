@@ -271,6 +271,31 @@ async def delete_tax_lines(session: AsyncSession, invoice_id: UUID) -> None:
     )
 
 
+@dataclass(frozen=True)
+class PurgedInvoice:
+    """Una factura de prueba borrada por la purga (S3.5): su id y el fichero subido asociado."""
+
+    id: UUID
+    uploaded_file_id: UUID
+
+
+async def purge_test_invoices(session: AsyncSession) -> list[PurgedInvoice]:
+    """Borra TODAS las facturas `is_test = true` visibles en el contexto y las devuelve (S3.5).
+
+    La condición `is_test = true` es fija en esta sentencia, nunca un parámetro (spec S3.5 regla de
+    dominio 2): estructuralmente no puede alcanzar una factura real. El borrado arrastra en cascada
+    `invoice_tax_lines`/`ocr_corrections`/`invoice_edits` (ya declarado en el esquema, 0007/0008);
+    `uploaded_files` se borra aparte (la cascada solo va de `uploaded_files` hacia `invoices`, no al
+    revés), de ahí que se devuelva también `uploaded_file_id` de cada fila borrada.
+    """
+    rows = (
+        await session.execute(
+            text("DELETE FROM invoices WHERE is_test = true RETURNING id, uploaded_file_id")
+        )
+    ).all()
+    return [PurgedInvoice(id=row.id, uploaded_file_id=row.uploaded_file_id) for row in rows]
+
+
 async def insert_corrections(
     session: AsyncSession,
     *,

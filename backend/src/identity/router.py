@@ -211,8 +211,26 @@ async def activate_confirm(body: ActivateConfirmRequest) -> dict[str, str]:
     return {"status": "active"}
 
 
+class MeCompanyOut(BaseModel):
+    """Empresa a la que está acotado un `user` en `/auth/me` (`null` para `tenant_admin`)."""
+
+    id: str
+    name: str
+
+
+class MeOut(BaseModel):
+    """Respuesta de `GET /auth/me` (S1.6 C5/C6), tipada para que el cliente autogenerado la use
+    sin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado)."""
+
+    id: str
+    email: str
+    role: str
+    tenant: str
+    company: MeCompanyOut | None
+
+
 @router.get("/me")
-async def me(identity: Annotated[AuthContext, Depends(current_identity)]) -> dict[str, object]:
+async def me(identity: Annotated[AuthContext, Depends(current_identity)]) -> MeOut:
     """Testigo protegido: la identidad del token, leída bajo el contexto del tenant (RLS).
 
     Incluye `company` (id y nombre) para un `user` acotado a su empresa; `null` para un
@@ -222,14 +240,10 @@ async def me(identity: Annotated[AuthContext, Depends(current_identity)]) -> dic
     if row is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     company = (
-        {"id": str(identity.company.id), "name": identity.company.name}
+        MeCompanyOut(id=str(identity.company.id), name=identity.company.name)
         if identity.company is not None
         else None
     )
-    return {
-        "id": row.id,
-        "email": row.email,
-        "role": row.role,
-        "tenant": identity.tenant_slug,
-        "company": company,
-    }
+    return MeOut(
+        id=row.id, email=row.email, role=row.role, tenant=identity.tenant_slug, company=company
+    )

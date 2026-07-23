@@ -115,6 +115,16 @@ async def transition_status(session: AsyncSession, file_id: UUID, status: FileSt
     )
 
 
+async def delete_uploaded_file(session: AsyncSession, file_id: UUID) -> None:
+    """Borra la fila de `uploaded_files` del contexto (purga de facturas de prueba, S3.5).
+
+    Solo el borrado de la fila; el objeto en MinIO lo borra `service.delete_uploaded_file` (dueño
+    del almacén). Nada llama a esta función directamente salvo ese caso: el resto del intake es
+    append-only por diseño (spec S2.1 §4).
+    """
+    await session.execute(text("DELETE FROM uploaded_files WHERE id = :id"), {"id": str(file_id)})
+
+
 def is_duplicate_violation(exc: IntegrityError) -> bool:
     """True si la `IntegrityError` viene del UNIQUE `(company_id, sha256)`, no de otra."""
     return violates_unique_constraint(exc, _COMPANY_SHA256_UNIQUE)

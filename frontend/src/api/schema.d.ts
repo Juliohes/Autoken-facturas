@@ -459,6 +459,26 @@ export interface paths {
         patch: operations["edit_invoice_api_v1_invoices__invoice_id__patch"];
         trace?: never;
     };
+    "/api/v1/invoices/test/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Purge Test Invoices
+         * @description Borra TODAS las facturas de prueba de la asesoría de una vez (S3.5). Solo `tenant_admin`.
+         */
+        post: operations["purge_test_invoices_api_v1_invoices_test_purge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reporting/companies": {
         parameters: {
             query?: never;
@@ -895,6 +915,32 @@ export interface components {
             totp_code?: string | null;
         };
         /**
+         * MeCompanyOut
+         * @description Empresa a la que está acotado un `user` en `/auth/me` (`null` para `tenant_admin`).
+         */
+        MeCompanyOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * MeOut
+         * @description Respuesta de `GET /auth/me` (S1.6 C5/C6), tipada para que el cliente autogenerado la use
+         *     sin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado).
+         */
+        MeOut: {
+            /** Id */
+            id: string;
+            /** Email */
+            email: string;
+            /** Role */
+            role: string;
+            /** Tenant */
+            tenant: string;
+            company: components["schemas"]["MeCompanyOut"] | null;
+        };
+        /**
          * PanelOut
          * @description Respuesta de `GET /reporting/invoices`: una página del panel (spec §2).
          */
@@ -903,6 +949,14 @@ export interface components {
             items: components["schemas"]["InvoiceRowOut"][];
             /** Next Cursor */
             next_cursor: string | null;
+        };
+        /**
+         * PurgeResultOut
+         * @description Respuesta de `POST /invoices/test/purge` (S3.5): cuántas facturas de prueba se borraron.
+         */
+        PurgeResultOut: {
+            /** Purged */
+            purged: number;
         };
         /**
          * RegisterRequest
@@ -1223,9 +1277,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MeOut"];
                 };
             };
         };
@@ -1678,6 +1730,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_test_invoices_api_v1_invoices_test_purge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurgeResultOut"];
                 };
             };
         };

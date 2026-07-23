@@ -312,6 +312,15 @@ async def fetch_invoice_edits(dsns: dict[str, str], *, invoice_id: str) -> list[
         await conn.close()
 
 
+async def fetch_uploaded_file(dsns: dict[str, str], *, file_id: str) -> dict | None:
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        row = await conn.fetchrow("SELECT * FROM uploaded_files WHERE id = $1", file_id)
+        return dict(row) if row is not None else None
+    finally:
+        await conn.close()
+
+
 async def count_invoices(dsns: dict[str, str], *, file_id: str) -> int:
     conn = await asyncpg.connect(dsns["admin"])
     try:

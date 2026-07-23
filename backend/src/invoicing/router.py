@@ -1,5 +1,5 @@
-"""Endpoints HTTP de la persistencia de facturas: review/confirm (S2.5), historial (S2.6) y edición
-auditada (S3.3).
+"""Endpoints HTTP de la persistencia de facturas: review/confirm (S2.5), historial (S2.6), edición
+auditada (S3.3) y purga de facturas de prueba (S3.5).
 
 Capa HTTP **fina**: autentica y autoriza (portero de roles; la pertenencia fina la comprueba el
 servicio), tipa el body y traduce el resultado o la excepción de dominio de `invoicing.service` a la
@@ -242,3 +242,16 @@ async def edit_invoice(
         irpf_amount=result.irpf_amount,
         balance_ok=result.balance_ok,
     )
+
+
+class PurgeResultOut(BaseModel):
+    """Respuesta de `POST /invoices/test/purge` (S3.5): cuántas facturas de prueba se borraron."""
+
+    purged: int
+
+
+@invoices_router.post("/test/purge")
+async def purge_test_invoices(identity: InvoiceEditor) -> PurgeResultOut:
+    """Borra TODAS las facturas de prueba de la asesoría de una vez (S3.5). Solo `tenant_admin`."""
+    result = await service.purge_test_invoices(identity)
+    return PurgeResultOut(purged=result.purged)

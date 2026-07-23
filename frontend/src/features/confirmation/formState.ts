@@ -72,7 +72,11 @@ function taxLineToForm(line: ReviewTaxLine): TaxLineForm {
  */
 export function formStateToConfirmBody(
   form: ConfirmFormState,
-  options: { direction: ConfirmBody['direction']; responsibilityAccepted: boolean },
+  options: {
+    direction: ConfirmBody['direction']
+    responsibilityAccepted: boolean
+    isTest?: boolean
+  },
 ): ConfirmBody {
   return {
     direction: options.direction,
@@ -89,7 +93,7 @@ export function formStateToConfirmBody(
       cuota: toBody(line.cuota),
     })),
     responsibility_accepted: options.responsibilityAccepted,
-    is_test: false,
+    is_test: options.isTest ?? false,
   }
 }
 

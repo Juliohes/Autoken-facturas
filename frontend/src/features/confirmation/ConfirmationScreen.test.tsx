@@ -318,4 +318,68 @@ describe('ConfirmationScreen (S2.4)', () => {
 
     resolvePost({ data: { id: 'inv-1' }, error: undefined })
   })
+
+  it('S3.5 C9: un tenant_admin ve la casilla "Factura de prueba" y marcarla manda is_test: true', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/auth/me')) {
+        return Promise.resolve({
+          data: { id: 'u1', email: 'admin@ilex.es', role: 'tenant_admin', tenant: 'ilex', company: null },
+          error: undefined,
+        })
+      }
+      return Promise.resolve({ data: makeReview(), error: undefined })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByLabelText('Importe total')
+    const checkbox = await screen.findByText('Factura de prueba (no aparecerá en informes)')
+    expect(checkbox).toBeInTheDocument()
+    await user.click(screen.getByLabelText('Factura de prueba (no aparecerá en informes)'))
+    // Dos casillas en pantalla aquí (prueba + responsabilidad): se identifica por su propia
+    // etiqueta, no por `acceptResponsibility` (que asume una única casilla, S2.4).
+    await user.click(
+      screen.getByLabelText('Acepto la responsabilidad de la veracidad de los datos que confirmo.'),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
+
+    await waitFor(() => {
+      expect(postMock).toHaveBeenCalledWith(
+        '/api/v1/uploads/{file_id}/confirm',
+        expect.objectContaining({ body: expect.objectContaining({ is_test: true }) }),
+      )
+    })
+  })
+
+  it('S3.5 C10: un empleado no ve la casilla y siempre manda is_test: false', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/auth/me')) {
+        return Promise.resolve({
+          data: {
+            id: 'u1',
+            email: 'ana@ilex.es',
+            role: 'user',
+            tenant: 'ilex',
+            company: { id: 'c1', name: 'Empresa' },
+          },
+          error: undefined,
+        })
+      }
+      return Promise.resolve({ data: makeReview(), error: undefined })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByLabelText('Importe total')
+    expect(screen.queryByText('Factura de prueba (no aparecerá en informes)')).not.toBeInTheDocument()
+    await acceptResponsibility(user)
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
+
+    await waitFor(() => {
+      expect(postMock).toHaveBeenCalledWith(
+        '/api/v1/uploads/{file_id}/confirm',
+        expect.objectContaining({ body: expect.objectContaining({ is_test: false }) }),
+      )
+    })
+  })
 })
