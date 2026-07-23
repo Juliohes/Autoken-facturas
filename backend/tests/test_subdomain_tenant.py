@@ -14,7 +14,9 @@ import asyncpg
 import httpx
 import pytest
 
-from tests._dbtest import provision_test_db, seed_tenant
+from tests._auth import bearer
+from tests._dbtest import provision_test_db, seed_branding, seed_tenant
+from tests._platform import platform_token, seed_platform_admin
 
 _HEALTH = "/api/v1/health"
 _CURRENT = "/api/v1/tenants/current"
@@ -136,6 +138,121 @@ async def test_c7_resolve_tenant_solo_devuelve_activos(
     finally:
         await conn.close()
     assert len(filas) == 0
+
+
+# --- S4.2: branding en /tenants/current ----------------------------------------------------------
+
+
+async def test_s42_c1_devuelve_el_branding_completo_cuando_existe(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """S4.2 C1: con branding puesto, el endpoint lo devuelve tal cual."""
+    client, dsns = api
+    tenant_id = await seed_tenant(dsns["admin"], "ilex", "I-Lex Asesoría")
+    await seed_branding(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        logo_url="https://cdn.x/logo.png",
+        color_primary="#112233",
+        color_secondary="#445566",
+        app_name="I-Lex",
+    )
+    resp = await client.get(_CURRENT, headers=_host("ilex.autoken.es"))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["logo_url"] == "https://cdn.x/logo.png"
+    assert body["color_primary"] == "#112233"
+    assert body["color_secondary"] == "#445566"
+    assert body["app_name"] == "I-Lex"
+
+
+async def test_s42_defensivo_sin_fila_de_tenant_branding_todos_los_campos_son_null(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """Defensivo: sin ninguna fila de `tenant_branding` (estado no alcanzable en producción, donde
+    `create_tenant`, S4.1, siempre crea una), `get_branding` da `None` y el endpoint no rompe."""
+    client, dsns = api
+    await seed_tenant(dsns["admin"], "ilex", "I-Lex Asesoría")
+    resp = await client.get(_CURRENT, headers=_host("ilex.autoken.es"))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["logo_url"] is None
+    assert body["color_primary"] is None
+    assert body["color_secondary"] is None
+    assert body["app_name"] is None
+    assert body["favicon"] is None
+
+
+async def test_s42_c2_alta_minima_via_platform_admin_app_name_cae_al_nombre_del_tenant(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """S4.2 C2 (camino real): un tenant dado de alta sin logo/colores (S4.1) siempre tiene fila de
+    `tenant_branding`, con `app_name` = su `name` (no `null`) y el resto de branding a `null`."""
+    client, dsns = api
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+    create_resp = await client.post(
+        "/api/v1/platform/tenants",
+        json={"name": "Mínima SL", "slug": "minima"},
+        headers={**_host("panel.localhost"), **bearer(token)},
+    )
+    assert create_resp.status_code == 201, create_resp.text
+
+    resp = await client.get(_CURRENT, headers=_host("minima.autoken.es"))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["app_name"] == "Mínima SL"
+    assert body["logo_url"] is None
+    assert body["color_primary"] is None
+    assert body["color_secondary"] is None
+
+
+async def test_s42_c3_sigue_siendo_404_neutro_sin_tenant(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """S4.2 C3: host que no resuelve -> 404, sin cambios por añadir branding a la respuesta."""
+    client, _ = api
+    resp = await client.get(_CURRENT, headers=_host("nope.autoken.es"))
+    assert resp.status_code == 404
+
+
+async def test_s42_c4_anticruce_branding_no_se_filtra_entre_tenants(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """S4.2 C4: el branding de `ilex` no aparece al pedir el de `otra`, y viceversa."""
+    client, dsns = api
+    tid_ilex = await seed_tenant(dsns["admin"], "ilex", "I-Lex Asesoría")
+    tid_otra = await seed_tenant(dsns["admin"], "otra", "Otra Asesoría")
+    await seed_branding(dsns["admin"], tenant_id=tid_ilex, app_name="I-Lex")
+    await seed_branding(dsns["admin"], tenant_id=tid_otra, app_name="Otra")
+
+    resp_ilex = await client.get(_CURRENT, headers=_host("ilex.autoken.es"))
+    resp_otra = await client.get(_CURRENT, headers=_host("otra.autoken.es"))
+
+    assert resp_ilex.json()["app_name"] == "I-Lex"
+    assert resp_otra.json()["app_name"] == "Otra"
+
+
+async def test_s42_rls_tapa_la_lectura_directa_de_tenant_branding_sin_contexto(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """S4.2 (defensa en profundidad, mismo patrón que C6): sin `app.tenant_id` fijado, un `SELECT`
+    directo del rol runtime sobre `tenant_branding` no ve nada, aunque la fila exista de verdad.
+
+    El test C4 (arriba) demuestra el comportamiento observable (branding correcto por subdominio),
+    pero pasaría igual si la RLS de `tenant_branding` estuviera rota, porque el `WHERE` de la
+    propia consulta ya filtra por el tenant correcto. Este test aísla la RLS como mecanismo, no el
+    filtro de aplicación (regla de oro 5 del proyecto: la suite anti-cruce es gate bloqueante).
+    """
+    _, dsns = api
+    tenant_id = await seed_tenant(dsns["admin"], "ilex", "I-Lex Asesoría")
+    await seed_branding(dsns["admin"], tenant_id=tenant_id, app_name="I-Lex")
+    conn = await asyncpg.connect(dsns["app"])  # rol runtime, sin app.tenant_id
+    try:
+        filas = await conn.fetch("SELECT * FROM tenant_branding WHERE tenant_id = $1", tenant_id)
+    finally:
+        await conn.close()
+    assert len(filas) == 0  # RLS FORCE: sin contexto, 0 filas aunque la fila exista
 
 
 # --- Refuerzos de la auditoría de S1.2 ----------------------------------------------------------

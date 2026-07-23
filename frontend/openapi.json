@@ -33,7 +33,7 @@
           "tenancy"
         ],
         "summary": "Current Tenant",
-        "description": "Datos p\u00fablicos del tenant resuelto por el subdominio (para el login/branding).\n\n404 neutro si el host no corresponde a un tenant activo (inexistente, suspendido o no-tenant):\nla respuesta es id\u00e9ntica en todos esos casos, no se revela qu\u00e9 tenants existen.",
+        "description": "Datos p\u00fablicos del tenant resuelto por el subdominio, incluido su branding (S1.2/S4.2).\n\n404 neutro si el host no corresponde a un tenant activo (inexistente, suspendido o no-tenant):\nla respuesta es id\u00e9ntica en todos esos casos, no se revela qu\u00e9 tenants existen.",
         "operationId": "current_tenant_api_v1_tenants_current_get",
         "responses": {
           "200": {
@@ -41,9 +41,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Current Tenant Api V1 Tenants Current Get"
+                  "$ref": "#/components/schemas/TenantCurrentOut"
                 }
               }
             }
@@ -2633,6 +2631,90 @@
         ],
         "title": "TenantCreateIn",
         "description": "Cuerpo de `POST /platform/tenants` (spec S4.1 \u00a72/\u00a73)."
+      },
+      "TenantCurrentOut": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "is_demo": {
+            "type": "boolean",
+            "title": "Is Demo"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "color_primary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Primary"
+          },
+          "color_secondary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Secondary"
+          },
+          "app_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Name"
+          },
+          "favicon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Favicon"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "is_demo",
+          "logo_url",
+          "color_primary",
+          "color_secondary",
+          "app_name",
+          "favicon"
+        ],
+        "title": "TenantCurrentOut",
+        "description": "Respuesta de `GET /tenants/current` (S1.2 + branding S4.2).\n\nLos campos de branding son `null` cuando el tenant no tiene fila en `tenant_branding` o el campo\nconcreto est\u00e1 vac\u00edo: el servidor nunca inventa un valor por defecto (spec S4.2 decisi\u00f3n 1); los\nvalores de reemplazo (\"Setex tal cual hoy\") los aplica el frontend."
       },
       "TenantOut": {
         "properties": {

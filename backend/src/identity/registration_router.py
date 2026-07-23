@@ -22,11 +22,11 @@ from identity import registration, registration_repo
 from identity.authz import require_roles
 from identity.client_ip import client_ip
 from identity.dependencies import AuthContext
-from identity.public_context import PublicTenantContext, public_tenant_context
 from notifications import Notifier, get_notifier
 from shared.config import get_settings
 from shared.redis import RedisError, get_redis
 from tenancy.constants import Role
+from tenancy.context import PublicTenantContext, public_tenant_context
 
 router = APIRouter(tags=["registration"])
 
