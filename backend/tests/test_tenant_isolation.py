@@ -35,6 +35,7 @@ API = "/api/v1"
 _PUBLIC_ROUTES = {
     ("GET", f"{API}/health"),
     ("GET", f"{API}/tenants/current"),
+    ("GET", f"{API}/manifest.webmanifest"),
     ("POST", f"{API}/auth/login"),
     ("POST", f"{API}/auth/refresh"),
     ("POST", f"{API}/auth/logout"),

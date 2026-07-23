@@ -194,18 +194,27 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   un test que comprobaba un caso que en la práctica nunca puede pasar (se corrigió para probar el
   caso real); y se reforzó la prueba de que el logo/color de una asesoría nunca se cuela al pedir el
   de otra, probando directamente el candado de la base de datos, no solo el resultado final.
+- **S4.3 — Manifest PWA dinámico** (24/07/2026): cuando alguien le da a "Instalar app" desde el móvil,
+  hasta ahora siempre se instalaba "Autoken Facturas" con el icono genérico, sin importar de qué
+  asesoría fuera. Ahora se instala con el nombre y el icono de la asesoría, tomados del logo y el
+  nombre que ya se configuraron en S4.1. También se añadió el icono pequeño de la pestaña del
+  navegador (favicon) por asesoría. La auditoría encontró y corrigió dos fallos reales antes de
+  cerrar la tarea: uno impedía que el icono de instalación se viera bien en las asesorías SIN logo
+  propio (un problema técnico de cómo el navegador entiende una dirección relativa, ya arreglado); y
+  otro hacía que, si una asesoría configuraba SOLO el icono de la pestaña (sin tocar nombre ni
+  colores), ese icono a veces no llegara a aparecer — también corregido y con una prueba nueva que
+  vigila que no vuelva a pasar.
 
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
   facturas (S3.3 solo trajo la capacidad de corregir con seguridad, no la pantalla para hacerlo cómodo),
   si hace falta más adelante.
-- **Sprint 4 en marcha** (S4.1 y S4.2 cerrados 24/07/2026): quedan S4.3 (icono de instalación propio
-  por asesoría), S4.4 (modo demo con un clic), S4.5 (panel de consumo: empresas/usuarios/facturas/coste
-  por asesoría), S4.6 (dominios propios de cliente) y S4.7 (suspender/exportar/borrar una asesoría).
-  S4.2 dejó el logo/colores aplicados solo en el punto de entrada actual de la app, no todavía en cada
-  pantalla ya construida (panel, empresas...) — eso encaja mejor junto con la tarea de "esqueleto"
-  de abajo.
+- **Sprint 4 en marcha** (S4.1-S4.3 cerrados 24/07/2026): quedan S4.4 (modo demo con un clic), S4.5
+  (panel de consumo: empresas/usuarios/facturas/coste por asesoría), S4.6 (dominios propios de
+  cliente) y S4.7 (suspender/exportar/borrar una asesoría). S4.2/S4.3 dejaron el logo/colores/icono
+  aplicados solo en el punto de entrada actual de la app, no todavía en cada pantalla ya construida
+  (panel, empresas...) — eso encaja mejor junto con la tarea de "esqueleto" de abajo.
 - **Pendiente transversal, detectado el 23/07/2026**: las pantallas construidas hasta ahora (historial,
   confirmación, panel de facturas, empresas) existen y están probadas cada una por su cuenta, pero la
   aplicación todavía no tiene "esqueleto" que las una: no hay login real en pantalla, ni menú, ni forma de
@@ -222,7 +231,7 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   falta construir un interruptor (solo para Julio) que permita apagar este modo experimental sin tocar
   código, porque cuesta dinero real en llamadas a las IAs.
 
-**Avance estimado hacia producción a día de hoy: ≈61%** (31 de 51 tareas del plan "core", sin contar el
+**Avance estimado hacia producción a día de hoy: ≈63%** (32 de 51 tareas del plan "core", sin contar el
 módulo de Verifactu, la limpieza final del servidor viejo, ni la ampliación del 22/07 —aún no tiene número
 de tarea fijo—, que van en paralelo y no bloquean el lanzamiento). **Sprint 3 completo; Sprint 4 en marcha
-(S4.1-S4.2 hechos, quedan S4.3-S4.7).**
+(S4.1-S4.3 hechos, quedan S4.4-S4.7).**

@@ -39,9 +39,33 @@ export interface paths {
          * @description Datos públicos del tenant resuelto por el subdominio, incluido su branding (S1.2/S4.2).
          *
          *     404 neutro si el host no corresponde a un tenant activo (inexistente, suspendido o no-tenant):
-         *     la respuesta es idéntica en todos esos casos, no se revela qué tenants existen.
+         *     la respuesta es idéntica en todos esos casos, no se revela qué tenants existen (lo da
+         *     `public_tenant_context`, mismo portero que el registro público, S1.4).
          */
         get: operations["current_tenant_api_v1_tenants_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manifest.webmanifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tenant Manifest
+         * @description Web App Manifest del tenant resuelto por el subdominio (S4.3).
+         *
+         *     Mismo portero público que `/tenants/current` (404 neutro sin tenant). `Content-Type:
+         *     application/manifest+json`, el tipo correcto para un manifest (no `application/json`).
+         */
+        get: operations["tenant_manifest_api_v1_manifest_webmanifest_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1203,6 +1227,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TenantCurrentOut"];
+                };
+            };
+        };
+    };
+    tenant_manifest_api_v1_manifest_webmanifest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
