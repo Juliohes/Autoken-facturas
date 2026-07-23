@@ -34,8 +34,19 @@ def get_redis() -> aioredis.Redis:
 
 
 async def dispose_redis() -> None:
-    """Cierra el cliente y su pool (lifespan de la app; tests entre casos)."""
+    """Cierra el cliente y su pool (lifespan de la app; tests entre casos).
+
+    En tests, `_client` puede haber quedado atado al *event loop* de un caso anterior, ya cerrado
+    por `pytest-asyncio` (loop por test, function-scoped): `aclose()` intenta entonces cerrar
+    sockets de un loop muerto y revienta con `RuntimeError: Event loop is closed` en vez de
+    comportarse como un no-op seguro (no hay nada que cerrar de verdad: los sockets de ese loop ya
+    no existen). Se ignora ese caso concreto; cualquier otro error de cierre sigue propagándose.
+    """
     global _client
     if _client is not None:
-        await _client.aclose()
+        try:
+            await _client.aclose()
+        except RuntimeError as exc:
+            if "Event loop is closed" not in str(exc):
+                raise
         _client = None
