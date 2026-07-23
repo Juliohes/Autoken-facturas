@@ -73,11 +73,13 @@
   (facturas de prueba) cerrados y mergeados.
 - **Falta de Sprint 2**: **S2.2** (captura guiada PWA, `getUserMedia`+OpenCV.js, ADR-0002) — sin empezar, no
   hay ningún componente de cámara en frontend hoy.
-- **Sprint 4 (panel de plataforma)**: no iniciado; `platform_admin/` solo tiene el healthcheck. Es el
-  siguiente sprint a abordar.
+- **Sprint 4 (panel de plataforma) arrancado**: S4.1 (alta de tenant en minutos) cerrado y mergeado.
+  Primer endpoint del proyecto protegido por el rol `platform_admin` (antes solo servía para login);
+  ver ADR-0013 (enmienda 2026-07-24). Quedan S4.2-S4.7.
 - **Hallazgo transversal (S3.4, 2026-07-23)**: las pantallas de frontend construidas hasta ahora
-  (historial, confirmación, panel de facturas, empresas) viven y se prueban aisladas; falta una tarea de
-  integración (app-shell: login real, menú, routing) que las conecte entre sí antes de un demo end-to-end.
+  (historial, confirmación, panel de facturas, empresas, plataforma) viven y se prueban aisladas; falta
+  una tarea de integración (app-shell: login real, menú, routing) que las conecte entre sí antes de un
+  demo end-to-end.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11), aún sin construir**:

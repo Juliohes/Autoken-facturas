@@ -541,6 +541,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tenants
+         * @description Todos los tenants, más reciente primero (S4.1).
+         */
+        get: operations["list_tenants_api_v1_platform_tenants_get"];
+        put?: never;
+        /**
+         * Create Tenant
+         * @description Da de alta un tenant operativo (S4.1). Slug/color inválidos -> 422; slug duplicado -> 409.
+         */
+        post: operations["create_tenant_api_v1_platform_tenants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1023,6 +1047,46 @@ export interface components {
             base: string | null;
             /** Cuota */
             cuota: string | null;
+        };
+        /**
+         * TenantCreateIn
+         * @description Cuerpo de `POST /platform/tenants` (spec S4.1 §2/§3).
+         */
+        TenantCreateIn: {
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Logo Url */
+            logo_url?: string | null;
+            /** Color Primary */
+            color_primary?: string | null;
+            /** Color Secondary */
+            color_secondary?: string | null;
+        };
+        /**
+         * TenantOut
+         * @description Un tenant en la respuesta (alta o listado).
+         */
+        TenantOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            /** Is Demo */
+            is_demo: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /**
          * UploadOut
@@ -1834,6 +1898,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tenants_api_v1_platform_tenants_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantOut"][];
+                };
+            };
+        };
+    };
+    create_tenant_api_v1_platform_tenants_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantOut"];
                 };
             };
             /** @description Validation Error */

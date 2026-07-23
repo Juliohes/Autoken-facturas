@@ -15,7 +15,12 @@ from typing import Annotated, Any
 from fastapi import Depends, HTTPException
 from fastapi.dependencies.models import Dependant
 
-from identity.dependencies import AuthContext, current_identity
+from identity.dependencies import (
+    AuthContext,
+    PlatformAuthContext,
+    current_identity,
+    current_platform_identity,
+)
 from tenancy.constants import Role
 
 # Atributo con el que se marca la dependencia `guard` que produce `require_roles`, para que el guard
@@ -33,6 +38,25 @@ def require_roles(*roles: Role) -> Callable[..., Coroutine[Any, Any, AuthContext
     ) -> AuthContext:
         if identity.role not in allowed:
             raise HTTPException(status_code=403, detail="Forbidden")
+        return identity
+
+    setattr(guard, ROLES_MARKER, allowed)
+    return guard
+
+
+def require_platform_admin() -> Callable[..., Coroutine[Any, Any, PlatformAuthContext]]:
+    """Dependencia que exige un `platform_admin` ya autenticado (S4.1), sin contexto de tenant.
+
+    `current_platform_identity` ya solo deja pasar `platform_admin` (403 para cualquier otro rol);
+    este wrapper no añade ninguna comprobación, solo lleva el mismo `ROLES_MARKER` que
+    `require_roles` para que el guard anti-olvido C10 reconozca la ruta como protegida por rol,
+    aunque no pase por `current_identity` (un `platform_admin` no tiene tenant que resolver).
+    """
+    allowed = frozenset({str(Role.PLATFORM_ADMIN)})
+
+    async def guard(
+        identity: Annotated[PlatformAuthContext, Depends(current_platform_identity)],
+    ) -> PlatformAuthContext:
         return identity
 
     setattr(guard, ROLES_MARKER, allowed)

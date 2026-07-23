@@ -15,12 +15,8 @@ from uuid import UUID
 from sqlalchemy import text
 
 from shared.db import session
+from tenancy.constants import PLATFORM_SUBDOMAINS, RESERVED_SLUGS
 
-# Subdominios de plataforma (panel de Julio/Alberto): no son asesorías, pero SÍ son el único host
-# donde un `platform_admin` puede autenticarse (#53, S1.6 C8).
-_PLATFORM = frozenset({"panel", "panel-staging"})
-# Subdominios que NO son asesorías (plataforma / alias del dominio raíz). No resuelven a tenant.
-_RESERVED = frozenset({"www"}) | _PLATFORM
 # Dominios base admitidos para extraer el subdominio (producción + conveniencia de desarrollo).
 _DEV_BASE = "localhost"
 
@@ -74,7 +70,7 @@ def extract_subdomain(host: str, base_domain: str, *, allow_localhost: bool = Tr
     `ilex.autoken.es` -> `ilex`; `autoken.es`/`www.autoken.es` -> None; `panel.autoken.es` -> None.
     """
     label = _first_label(host, base_domain, allow_localhost=allow_localhost)
-    if label is None or label in _RESERVED:
+    if label is None or label in RESERVED_SLUGS:
         return None
     return label
 
@@ -85,7 +81,7 @@ def is_platform_host(host: str, base_domain: str, *, allow_localhost: bool = Tru
     Es el único host donde se acepta el login de un `platform_admin` (#53, S1.6 C8): en cualquier
     otro host no-tenant el login de plataforma se rechaza como una credencial inexistente.
     """
-    return _first_label(host, base_domain, allow_localhost=allow_localhost) in _PLATFORM
+    return _first_label(host, base_domain, allow_localhost=allow_localhost) in PLATFORM_SUBDOMAINS
 
 
 async def resolve_tenant(slug: str) -> ResolvedTenant | None:

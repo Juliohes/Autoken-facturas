@@ -93,3 +93,36 @@ es S1.5.
   `platform_admin` fuera de `panel` y amplía la superficie de ataque. Acotado a `panel` (#53).
 - **Un framework de permisos (Casbin/OSO)**: sobredimensionado para tres roles y una matriz pequeña;
   un portero de dependencia + la RLS de Postgres cubren el caso con menos piezas.
+
+## Enmienda (2026-07-24, S4.1): primer endpoint de negocio de `platform_admin`
+
+La decisión 5 de este ADR dejaba explícitamente fuera de alcance "el acceso cross-tenant [de
+`platform_admin`] con audit log... es S4". S4.1 ("Alta de tenant en minutos") lo abre: el primer
+endpoint de negocio (no solo login) que un `platform_admin` puede usar (`POST`/`GET
+/platform/tenants`). Esto introduce una **excepción explícita** a la regla dura de S1.2/S1.3 ("el
+**token identifica**, el **subdominio aísla**"): para este rol, el JWT firmado con
+`role = platform_admin` **es** la barrera completa, con independencia del host por el que llegue la
+petición.
+
+- **Por qué es seguro sin atar al host**: el login de `platform_admin` SÍ sigue atado a `panel`/
+  `panel-staging` (decisión 4, sin cambios); una vez emitido el token, viaja por
+  `Authorization: Bearer` (no por cookie, no hay CSRF), y la API no tiene CORS abierto. Comprobar
+  además el host en cada petición autenticada no añadiría una frontera de confianza real (el `Host`
+  lo controla el cliente), solo complejidad.
+- **Mecanismo, no acoplado a `current_identity`**: una dependencia paralela,
+  `identity.dependencies.current_platform_identity`, valida el JWT y exige el rol, sin depender de
+  que el subdominio resuelva a un tenant (un `platform_admin` no tiene uno). Usa una sesión de BD
+  sin RLS de tenant (`shared.db.platform_session`), y el acceso a `tenants`/`tenant_branding` pasa
+  por funciones `SECURITY DEFINER` acotadas (`create_tenant`/`list_tenants`, migración 0010), mismo
+  patrón que `resolve_tenant`/`find_platform_admin` (S1.2/S1.3): el rol runtime de la API nunca gana
+  `SELECT`/`INSERT` directo y sin acotar sobre esas tablas.
+- **Guard anti-olvido (C10) preservado**: `identity.authz.require_platform_admin()` envuelve
+  `current_platform_identity` con el mismo `ROLES_MARKER` que `require_roles`, para que el guard que
+  detecta endpoints de negocio sin portero (spec S1.6 C10) reconozca también este camino.
+- **Traza de auditoría**: pendiente para cuando haya una operación que lo justifique (S4.1 es alta
+  únicamente, sin modificar/borrar); se revisará en S4.7 (ciclo de vida del tenant: suspender/
+  exportar/borrar), que sí son operaciones sensibles sobre asesorías ya existentes.
+
+Este patrón (rol de plataforma como barrera completa, sin dependencia del host, vía
+`current_platform_identity`/`require_platform_admin`/`platform_session`) es el que reutilizará el
+resto de endpoints de plataforma de Sprint 4, no una excepción puntual de S4.1.
