@@ -36,7 +36,7 @@ export interface paths {
         };
         /**
          * Current Tenant
-         * @description Datos públicos del tenant resuelto por el subdominio (para el login/branding).
+         * @description Datos públicos del tenant resuelto por el subdominio, incluido su branding (S1.2/S4.2).
          *
          *     404 neutro si el host no corresponde a un tenant activo (inexistente, suspendido o no-tenant):
          *     la respuesta es idéntica en todos esos casos, no se revela qué tenants existen.
@@ -1065,6 +1065,32 @@ export interface components {
             color_secondary?: string | null;
         };
         /**
+         * TenantCurrentOut
+         * @description Respuesta de `GET /tenants/current` (S1.2 + branding S4.2).
+         *
+         *     Los campos de branding son `null` cuando el tenant no tiene fila en `tenant_branding` o el campo
+         *     concreto está vacío: el servidor nunca inventa un valor por defecto (spec S4.2 decisión 1); los
+         *     valores de reemplazo ("Setex tal cual hoy") los aplica el frontend.
+         */
+        TenantCurrentOut: {
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            /** Is Demo */
+            is_demo: boolean;
+            /** Logo Url */
+            logo_url: string | null;
+            /** Color Primary */
+            color_primary: string | null;
+            /** Color Secondary */
+            color_secondary: string | null;
+            /** App Name */
+            app_name: string | null;
+            /** Favicon */
+            favicon: string | null;
+        };
+        /**
          * TenantOut
          * @description Un tenant en la respuesta (alta o listado).
          */
@@ -1176,9 +1202,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TenantCurrentOut"];
                 };
             };
         };

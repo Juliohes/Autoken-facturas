@@ -104,6 +104,34 @@ async def seed_tenant(admin_dsn: str, slug: str, name: str, status: str = "activ
         await conn.close()
 
 
+async def seed_branding(
+    admin_dsn: str,
+    *,
+    tenant_id: str,
+    logo_url: str | None = None,
+    color_primary: str | None = None,
+    color_secondary: str | None = None,
+    app_name: str | None = None,
+    favicon: str | None = None,
+) -> None:
+    """Inserta la fila de `tenant_branding` de un tenant (como superusuario, saltando RLS, S4.2)."""
+    conn = await asyncpg.connect(admin_dsn)
+    try:
+        await conn.execute(
+            "INSERT INTO tenant_branding "
+            "(tenant_id, logo_url, color_primary, color_secondary, app_name, favicon) "
+            "VALUES ($1, $2, $3, $4, $5, $6)",
+            tenant_id,
+            logo_url,
+            color_primary,
+            color_secondary,
+            app_name,
+            favicon,
+        )
+    finally:
+        await conn.close()
+
+
 async def seed_user(
     admin_dsn: str,
     *,

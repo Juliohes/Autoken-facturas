@@ -183,16 +183,29 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   exactamente dos cosas — crear una asesoría, listarlas todas — sin abrir ninguna otra puerta. La
   auditoría encontró y corrigió dos fallos reales antes de cerrar la tarea: un subdominio demasiado
   largo rompía con un error feo en vez de avisar con claridad, y se podía crear una asesoría sin nombre.
+- **S4.2 — Theming runtime** (24/07/2026): cada asesoría ya podía guardar su logo y sus colores al
+  darse de alta (S4.1), pero esos datos no se usaban para nada. Ahora, al arrancar, la aplicación
+  pregunta "¿de qué asesoría es este subdominio y cómo se ve?" y aplica esos colores y ese logo — sin
+  que la asesoría original (Setex) note ningún cambio, porque para ella todo sigue exactamente igual
+  que hoy (sin logo ni colores propios, cae a los de siempre). Fue una tarea más sencilla de lo
+  esperado por dentro: a diferencia del alta de asesorías (S4.1), leer el logo/colores no necesitó
+  ningún permiso nuevo en la base de datos. La auditoría encontró y corrigió tres detalles: un trozo
+  de código que ya existía en otro sitio del proyecto se estaba reescribiendo en vez de reutilizarse;
+  un test que comprobaba un caso que en la práctica nunca puede pasar (se corrigió para probar el
+  caso real); y se reforzó la prueba de que el logo/color de una asesoría nunca se cuela al pedir el
+  de otra, probando directamente el candado de la base de datos, no solo el resultado final.
 
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
   facturas (S3.3 solo trajo la capacidad de corregir con seguridad, no la pantalla para hacerlo cómodo),
   si hace falta más adelante.
-- **Sprint 4 en marcha** (S4.1 cerrado 24/07/2026): quedan S4.2 (que cada asesoría se vea con su logo y
-  colores propios), S4.3 (icono de instalación propio por asesoría), S4.4 (modo demo con un clic), S4.5
-  (panel de consumo: empresas/usuarios/facturas/coste por asesoría), S4.6 (dominios propios de cliente)
-  y S4.7 (suspender/exportar/borrar una asesoría).
+- **Sprint 4 en marcha** (S4.1 y S4.2 cerrados 24/07/2026): quedan S4.3 (icono de instalación propio
+  por asesoría), S4.4 (modo demo con un clic), S4.5 (panel de consumo: empresas/usuarios/facturas/coste
+  por asesoría), S4.6 (dominios propios de cliente) y S4.7 (suspender/exportar/borrar una asesoría).
+  S4.2 dejó el logo/colores aplicados solo en el punto de entrada actual de la app, no todavía en cada
+  pantalla ya construida (panel, empresas...) — eso encaja mejor junto con la tarea de "esqueleto"
+  de abajo.
 - **Pendiente transversal, detectado el 23/07/2026**: las pantallas construidas hasta ahora (historial,
   confirmación, panel de facturas, empresas) existen y están probadas cada una por su cuenta, pero la
   aplicación todavía no tiene "esqueleto" que las una: no hay login real en pantalla, ni menú, ni forma de
@@ -209,7 +222,7 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   falta construir un interruptor (solo para Julio) que permita apagar este modo experimental sin tocar
   código, porque cuesta dinero real en llamadas a las IAs.
 
-**Avance estimado hacia producción a día de hoy: ≈59%** (30 de 51 tareas del plan "core", sin contar el
+**Avance estimado hacia producción a día de hoy: ≈61%** (31 de 51 tareas del plan "core", sin contar el
 módulo de Verifactu, la limpieza final del servidor viejo, ni la ampliación del 22/07 —aún no tiene número
 de tarea fijo—, que van en paralelo y no bloquean el lanzamiento). **Sprint 3 completo; Sprint 4 en marcha
-(S4.1 hecho, quedan S4.2-S4.7).**
+(S4.1-S4.2 hechos, quedan S4.3-S4.7).**

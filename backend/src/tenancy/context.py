@@ -1,11 +1,13 @@
-"""Contexto de tenant SIN token para rutas públicas del subdominio (S1.4: registro).
+"""Contexto de tenant SIN token para rutas públicas del subdominio (S1.4/S4.2).
 
-El registro es **público** pero escribe SOLO en el tenant del subdominio: no hay token que porte el
-`tenant_id`, así que el contexto de aislamiento se abre desde `request.state.tenant` (resuelto por
-el middleware de S1.2). Si el host no resuelve a un tenant activo (raíz, plataforma, inexistente o
-suspendido) no hay asesoría donde registrarse -> **404** (nunca 500). La sesión se abre en contexto
-de asesoría (sin `company_id`): el registro crea usuario + empresa + membership del tenant, y el
-`tenant_id` de esas filas sale del contexto (`app.tenant_id`), jamás del cliente.
+Vive en `tenancy` (no en `identity`) porque no depende de nada de autenticación: solo del tenant ya
+resuelto por el middleware de subdominio (S1.2). Dos consumidores hoy: el registro público (S1.4,
+`identity/registration_router.py`, escribe usuario+empresa+membership) y `GET /tenants/current`
+(S4.2, `tenancy/router.py`, solo lee su branding) — mismo patrón, "abrir el contexto de aislamiento
+sin token", reutilizado en vez de reimplementado en cada router público.
+
+Si el host no resuelve a un tenant activo (raíz, plataforma, inexistente o suspendido) no hay
+asesoría con la que trabajar -> **404** (nunca 500).
 """
 
 from __future__ import annotations
