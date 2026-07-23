@@ -35,3 +35,14 @@ class CompanyStatus(StrEnum):
 
     ACTIVE = "active"
     PENDING = "pending"
+
+
+# Subdominios de plataforma (panel de Julio/Alberto): no son asesorías, pero SÍ son el único host
+# donde un `platform_admin` puede autenticarse (S1.6 C8). Fuente única: `tenancy.resolution` los usa
+# para no resolver tenant en esos hosts; `platform_admin.service` (S4.1) los usa para rechazar un
+# slug de asesoría que chocaría con uno de ellos.
+PLATFORM_SUBDOMAINS = frozenset({"panel", "panel-staging"})
+
+# Subdominios reservados que NUNCA son un slug de asesoría válido: los de plataforma más `www`
+# (alias del dominio raíz).
+RESERVED_SLUGS = frozenset({"www"}) | PLATFORM_SUBDOMAINS

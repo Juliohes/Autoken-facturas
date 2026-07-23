@@ -1,12 +1,17 @@
-"""Dependencia de identidad por petición: valida el JWT y abre el contexto de aislamiento (S1.3).
+"""Dependencias de identidad por petición (S1.3/S4.1): validan el JWT y abren el contexto de BD.
 
-Regla dura del sprint (§1 de la spec): el **token identifica**, pero el **subdominio aísla**. Esta
-dependencia valida el access token, exige que su `tenant_id` case con el tenant del subdominio
-(S1.2) y, si casa, abre `tenant_session` para que la petición corra dentro de la RLS del tenant:
+Dos caminos, según si la identidad tiene tenant o no:
+- `current_identity` (regla dura del sprint: el **token identifica**, el **subdominio aísla**):
+  exige que el `tenant_id` del token case con el tenant del subdominio (S1.2) y abre
+  `tenant_session` para que la petición corra dentro de la RLS del tenant.
+  - sin cabecera `Authorization` o con firma/formato inválidos -> **401**;
+  - el subdominio no resuelve a un tenant activo (p. ej. suspendido) -> **401** (sin contexto);
+  - el `tenant_id` del token no casa con el tenant del subdominio -> **403** (otra asesoría).
+- `current_platform_identity` (S4.1): un `platform_admin` no tiene tenant, así que no hay nada que
+  casar con el subdominio; la barrera es solo el rol del token, con una sesión sin RLS de tenant.
 
-- sin cabecera `Authorization` o con firma/formato inválidos -> **401**;
-- el subdominio no resuelve a un tenant activo (p. ej. suspendido) -> **401** (no hay contexto);
-- el `tenant_id` del token no casa con el tenant del subdominio -> **403** (token de otra asesoría).
+Ambas comparten la lectura/decodificación del token (`_decode_bearer_claims`), único sitio donde
+cambia el formato del error 401 de autenticación.
 """
 
 from __future__ import annotations
@@ -20,10 +25,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity.repository import CompanyRef, MisconfiguredUserCompany, resolve_user_company
 from identity.scoping import RlsScope, RoleNotAuthorized, scope_for_role
-from identity.tokens import InvalidAccessToken, decode_access_token
+from identity.tokens import AccessClaims, InvalidAccessToken, decode_access_token
 from shared.config import get_settings
-from shared.db import tenant_session
+from shared.db import platform_session, tenant_session
+from tenancy.constants import Role
 from tenancy.resolution import ResolvedTenant
+
+
+def _decode_bearer_claims(request: Request) -> AccessClaims:
+    """Lee `Authorization: Bearer <token>` y devuelve sus claims, o 401 (sin cabecera/inválido).
+
+    Compartido por `current_identity` y `current_platform_identity`: mismo criterio de qué cuenta
+    como "no autenticado" para ambos caminos, un solo sitio que sincronizar si cambia.
+    """
+    authorization = request.headers.get("authorization", "")
+    scheme, _, raw_token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not raw_token.strip():
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        return decode_access_token(raw_token.strip(), secret=get_settings().jwt_secret)
+    except InvalidAccessToken as exc:
+        raise HTTPException(status_code=401, detail="Invalid token") from exc
 
 
 @dataclass(frozen=True)
@@ -50,14 +72,7 @@ async def current_identity(request: Request) -> AsyncIterator[AuthContext]:
     `company_id`, ve todo el tenant). El nivel de empresa se resuelve **por petición** (no en el
     token).
     """
-    authorization = request.headers.get("authorization", "")
-    scheme, _, raw_token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not raw_token.strip():
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    try:
-        claims = decode_access_token(raw_token.strip(), secret=get_settings().jwt_secret)
-    except InvalidAccessToken as exc:
-        raise HTTPException(status_code=401, detail="Invalid token") from exc
+    claims = _decode_bearer_claims(request)
 
     resolved: ResolvedTenant | None = getattr(request.state, "tenant", None)
     if resolved is None:
@@ -95,3 +110,33 @@ async def current_identity(request: Request) -> AsyncIterator[AuthContext]:
             session=db_session,
             company=company,
         )
+
+
+@dataclass(frozen=True)
+class PlatformAuthContext:
+    """Identidad validada de un `platform_admin` + una sesión SIN contexto de tenant (S4.1).
+
+    Distinta de `AuthContext` a propósito: un `platform_admin` no tiene `tenant_id`/empresa (S1.3),
+    así que no hay nada que fijar con `SET LOCAL`. Las operaciones de plataforma pasan por funciones
+    `SECURITY DEFINER` acotadas (`create_tenant`/`list_tenants`, migración 0010), no por la RLS de
+    un tenant.
+    """
+
+    user_id: UUID
+    session: AsyncSession
+
+
+async def current_platform_identity(request: Request) -> AsyncIterator[PlatformAuthContext]:
+    """Valida el token y exige `role = platform_admin`. Sin contexto de tenant (S4.1).
+
+    A diferencia de `current_identity`, NO depende de que el subdominio resuelva a un tenant (un
+    `platform_admin` no pertenece a ninguno): la barrera real es el rol del token firmado, no el
+    host por el que llega la petición. Sin cabecera/token válido -> 401; token de otro rol -> 403.
+    """
+    claims = _decode_bearer_claims(request)
+
+    if claims.role != Role.PLATFORM_ADMIN.value:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    async with platform_session() as db_session:
+        yield PlatformAuthContext(user_id=UUID(claims.sub), session=db_session)

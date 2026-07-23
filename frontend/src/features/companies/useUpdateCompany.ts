@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
-import { errorDetail } from './errors'
+import { errorDetail } from '../../api/errors'
 import type { CompanyUpdate } from './types'
 
 export function useUpdateCompany() {

@@ -78,6 +78,28 @@ async def session() -> AsyncIterator[AsyncSession]:
 
 
 @asynccontextmanager
+async def platform_session() -> AsyncIterator[AsyncSession]:
+    """Sesión transaccional SIN contexto de tenant, para operaciones de `platform_admin` (S4.1).
+
+    A diferencia de `session()` (sin transacción explícita, pensada para lecturas puntuales como
+    `resolve_tenant`), esta SÍ abre una transacción real (commit al salir sin error, rollback si hay
+    excepción): las escrituras de plataforma (alta de tenant vía la función `SECURITY DEFINER`
+    `create_tenant`) necesitan confirmarse de verdad. Sin `SET LOCAL` de `app.tenant_id`/
+    `app.company_id`: un `platform_admin` no tiene tenant (S1.3); las funciones que llama ya saltan
+    la RLS por sí mismas (`BYPASSRLS` del rol propietario, no de la sesión del rol runtime).
+
+    **No usar para leer/escribir tablas de negocio directamente** (`companies`, `invoices`...): sin
+    contexto de tenant, la RLS de esas tablas falla cerrado (0 filas en `SELECT`, violación de
+    política en `INSERT`/`UPDATE`), así que un mal uso no fuga datos entre tenants, pero sí produce
+    un bug silencioso difícil de depurar. Esta sesión es solo para invocar funciones `SECURITY
+    DEFINER` de plataforma ya acotadas (`create_tenant`, `list_tenants`...), nunca SQL de negocio
+    libre.
+    """
+    async with _get_sessionmaker()() as db_session, db_session.begin():
+        yield db_session
+
+
+@asynccontextmanager
 async def tenant_session(
     tenant_id: UUID, company_id: UUID | None = None
 ) -> AsyncIterator[AsyncSession]:

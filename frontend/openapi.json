@@ -1184,6 +1184,72 @@
           }
         }
       }
+    },
+    "/api/v1/platform/tenants": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "List Tenants",
+        "description": "Todos los tenants, m\u00e1s reciente primero (S4.1).",
+        "operationId": "list_tenants_api_v1_platform_tenants_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TenantOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Tenants Api V1 Platform Tenants Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Create Tenant",
+        "description": "Da de alta un tenant operativo (S4.1). Slug/color inv\u00e1lidos -> 422; slug duplicado -> 409.",
+        "operationId": "create_tenant_api_v1_platform_tenants_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2515,6 +2581,99 @@
         ],
         "title": "TaxLineOut",
         "description": "Un tramo de IVA de la fila del panel."
+      },
+      "TenantCreateIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "color_primary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Primary"
+          },
+          "color_secondary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Secondary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "slug"
+        ],
+        "title": "TenantCreateIn",
+        "description": "Cuerpo de `POST /platform/tenants` (spec S4.1 \u00a72/\u00a73)."
+      },
+      "TenantOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "is_demo": {
+            "type": "boolean",
+            "title": "Is Demo"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "status",
+          "is_demo",
+          "created_at"
+        ],
+        "title": "TenantOut",
+        "description": "Un tenant en la respuesta (alta o listado)."
       },
       "UploadOut": {
         "properties": {

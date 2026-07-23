@@ -170,11 +170,29 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   corrigió: ahora los datos se borran primero de forma segura, y las fotos se limpian justo después,
   sin alargar la operación principal.
 
+### Sprint 4 — El panel de la plataforma (arrancado, julio 2026)
+
+- **S4.1 — Alta de tenant en minutos** (24/07/2026): hasta ahora, dar de alta una asesoría nueva en el
+  sistema exigía meter la mano directamente en la base de datos. Julio/Alberto ya tienen una pantalla
+  ("Plataforma — Asesorías") con un formulario (nombre, subdominio, logo, 2 colores) que crea la
+  asesoría al momento — su subdominio (`nueva-asesoria.autoken.es`) queda listo para usarse sin tocar
+  código ni reiniciar nada — y un listado de las que ya existen. Por dentro fue más delicado de lo que
+  parece: la tabla de asesorías tiene una protección especial (cada una solo puede ver sus propios
+  datos, ni siquiera la aplicación puede "ver todas a la vez" por defecto), así que hizo falta crear un
+  mecanismo acotado, del mismo tipo que ya se usaba para el login de plataforma, que deja hacer
+  exactamente dos cosas — crear una asesoría, listarlas todas — sin abrir ninguna otra puerta. La
+  auditoría encontró y corrigió dos fallos reales antes de cerrar la tarea: un subdominio demasiado
+  largo rompía con un error feo en vez de avisar con claridad, y se podía crear una asesoría sin nombre.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
   facturas (S3.3 solo trajo la capacidad de corregir con seguridad, no la pantalla para hacerlo cómodo),
   si hace falta más adelante.
+- **Sprint 4 en marcha** (S4.1 cerrado 24/07/2026): quedan S4.2 (que cada asesoría se vea con su logo y
+  colores propios), S4.3 (icono de instalación propio por asesoría), S4.4 (modo demo con un clic), S4.5
+  (panel de consumo: empresas/usuarios/facturas/coste por asesoría), S4.6 (dominios propios de cliente)
+  y S4.7 (suspender/exportar/borrar una asesoría).
 - **Pendiente transversal, detectado el 23/07/2026**: las pantallas construidas hasta ahora (historial,
   confirmación, panel de facturas, empresas) existen y están probadas cada una por su cuenta, pero la
   aplicación todavía no tiene "esqueleto" que las una: no hay login real en pantalla, ni menú, ni forma de
@@ -191,6 +209,7 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   falta construir un interruptor (solo para Julio) que permita apagar este modo experimental sin tocar
   código, porque cuesta dinero real en llamadas a las IAs.
 
-**Avance estimado hacia producción a día de hoy: ≈57%** (29 de 51 tareas del plan "core", sin contar el
+**Avance estimado hacia producción a día de hoy: ≈59%** (30 de 51 tareas del plan "core", sin contar el
 módulo de Verifactu, la limpieza final del servidor viejo, ni la ampliación del 22/07 —aún no tiene número
-de tarea fijo—, que van en paralelo y no bloquean el lanzamiento). **Sprint 3 completo.**
+de tarea fijo—, que van en paralelo y no bloquean el lanzamiento). **Sprint 3 completo; Sprint 4 en marcha
+(S4.1 hecho, quedan S4.2-S4.7).**
