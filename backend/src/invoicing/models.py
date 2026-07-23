@@ -1,8 +1,9 @@
-"""Modelos ORM de la persistencia de facturas (S2.5): invoices + tax_lines + ocr_corrections.
+"""Modelos ORM de la persistencia de facturas: invoices + tax_lines + ocr_corrections (S2.5) +
+invoice_edits (S3.3).
 
-El esquema aquí debe coincidir con la migración 0007 (el guard `alembic check` de CI detecta la
-deriva ORM<->migración). Las políticas RLS de dos niveles y los grants viven en la migración, no en
-el ORM, igual que en `uploaded_files` (0004) y `ocr_extractions` (0005).
+El esquema aquí debe coincidir con las migraciones 0007/0008 (el guard `alembic check` de CI detecta
+la deriva ORM<->migración). Las políticas RLS de dos niveles y los grants viven en la migración, no
+en el ORM, igual que en `uploaded_files` (0004) y `ocr_extractions` (0005).
 
 Una factura vigente por `uploaded_file_id` (UNIQUE): reconfirmar es 409, no duplica.
 """
@@ -132,5 +133,38 @@ class OcrCorrection(Base):
         PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class InvoiceEdit(Base):
+    """Edición humana de un campo de una factura ya confirmada (`invoice_edits`, S3.3).
+
+    Una fila por campo que cambió en una edición (no una fila por edición). Mismo patrón de diff que
+    `OcrCorrection`, pero humano-vs-humano (post-confirmación), no IA-vs-humano (al confirmar):
+    `old_value` es el valor anterior, `new_value` el editado, ambos como texto.
+    """
+
+    __tablename__ = "invoice_edits"
+
+    id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    invoice_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False
+    )
+    field: Mapped[str] = mapped_column(Text, nullable=False)
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    edited_by: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    edited_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

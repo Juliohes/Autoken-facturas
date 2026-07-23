@@ -10,9 +10,11 @@ descuadre aritmético AVISA pero no bloquea (regla 5).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -36,6 +38,7 @@ from ocr import repository as ocr_repo
 from ocr.repository import ExtractionRecord
 from ocr.verification import TaxLine, check_invoice_totals
 from shared.audit import write_audit
+from shared.tax_id import normalize_tax_id
 from tenancy.constants import Role
 
 # Estados del fichero desde los que se puede revisar/confirmar (spec §2/§5): ya hay datos del OCR.
@@ -77,9 +80,28 @@ class ResponsibilityNotAccepted(InvoicingError):
     """No se aceptó la responsabilidad: bloquea el guardado (-> 422)."""
 
 
+class InvoiceNotVisible(InvoicingError):
+    """La factura no existe en el contexto del actor (inexistente u otro tenant) (-> 404, S3.3).
+
+    A diferencia de `_load_file` (S2.5), aquí no hay un caso 403 aparte: el editor es siempre
+    `tenant_admin` (spec S3.3, decisión de dominio 1), cuyo contexto ya abarca toda la asesoría
+    (`app.company_id` sin fijar), así que no existe un "fichero de empresa hermana" que distinguir.
+    """
+
+
+class CounterpartyNameRequired(InvoicingError):
+    """Cambiar el CIF de contraparte sin mandar también el nombre en el mismo `PATCH` (-> 422).
+
+    Si solo cambiara el CIF, la reverificación (S2.8) comprobaría el nombre VIEJO contra el CIF
+    NUEVO: la factura quedaría con `counterparty_cif_status = valid` pero un nombre que nadie ha
+    verificado que coincida (hallazgo de auditoría S3.3). Se exige el nombre junto al CIF nuevo
+    para que el veredicto sea real, no una verificación a medias.
+    """
+
+
 @dataclass(frozen=True)
 class ConfirmTaxLine:
-    """Un tramo de IVA confirmado por el humano (valores tipados desde el body)."""
+    """Un tramo de IVA tipado desde el body (del humano): confirmar (S2.5) o editar (S3.3)."""
 
     iva_pct: Decimal | None
     base: Decimal | None
@@ -135,6 +157,22 @@ class HistoryItem:
     confirmed_at: datetime
 
 
+@dataclass(frozen=True)
+class EditResult:
+    """Estado de la factura tras aplicar (o no) una edición (S3.3): lo que responde el endpoint."""
+
+    id: UUID
+    issue_date: date | None
+    counterparty_tax_id: str | None
+    counterparty_name: str | None
+    counterparty_cif_status: str
+    net_amount: Decimal | None
+    tax_amount: Decimal | None
+    total_amount: Decimal | None
+    irpf_amount: Decimal | None
+    balance_ok: bool | None
+
+
 def _is_admin(role: str) -> bool:
     """True si el rol exime de las guardas de admin (CIF propio ausente, marcar `is_test`).
 
@@ -159,6 +197,20 @@ def _counterparty_reason(verdict: CounterpartyVerdict) -> str | None:
     if verdict.status == CifStatus.NOT_FOUND:
         return REASON_CIF_NOT_FOUND
     return None
+
+
+async def _verify_counterparty_or_raise(
+    tenant_id: UUID, tax_id: str | None, name: str | None
+) -> CounterpartyVerdict:
+    """Reverifica el CIF de contraparte (S2.8) y bloquea (`CounterpartyBlocked`) si no pasa.
+
+    Compartido por `confirm` (S2.5, C3) y `edit_invoice` (S3.3): misma guarda de servidor, "no se
+    confía en el cliente", en los dos únicos sitios donde un CIF de contraparte llega a persistirse.
+    """
+    verdict = await verify_counterparty(tenant_id, tax_id, name)
+    if _counterparty_reason(verdict) is not None:
+        raise CounterpartyBlocked
+    return verdict
 
 
 def _own_tax_id_blocks(own_tax_id_present: bool, role: str) -> bool:
@@ -311,11 +363,9 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
         raise ResponsibilityNotAccepted
 
     # Reverifica el CIF de contraparte del BODY con S2.8 (no se confía en el cliente, C3).
-    verdict = await verify_counterparty(
+    verdict = await _verify_counterparty_or_raise(
         identity.tenant_id, command.counterparty_tax_id, command.counterparty_name
     )
-    if _counterparty_reason(verdict) is not None:
-        raise CounterpartyBlocked
 
     # Descuadre = aviso, no bloqueo (regla 5, C6): se guarda con el resultado registrado.
     balance_ok = _balance_ok(_command_tax_lines(command), command.total_amount, command.irpf_amount)
@@ -410,6 +460,193 @@ async def history(identity: AuthContext) -> list[HistoryItem]:
         )
         for entry in entries
     ]
+
+
+AUDIT_ACTION_EDIT = "invoice.edit"
+
+
+def _lines_from_raw(
+    raw: list[tuple[Decimal | None, Decimal | None, Decimal | None]],
+) -> list[TaxLine]:
+    """`TaxLine` completos desde las tuplas crudas de `repository.InvoiceRecord`; descarta
+    incompletos (igual criterio que `_extraction_tax_lines`/`_command_tax_lines`)."""
+    lines: list[TaxLine] = []
+    for iva_pct, base, cuota in raw:
+        if iva_pct is None or base is None or cuota is None:
+            continue
+        lines.append(TaxLine(iva_pct=iva_pct, base=base, cuota=cuota))
+    return lines
+
+
+def _lines_from_edit(raw: list[ConfirmTaxLine]) -> list[TaxLine]:
+    """`TaxLine` completos desde los tramos del `PATCH`; descarta incompletos."""
+    lines: list[TaxLine] = []
+    for line in raw:
+        if line.iva_pct is None or line.base is None or line.cuota is None:
+            continue
+        lines.append(TaxLine(iva_pct=line.iva_pct, base=line.base, cuota=line.cuota))
+    return lines
+
+
+@dataclass(frozen=True)
+class _MergedFields:
+    """El `PATCH` parcial fusionado con el valor actual: un campo ausente conserva su valor."""
+
+    issue_date: date | None
+    counterparty_tax_id: str | None
+    counterparty_name: str | None
+    net_amount: Decimal | None
+    tax_amount: Decimal | None
+    total_amount: Decimal | None
+    irpf_amount: Decimal | None
+    tax_lines: list[TaxLine]
+
+
+def _merge_patch(current: repository.InvoiceRecord, patch: Mapping[str, Any]) -> _MergedFields:
+    """Fusiona `patch` con `current`: cada campo ausente en `patch` conserva el valor actual."""
+    tax_lines = (
+        _lines_from_edit(patch["tax_lines"])
+        if "tax_lines" in patch
+        else _lines_from_raw(current.tax_lines)
+    )
+    return _MergedFields(
+        issue_date=patch.get("issue_date", current.issue_date),
+        counterparty_tax_id=patch.get("counterparty_tax_id", current.counterparty_tax_id),
+        counterparty_name=patch.get("counterparty_name", current.counterparty_name),
+        net_amount=patch.get("net_amount", current.net_amount),
+        tax_amount=patch.get("tax_amount", current.tax_amount),
+        total_amount=patch.get("total_amount", current.total_amount),
+        irpf_amount=patch.get("irpf_amount", current.irpf_amount),
+        tax_lines=tax_lines,
+    )
+
+
+async def _maybe_reverify_cif(
+    identity: AuthContext,
+    current: repository.InvoiceRecord,
+    merged: _MergedFields,
+    patch: Mapping[str, Any],
+) -> str:
+    """Reverifica el CIF SOLO si cambia de verdad (spec §2 decisión 3); si no, conserva el estado.
+
+    Si el CIF cambia pero el `PATCH` no trae también `counterparty_name`, exige ambos juntos
+    (`CounterpartyNameRequired`): reverificar el CIF nuevo contra el nombre VIEJO dejaría la
+    factura en `valid` con un nombre que nadie ha comprobado que coincida (hallazgo de auditoría).
+    """
+    if "counterparty_tax_id" not in patch:
+        return current.counterparty_cif_status
+    if normalize_tax_id(merged.counterparty_tax_id) == normalize_tax_id(
+        current.counterparty_tax_id
+    ):
+        return current.counterparty_cif_status
+    if "counterparty_name" not in patch:
+        raise CounterpartyNameRequired
+    verdict = await _verify_counterparty_or_raise(
+        identity.tenant_id, merged.counterparty_tax_id, merged.counterparty_name
+    )
+    return verdict.status
+
+
+def _edit_diff(current: repository.InvoiceRecord, merged: _MergedFields) -> list[Correction]:
+    """Correcciones = diff del `PATCH` fusionado contra el valor anterior de la factura (S3.3)."""
+    baseline = BaselineFields(
+        issue_date=current.issue_date,
+        total_amount=current.total_amount,
+        net_amount=current.net_amount,
+        tax_amount=current.tax_amount,
+        counterparty_tax_id=current.counterparty_tax_id,
+        counterparty_name=current.counterparty_name,
+        tax_lines=_tax_line_fields(_lines_from_raw(current.tax_lines)),
+    )
+    confirmed = ConfirmedFields(
+        issue_date=merged.issue_date,
+        total_amount=merged.total_amount,
+        net_amount=merged.net_amount,
+        tax_amount=merged.tax_amount,
+        counterparty_tax_id=merged.counterparty_tax_id,
+        counterparty_name=merged.counterparty_name,
+        tax_lines=_tax_line_fields(merged.tax_lines),
+    )
+    return diff_corrections(baseline, confirmed)
+
+
+def _edit_result(
+    invoice_id: UUID, merged: _MergedFields, *, cif_status: str, balance_ok: bool | None
+) -> EditResult:
+    return EditResult(
+        id=invoice_id,
+        issue_date=merged.issue_date,
+        counterparty_tax_id=merged.counterparty_tax_id,
+        counterparty_name=merged.counterparty_name,
+        counterparty_cif_status=cif_status,
+        net_amount=merged.net_amount,
+        tax_amount=merged.tax_amount,
+        total_amount=merged.total_amount,
+        irpf_amount=merged.irpf_amount,
+        balance_ok=balance_ok,
+    )
+
+
+async def edit_invoice(
+    identity: AuthContext, invoice_id: UUID, patch: Mapping[str, Any]
+) -> EditResult:
+    """Edita los campos presentes en `patch` de una factura ya confirmada (S3.3, `tenant_admin`).
+
+    `patch` solo trae las claves que el cliente envió (patch parcial real, spec §2). Sin cambios
+    reales (el diff sale vacío) no escribe nada: ni `invoices`, ni `invoice_tax_lines`, ni
+    `invoice_edits`, ni `audit_log` (spec §2, "sin cambios reales = sin efecto observable").
+    """
+    current = await repository.get_invoice(identity.session, invoice_id)
+    if current is None:
+        raise InvoiceNotVisible
+
+    merged = _merge_patch(current, patch)
+    cif_status = await _maybe_reverify_cif(identity, current, merged, patch)
+    # Regla 5: el descuadre avisa, nunca bloquea; se calcula una sola vez y sirve tanto si hay
+    # cambios reales como si no (evita recomputarlo dos veces con el riesgo de que diverjan).
+    balance_ok = _balance_ok(merged.tax_lines, merged.total_amount, merged.irpf_amount)
+    edits = _edit_diff(current, merged)
+
+    if not edits:
+        return _edit_result(invoice_id, merged, cif_status=cif_status, balance_ok=balance_ok)
+
+    await repository.update_invoice(
+        identity.session,
+        invoice_id,
+        issue_date=merged.issue_date,
+        counterparty_tax_id=merged.counterparty_tax_id,
+        counterparty_name=merged.counterparty_name,
+        counterparty_cif_status=cif_status,
+        net_amount=merged.net_amount,
+        tax_amount=merged.tax_amount,
+        total_amount=merged.total_amount,
+        irpf_amount=merged.irpf_amount,
+        balance_ok=balance_ok,
+    )
+    if "tax_lines" in patch:
+        await repository.delete_tax_lines(identity.session, invoice_id)
+        await repository.insert_tax_lines(
+            identity.session,
+            invoice_id=invoice_id,
+            company_id=current.company_id,
+            lines=[(line.iva_pct, line.base, line.cuota) for line in merged.tax_lines],
+        )
+    await repository.insert_edits(
+        identity.session,
+        invoice_id=invoice_id,
+        company_id=current.company_id,
+        edited_by=identity.user_id,
+        edits=edits,
+    )
+    await write_audit(
+        identity.session,
+        actor_id=identity.user_id,
+        action=AUDIT_ACTION_EDIT,
+        entity=_AUDIT_ENTITY,
+        entity_id=invoice_id,
+        payload={edit.field: {"old": edit.ai_value, "new": edit.human_value} for edit in edits},
+    )
+    return _edit_result(invoice_id, merged, cif_status=cif_status, balance_ok=balance_ok)
 
 
 def _diff(extraction: ExtractionRecord, command: ConfirmCommand) -> list[Correction]:

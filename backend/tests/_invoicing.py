@@ -279,6 +279,39 @@ async def fetch_invoice(dsns: dict[str, str], *, file_id: str) -> dict | None:
         await conn.close()
 
 
+async def fetch_invoice_by_id(dsns: dict[str, str], *, invoice_id: str) -> dict | None:
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        row = await conn.fetchrow("SELECT * FROM invoices WHERE id = $1", invoice_id)
+        return dict(row) if row is not None else None
+    finally:
+        await conn.close()
+
+
+async def fetch_tax_lines(dsns: dict[str, str], *, invoice_id: str) -> list[dict]:
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        rows = await conn.fetch(
+            "SELECT iva_pct, base, cuota FROM invoice_tax_lines WHERE invoice_id = $1", invoice_id
+        )
+        return [dict(r) for r in rows]
+    finally:
+        await conn.close()
+
+
+async def fetch_invoice_edits(dsns: dict[str, str], *, invoice_id: str) -> list[dict]:
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        rows = await conn.fetch(
+            "SELECT field, old_value, new_value, edited_by FROM invoice_edits "
+            "WHERE invoice_id = $1",
+            invoice_id,
+        )
+        return [dict(r) for r in rows]
+    finally:
+        await conn.close()
+
+
 async def count_invoices(dsns: dict[str, str], *, file_id: str) -> int:
     conn = await asyncpg.connect(dsns["admin"])
     try:
