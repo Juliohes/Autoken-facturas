@@ -68,13 +68,16 @@
 
 ## Estado actual (reconciliado 2026-07-22 — ver PLAN MAESTRO §11.11)
 - **Fase real (git log)**: Sprint 1 (tenancy/identity/companies) completo. Sprint 2 (intake+OCR) completo
-  salvo S2.2. **Sprint 3 (panel de asesoría) arrancado**: S3.1 (panel de facturas) cerrado y mergeado
-  (`0df4138`, PR #77). Este archivo llevaba desde 2026-07-02 sin reflejar el estado real — corregido hoy.
+  salvo S2.2. **Sprint 3 (panel de asesoría)**: S3.1 (panel de facturas, PR #77), S3.2 (export Excel, PR
+  #80), S3.3 (edición auditada, PR #81) y S3.4 (gestión de empresas/usuarios, PR #82) cerrados y mergeados.
+  Solo queda **S3.5** (facturas de prueba) para cerrar el sprint.
 - **Falta de Sprint 2**: **S2.2** (captura guiada PWA, `getUserMedia`+OpenCV.js, ADR-0002) — sin empezar, no
   hay ningún componente de cámara en frontend hoy.
-- **Sprint 3**: S3.1 hecho; quedan S3.2 (export Excel), S3.3 (edición auditada), S3.4 (gestión
-  empresas/usuarios), S3.5 (facturas de prueba). **Sprint 4 (panel de plataforma)**: no iniciado;
+- **Sprint 3**: queda S3.5 (facturas de prueba). **Sprint 4 (panel de plataforma)**: no iniciado;
   `platform_admin/` solo tiene el healthcheck.
+- **Hallazgo transversal (S3.4, 2026-07-23)**: las pantallas de frontend construidas hasta ahora
+  (historial, confirmación, panel de facturas, empresas) viven y se prueban aisladas; falta una tarea de
+  integración (app-shell: login real, menú, routing) que las conecte entre sí antes de un demo end-to-end.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11), aún sin construir**:
