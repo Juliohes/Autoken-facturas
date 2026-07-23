@@ -70,6 +70,7 @@ afterEach(() => {
   document.title = ''
   document.documentElement.style.removeProperty('--color-primary')
   document.documentElement.style.removeProperty('--color-secondary')
+  document.getElementById('tenant-favicon')?.remove()
 })
 
 describe('App (S4.2 theming runtime)', () => {
@@ -111,6 +112,27 @@ describe('App (S4.2 theming runtime)', () => {
 
     await waitFor(() => expect(document.title).toBe(DEFAULT_APP_NAME))
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('S4.3 C5: con favicon (aunque sea el único campo de branding), inyecta el link', async () => {
+    // Caso que reveló un bug real en auditoría: el tenant SOLO configura favicon (app_name/colores
+    // siguen en sus valores por defecto entre renders), y aun así el <link> debe inyectarse.
+    mockRoutes(makeTenant({ favicon: 'https://cdn.x/favicon.png' }))
+    renderApp()
+
+    await waitFor(() => {
+      const link = document.querySelector('link[rel="icon"]')
+      expect(link).not.toBeNull()
+      expect(link).toHaveAttribute('href', 'https://cdn.x/favicon.png')
+    })
+  })
+
+  it('S4.3 C6: sin favicon, no hay ningún <link rel="icon">', async () => {
+    mockRoutes(makeTenant())
+    renderApp()
+
+    await waitFor(() => expect(document.title).toBe(DEFAULT_APP_NAME))
+    expect(document.querySelector('link[rel="icon"]')).toBeNull()
   })
 
   it('C8: un fallo al cargar el tenant no bloquea el arranque ni muestra error', async () => {

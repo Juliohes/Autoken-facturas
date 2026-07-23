@@ -33,7 +33,7 @@
           "tenancy"
         ],
         "summary": "Current Tenant",
-        "description": "Datos p\u00fablicos del tenant resuelto por el subdominio, incluido su branding (S1.2/S4.2).\n\n404 neutro si el host no corresponde a un tenant activo (inexistente, suspendido o no-tenant):\nla respuesta es id\u00e9ntica en todos esos casos, no se revela qu\u00e9 tenants existen.",
+        "description": "Datos p\u00fablicos del tenant resuelto por el subdominio, incluido su branding (S1.2/S4.2).\n\n404 neutro si el host no corresponde a un tenant activo (inexistente, suspendido o no-tenant):\nla respuesta es id\u00e9ntica en todos esos casos, no se revela qu\u00e9 tenants existen (lo da\n`public_tenant_context`, mismo portero que el registro p\u00fablico, S1.4).",
         "operationId": "current_tenant_api_v1_tenants_current_get",
         "responses": {
           "200": {
@@ -43,6 +43,26 @@
                 "schema": {
                   "$ref": "#/components/schemas/TenantCurrentOut"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/manifest.webmanifest": {
+      "get": {
+        "tags": [
+          "tenancy"
+        ],
+        "summary": "Tenant Manifest",
+        "description": "Web App Manifest del tenant resuelto por el subdominio (S4.3).\n\nMismo portero p\u00fablico que `/tenants/current` (404 neutro sin tenant). `Content-Type:\napplication/manifest+json`, el tipo correcto para un manifest (no `application/json`).",
+        "operationId": "tenant_manifest_api_v1_manifest_webmanifest_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }

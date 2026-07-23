@@ -20,6 +20,7 @@ from tests._platform import platform_token, seed_platform_admin
 
 _HEALTH = "/api/v1/health"
 _CURRENT = "/api/v1/tenants/current"
+_MANIFEST = "/api/v1/manifest.webmanifest"
 
 
 @pytest.fixture
@@ -253,6 +254,126 @@ async def test_s42_rls_tapa_la_lectura_directa_de_tenant_branding_sin_contexto(
     finally:
         await conn.close()
     assert len(filas) == 0  # RLS FORCE: sin contexto, 0 filas aunque la fila exista
+
+
+# --- S4.3: manifest PWA dinámico -----------------------------------------------------------------
+
+# `/` inicial a propósito: un `src` de icono relativo resuelve contra la URL del propio manifest
+# (no la del documento), y el manifest ya no vive en la raíz (auditoría de arquitectura de S4.3).
+_DEFAULT_ICONS = [
+    {"src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+]
+
+
+async def test_s43_c1_manifest_con_branding_completo(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """S4.3 C1: manifest con el nombre/colores/icono del tenant."""
+    client, dsns = api
+    tenant_id = await seed_tenant(dsns["admin"], "ilex", "I-Lex Asesoría")
+    await seed_branding(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        app_name="I-Lex",
+        color_secondary="#445566",
+        logo_url="https://cdn.x/logo.png",
+    )
+    resp = await client.get(_MANIFEST, headers=_host("ilex.autoken.es"))
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/manifest+json")
+    body = resp.json()
+    assert body["name"] == "I-Lex"
+    assert body["short_name"] == "I-Lex"
+    assert body["theme_color"] == "#445566"
+    assert body["background_color"] == "#445566"
+    assert body["icons"] == [{"src": "https://cdn.x/logo.png", "sizes": "any"}]
+
+
+async def test_s43_defensivo_manifest_sin_fila_de_tenant_branding_cae_a_los_valores_de_hoy(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """Defensivo (estado no alcanzable en producción, ver el test análogo de S4.2, más abajo): sin
+    ninguna fila de `tenant_branding`, el manifest es idéntico al fijo de hoy, campo a campo."""
+    client, dsns = api
+    await seed_tenant(dsns["admin"], "ilex", "I-Lex Asesoría")
+    resp = await client.get(_MANIFEST, headers=_host("ilex.autoken.es"))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "Autoken Facturas"
+    assert body["short_name"] == "Facturas"
+    assert body["theme_color"] == "#0f172a"
+    assert body["background_color"] == "#0f172a"
+    assert body["display"] == "standalone"
+    assert body["start_url"] == "/"
+    assert body["icons"] == _DEFAULT_ICONS
+
+
+async def test_s43_c2_alta_minima_via_platform_admin_manifest_cae_al_nombre_del_tenant(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """S4.3 C2 (camino real, mismo criterio que el test análogo de S4.2): un tenant dado de alta
+    sin logo/colores (S4.1) siempre tiene fila de `tenant_branding`, con `app_name` = su `name` —
+    el manifest usa ese nombre, no el genérico por defecto, y cae a color/iconos de hoy."""
+    client, dsns = api
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+    create_resp = await client.post(
+        "/api/v1/platform/tenants",
+        json={"name": "Mínima SL", "slug": "minima"},
+        headers={**_host("panel.localhost"), **bearer(token)},
+    )
+    assert create_resp.status_code == 201, create_resp.text
+
+    resp = await client.get(_MANIFEST, headers=_host("minima.autoken.es"))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "Mínima SL"
+    assert body["short_name"] == "Mínima SL"
+    assert body["theme_color"] == "#0f172a"
+    assert body["background_color"] == "#0f172a"
+    assert body["icons"] == _DEFAULT_ICONS
+
+
+async def test_s43_c3_404_neutro_sin_tenant(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """S4.3 C3: host que no resuelve -> 404, mismo criterio que /tenants/current."""
+    client, _ = api
+    resp = await client.get(_MANIFEST, headers=_host("nope.autoken.es"))
+    assert resp.status_code == 404
+
+
+async def test_s43_c4_anticruce_cada_subdominio_recibe_su_propio_manifest(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """S4.3 C4: el manifest de `ilex` no aparece al pedir el de `otra`, y viceversa."""
+    client, dsns = api
+    tid_ilex = await seed_tenant(dsns["admin"], "ilex", "I-Lex Asesoría")
+    tid_otra = await seed_tenant(dsns["admin"], "otra", "Otra Asesoría")
+    await seed_branding(dsns["admin"], tenant_id=tid_ilex, app_name="I-Lex")
+    await seed_branding(dsns["admin"], tenant_id=tid_otra, app_name="Otra")
+
+    resp_ilex = await client.get(_MANIFEST, headers=_host("ilex.autoken.es"))
+    resp_otra = await client.get(_MANIFEST, headers=_host("otra.autoken.es"))
+
+    assert resp_ilex.json()["name"] == "I-Lex"
+    assert resp_otra.json()["name"] == "Otra"
+
+
+async def test_s43_caso_limite_short_name_se_trunca_a_12_caracteres(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """S4.3 (caso límite §5): `app_name` largo -> `short_name` truncado, `name` completo."""
+    client, dsns = api
+    tenant_id = await seed_tenant(dsns["admin"], "ilex", "I-Lex Asesoría")
+    await seed_branding(dsns["admin"], tenant_id=tenant_id, app_name="Asesoría Muy Larga SL")
+    resp = await client.get(_MANIFEST, headers=_host("ilex.autoken.es"))
+    body = resp.json()
+    assert body["name"] == "Asesoría Muy Larga SL"
+    assert body["short_name"] == "Asesoría Muy"
+    assert len(body["short_name"]) <= 12
 
 
 # --- Refuerzos de la auditoría de S1.2 ----------------------------------------------------------

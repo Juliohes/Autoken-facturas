@@ -1,10 +1,15 @@
 """Middleware de cabeceras de seguridad (defensa en profundidad) — endurecimiento S1.6 Parte B.
 
 Fija en TODAS las respuestas un conjunto conservador de cabeceras de seguridad apropiadas para una
-API JSON (sin superficie HTML propia): evita sniffing de tipos, enmarcado (clickjacking), fuga del
-referer y, como CSP mínima, prohíbe cargar cualquier recurso y ser enmarcado. `Strict-Transport-
-Security` solo se emite en producción (detrás de TLS): anunciar HSTS sin HTTPS no aporta y en
-desarrollo/HTTP es inútil o molesto.
+API JSON: evita sniffing de tipos, enmarcado (clickjacking), fuga del referer y, como CSP mínima,
+prohíbe cargar cualquier recurso y ser enmarcado. `Strict-Transport-Security` solo se emite en
+producción (detrás de TLS): anunciar HSTS sin HTTPS no aporta y en desarrollo/HTTP es inútil o
+molesto.
+
+Nota (S4.3): desde que `GET /manifest.webmanifest` sirve el Web App Manifest, esta API ya tiene un
+consumidor que no es un cliente JS de la SPA (el propio navegador, vía `<link rel="manifest">`). No
+cambia la política: la CSP que rige si el navegador puede *cargar* el manifest es la del documento
+HTML que lo enlaza, no esta cabecera de la respuesta del manifest en sí.
 
 Se monta con una sola línea en `main.py`; toda la política vive aquí (un único sitio, sin
 dispersión). Nota: S5.1 afinará y medirá con Mozilla Observatory; esto deja una base sólida.

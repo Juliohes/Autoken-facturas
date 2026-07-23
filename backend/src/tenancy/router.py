@@ -1,14 +1,16 @@
-"""Endpoints de tenancy expuestos por la API (S1.2, ampliado con branding en S4.2)."""
+"""Endpoints de tenancy expuestos por la API (S1.2, ampliado con branding en S4.2/S4.3)."""
 
 from __future__ import annotations
 
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from tenancy import repository
 from tenancy.context import PublicTenantContext, public_tenant_context
+from tenancy.manifest import build_manifest
 
 router = APIRouter(tags=["tenancy"])
 
@@ -54,3 +56,15 @@ async def current_tenant(context: PublicContext) -> TenantCurrentOut:
         app_name=branding.app_name if branding else None,
         favicon=branding.favicon if branding else None,
     )
+
+
+@router.get("/manifest.webmanifest")
+async def tenant_manifest(context: PublicContext) -> JSONResponse:
+    """Web App Manifest del tenant resuelto por el subdominio (S4.3).
+
+    Mismo portero público que `/tenants/current` (404 neutro sin tenant). `Content-Type:
+    application/manifest+json`, el tipo correcto para un manifest (no `application/json`).
+    """
+    branding = await repository.get_branding(context.session, context.tenant.id)
+    manifest = build_manifest(branding)
+    return JSONResponse(content=manifest, media_type="application/manifest+json")

@@ -28,6 +28,7 @@ afterEach(() => {
   document.title = ''
   document.documentElement.style.removeProperty('--color-primary')
   document.documentElement.style.removeProperty('--color-secondary')
+  document.getElementById('tenant-favicon')?.remove()
 })
 
 describe('resolveTheme (S4.2)', () => {
@@ -70,6 +71,16 @@ describe('resolveTheme (S4.2)', () => {
       'https://cdn.x/logo.png',
     )
   })
+
+  it('S4.3: faviconUrl es null cuando el tenant no tiene favicon', () => {
+    expect(resolveTheme(makeTenant()).faviconUrl).toBeNull()
+  })
+
+  it('S4.3: faviconUrl se propaga tal cual cuando existe', () => {
+    expect(resolveTheme(makeTenant({ favicon: 'https://cdn.x/favicon.png' })).faviconUrl).toBe(
+      'https://cdn.x/favicon.png',
+    )
+  })
 })
 
 describe('applyTenantTheme (S4.2)', () => {
@@ -79,9 +90,54 @@ describe('applyTenantTheme (S4.2)', () => {
       colorPrimary: '#112233',
       colorSecondary: '#445566',
       logoUrl: null,
+      faviconUrl: null,
     })
     expect(document.title).toBe('I-Lex')
     expect(document.documentElement.style.getPropertyValue('--color-primary')).toBe('#112233')
     expect(document.documentElement.style.getPropertyValue('--color-secondary')).toBe('#445566')
+  })
+})
+
+describe('applyTenantTheme — favicon (S4.3)', () => {
+  it('C5: con favicon, inyecta un <link rel="icon"> con ese href', () => {
+    applyTenantTheme({
+      appName: 'I-Lex',
+      colorPrimary: '#112233',
+      colorSecondary: '#445566',
+      logoUrl: null,
+      faviconUrl: 'https://cdn.x/favicon.png',
+    })
+    const link = document.querySelector('link[rel="icon"]')
+    expect(link).not.toBeNull()
+    expect(link?.getAttribute('href')).toBe('https://cdn.x/favicon.png')
+  })
+
+  it('C6: sin favicon, no añade ningún <link rel="icon">', () => {
+    applyTenantTheme({
+      appName: 'I-Lex',
+      colorPrimary: '#112233',
+      colorSecondary: '#445566',
+      logoUrl: null,
+      faviconUrl: null,
+    })
+    expect(document.querySelector('link[rel="icon"]')).toBeNull()
+  })
+
+  it('caso límite: cambiar de un favicon a ninguno retira el link ya inyectado', () => {
+    applyTenantTheme({
+      appName: 'I-Lex',
+      colorPrimary: '#112233',
+      colorSecondary: '#445566',
+      logoUrl: null,
+      faviconUrl: 'https://cdn.x/favicon.png',
+    })
+    applyTenantTheme({
+      appName: 'I-Lex',
+      colorPrimary: '#112233',
+      colorSecondary: '#445566',
+      logoUrl: null,
+      faviconUrl: null,
+    })
+    expect(document.querySelector('link[rel="icon"]')).toBeNull()
   })
 })

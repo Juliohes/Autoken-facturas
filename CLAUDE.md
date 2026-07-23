@@ -73,12 +73,12 @@
   (facturas de prueba) cerrados y mergeados.
 - **Falta de Sprint 2**: **S2.2** (captura guiada PWA, `getUserMedia`+OpenCV.js, ADR-0002) — sin empezar, no
   hay ningún componente de cámara en frontend hoy.
-- **Sprint 4 (panel de plataforma) arrancado**: S4.1 (alta de tenant en minutos) y S4.2 (theming
-  runtime) cerrados y mergeados. S4.1: primer endpoint del proyecto protegido por el rol
-  `platform_admin` (antes solo servía para login); ver ADR-0013 (enmienda 2026-07-24). S4.2: el
-  frontend aplica el branding del tenant (logo/colores/nombre) solo en `App.tsx` (único punto de
-  entrada hoy); retocar las pantallas ya construidas para que lo consuman queda para la tarea de
-  app-shell. Quedan S4.3-S4.7.
+- **Sprint 4 (panel de plataforma) arrancado**: S4.1 (alta de tenant en minutos), S4.2 (theming
+  runtime) y S4.3 (manifest PWA dinámico) cerrados y mergeados. S4.1: primer endpoint del proyecto
+  protegido por el rol `platform_admin` (antes solo servía para login); ver ADR-0013 (enmienda
+  2026-07-24). S4.2/S4.3: el frontend aplica el branding del tenant (logo/colores/nombre/favicon/
+  manifest) solo en `App.tsx`/`index.html` (único punto de entrada hoy); retocar las pantallas ya
+  construidas para que lo consuman queda para la tarea de app-shell. Quedan S4.4-S4.7.
 - **Hallazgo transversal (S3.4, 2026-07-23)**: las pantallas de frontend construidas hasta ahora
   (historial, confirmación, panel de facturas, empresas, plataforma) viven y se prueban aisladas; falta
   una tarea de integración (app-shell: login real, menú, routing) que las conecte entre sí antes de un

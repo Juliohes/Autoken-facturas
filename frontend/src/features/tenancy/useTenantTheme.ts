@@ -15,7 +15,7 @@ export function useTenantTheme(): AppliedTheme {
   useEffect(() => {
     applyTenantTheme(theme)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme.appName, theme.colorPrimary, theme.colorSecondary])
+  }, [theme.appName, theme.colorPrimary, theme.colorSecondary, theme.faviconUrl])
 
   return theme
 }
