@@ -1,10 +1,12 @@
-"""Acceso a datos del panel de facturas (S3.1): lectura filtrada/paginada de `invoices`.
+"""Acceso a datos de `reporting`: panel de facturas (S3.1), export a Excel (S3.2) y ficha agregada
+de empresas (S3.4).
 
 `reporting` es un contexto de **solo lectura** (estilo CQRS): no posee `invoices`/
-`invoice_tax_lines` (los posee `invoicing`) ni `uploaded_files` (los posee `invoice_intake`), pero
-necesita consultarlos juntos, filtrados y paginados, para el panel de la asesoría. Igual que el
-resto de repositorios del proyecto, la sesión llega ya abierta en el contexto de aislamiento del
-tenant (RLS de dos niveles, migraciones 0001/0004/0007); `reporting` nunca escribe, solo lee.
+`invoice_tax_lines` (los posee `invoicing`), `uploaded_files` (los posee `invoice_intake`) ni
+`companies`/`memberships`/`users` (los posee `companies`/`identity`), pero necesita consultarlos
+juntos, filtrados/ordenados/agregados, para las pantallas de la asesoría. Igual que el resto de
+repositorios del proyecto, la sesión llega ya abierta en el contexto de aislamiento del tenant (RLS
+de dos niveles, migraciones 0001/0004/0007); `reporting` nunca escribe, solo lee.
 """
 
 from __future__ import annotations
@@ -85,6 +87,21 @@ class ExportRow:
     tax_lines: list[TaxLineRow]
     uploaded_at: datetime
     confirmed_by_email: str
+
+
+@dataclass(frozen=True)
+class CompanyRow:
+    """Una fila de la ficha agregada de empresas (S3.4, spec §2/§3 C1)."""
+
+    id: UUID
+    name: str
+    cif: str
+    status: str
+    notes: str | None
+    created_at: datetime
+    user_count: int
+    invoice_count: int
+    last_invoice_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -248,6 +265,61 @@ async def list_for_export(session: AsyncSession, *, filters: Filters) -> list[Ex
             tax_lines=tax_lines_by_invoice.get(row.id, []),
             uploaded_at=row.uploaded_at,
             confirmed_by_email=row.confirmed_by_email,
+        )
+        for row in rows
+    ]
+
+
+async def list_companies(session: AsyncSession) -> list[CompanyRow]:
+    """Ficha agregada de las empresas del contexto (S3.4): datos propios + contadores agregados.
+
+    `reporting` no posee `companies`/`memberships`/`users`/`invoices` (los poseen `companies`/
+    `identity`/`invoicing`), pero los junta para la pantalla "Empresas" sin que cada uno exponga un
+    endpoint propio (mismo criterio CQRS-light que `list_invoices`, ADR-0017). Sin filtro de
+    `tenant_id` por parámetro: la RLS de dos niveles ya acota cada tabla al tenant del
+    `tenant_admin` (y, dentro de ella, a la fila de `companies`); como su `app.company_id` no está
+    fijado, ve todas las de su asesoría. Los contadores se agregan en subconsultas propias, una fila
+    por empresa, ANTES de unirlas a `companies` (`LEFT JOIN` 1-a-1): unir directamente dos
+    relaciones 1-a-N (`memberships`, `invoices`) en el mismo `SELECT` multiplicaría filas entre sí
+    (nº de usuarios × nº de facturas por empresa) antes de agregar, un producto cartesiano
+    innecesario que esta forma evita.
+    """
+    rows = (
+        await session.execute(
+            text(
+                "SELECT c.id, c.name, c.cif, c.status, c.notes, c.created_at, "
+                " COALESCE(uc.user_count, 0) AS user_count, "
+                " COALESCE(ic.invoice_count, 0) AS invoice_count, "
+                " ic.last_invoice_at "
+                "FROM companies c "
+                "LEFT JOIN ("
+                "  SELECT m.company_id, COUNT(*) AS user_count "
+                "  FROM memberships m JOIN users u ON u.id = m.user_id "
+                "  WHERE u.status = 'active' "
+                "  GROUP BY m.company_id"
+                ") uc ON uc.company_id = c.id "
+                "LEFT JOIN ("
+                "  SELECT i.company_id, COUNT(*) AS invoice_count, "
+                "   MAX(i.confirmed_at) AS last_invoice_at "
+                "  FROM invoices i "
+                "  WHERE i.is_test = false "
+                "  GROUP BY i.company_id"
+                ") ic ON ic.company_id = c.id "
+                "ORDER BY c.name"
+            )
+        )
+    ).all()
+    return [
+        CompanyRow(
+            id=row.id,
+            name=row.name,
+            cif=row.cif,
+            status=row.status,
+            notes=row.notes,
+            created_at=row.created_at,
+            user_count=row.user_count,
+            invoice_count=row.invoice_count,
+            last_invoice_at=row.last_invoice_at,
         )
         for row in rows
     ]

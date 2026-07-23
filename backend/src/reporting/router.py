@@ -1,5 +1,7 @@
-"""Endpoints HTTP del panel de facturas de la asesoría: `GET /api/v1/reporting/invoices` (S3.1) y
-su export a Excel, `GET /api/v1/reporting/invoices/export` (S3.2).
+"""Endpoints HTTP de `reporting`: panel de facturas de la asesoría
+(`GET /api/v1/reporting/invoices`, S3.1), su export a Excel
+(`GET /api/v1/reporting/invoices/export`, S3.2) y la ficha agregada de empresas
+(`GET /api/v1/reporting/companies`, S3.4).
 
 Capa HTTP fina: autentica y autoriza (`tenant_admin`, portero de roles), tipa los filtros de la
 query string y traduce el resultado o la excepción de dominio de `reporting.service` a la
@@ -84,6 +86,40 @@ def _filters_from_query(
         cif_status=cif_status,
         company_id=company_id,
     )
+
+
+class CompanyRowOut(BaseModel):
+    """Una fila de la ficha agregada de empresas (S3.4, spec §2/§3 C1)."""
+
+    id: UUID
+    name: str
+    cif: str
+    status: str
+    notes: str | None
+    created_at: datetime
+    user_count: int
+    invoice_count: int
+    last_invoice_at: datetime | None
+
+
+@router.get("/companies")
+async def list_companies(identity: TenantAdmin) -> list[CompanyRowOut]:
+    """Empresas de la asesoría con sus contadores agregados (S3.4). Ver spec S3.4."""
+    rows = await service.list_companies(identity)
+    return [
+        CompanyRowOut(
+            id=row.id,
+            name=row.name,
+            cif=row.cif,
+            status=row.status,
+            notes=row.notes,
+            created_at=row.created_at,
+            user_count=row.user_count,
+            invoice_count=row.invoice_count,
+            last_invoice_at=row.last_invoice_at,
+        )
+        for row in rows
+    ]
 
 
 @router.get("/invoices")

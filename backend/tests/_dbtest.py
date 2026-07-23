@@ -155,18 +155,21 @@ async def seed_company(
     name: str,
     cif: str,
     status: str = "active",
+    notes: str | None = None,
 ) -> str:
     """Inserta una empresa del tenant (como superusuario, saltando RLS) y devuelve su id."""
     conn = await asyncpg.connect(admin_dsn)
     try:
         company_id = str(uuid4())
         await conn.execute(
-            "INSERT INTO companies (id, tenant_id, name, cif, status) VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO companies (id, tenant_id, name, cif, status, notes) "
+            "VALUES ($1, $2, $3, $4, $5, $6)",
             company_id,
             tenant_id,
             name,
             cif,
             status,
+            notes,
         )
         return company_id
     finally:

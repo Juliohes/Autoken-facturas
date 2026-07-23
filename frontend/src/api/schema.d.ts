@@ -434,6 +434,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoices/{invoice_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit Invoice
+         * @description Edita los campos presentes en el body de una factura confirmada. Solo `tenant_admin` (S3.3).
+         *
+         *     Patch parcial real: solo las claves que el cliente envió (`model_fields_set`) llegan al
+         *     servicio; un campo ausente en el body conserva su valor actual (spec §2). `tax_lines: null`
+         *     explícito se trata como AUSENTE (no toca los tramos): solo una lista real (incluida `[]`, que
+         *     los borra todos) es una instrucción de cambio; un `null` no es una lista de tramos válida.
+         */
+        patch: operations["edit_invoice_api_v1_invoices__invoice_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/reporting/companies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Companies
+         * @description Empresas de la asesoría con sus contadores agregados (S3.4). Ver spec S3.4.
+         */
+        get: operations["list_companies_api_v1_reporting_companies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reporting/invoices": {
         parameters: {
             query?: never;
@@ -551,6 +596,36 @@ export interface components {
             cif: string;
             /** Status */
             status: string;
+        };
+        /**
+         * CompanyRowOut
+         * @description Una fila de la ficha agregada de empresas (S3.4, spec §2/§3 C1).
+         */
+        CompanyRowOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Cif */
+            cif: string;
+            /** Status */
+            status: string;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** User Count */
+            user_count: number;
+            /** Invoice Count */
+            invoice_count: number;
+            /** Last Invoice At */
+            last_invoice_at: string | null;
         };
         /**
          * CompanyUpdate
@@ -704,6 +779,57 @@ export interface components {
             row: number;
             /** Reason */
             reason: string;
+        };
+        /**
+         * InvoiceEditIn
+         * @description Cuerpo de `PATCH /invoices/{id}` (S3.3): patch parcial, solo cambian los campos presentes.
+         */
+        InvoiceEditIn: {
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Counterparty Tax Id */
+            counterparty_tax_id?: string | null;
+            /** Counterparty Name */
+            counterparty_name?: string | null;
+            /** Net Amount */
+            net_amount?: number | string | null;
+            /** Tax Amount */
+            tax_amount?: number | string | null;
+            /** Total Amount */
+            total_amount?: number | string | null;
+            /** Irpf Amount */
+            irpf_amount?: number | string | null;
+            /** Tax Lines */
+            tax_lines?: components["schemas"]["TaxLineIn"][] | null;
+        };
+        /**
+         * InvoiceOut
+         * @description Estado de la factura tras la edición (spec S3.3 §2).
+         */
+        InvoiceOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Issue Date */
+            issue_date: string | null;
+            /** Counterparty Tax Id */
+            counterparty_tax_id: string | null;
+            /** Counterparty Name */
+            counterparty_name: string | null;
+            /** Counterparty Cif Status */
+            counterparty_cif_status: string;
+            /** Net Amount */
+            net_amount: string | null;
+            /** Tax Amount */
+            tax_amount: string | null;
+            /** Total Amount */
+            total_amount: string | null;
+            /** Irpf Amount */
+            irpf_amount: string | null;
+            /** Balance Ok */
+            balance_ok: boolean | null;
         };
         /**
          * InvoiceRowOut
@@ -1517,6 +1643,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HistoryOut"];
+                };
+            };
+        };
+    };
+    edit_invoice_api_v1_invoices__invoice_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceEditIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_companies_api_v1_reporting_companies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyRowOut"][];
                 };
             };
         };

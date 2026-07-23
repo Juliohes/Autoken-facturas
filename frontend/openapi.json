@@ -803,6 +803,86 @@
         }
       }
     },
+    "/api/v1/invoices/{invoice_id}": {
+      "patch": {
+        "tags": [
+          "invoicing"
+        ],
+        "summary": "Edit Invoice",
+        "description": "Edita los campos presentes en el body de una factura confirmada. Solo `tenant_admin` (S3.3).\n\nPatch parcial real: solo las claves que el cliente envi\u00f3 (`model_fields_set`) llegan al\nservicio; un campo ausente en el body conserva su valor actual (spec \u00a72). `tax_lines: null`\nexpl\u00edcito se trata como AUSENTE (no toca los tramos): solo una lista real (incluida `[]`, que\nlos borra todos) es una instrucci\u00f3n de cambio; un `null` no es una lista de tramos v\u00e1lida.",
+        "operationId": "edit_invoice_api_v1_invoices__invoice_id__patch",
+        "parameters": [
+          {
+            "name": "invoice_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Invoice Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvoiceEditIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reporting/companies": {
+      "get": {
+        "tags": [
+          "reporting"
+        ],
+        "summary": "List Companies",
+        "description": "Empresas de la asesor\u00eda con sus contadores agregados (S3.4). Ver spec S3.4.",
+        "operationId": "list_companies_api_v1_reporting_companies_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CompanyRowOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Companies Api V1 Reporting Companies Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reporting/invoices": {
       "get": {
         "tags": [
@@ -1234,6 +1314,77 @@
         "title": "CompanyOut",
         "description": "Empresa en la respuesta (alta, edici\u00f3n y listado)."
       },
+      "CompanyRowOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "cif": {
+            "type": "string",
+            "title": "Cif"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "user_count": {
+            "type": "integer",
+            "title": "User Count"
+          },
+          "invoice_count": {
+            "type": "integer",
+            "title": "Invoice Count"
+          },
+          "last_invoice_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Invoice At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "cif",
+          "status",
+          "notes",
+          "created_at",
+          "user_count",
+          "invoice_count",
+          "last_invoice_at"
+        ],
+        "title": "CompanyRowOut",
+        "description": "Una fila de la ficha agregada de empresas (S3.4, spec \u00a72/\u00a73 C1)."
+      },
       "CompanyUpdate": {
         "properties": {
           "name": {
@@ -1650,6 +1801,242 @@
         ],
         "title": "InvalidRowOut",
         "description": "Fila rechazada en el informe de importaci\u00f3n: n\u00famero de fila (1-based) y motivo."
+      },
+      "InvoiceEditIn": {
+        "properties": {
+          "issue_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "counterparty_tax_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Tax Id"
+          },
+          "counterparty_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Name"
+          },
+          "net_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Amount"
+          },
+          "tax_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Amount"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
+          },
+          "irpf_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Irpf Amount"
+          },
+          "tax_lines": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TaxLineIn"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Lines"
+          }
+        },
+        "type": "object",
+        "title": "InvoiceEditIn",
+        "description": "Cuerpo de `PATCH /invoices/{id}` (S3.3): patch parcial, solo cambian los campos presentes."
+      },
+      "InvoiceOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "counterparty_tax_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Tax Id"
+          },
+          "counterparty_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Name"
+          },
+          "counterparty_cif_status": {
+            "type": "string",
+            "title": "Counterparty Cif Status"
+          },
+          "net_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Amount"
+          },
+          "tax_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Amount"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
+          },
+          "irpf_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Irpf Amount"
+          },
+          "balance_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Balance Ok"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "issue_date",
+          "counterparty_tax_id",
+          "counterparty_name",
+          "counterparty_cif_status",
+          "net_amount",
+          "tax_amount",
+          "total_amount",
+          "irpf_amount",
+          "balance_ok"
+        ],
+        "title": "InvoiceOut",
+        "description": "Estado de la factura tras la edici\u00f3n (spec S3.3 \u00a72)."
       },
       "InvoiceRowOut": {
         "properties": {

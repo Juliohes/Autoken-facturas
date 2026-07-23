@@ -76,3 +76,13 @@ migración 0001), y sigue traduciendo a un DTO propio del servicio (`ExportItem`
 router). Se deja constancia aquí para que la advertencia de "Consecuencias" (una migración de esquema debe
 revisar también `reporting/repository.py`) se entienda extendida a `companies.name` y `users.email`, no solo
 a `invoices`/`invoice_tax_lines`/`uploaded_files`.
+
+## Enmienda (2026-07-23, S3.4): ficha de empresas amplía el conjunto de tablas leídas a `memberships`
+
+La ficha agregada de empresas (S3.4, `reporting.repository.list_companies`) añade una subconsulta agregada
+sobre `memberships` (contador de usuarios `active` por empresa) además de `companies`, `users` e `invoices`
+(ya cubiertas por la enmienda anterior). El patrón no cambia: solo lectura, RLS de dos niveles propia de
+`memberships` (migración 0001, independiente de la de `invoices`), DTO propio del servicio
+(`CompanySummary`, nunca `CompanyRow` hasta el router). La advertencia de "Consecuencias" (una migración de
+esquema debe revisar también `reporting/repository.py`) queda extendida también a `memberships.user_id`/
+`memberships.company_id`.
