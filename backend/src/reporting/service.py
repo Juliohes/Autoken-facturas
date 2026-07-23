@@ -1,8 +1,10 @@
-"""Lógica de dominio del panel de facturas (S3.1) y su export a Excel (S3.2).
+"""Lógica de dominio del panel de facturas (S3.1), su export a Excel (S3.2) y la ficha agregada de
+empresas (S3.4).
 
-El router HTTP es fino: traduce la petición a `list_invoices`/`export_invoices` y sus excepciones
-de dominio a códigos HTTP. Aquí vive la validación del rango de fechas (compartida por ambos) y la
-codificación/decodificación del cursor de paginación (opaco para el cliente, spec S3.1 §2).
+El router HTTP es fino: traduce la petición a `list_invoices`/`export_invoices`/`list_companies` y
+sus excepciones de dominio a códigos HTTP. Aquí vive la validación del rango de fechas (compartida
+por panel y export) y la codificación/decodificación del cursor de paginación (opaco para el
+cliente, spec S3.1 §2); `list_companies` (S3.4) no pagina, así que no la necesita.
 """
 
 from __future__ import annotations
@@ -102,6 +104,44 @@ class ExportItem:
     tax_lines: list[TaxLineItem]
     uploaded_at: datetime
     confirmed_by_email: str
+
+
+@dataclass(frozen=True)
+class CompanySummary:
+    """Una fila de la ficha agregada de empresas (S3.4), contrato propio del servicio.
+
+    No reexporta `repository.CompanyRow` tal cual, mismo criterio que `InvoiceItem` (S3.1).
+    """
+
+    id: UUID
+    name: str
+    cif: str
+    status: str
+    notes: str | None
+    created_at: datetime
+    user_count: int
+    invoice_count: int
+    last_invoice_at: datetime | None
+
+
+def _to_company_summary(row: repository.CompanyRow) -> CompanySummary:
+    return CompanySummary(
+        id=row.id,
+        name=row.name,
+        cif=row.cif,
+        status=row.status,
+        notes=row.notes,
+        created_at=row.created_at,
+        user_count=row.user_count,
+        invoice_count=row.invoice_count,
+        last_invoice_at=row.last_invoice_at,
+    )
+
+
+async def list_companies(identity: AuthContext) -> list[CompanySummary]:
+    """Ficha agregada de las empresas de la asesoría del `tenant_admin` (S3.4). Solo lectura."""
+    rows = await repository.list_companies(identity.session)
+    return [_to_company_summary(row) for row in rows]
 
 
 def _validate_date_range(filters: PanelFilters) -> None:

@@ -144,11 +144,29 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   contra él — ahora eso se bloquea y pide los dos datos juntos. Solo el administrador puede editar
   facturas; no hay pantalla nueva todavía (eso vendrá si hace falta), esta tarea era la capacidad de
   corregir con seguridad, no la pantalla para hacerlo cómodo.
+- **S3.4 — Gestión de empresas y usuarios** (23/07/2026): la pantalla "Empresas" del administrador: una
+  fila por empresa-cliente con su nombre, CIF, estado, notas, cuántos usuarios activos tiene, cuántas
+  facturas reales le han confirmado y cuándo fue la última (más su fecha de alta como cliente) — datos que
+  antes estaban repartidos y sin un sitio único donde verlos juntos. Desde ahí se da de alta una empresa
+  nueva, se edita (incluidas las notas, que se guardaban desde hacía tiempo pero no se podían volver a leer
+  en pantalla), se borra (bloqueado si tiene usuarios, para no perder historial), se enlaza a "ver sus
+  facturas" en el panel de S3.1, y se aprueban o rechazan los registros de usuarios pendientes (la solicitud
+  de alta que manda alguien nuevo, ya existía por detrás desde el Sprint 1 pero sin pantalla que la
+  mostrara). La auditoría en tres capas encontró y corrigió un detalle de rendimiento: la primera versión de
+  la consulta juntaba usuarios y facturas de la misma empresa en un único cruce, lo que multiplicaba filas
+  de más por debajo antes de contarlas bien (el resultado final salía correcto, pero por un camino más
+  costoso de lo necesario); se separó en dos cuentas independientes antes de unirlas a la empresa, un cruce
+  más simple y que envejece mejor según crezca el histórico de facturas.
 
 ## 5. Qué queda por delante
 
-- **Sprint 3** (en marcha): pantalla para editar una factura desde el panel (falta el frontend de S3.3),
-  gestión de empresas y usuarios desde el panel (S3.4), y marcar/purgar facturas de prueba (S3.5).
+- **Sprint 3** (en marcha): pantalla para editar una factura desde el panel (falta el frontend de S3.3), y
+  marcar/purgar facturas de prueba (S3.5).
+- **Pendiente transversal, detectado el 23/07/2026**: las pantallas construidas hasta ahora (historial,
+  confirmación, panel de facturas, empresas) existen y están probadas cada una por su cuenta, pero la
+  aplicación todavía no tiene "esqueleto" que las una: no hay login real en pantalla, ni menú, ni forma de
+  pasar de una a otra con el ratón. Es trabajo pendiente de una tarea de integración (aún sin número fijo)
+  antes de poder enseñarle la aplicación completa a un usuario real de principio a fin.
 - **Sprint 4**: panel de la plataforma (dar de alta asesorías nuevas en minutos) y personalización visual
   por asesoría (cada una con su logo y colores).
 - **Sprint 5**: refuerzo de seguridad y pruebas de carga antes de dar el paso final.
@@ -160,6 +178,6 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   falta construir un interruptor (solo para Julio) que permita apagar este modo experimental sin tocar
   código, porque cuesta dinero real en llamadas a las IAs.
 
-**Avance estimado hacia producción a día de hoy: ≈53%** (27 de 51 tareas del plan "core", sin contar el
+**Avance estimado hacia producción a día de hoy: ≈55%** (28 de 51 tareas del plan "core", sin contar el
 módulo de Verifactu, la limpieza final del servidor viejo, ni la ampliación del 22/07 —aún no tiene número
 de tarea fijo—, que van en paralelo y no bloquean el lanzamiento).
