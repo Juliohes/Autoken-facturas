@@ -23,6 +23,7 @@ from tests._auth import USER_PASSWORD, USER_PASSWORD_HASH, bearer, host, login
 from tests._companies import VALID_CIF, VALID_CIF_2, XLSX_MIME, build_xlsx
 from tests._dbtest import seed_company, seed_tenant, seed_user
 from tests._intake import JPEG, JPEG_CT, upload_parts
+from tests._invoicing import seed_invoice
 
 pytestmark = pytest.mark.isolation
 
@@ -55,6 +56,7 @@ _PROTECTED_ROUTES = {
     ("GET", f"{API}/uploads/{{file_id}}/review"),
     ("POST", f"{API}/uploads/{{file_id}}/confirm"),
     ("GET", f"{API}/invoices/history"),
+    ("PATCH", f"{API}/invoices/{{invoice_id}}"),
     ("GET", f"{API}/reporting/invoices"),
     ("GET", f"{API}/reporting/invoices/export"),
     ("GET", f"{API}/registrations"),
@@ -89,6 +91,7 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ("GET", f"{API}/uploads/{dummy_id}/review", {}),
         ("POST", f"{API}/uploads/{dummy_id}/confirm", {"json": {"direction": "recibida"}}),
         ("GET", f"{API}/invoices/history", {}),
+        ("PATCH", f"{API}/invoices/{dummy_id}", {"json": {"total_amount": "1.00"}}),
         ("GET", f"{API}/reporting/invoices", {}),
         ("GET", f"{API}/reporting/invoices/export", {}),
         ("GET", f"{API}/registrations", {}),
@@ -158,6 +161,7 @@ async def test_c2_operar_por_id_ajeno_da_404(authapi: Api) -> None:
         password_hash=USER_PASSWORD_HASH,
         status="pending",
     )
+    invoice_otra = await seed_invoice(dsns, tenant_id=tid_otra, company_id=company_otra)
     token_ilex = await _token(client, "ilex.localhost", admin_ilex)
     propio = lambda: {**host("ilex.localhost"), **bearer(token_ilex)}  # noqa: E731
 
@@ -166,6 +170,7 @@ async def test_c2_operar_por_id_ajeno_da_404(authapi: Api) -> None:
         ("DELETE", f"{API}/companies/{company_otra}", {}),
         ("POST", f"{API}/registrations/{user_otra}/approve", {}),
         ("POST", f"{API}/registrations/{user_otra}/reject", {}),
+        ("PATCH", f"{API}/invoices/{invoice_otra}", {"json": {"total_amount": "1.00"}}),
     ]
     for method, path, kwargs in casos:
         resp = await client.request(method, path, headers=propio(), **kwargs)

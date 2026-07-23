@@ -135,11 +135,20 @@ en un teléfono real y queda pendiente hasta disponer de uno.
 - **Ajuste menor** (22/07/2026, sesión paralela de Julio ya aterrizada): el % de IVA de un tramo se veía a
   veces como "21,0%" en vez de "21%"; corregido para mostrar siempre el número limpio sin decimales de
   sobra cuando no aportan nada.
+- **S3.3 — Corregir una factura ya confirmada** (23/07/2026): a veces una factura confirmada tiene un dato
+  mal leído que nadie notó hasta después (un importe, la fecha, el CIF del proveedor). El administrador
+  puede corregirlo, y **queda constancia de quién cambió qué y cuál era el valor anterior** (no se puede
+  "editar en silencio"). Si se cambia el CIF del proveedor, el sistema lo vuelve a verificar como si fuera
+  nuevo. La auditoría encontró un fallo real: si alguien cambiaba SOLO el CIF sin actualizar también el
+  nombre del proveedor, el sistema daba por bueno el CIF nuevo dejando el nombre antiguo sin comprobar
+  contra él — ahora eso se bloquea y pide los dos datos juntos. Solo el administrador puede editar
+  facturas; no hay pantalla nueva todavía (eso vendrá si hace falta), esta tarea era la capacidad de
+  corregir con seguridad, no la pantalla para hacerlo cómodo.
 
 ## 5. Qué queda por delante
 
-- **Sprint 3** (en marcha): edición de una factura con registro de quién cambió qué (S3.3), gestión de
-  empresas y usuarios desde el panel (S3.4), y marcar/purgar facturas de prueba (S3.5).
+- **Sprint 3** (en marcha): pantalla para editar una factura desde el panel (falta el frontend de S3.3),
+  gestión de empresas y usuarios desde el panel (S3.4), y marcar/purgar facturas de prueba (S3.5).
 - **Sprint 4**: panel de la plataforma (dar de alta asesorías nuevas en minutos) y personalización visual
   por asesoría (cada una con su logo y colores).
 - **Sprint 5**: refuerzo de seguridad y pruebas de carga antes de dar el paso final.
@@ -151,6 +160,6 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   falta construir un interruptor (solo para Julio) que permita apagar este modo experimental sin tocar
   código, porque cuesta dinero real en llamadas a las IAs.
 
-**Avance estimado hacia producción a día de hoy: ≈50%** (25 de 50 tareas del plan "core", sin contar el
+**Avance estimado hacia producción a día de hoy: ≈53%** (27 de 51 tareas del plan "core", sin contar el
 módulo de Verifactu, la limpieza final del servidor viejo, ni la ampliación del 22/07 —aún no tiene número
 de tarea fijo—, que van en paralelo y no bloquean el lanzamiento).

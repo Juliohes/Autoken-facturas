@@ -54,9 +54,112 @@ class HistoryEntry:
     confirmed_at: datetime
 
 
+@dataclass(frozen=True)
+class InvoiceRecord:
+    """Estado actual de una factura confirmada, para calcular el diff de una edición (S3.3).
+
+    `tax_lines` en bruto (tuplas `(iva_pct, base, cuota)`, como `insert_tax_lines`): el repositorio
+    no conoce el tipo `ocr.verification.TaxLine` (es del contexto `ocr`); esa conversión es del
+    servicio, igual que ya hace con los tramos de la extracción OCR (`_extraction_tax_lines`).
+    """
+
+    id: UUID
+    company_id: UUID
+    issue_date: date | None
+    counterparty_tax_id: str | None
+    counterparty_name: str | None
+    counterparty_cif_status: str
+    net_amount: Decimal | None
+    tax_amount: Decimal | None
+    total_amount: Decimal | None
+    irpf_amount: Decimal | None
+    tax_lines: list[tuple[Decimal | None, Decimal | None, Decimal | None]]
+
+
 def is_duplicate_invoice(exc: IntegrityError) -> bool:
     """True si la `IntegrityError` viene del UNIQUE `(uploaded_file_id)` de `invoices`."""
     return violates_unique_constraint(exc, _UPLOADED_FILE_UNIQUE)
+
+
+async def get_invoice(session: AsyncSession, invoice_id: UUID) -> InvoiceRecord | None:
+    """Estado actual de una factura visible en el contexto (RLS), o `None` (S3.3).
+
+    Usado para calcular el diff de una edición contra el valor anterior; sin filtro de
+    `tenant_id`/`company_id` por parámetro (la RLS de dos niveles ya acota, igual que el resto del
+    contexto).
+    """
+    row = (
+        await session.execute(
+            text(
+                "SELECT id, company_id, issue_date, counterparty_tax_id, counterparty_name, "
+                " counterparty_cif_status, net_amount, tax_amount, total_amount, irpf_amount "
+                "FROM invoices WHERE id = :id"
+            ),
+            {"id": str(invoice_id)},
+        )
+    ).first()
+    if row is None:
+        return None
+    lines = (
+        await session.execute(
+            text("SELECT iva_pct, base, cuota FROM invoice_tax_lines WHERE invoice_id = :id"),
+            {"id": str(invoice_id)},
+        )
+    ).all()
+    return InvoiceRecord(
+        id=row.id,
+        company_id=row.company_id,
+        issue_date=row.issue_date,
+        counterparty_tax_id=row.counterparty_tax_id,
+        counterparty_name=row.counterparty_name,
+        counterparty_cif_status=row.counterparty_cif_status,
+        net_amount=row.net_amount,
+        tax_amount=row.tax_amount,
+        total_amount=row.total_amount,
+        irpf_amount=row.irpf_amount,
+        tax_lines=[(line.iva_pct, line.base, line.cuota) for line in lines],
+    )
+
+
+async def update_invoice(
+    session: AsyncSession,
+    invoice_id: UUID,
+    *,
+    issue_date: date | None,
+    counterparty_tax_id: str | None,
+    counterparty_name: str | None,
+    counterparty_cif_status: str,
+    net_amount: Decimal | None,
+    tax_amount: Decimal | None,
+    total_amount: Decimal | None,
+    irpf_amount: Decimal | None,
+    balance_ok: bool | None,
+) -> None:
+    """Actualiza los campos editables de una factura ya confirmada (S3.3). Siempre el conjunto
+    completo (el servicio ya fusionó el `PATCH` parcial con el valor anterior): evita construir SQL
+    con una lista de columnas dinámica."""
+    await session.execute(
+        text(
+            "UPDATE invoices SET issue_date = :issue_date, "
+            " counterparty_tax_id = :counterparty_tax_id, counterparty_name = :counterparty_name, "
+            " counterparty_cif_status = :counterparty_cif_status, net_amount = :net_amount, "
+            " tax_amount = :tax_amount, total_amount = :total_amount, "
+            " irpf_amount = :irpf_amount, balance_ok = :balance_ok "
+            "WHERE id = :id"
+        ),
+        {
+            "id": str(invoice_id),
+            "issue_date": issue_date,
+            "counterparty_tax_id": counterparty_tax_id,
+            "counterparty_name": counterparty_name,
+            "counterparty_cif_status": counterparty_cif_status,
+            "net_amount": net_amount,
+            "tax_amount": tax_amount,
+            "total_amount": total_amount,
+            "irpf_amount": irpf_amount,
+            "balance_ok": balance_ok,
+        },
+    )
 
 
 async def invoice_exists_for_file(session: AsyncSession, uploaded_file_id: UUID) -> bool:
@@ -159,6 +262,15 @@ async def insert_tax_lines(
         )
 
 
+async def delete_tax_lines(session: AsyncSession, invoice_id: UUID) -> None:
+    """Borra todos los tramos de IVA de una factura (S3.3): el reemplazo completo de `tax_lines` en
+    una edición es un borra-e-inserta, no un `UPDATE` fila a fila (spec §2 C6)."""
+    await session.execute(
+        text("DELETE FROM invoice_tax_lines WHERE invoice_id = :invoice_id"),
+        {"invoice_id": str(invoice_id)},
+    )
+
+
 async def insert_corrections(
     session: AsyncSession,
     *,
@@ -186,6 +298,40 @@ async def insert_corrections(
                 "ai_value": correction.ai_value,
                 "human_value": correction.human_value,
                 "corrected_by": str(corrected_by),
+            },
+        )
+
+
+async def insert_edits(
+    session: AsyncSession,
+    *,
+    invoice_id: UUID,
+    company_id: UUID,
+    edited_by: UUID,
+    edits: list[Correction],
+) -> None:
+    """Inserta una fila por campo que cambió en una edición post-confirmación (S3.3, spec §2).
+
+    Reutiliza `Correction` (mismo diff que `ocr_corrections`, `invoicing.corrections`): `ai_value`
+    es aquí el valor ANTERIOR de la factura, `human_value` el editado (nombres del dataclass
+    genéricos; las columnas de `invoice_edits` sí se llaman `old_value`/`new_value`, más precisas
+    para este caso de uso humano-vs-humano).
+    """
+    for edit in edits:
+        await session.execute(
+            text(
+                f"INSERT INTO invoice_edits "
+                f"(tenant_id, company_id, invoice_id, field, old_value, new_value, edited_by) "
+                f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :invoice_id, :field, :old_value, "
+                f" :new_value, :edited_by)"
+            ),
+            {
+                "company_id": str(company_id),
+                "invoice_id": str(invoice_id),
+                "field": edit.field,
+                "old_value": edit.ai_value,
+                "new_value": edit.human_value,
+                "edited_by": str(edited_by),
             },
         )
 

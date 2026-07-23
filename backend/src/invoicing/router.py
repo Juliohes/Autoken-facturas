@@ -1,4 +1,5 @@
-"""Endpoints HTTP de la persistencia de facturas (S2.5): review (GET) y confirm (POST).
+"""Endpoints HTTP de la persistencia de facturas: review/confirm (S2.5), historial (S2.6) y edición
+auditada (S3.3).
 
 Capa HTTP **fina**: autentica y autoriza (portero de roles; la pertenencia fina la comprueba el
 servicio), tipa el body y traduce el resultado o la excepción de dominio de `invoicing.service` a la
@@ -22,9 +23,9 @@ from tenancy.constants import Role
 
 router = APIRouter(prefix="/uploads", tags=["invoicing"])
 
-# Historial de facturas (S2.6): mismo prefijo de recurso `invoices`, router aparte porque
+# Historial (S2.6) y edición (S3.3): mismo prefijo de recurso `invoices`, router aparte porque
 # `router` ya lleva el prefijo `/uploads` (una `APIRouter` tiene un único prefijo).
-history_router = APIRouter(prefix="/invoices", tags=["invoicing"])
+invoices_router = APIRouter(prefix="/invoices", tags=["invoicing"])
 
 # Identidad autorizada a revisar/confirmar: empleado (`user`) o admin de asesoría (`tenant_admin`).
 # La pertenencia fina a la empresa del fichero la comprueba el servicio (403 vs 404, C10/C13).
@@ -33,6 +34,10 @@ Reviewer = Annotated[AuthContext, Depends(require_roles(Role.USER, Role.TENANT_A
 # Mismo conjunto de roles que `Reviewer` (S2.6 no añade un rol nuevo), con su propio nombre: ver el
 # historial no "revisa" un fichero, así que el gate se nombra por lo que autoriza aquí.
 HistoryViewer = Reviewer
+
+# Editar una factura ya confirmada es exclusivo de `tenant_admin` (spec S3.3, decisión de dominio
+# 1): a diferencia de `Reviewer`, el empleado no entra aquí.
+InvoiceEditor = Annotated[AuthContext, Depends(require_roles(Role.TENANT_ADMIN))]
 
 
 class TaxLineIn(BaseModel):
@@ -69,6 +74,12 @@ _ERROR_STATUS: list[tuple[type[Exception], int, str]] = [
     (service.CounterpartyBlocked, 422, "El CIF de contraparte no es válido o no consta"),
     (service.OwnTaxIdMissing, 422, "El CIF propio no aparece en la factura"),
     (service.ResponsibilityNotAccepted, 422, "Debes aceptar la responsabilidad para confirmar"),
+    (service.InvoiceNotVisible, 404, "Factura no encontrada"),
+    (
+        service.CounterpartyNameRequired,
+        422,
+        "Si cambias el CIF de contraparte, indica también su nombre",
+    ),
 ]
 
 
@@ -142,7 +153,7 @@ class HistoryOut(BaseModel):
     entries: list[HistoryEntryOut]
 
 
-@history_router.get("/history")
+@invoices_router.get("/history")
 async def invoice_history(identity: HistoryViewer) -> HistoryOut:
     """Facturas confirmadas de los últimos 7 días del contexto del usuario (S2.6). Solo lectura."""
     entries = await service.history(identity)
@@ -160,4 +171,74 @@ async def invoice_history(identity: HistoryViewer) -> HistoryOut:
             )
             for entry in entries
         ]
+    )
+
+
+class InvoiceEditIn(BaseModel):
+    """Cuerpo de `PATCH /invoices/{id}` (S3.3): patch parcial, solo cambian los campos presentes."""
+
+    issue_date: date | None = None
+    counterparty_tax_id: str | None = None
+    counterparty_name: str | None = None
+    net_amount: Decimal | None = None
+    tax_amount: Decimal | None = None
+    total_amount: Decimal | None = None
+    irpf_amount: Decimal | None = None
+    tax_lines: list[TaxLineIn] | None = None
+
+
+class InvoiceOut(BaseModel):
+    """Estado de la factura tras la edición (spec S3.3 §2)."""
+
+    id: UUID
+    issue_date: date | None
+    counterparty_tax_id: str | None
+    counterparty_name: str | None
+    counterparty_cif_status: str
+    net_amount: Decimal | None
+    tax_amount: Decimal | None
+    total_amount: Decimal | None
+    irpf_amount: Decimal | None
+    balance_ok: bool | None
+
+
+@invoices_router.patch("/{invoice_id}")
+async def edit_invoice(
+    identity: InvoiceEditor, invoice_id: UUID, body: InvoiceEditIn
+) -> InvoiceOut:
+    """Edita los campos presentes en el body de una factura confirmada. Solo `tenant_admin` (S3.3).
+
+    Patch parcial real: solo las claves que el cliente envió (`model_fields_set`) llegan al
+    servicio; un campo ausente en el body conserva su valor actual (spec §2). `tax_lines: null`
+    explícito se trata como AUSENTE (no toca los tramos): solo una lista real (incluida `[]`, que
+    los borra todos) es una instrucción de cambio; un `null` no es una lista de tramos válida.
+    """
+    patch: dict[str, object] = {}
+    for field_name in body.model_fields_set:
+        value = getattr(body, field_name)
+        if field_name == "tax_lines":
+            if value is None:
+                continue
+            value = [
+                service.ConfirmTaxLine(iva_pct=line.iva_pct, base=line.base, cuota=line.cuota)
+                for line in value
+            ]
+        patch[field_name] = value
+
+    try:
+        result = await service.edit_invoice(identity, invoice_id, patch)
+    except service.InvoicingError as exc:
+        _raise_http(exc)
+
+    return InvoiceOut(
+        id=result.id,
+        issue_date=result.issue_date,
+        counterparty_tax_id=result.counterparty_tax_id,
+        counterparty_name=result.counterparty_name,
+        counterparty_cif_status=result.counterparty_cif_status,
+        net_amount=result.net_amount,
+        tax_amount=result.tax_amount,
+        total_amount=result.total_amount,
+        irpf_amount=result.irpf_amount,
+        balance_ok=result.balance_ok,
     )
