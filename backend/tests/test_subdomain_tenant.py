@@ -25,15 +25,27 @@ _MANIFEST = "/api/v1/manifest.webmanifest"
 
 @pytest.fixture
 async def api() -> AsyncIterator[tuple[httpx.AsyncClient, dict[str, str]]]:
-    """App wired a la BD de test como rol runtime + cliente HTTP; devuelve (client, dsns)."""
+    """App wired a la BD de test como rol runtime + Redis + cliente HTTP; devuelve (client, dsns).
+
+    Redis: originalmente esta fixture (S1.2) no lo tocaba, ningún test de este fichero hacía login.
+    Desde que S4.2/S4.3 añadieron tests que sí (`platform_token`, rate-limit de `/auth/login`), hace
+    falta el mismo tratamiento que ya usa `conftest.authapi`: descartar el cliente Redis cacheado
+    (puede venir atado al *event loop* de un test anterior, ya cerrado por pytest-asyncio, loop por
+    test) y apuntar a un índice de test dedicado, o el login revienta con 500 en vez de 200/401.
+    """
     from shared import config
     from shared import db as db_module
+    from shared import redis as redis_module
 
     dsns = await provision_test_db()
-    prev = os.environ.get("DATABASE_URL")
+    prev_db = os.environ.get("DATABASE_URL")
+    prev_redis = os.environ.get("REDIS_URL")
     os.environ["DATABASE_URL"] = dsns["app_async"]
+    os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
     config.get_settings.cache_clear()
     await db_module.dispose_engine()
+    await redis_module.dispose_redis()
+    await redis_module.get_redis().flushdb()
 
     from main import create_app
 
@@ -45,10 +57,12 @@ async def api() -> AsyncIterator[tuple[httpx.AsyncClient, dict[str, str]]]:
             yield client, dsns
     finally:
         await db_module.dispose_engine()
-        if prev is None:
-            os.environ.pop("DATABASE_URL", None)
-        else:
-            os.environ["DATABASE_URL"] = prev
+        await redis_module.dispose_redis()
+        for var, prev in (("DATABASE_URL", prev_db), ("REDIS_URL", prev_redis)):
+            if prev is None:
+                os.environ.pop(var, None)
+            else:
+                os.environ[var] = prev
         config.get_settings.cache_clear()
 
 
