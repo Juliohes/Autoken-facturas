@@ -226,4 +226,36 @@ describe('CompaniesPanel (S3.4)', () => {
     expect(screen.queryByTestId('companies-table')).not.toBeInTheDocument()
     expect(screen.queryByTestId('registrations-table')).not.toBeInTheDocument()
   })
+
+  it('C10 (S3.5): purgar pide confirmación nativa y muestra cuántas facturas se borraron', async () => {
+    mockRoutes({ companies: [], registrations: [] })
+    postMock.mockResolvedValue({ data: { purged: 3 }, error: undefined })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findByText('Todavía no hay empresas.')
+
+    await user.click(screen.getByRole('button', { name: 'Purgar facturas de prueba' }))
+
+    expect(confirmSpy).toHaveBeenCalled()
+    await waitFor(() => {
+      expect(postMock).toHaveBeenCalledWith('/api/v1/invoices/test/purge')
+    })
+    expect(await screen.findByText('Se han borrado 3 facturas de prueba.')).toBeInTheDocument()
+    confirmSpy.mockRestore()
+  })
+
+  it('C11 (S3.5): cancelar el diálogo nativo no llama al endpoint de purga', async () => {
+    mockRoutes({ companies: [], registrations: [] })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findByText('Todavía no hay empresas.')
+
+    await user.click(screen.getByRole('button', { name: 'Purgar facturas de prueba' }))
+
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(postMock).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
 })

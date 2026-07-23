@@ -15,14 +15,19 @@ import contextlib
 import hashlib
 from uuid import UUID
 
+import structlog
+from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from invoice_intake import mime, repository, scanner, storage
 from jobs import queue
 from shared.audit import write_audit
 from shared.db import tenant_session
 from tenancy.constants import Role
+
+logger = structlog.get_logger("invoice_intake")
 
 # Traza de auditoría del intake (spec S2.1 C13): entidad y acción en constantes, no literales.
 _AUDIT_ENTITY = "uploaded_file"
@@ -144,6 +149,51 @@ async def get_download_url(session: AsyncSession, *, tenant_id: UUID, file_id: U
     return await asyncio.to_thread(
         storage.presigned_get_url, location.bucket, location.key, DOWNLOAD_URL_TTL_SECONDS
     )
+
+
+async def delete_uploaded_file_row(
+    session: AsyncSession, file_id: UUID
+) -> repository.UploadedFileLocation | None:
+    """Borra la fila de `uploaded_files` y devuelve su ubicación en MinIO, sin tocar el objeto.
+
+    Llamada desde `invoicing.service.purge_test_invoices` (S3.5, dueño de la orquestación), una vez
+    por factura de prueba purgada. A propósito NO borra el objeto de MinIO aquí: eso implicaría una
+    llamada de red por factura dentro de la MISMA transacción abierta de la petición, alargándola y
+    reteniendo los locks de las filas ya borradas mientras dura la purga. `schedule_storage_cleanup`
+    agenda esas bajas para DESPUÉS del commit. La ubicación se lee ANTES de borrar la fila: después
+    ya no habría de dónde leerla.
+    """
+    location = await repository.get_file_location(session, file_id)
+    await repository.delete_uploaded_file(session, file_id)
+    return location
+
+
+def schedule_storage_cleanup(
+    session: AsyncSession, locations: list[repository.UploadedFileLocation]
+) -> None:
+    """Agenda el borrado best-effort de objetos de MinIO tras el commit de la petición (S3.5).
+
+    Mismo patrón que `identity.registration._dispatch_after_commit` (S1.4, evento `after_commit` de
+    SQLAlchemy): el borrado en Postgres ya es la fuente de verdad y ya se completó (regla de dominio
+    4 de la spec S3.5); los objetos solo se tocan si la transacción confirma de verdad, y fuera de
+    sus locks. Un fallo al borrar un objeto se avisa (log), nunca en silencio ni bloqueante: no hay
+    nada que revertir, la fila ya no existe.
+    """
+    if not locations:
+        return
+
+    def _cleanup(_sync_session: Session) -> None:
+        for location in locations:
+            try:
+                storage.remove_object(location.bucket, location.key)
+            except storage.StorageUnavailable:
+                logger.warning(
+                    "invoice_intake.purge.storage_removal_failed",
+                    bucket=location.bucket,
+                    key=location.key,
+                )
+
+    event.listen(session.sync_session, "after_commit", _cleanup, once=True)
 
 
 async def create_upload(

@@ -4,6 +4,7 @@
 // módulos puros aparte (sin monolito). Comportamientos C1-C12 de la spec.
 import { useState } from 'react'
 
+import { useCurrentUser } from '../identity/useCurrentUser'
 import { CounterpartyVerdictBlock } from './CounterpartyVerdictBlock'
 import { FieldRow } from './FieldRow'
 import { ResponsibilityCheckbox } from './ResponsibilityCheckbox'
@@ -66,8 +67,11 @@ interface FormProps {
 /** Formulario propiamente dicho: se monta con los datos ya cargados. */
 function ConfirmationForm({ fileId, review, onConfirmed, onRetry }: FormProps) {
   const confirm = useConfirm(fileId)
+  const currentUser = useCurrentUser()
   const [form, setForm] = useState<ConfirmFormState>(() => initialFormState(review))
   const [responsibilityAccepted, setResponsibilityAccepted] = useState(false)
+  const [isTest, setIsTest] = useState(false)
+  const isAdmin = currentUser.data?.role === 'tenant_admin'
 
   const conf = (field: string): Confidence => review.confidences[field] ?? null
   const set = (patch: Partial<ConfirmFormState>) => setForm((prev) => ({ ...prev, ...patch }))
@@ -86,6 +90,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry }: FormProps) {
     const body = formStateToConfirmBody(form, {
       direction: 'recibida',
       responsibilityAccepted,
+      isTest: isAdmin && isTest,
     })
     confirm.mutate(body, { onSuccess: () => onConfirmed() })
   }
@@ -209,6 +214,19 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry }: FormProps) {
           </div>
         </div>
       </details>
+
+      {/* S3.5: solo el tenant_admin puede marcar una factura como de prueba (excluida de
+          informes, purgable de un clic); un empleado ni ve la casilla. */}
+      {isAdmin && (
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={isTest}
+            onChange={(e) => setIsTest(e.target.checked)}
+          />
+          Factura de prueba (no aparecerá en informes)
+        </label>
+      )}
 
       <ResponsibilityCheckbox
         checked={responsibilityAccepted}

@@ -237,9 +237,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Me Api V1 Auth Me Get"
+                  "$ref": "#/components/schemas/MeOut"
                 }
               }
             }
@@ -850,6 +848,28 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoices/test/purge": {
+      "post": {
+        "tags": [
+          "invoicing"
+        ],
+        "summary": "Purge Test Invoices",
+        "description": "Borra TODAS las facturas de prueba de la asesor\u00eda de una vez (S3.5). Solo `tenant_admin`.",
+        "operationId": "purge_test_invoices_api_v1_invoices_test_purge_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurgeResultOut"
                 }
               }
             }
@@ -2214,6 +2234,65 @@
         "title": "LoginRequest",
         "description": "Cuerpo de `POST /auth/login`."
       },
+      "MeCompanyOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "MeCompanyOut",
+        "description": "Empresa a la que est\u00e1 acotado un `user` en `/auth/me` (`null` para `tenant_admin`)."
+      },
+      "MeOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "tenant": {
+            "type": "string",
+            "title": "Tenant"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeCompanyOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "role",
+          "tenant",
+          "company"
+        ],
+        "title": "MeOut",
+        "description": "Respuesta de `GET /auth/me` (S1.6 C5/C6), tipada para que el cliente autogenerado la use\nsin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado)."
+      },
       "PanelOut": {
         "properties": {
           "items": {
@@ -2242,6 +2321,20 @@
         ],
         "title": "PanelOut",
         "description": "Respuesta de `GET /reporting/invoices`: una p\u00e1gina del panel (spec \u00a72)."
+      },
+      "PurgeResultOut": {
+        "properties": {
+          "purged": {
+            "type": "integer",
+            "title": "Purged"
+          }
+        },
+        "type": "object",
+        "required": [
+          "purged"
+        ],
+        "title": "PurgeResultOut",
+        "description": "Respuesta de `POST /invoices/test/purge` (S3.5): cu\u00e1ntas facturas de prueba se borraron."
       },
       "RegisterRequest": {
         "properties": {
