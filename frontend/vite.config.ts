@@ -11,6 +11,14 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: false,
+      workbox: {
+        // OpenCV.js (S2.2) es un chunk WASM de ~15 MB, cargado perezosamente solo al entrar en
+        // /capturar (decisión 2 de la spec, ver `opencv/loadOpenCv.ts`): precachearlo en la
+        // instalación del service worker obligaría a todo el mundo a descargarlo de golpe al abrir
+        // la app por primera vez, justo lo contrario de "perezoso". Se sirve bajo demanda con la
+        // caché normal del navegador cuando de verdad hace falta.
+        globIgnores: ['**/opencv-*.js'],
+      },
     }),
   ],
   server: {

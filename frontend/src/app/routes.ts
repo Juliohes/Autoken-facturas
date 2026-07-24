@@ -14,6 +14,7 @@ export const ROUTES = {
   invoices: '/facturas',
   companies: '/empresas',
   history: '/historial',
+  capture: '/capturar',
   confirmationPattern: '/confirmar/:fileId',
   confirmation: (fileId: string) => `/confirmar/${fileId}`,
 } as const
@@ -37,13 +38,16 @@ const ROUTE_DEFS: RouteDef[] = [
   { path: ROUTES.invoices, roles: ['tenant_admin'], label: 'Facturas' },
   { path: ROUTES.companies, roles: ['tenant_admin'], label: 'Empresas' },
   { path: ROUTES.history, roles: ['tenant_admin', 'user'], label: 'Historial' },
+  { path: ROUTES.capture, roles: ['tenant_admin', 'user'], label: 'Subir factura' },
   { path: ROUTES.confirmationPattern, roles: ['tenant_admin', 'user'] },
 ]
 
+// `user` entra directo a capturar (S2.2 decisión 1): subir facturas es su tarea principal del día a
+// día, no consultar el historial. `tenant_admin` mantiene `/facturas` (su tarea es supervisar).
 const ROLE_HOME: Record<Role, string> = {
   platform_admin: ROUTES.platform,
   tenant_admin: ROUTES.invoices,
-  user: ROUTES.history,
+  user: ROUTES.capture,
 }
 
 export function homeRouteForRole(role: Role): string {

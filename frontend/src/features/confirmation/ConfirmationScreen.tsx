@@ -22,9 +22,12 @@ interface Props {
   fileId: string
   onConfirmed: () => void
   onRetry: () => void
+  /** Recibida/Emitida elegida en la captura (S2.2); sin captura de por medio (navegación directa a
+   * esta URL), se mantiene el valor por defecto de siempre. */
+  direction?: 'recibida' | 'emitida'
 }
 
-export function ConfirmationScreen({ fileId, onConfirmed, onRetry }: Props) {
+export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction = 'recibida' }: Props) {
   const review = useReview(fileId)
 
   if (review.isLoading) {
@@ -53,6 +56,7 @@ export function ConfirmationScreen({ fileId, onConfirmed, onRetry }: Props) {
       review={review.data}
       onConfirmed={onConfirmed}
       onRetry={onRetry}
+      direction={direction}
     />
   )
 }
@@ -62,10 +66,11 @@ interface FormProps {
   review: ReviewResponse
   onConfirmed: () => void
   onRetry: () => void
+  direction: 'recibida' | 'emitida'
 }
 
 /** Formulario propiamente dicho: se monta con los datos ya cargados. */
-function ConfirmationForm({ fileId, review, onConfirmed, onRetry }: FormProps) {
+function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: FormProps) {
   const confirm = useConfirm(fileId)
   const currentUser = useCurrentUser()
   const [form, setForm] = useState<ConfirmFormState>(() => initialFormState(review))
@@ -85,10 +90,10 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry }: FormProps) {
   const hasImbalance = review.warnings.includes(WARNING_IMBALANCE)
 
   const handleConfirm = () => {
-    // `direction` se propaga (la selección Recibida/Emitida es de S2.2, §6): por
-    // defecto "recibida", el flujo del CIF de contraparte de §11.8.
+    // `direction` llega de la selección Recibida/Emitida de S2.2; por defecto "recibida" si se
+    // navega aquí sin pasar por la captura (flujo del CIF de contraparte de §11.8).
     const body = formStateToConfirmBody(form, {
-      direction: 'recibida',
+      direction,
       responsibilityAccepted,
       isTest: isAdmin && isTest,
     })

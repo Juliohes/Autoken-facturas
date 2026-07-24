@@ -4,7 +4,7 @@
 // Comportamientos C13-C16 de la spec.
 import { useState } from 'react'
 
-import { useCompanyOptions } from './useCompanyOptions'
+import { useCompanyOptions } from '../companies/useCompanyOptions'
 import { useDownloadUrl } from './useDownloadUrl'
 import { useExportInvoices } from './useExportInvoices'
 import { useInvoicesPanel } from './useInvoicesPanel'
