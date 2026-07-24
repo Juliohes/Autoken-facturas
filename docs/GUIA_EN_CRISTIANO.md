@@ -223,14 +223,29 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   coexista, que la caché compartida de CIFs (que no pertenece a ninguna asesoría) no se ve afectada,
   y los casos de error visibles en pantalla.
 
+- **S4.5 — Métricas y consumo** (24/07/2026): el panel de plataforma ya deja crear asesorías y
+  gestionar su modo demo, pero Julio no tenía forma de saber, sin entrar a mano en la base de
+  datos, cuánto está usando de verdad cada una: cuántas empresas ha dado de alta, cuántos usuarios
+  tiene activos, cuántas facturas mete al mes, cuántas veces ha usado el lector automático (OCR), y
+  cuándo fue la última vez que hizo algo. Ahora el panel muestra una segunda tabla, "Métricas y
+  consumo", con esos números por asesoría. Un matiz importante: el plan pedía enseñar el "coste de
+  OCR acumulado" (cuánto ha costado en dinero), pero hoy la aplicación no guarda ese dato en ningún
+  sitio (los proveedores de IA no siempre devuelven el precio exacto, y aún no existe una tabla de
+  precios por modelo) — así que, en vez de inventar una cifra de dinero que no sería real, se
+  muestra el número de facturas procesadas por el lector automático, dejando claro con el nombre de
+  la columna que NO es una cantidad de euros. La auditoría (tres revisores en paralelo) no encontró
+  ningún problema de diseño ni de seguridad; sí sugirió reforzar varias pruebas (que "empresas" y
+  "facturas procesadas" cuenten de verdad TODOS los casos, no solo los "bonitos"; que el orden de
+  la tabla sea siempre el mismo; que ninguna prueba dejara colar un símbolo de moneda por
+  descuido), y se añadieron esas pruebas antes de cerrar la tarea.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
   facturas (S3.3 solo trajo la capacidad de corregir con seguridad, no la pantalla para hacerlo cómodo),
   si hace falta más adelante.
-- **Sprint 4 en marcha** (S4.1-S4.4 cerrados 24/07/2026): quedan S4.5 (panel de consumo:
-  empresas/usuarios/facturas/coste por asesoría), S4.6 (dominios propios de cliente) y S4.7
-  (suspender/exportar/borrar una asesoría real). S4.2/S4.3 dejaron el logo/colores/icono
+- **Sprint 4 en marcha** (S4.1-S4.5 cerrados 24/07/2026): quedan S4.6 (dominios propios de cliente)
+  y S4.7 (suspender/exportar/borrar una asesoría real). S4.2/S4.3 dejaron el logo/colores/icono
   aplicados solo en el punto de entrada actual de la app, no todavía en cada pantalla ya construida
   (panel, empresas...) — eso encaja mejor junto con la tarea de "esqueleto" de abajo.
 - **Pendiente transversal, detectado el 23/07/2026**: las pantallas construidas hasta ahora (historial,
@@ -249,7 +264,7 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   falta construir un interruptor (solo para Julio) que permita apagar este modo experimental sin tocar
   código, porque cuesta dinero real en llamadas a las IAs.
 
-**Avance estimado hacia producción a día de hoy: ≈65%** (33 de 51 tareas del plan "core", sin contar el
+**Avance estimado hacia producción a día de hoy: ≈67%** (34 de 51 tareas del plan "core", sin contar el
 módulo de Verifactu, la limpieza final del servidor viejo, ni la ampliación del 22/07 —aún no tiene número
 de tarea fijo—, que van en paralelo y no bloquean el lanzamiento). **Sprint 3 completo; Sprint 4 en marcha
-(S4.1-S4.4 hechos, quedan S4.5-S4.7).**
+(S4.1-S4.5 hechos, quedan S4.6-S4.7).**

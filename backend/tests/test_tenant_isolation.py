@@ -67,6 +67,7 @@ _PROTECTED_ROUTES = {
     ("POST", f"{API}/registrations/{{user_id}}/reject"),
     ("POST", f"{API}/platform/tenants"),
     ("GET", f"{API}/platform/tenants"),
+    ("GET", f"{API}/platform/tenants/metrics"),
     ("POST", f"{API}/platform/tenants/{{tenant_id}}/convert-to-production"),
     ("POST", f"{API}/platform/tenants/{{tenant_id}}/purge"),
 }
@@ -108,6 +109,7 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ("POST", f"{API}/registrations/{dummy_id}/reject", {}),
         ("POST", f"{API}/platform/tenants", {"json": {"name": "X", "slug": "coladaxyz"}}),
         ("GET", f"{API}/platform/tenants", {}),
+        ("GET", f"{API}/platform/tenants/metrics", {}),
         ("POST", f"{API}/platform/tenants/{dummy_id}/convert-to-production", {}),
         ("POST", f"{API}/platform/tenants/{dummy_id}/purge", {}),
     ]

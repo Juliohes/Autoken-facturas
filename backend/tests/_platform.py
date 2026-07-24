@@ -7,6 +7,9 @@ cada test de `platform_admin`.
 
 from __future__ import annotations
 
+from datetime import datetime
+from uuid import uuid4
+
 import asyncpg
 import httpx
 
@@ -85,3 +88,69 @@ def bucket_exists(tenant_id: str) -> bool:
     from invoice_intake import storage
 
     return storage._client().bucket_exists(storage.bucket_for(tenant_id))
+
+
+async def seed_ocr_extraction(
+    dsns: dict[str, str],
+    *,
+    tenant_id: str,
+    company_id: str,
+    seed: int = 0,
+    uploaded_by: str | None = None,
+    status: str = "ok",
+) -> str:
+    """Inserta una extracción OCR mínima (S4.5): `uploaded_file` + fila de `ocr_extractions`.
+    Contenido irrelevante, solo cuenta para las métricas de consumo.
+
+    `seed` varía el contenido subido para no chocar con el UNIQUE `(company_id, sha256)` de
+    `uploaded_files` al sembrar varias extracciones de la misma empresa. `uploaded_by`: reutiliza un
+    usuario existente (por defecto crea uno nuevo `active`, que ya cuenta como consumo por sí solo —
+    pasar uno explícito cuando el test controla el número exacto de usuarios activos, S4.5 C1).
+    `status`: `ocr_extractions_count` cuenta cualquiera (spec S4.5 §0 decisión 5), por defecto `ok`.
+    """
+    from tests._ocr import JPEG, seed_uploaded_file
+
+    uploader = uploaded_by or await seed_user(
+        dsns["admin"], tenant_id=tenant_id, email=f"seed-ocr-{uuid4()}@example.com"
+    )
+    file_id = await seed_uploaded_file(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        uploaded_by=uploader,
+        content=JPEG + bytes([seed % 256]),
+    )
+    extraction_id = str(uuid4())
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        await conn.execute(
+            "INSERT INTO ocr_extractions (id, tenant_id, company_id, uploaded_file_id, "
+            "tax_lines, own_tax_id_present, confidences, validations, engine, model, raw, status) "
+            "VALUES ($1,$2,$3,$4,'[]'::jsonb,false,'{}'::jsonb,'{}'::jsonb,'test','test',"
+            "'{}'::jsonb,$5)",
+            extraction_id,
+            tenant_id,
+            company_id,
+            file_id,
+            status,
+        )
+    finally:
+        await conn.close()
+    return extraction_id
+
+
+async def seed_audit_log(
+    dsns: dict[str, str], *, tenant_id: str, at: datetime, action: str = "test.action"
+) -> None:
+    """Inserta una entrada de `audit_log` con un `at` concreto (S4.5, "último uso")."""
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        await conn.execute(
+            "INSERT INTO audit_log (id, tenant_id, action, entity, at) VALUES ($1,$2,$3,'test',$4)",
+            str(uuid4()),
+            tenant_id,
+            action,
+            at,
+        )
+    finally:
+        await conn.close()

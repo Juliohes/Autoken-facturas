@@ -35,6 +35,20 @@ class PurgeOutcome:
     was_demo: bool
 
 
+@dataclass(frozen=True)
+class TenantMetrics:
+    """Una fila de `platform_tenant_metrics()` (S4.5): consumo agregado de un tenant."""
+
+    tenant_id: UUID
+    slug: str
+    name: str
+    companies_count: int
+    active_users_count: int
+    invoices_this_month: int
+    ocr_extractions_count: int
+    last_activity_at: datetime | None
+
+
 def _to_tenant_record(row: Any) -> TenantRecord:
     return TenantRecord(
         id=row.id,
@@ -122,3 +136,29 @@ async def purge_demo_tenant(session: AsyncSession, tenant_id: UUID) -> PurgeOutc
         )
     ).one()
     return PurgeOutcome(existed=row.existed, was_demo=row.was_demo)
+
+
+async def tenant_metrics(session: AsyncSession) -> list[TenantMetrics]:
+    """Consumo agregado de todos los tenants, ordenado por slug (spec S4.5 §0 decisión 3)."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT tenant_id, slug, name, companies_count, active_users_count, "
+                "invoices_this_month, ocr_extractions_count, last_activity_at "
+                "FROM platform_tenant_metrics()"
+            )
+        )
+    ).all()
+    return [
+        TenantMetrics(
+            tenant_id=row.tenant_id,
+            slug=row.slug,
+            name=row.name,
+            companies_count=row.companies_count,
+            active_users_count=row.active_users_count,
+            invoices_this_month=row.invoices_this_month,
+            ocr_extractions_count=row.ocr_extractions_count,
+            last_activity_at=row.last_activity_at,
+        )
+        for row in rows
+    ]

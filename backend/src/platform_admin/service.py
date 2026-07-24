@@ -150,3 +150,8 @@ async def purge_demo_tenant(session: AsyncSession, tenant_id: UUID) -> None:
         raise TenantNotDemo()
 
     intake_service.schedule_bucket_cleanup(session, storage.bucket_for(tenant_id))
+
+
+async def tenant_metrics(session: AsyncSession) -> list[repository.TenantMetrics]:
+    """Consumo agregado de todos los tenants (S4.5 §3 C1-C4). Solo lectura."""
+    return await repository.tenant_metrics(session)

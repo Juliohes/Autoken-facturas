@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { api } from '../../api/client'
 import { PlatformTenants } from './PlatformTenants'
-import type { Tenant } from './types'
+import type { Tenant, TenantMetrics } from './types'
 
 vi.mock('../../api/client', () => ({
   api: { GET: vi.fn(), POST: vi.fn() },
@@ -30,8 +30,25 @@ function makeTenant(over: Partial<Tenant> = {}): Tenant {
   }
 }
 
-function mockRoutes(tenants: Tenant[] = []) {
+function makeMetric(over: Partial<TenantMetrics> = {}): TenantMetrics {
+  return {
+    tenant_id: 't1',
+    slug: 'nueva',
+    name: 'Nueva SL',
+    companies_count: 0,
+    active_users_count: 0,
+    invoices_this_month: 0,
+    ocr_extractions_count: 0,
+    last_activity_at: null,
+    ...over,
+  }
+}
+
+function mockRoutes(tenants: Tenant[] = [], metrics: TenantMetrics[] = []) {
   getMock.mockImplementation((path: string) => {
+    if (path.includes('/platform/tenants/metrics')) {
+      return Promise.resolve({ data: metrics, error: undefined })
+    }
     if (path.includes('/platform/tenants')) {
       return Promise.resolve({ data: tenants, error: undefined })
     }
@@ -162,7 +179,11 @@ describe('PlatformTenants — modo demo (S4.4)', () => {
 
   it('C15: "Convertir a producción" refresca la fila a "No" y oculta los botones', async () => {
     let tenants = [makeTenant({ id: 'demo-1', slug: 'demo', is_demo: true })]
-    getMock.mockImplementation(() => Promise.resolve({ data: tenants, error: undefined }))
+    getMock.mockImplementation((path: string) =>
+      path.includes('/metrics')
+        ? Promise.resolve({ data: [], error: undefined })
+        : Promise.resolve({ data: tenants, error: undefined }),
+    )
     postMock.mockImplementation((path: string) => {
       if (path.includes('convert-to-production')) {
         tenants = tenants.map((t) => ({ ...t, is_demo: false }))
@@ -231,7 +252,11 @@ describe('PlatformTenants — modo demo (S4.4)', () => {
 
   it('C17: "Purgar" confirmado hace desaparecer la fila', async () => {
     let tenants = [makeTenant({ id: 'demo-1', slug: 'demo', is_demo: true })]
-    getMock.mockImplementation(() => Promise.resolve({ data: tenants, error: undefined }))
+    getMock.mockImplementation((path: string) =>
+      path.includes('/metrics')
+        ? Promise.resolve({ data: [], error: undefined })
+        : Promise.resolve({ data: tenants, error: undefined }),
+    )
     postMock.mockImplementation((path: string) => {
       if (path.includes('/purge')) {
         tenants = []
@@ -249,5 +274,53 @@ describe('PlatformTenants — modo demo (S4.4)', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('tenant-row')).not.toBeInTheDocument()
     })
+  })
+})
+
+// --- S4.5 Métricas y consumo (spec docs/specs/S4.5-metricas-y-consumo.md, criterios C7-C8) --------
+
+describe('PlatformTenants — métricas y consumo (S4.5)', () => {
+  it('C7: muestra una fila por tenant con empresas/usuarios/facturas/OCR/último uso', async () => {
+    mockRoutes(
+      [makeTenant()],
+      [
+        makeMetric({
+          companies_count: 3,
+          active_users_count: 2,
+          invoices_this_month: 5,
+          ocr_extractions_count: 7,
+          last_activity_at: '2026-07-24T10:00:00Z',
+        }),
+      ],
+    )
+    renderPanel()
+
+    const rows = await screen.findAllByTestId('tenant-metrics-row')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveTextContent('3')
+    expect(rows[0]).toHaveTextContent('2')
+    expect(rows[0]).toHaveTextContent('5')
+    expect(rows[0]).toHaveTextContent('7')
+    expect(rows[0]).toHaveTextContent('2026-07-24T10:00:00Z')
+  })
+
+  it('spec §4: nunca presenta las métricas como dinero (sin €/$ ni la palabra "coste")', async () => {
+    mockRoutes(
+      [makeTenant()],
+      [makeMetric({ companies_count: 3, active_users_count: 2, ocr_extractions_count: 7 })],
+    )
+    renderPanel()
+
+    const row = await screen.findByTestId('tenant-metrics-row')
+    expect(row).not.toHaveTextContent(/[€$]/)
+    expect(row).not.toHaveTextContent(/coste/i)
+  })
+
+  it('C8: "último uso" nulo se muestra como texto legible, no null ni vacío', async () => {
+    mockRoutes([makeTenant()], [makeMetric({ last_activity_at: null })])
+    renderPanel()
+
+    const row = await screen.findByTestId('tenant-metrics-row')
+    expect(row).toHaveTextContent('Sin actividad')
   })
 })

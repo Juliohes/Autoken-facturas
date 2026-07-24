@@ -1269,6 +1269,32 @@
         }
       }
     },
+    "/api/v1/platform/tenants/metrics": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Tenant Metrics",
+        "description": "Consumo agregado de todos los tenants, ordenado por slug (S4.5).",
+        "operationId": "tenant_metrics_api_v1_platform_tenants_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TenantMetricsOut"
+                  },
+                  "type": "array",
+                  "title": "Response Tenant Metrics Api V1 Platform Tenants Metrics Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/tenants/{tenant_id}/convert-to-production": {
       "post": {
         "tags": [
@@ -2821,6 +2847,64 @@
         ],
         "title": "TenantCurrentOut",
         "description": "Respuesta de `GET /tenants/current` (S1.2 + branding S4.2).\n\nLos campos de branding son `null` cuando el tenant no tiene fila en `tenant_branding` o el campo\nconcreto est\u00e1 vac\u00edo: el servidor nunca inventa un valor por defecto (spec S4.2 decisi\u00f3n 1); los\nvalores de reemplazo (\"Setex tal cual hoy\") los aplica el frontend."
+      },
+      "TenantMetricsOut": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tenant Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "companies_count": {
+            "type": "integer",
+            "title": "Companies Count"
+          },
+          "active_users_count": {
+            "type": "integer",
+            "title": "Active Users Count"
+          },
+          "invoices_this_month": {
+            "type": "integer",
+            "title": "Invoices This Month"
+          },
+          "ocr_extractions_count": {
+            "type": "integer",
+            "title": "Ocr Extractions Count"
+          },
+          "last_activity_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "slug",
+          "name",
+          "companies_count",
+          "active_users_count",
+          "invoices_this_month",
+          "ocr_extractions_count",
+          "last_activity_at"
+        ],
+        "title": "TenantMetricsOut",
+        "description": "Consumo agregado de un tenant (S4.5). `ocr_extractions_count` es un proxy de uso, nunca una\ncifra monetaria (spec \u00a70 decisi\u00f3n 1: no hay coste real en \u20ac disponible hoy)."
       },
       "TenantOut": {
         "properties": {
