@@ -108,6 +108,4 @@ async def purge_demo_tenant(identity: Platform, tenant_id: UUID) -> None:
     except service.TenantNotFound as exc:
         raise HTTPException(status_code=404, detail="No existe ese tenant") from exc
     except service.TenantNotDemo as exc:
-        raise HTTPException(
-            status_code=409, detail="Solo se pueden purgar tenants demo"
-        ) from exc
+        raise HTTPException(status_code=409, detail="Solo se pueden purgar tenants demo") from exc

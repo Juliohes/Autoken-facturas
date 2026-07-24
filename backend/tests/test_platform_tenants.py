@@ -322,9 +322,7 @@ async def test_s44_c5_convertir_a_produccion_404_si_no_existe(authapi: Api) -> N
     await seed_platform_admin(dsns)
     token = await platform_token(client)
 
-    resp = await client.post(
-        f"{URL}/{uuid.uuid4()}/convert-to-production", headers=_auth(token)
-    )
+    resp = await client.post(f"{URL}/{uuid.uuid4()}/convert-to-production", headers=_auth(token))
 
     assert resp.status_code == 404
 
@@ -336,7 +334,8 @@ async def test_s44_c6_purgar_borra_el_tenant_y_su_cascada(authapi: Api) -> None:
     token = await platform_token(client)
     created = (
         await client.post(
-            URL, json={"name": "Demo Con Empresa", "slug": "demoempresa", "is_demo": True},
+            URL,
+            json={"name": "Demo Con Empresa", "slug": "demoempresa", "is_demo": True},
             headers=_auth(token),
         )
     ).json()
@@ -358,7 +357,8 @@ async def test_s44_c7_purgar_borra_el_bucket_de_minio(authapi: Api) -> None:
     token = await platform_token(client)
     created = (
         await client.post(
-            URL, json={"name": "Demo Con Fichero", "slug": "demofichero", "is_demo": True},
+            URL,
+            json={"name": "Demo Con Fichero", "slug": "demofichero", "is_demo": True},
             headers=_auth(token),
         )
     ).json()
@@ -410,7 +410,8 @@ async def test_s44_c10_fallo_de_minio_no_bloquea_la_purga(
     token = await platform_token(client)
     created = (
         await client.post(
-            URL, json={"name": "Demo Fallo", "slug": "demofallo", "is_demo": True},
+            URL,
+            json={"name": "Demo Fallo", "slug": "demofallo", "is_demo": True},
             headers=_auth(token),
         )
     ).json()
@@ -433,7 +434,8 @@ async def test_s44_c11_un_tenant_admin_no_puede_convertir_ni_purgar(authapi: Api
     admin_token = await platform_token(client)
     created = (
         await client.post(
-            URL, json={"name": "Demo Ajena", "slug": "demoajena", "is_demo": True},
+            URL,
+            json={"name": "Demo Ajena", "slug": "demoajena", "is_demo": True},
             headers=_auth(admin_token),
         )
     ).json()
@@ -465,9 +467,7 @@ async def test_s44_c11b_sin_autenticar_no_hay_acceso_a_convertir_ni_purgar(autha
     resp_convert = await client.post(
         f"{URL}/{uuid.uuid4()}/convert-to-production", headers=_auth("token-invalido")
     )
-    resp_purge = await client.post(
-        f"{URL}/{uuid.uuid4()}/purge", headers=_auth("token-invalido")
-    )
+    resp_purge = await client.post(f"{URL}/{uuid.uuid4()}/purge", headers=_auth("token-invalido"))
 
     assert resp_convert.status_code == 401
     assert resp_purge.status_code == 401
@@ -509,7 +509,8 @@ async def test_s44_purgar_no_toca_cif_lookups_cache_global(authapi: Api) -> None
     token = await platform_token(client)
     created = (
         await client.post(
-            URL, json={"name": "Demo Con Cache", "slug": "democache", "is_demo": True},
+            URL,
+            json={"name": "Demo Con Cache", "slug": "democache", "is_demo": True},
             headers=_auth(token),
         )
     ).json()
