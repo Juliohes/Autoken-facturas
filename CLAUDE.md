@@ -66,13 +66,12 @@
 
 ---
 
-## Estado actual (reconciliado 2026-07-22 — ver PLAN MAESTRO §11.11)
-- **Fase real (git log)**: Sprint 1 (tenancy/identity/companies) completo. Sprint 2 (intake+OCR) completo
-  salvo S2.2. **Sprint 3 (panel de asesoría) COMPLETO**: S3.1 (panel de facturas, PR #77), S3.2 (export
-  Excel, PR #80), S3.3 (edición auditada, PR #81), S3.4 (gestión de empresas/usuarios, PR #82) y S3.5
-  (facturas de prueba) cerrados y mergeados.
-- **Falta de Sprint 2**: **S2.2** (captura guiada PWA, `getUserMedia`+OpenCV.js, ADR-0002) — sin empezar, no
-  hay ningún componente de cámara en frontend hoy.
+## Estado actual (reconciliado 2026-07-24 — ver PLAN MAESTRO §11.11)
+- **Fase real (git log)**: Sprint 1 (tenancy/identity/companies) completo. **Sprint 2 (intake+OCR)
+  COMPLETO** (S2.2 cerrada 24/07/2026, PR #93 — verificación en hardware real pendiente). **Sprint 3
+  (panel de asesoría) COMPLETO**: S3.1 (panel de facturas, PR #77), S3.2 (export Excel, PR #80), S3.3
+  (edición auditada, PR #81), S3.4 (gestión de empresas/usuarios, PR #82) y S3.5 (facturas de prueba)
+  cerrados y mergeados.
 - **Sprint 4 (panel de plataforma) arrancado**: S4.1 (alta de tenant en minutos), S4.2 (theming
   runtime), S4.3 (manifest PWA dinámico), S4.4 (modo demo) y S4.5 (métricas y consumo) cerrados y
   mergeados. S4.1: primer endpoint del proyecto protegido por el rol `platform_admin` (antes solo
@@ -138,6 +137,29 @@
   fuga menor en el `Map` de reintentos ante fallos de red sin `onError`, tabla rol->ruta duplicada
   entre el router y el menú, y `tokenStore` reubicado de `features/session/` a `api/` por dirección
   de dependencias) — todos corregidos.
+- **S2.2 (captura guiada) cerrada y mergeada (PR #93) — SPRINT 2 COMPLETO** salvo verificación en
+  hardware real: segunda tarea del lote de cierre de backlog. Nueva ruta `/capturar` (nuevo
+  `ROLE_HOME.user`, antes `/historial`), 100% frontend, sin tocar `POST /uploads` (S2.1). Cámara
+  trasera (`getUserMedia`) con fallback a selector de fichero nativo; auto-captura por frames
+  (varianza del Laplaciano para nitidez + detección de contorno de 4 lados vía OpenCV.js para
+  encuadre, ambas condiciones a la vez); recorte + corrección de perspectiva automáticos tras la
+  captura, sin bloquear si no hay bordes claros; pantalla de revisión obligatoria antes de subir;
+  selector Recibida/Emitida propagado a la confirmación (S2.4) vía `location.state`.
+  `@techstark/opencv-js` cargado de forma perezosa (excluido del precache del service worker,
+  `vite.config.ts`), probado contra el WASM real con imágenes de muestra generadas por código (no
+  solo mockeado) — primera vez en el proyecto que se verifican así algoritmos de visión por
+  ordenador. Auditoría de 3 perspectivas: 1 hallazgo **crítico** corregido (la auto-captura no
+  propagaba el frame capturado desde el bucle de análisis hasta la pantalla de revisión — el botón
+  "Usar esta foto" quedaba deshabilitado para siempre en ese camino, solo la captura manual
+  funcionaba; corregido hilvanando el frame en el mismo callback que despacha la acción, con test
+  de regresión dedicado), 2 hallazgos **altos** coincidentes en dos lentes corregidos (un fichero no
+  decodificable como imagen en el fallback dejaba al usuario en un callejón sin salida silencioso;
+  un `user` sin empresa asignada llegaba a ver la cámara en vez de un error temprano, spec §5), y
+  varios medios/bajos corregidos (fuga de URLs de objeto sin revocar, decisiones de negocio
+  extraídas a `captureSelectors.ts`, `useCompanyOptions` reubicado de `features/panel/` a
+  `features/companies/` por cohesión, evento `ended` del stream de cámara). **Verificación en
+  Android/iPhone real explícitamente pendiente** de una sesión futura con hardware (decisión de
+  dominio confirmada por Julio, mismo patrón que la infraestructura de S4.6).
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11), aún sin construir**:
