@@ -5,7 +5,7 @@ import { NavLink } from 'react-router-dom'
 
 import { useSession } from '../features/session/SessionProvider'
 import type { AppliedTheme } from '../features/tenancy/theme'
-import { menuLinksForRole, ROUTES, type MenuLink, type Role } from './routes'
+import { menuLinksForRole, type MenuLink, type Role } from './routes'
 
 interface Props {
   role: Role
@@ -15,10 +15,7 @@ interface Props {
 
 export function Menu({ role, isAdminTech, theme }: Props) {
   const { logout } = useSession()
-  const links: MenuLink[] = menuLinksForRole(role)
-  // Fuera de `ROUTE_DEFS` a propósito (S4.10 decisión 6): no es una visibilidad por rol, es por un
-  // flag adicional (`is_admin_tech`) que solo tiene sentido dentro del rol `platform_admin`.
-  if (isAdminTech) links.push({ to: ROUTES.platformSettings, label: 'Ajustes' })
+  const links: MenuLink[] = menuLinksForRole(role, { isAdminTech })
 
   return (
     <nav className="flex items-center justify-between border-b border-slate-700 bg-slate-800 px-6 py-3 text-slate-100">

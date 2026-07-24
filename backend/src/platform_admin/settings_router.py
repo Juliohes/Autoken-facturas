@@ -14,12 +14,12 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from identity.authz import require_admin_tech
-from identity.dependencies import PlatformAuthContext
+from identity.dependencies import AdminTechAuthContext
 from platform_admin import settings_service
 
 router = APIRouter(prefix="/platform/settings", tags=["platform"])
 
-AdminTech = Annotated[PlatformAuthContext, Depends(require_admin_tech())]
+AdminTech = Annotated[AdminTechAuthContext, Depends(require_admin_tech())]
 
 
 class PlatformSettingsOut(BaseModel):

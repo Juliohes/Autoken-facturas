@@ -7,7 +7,11 @@ import { useUpdateAdminSettings } from './useUpdateAdminSettings'
 
 export function PlatformSettings() {
   const { user } = useSession()
-  const settings = useAdminSettings()
+  // `enabled` evita una petición GET que el backend rechazaría de todos modos (403) cuando el
+  // usuario no tiene el flag: no es una fuga (el backend ya deniega correctamente), pero ahorra una
+  // llamada de red visible en el inspector que delataba la existencia del endpoint sin necesidad
+  // (hallazgo de auditoría S4.10).
+  const settings = useAdminSettings(user?.is_admin_tech ?? false)
   const update = useUpdateAdminSettings()
 
   // C9: un platform_admin sin el flag nunca ve el interruptor, aunque entre a la URL a mano — la
