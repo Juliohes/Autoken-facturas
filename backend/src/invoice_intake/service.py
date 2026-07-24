@@ -196,6 +196,23 @@ def schedule_storage_cleanup(
     event.listen(session.sync_session, "after_commit", _cleanup, once=True)
 
 
+def schedule_bucket_cleanup(session: AsyncSession, bucket: str) -> None:
+    """Agenda el borrado best-effort del bucket entero de un tenant tras el commit (S4.4).
+
+    Mismo patrón que `schedule_storage_cleanup`: la purga de `tenants` en Postgres ya es la fuente
+    de verdad y ya se completó (la fila ya no existe pase lo que pase con MinIO); un fallo al
+    vaciar/borrar el bucket se avisa (log), nunca en silencio ni bloqueante.
+    """
+
+    def _cleanup(_sync_session: Session) -> None:
+        try:
+            storage.remove_bucket_recursive(bucket)
+        except storage.StorageUnavailable:
+            logger.warning("invoice_intake.tenant_purge.bucket_removal_failed", bucket=bucket)
+
+    event.listen(session.sync_session, "after_commit", _cleanup, once=True)
+
+
 async def create_upload(
     *, session: AsyncSession, tenant_id: UUID, user_id: UUID, company_id: UUID, content: bytes
 ) -> repository.UploadedFileRecord:

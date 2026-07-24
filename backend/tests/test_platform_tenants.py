@@ -8,13 +8,21 @@ tenant vs. tenant (por eso no vive en `test_tenant_isolation.py`).
 
 from __future__ import annotations
 
-import httpx
+import uuid
 
+import httpx
+import pytest
+
+from invoice_intake import storage
 from tests._auth import USER_PASSWORD, USER_PASSWORD_HASH, bearer, host, login
-from tests._dbtest import seed_tenant, seed_user
+from tests._counterparty import fetch_cif_lookup, seed_cif_lookup
+from tests._dbtest import seed_company, seed_tenant, seed_user
 from tests._platform import (
+    bucket_exists,
+    count_companies,
     count_tenants,
     fetch_branding,
+    fetch_tenant_by_id,
     fetch_tenant_by_slug,
     platform_token,
     seed_platform_admin,
@@ -237,3 +245,280 @@ async def test_c11_un_token_de_platform_admin_no_sirve_en_un_endpoint_de_tenant(
     )
 
     assert resp.status_code == 403
+
+
+# --- S4.4 Modo demo (spec docs/specs/S4.4-modo-demo.md, criterios C1-C11) ------------------------
+
+
+async def test_s44_c1_alta_con_is_demo_true_crea_un_tenant_demo(authapi: Api) -> None:
+    """C1: `is_demo: true` en el alta -> el tenant creado tiene `is_demo: true`."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.post(
+        URL,
+        json={"name": "Prospecto SL", "slug": "prospecto", "is_demo": True},
+        headers=_auth(token),
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["is_demo"] is True
+
+
+async def test_s44_c2_alta_sin_is_demo_sigue_creando_produccion(authapi: Api) -> None:
+    """C2: sin `is_demo` en el cuerpo -> `is_demo: false` (compatibilidad con S4.1)."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.post(URL, json={"name": "Real SL", "slug": "real"}, headers=_auth(token))
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["is_demo"] is False
+
+
+async def test_s44_c3_convertir_a_produccion_apaga_is_demo(authapi: Api) -> None:
+    """C3: tenant demo -> `convert-to-production` -> `is_demo: false`, resto de campos intactos."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+    created = (
+        await client.post(
+            URL, json={"name": "Demo SL", "slug": "demo1", "is_demo": True}, headers=_auth(token)
+        )
+    ).json()
+
+    resp = await client.post(f"{URL}/{created['id']}/convert-to-production", headers=_auth(token))
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["is_demo"] is False
+    assert body["slug"] == "demo1"
+    assert body["name"] == "Demo SL"
+    listed = await client.get(URL, headers=_auth(token))
+    assert next(t for t in listed.json() if t["id"] == created["id"])["is_demo"] is False
+
+
+async def test_s44_c4_convertir_a_produccion_es_idempotente(authapi: Api) -> None:
+    """C4: tenant ya de producción -> `convert-to-production` no falla, sigue en `is_demo:
+    false`."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+    created = (
+        await client.post(URL, json={"name": "Ya Real", "slug": "yareal"}, headers=_auth(token))
+    ).json()
+
+    resp = await client.post(f"{URL}/{created['id']}/convert-to-production", headers=_auth(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_demo"] is False
+
+
+async def test_s44_c5_convertir_a_produccion_404_si_no_existe(authapi: Api) -> None:
+    """C5: id inexistente -> 404."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.post(f"{URL}/{uuid.uuid4()}/convert-to-production", headers=_auth(token))
+
+    assert resp.status_code == 404
+
+
+async def test_s44_c6_purgar_borra_el_tenant_y_su_cascada(authapi: Api) -> None:
+    """C6: purgar un tenant demo con una empresa -> el tenant y la empresa desaparecen."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+    created = (
+        await client.post(
+            URL,
+            json={"name": "Demo Con Empresa", "slug": "demoempresa", "is_demo": True},
+            headers=_auth(token),
+        )
+    ).json()
+    await seed_company(dsns["admin"], tenant_id=created["id"], name="Empresa Demo", cif="A39031620")
+
+    resp = await client.post(f"{URL}/{created['id']}/purge", headers=_auth(token))
+
+    assert resp.status_code == 204, resp.text
+    assert await fetch_tenant_by_id(dsns, tenant_id=created["id"]) is None
+    assert await count_companies(dsns, tenant_id=created["id"]) == 0
+    assert await fetch_branding(dsns, tenant_id=created["id"]) is None
+
+
+async def test_s44_c7_purgar_borra_el_bucket_de_minio(authapi: Api) -> None:
+    """C7: el tenant tenía un objeto real en MinIO; tras purgar, el bucket entero ha
+    desaparecido."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+    created = (
+        await client.post(
+            URL,
+            json={"name": "Demo Con Fichero", "slug": "demofichero", "is_demo": True},
+            headers=_auth(token),
+        )
+    ).json()
+    bucket = storage.bucket_for(created["id"])
+    storage.put_object(bucket, "alguna/clave", b"contenido", 9, "application/octet-stream")
+    assert bucket_exists(created["id"])
+
+    resp = await client.post(f"{URL}/{created['id']}/purge", headers=_auth(token))
+
+    assert resp.status_code == 204, resp.text
+    assert not bucket_exists(created["id"])
+
+
+async def test_s44_c8_nunca_purga_un_tenant_de_produccion(authapi: Api) -> None:
+    """C8: `is_demo=false` -> 409; el tenant sigue existiendo, intacto."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+    created = (
+        await client.post(
+            URL, json={"name": "Producción SL", "slug": "produccion"}, headers=_auth(token)
+        )
+    ).json()
+
+    resp = await client.post(f"{URL}/{created['id']}/purge", headers=_auth(token))
+
+    assert resp.status_code == 409, resp.text
+    assert await fetch_tenant_by_id(dsns, tenant_id=created["id"]) is not None
+
+
+async def test_s44_c9_purgar_404_si_no_existe(authapi: Api) -> None:
+    """C9: id inexistente -> 404."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.post(f"{URL}/{uuid.uuid4()}/purge", headers=_auth(token))
+
+    assert resp.status_code == 404
+
+
+async def test_s44_c10_fallo_de_minio_no_bloquea_la_purga(
+    authapi: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C10: `remove_bucket_recursive` lanza `StorageUnavailable` -> la purga en Postgres igual
+    pasa."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+    created = (
+        await client.post(
+            URL,
+            json={"name": "Demo Fallo", "slug": "demofallo", "is_demo": True},
+            headers=_auth(token),
+        )
+    ).json()
+
+    def _boom(_bucket: str) -> None:
+        raise storage.StorageUnavailable("almacén caído (test)")
+
+    monkeypatch.setattr(storage, "remove_bucket_recursive", _boom)
+
+    resp = await client.post(f"{URL}/{created['id']}/purge", headers=_auth(token))
+
+    assert resp.status_code == 204, resp.text
+    assert await fetch_tenant_by_id(dsns, tenant_id=created["id"]) is None
+
+
+async def test_s44_c11_un_tenant_admin_no_puede_convertir_ni_purgar(authapi: Api) -> None:
+    """C11: un token de `tenant_admin` -> 403 en ambos endpoints nuevos."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    admin_token = await platform_token(client)
+    created = (
+        await client.post(
+            URL,
+            json={"name": "Demo Ajena", "slug": "demoajena", "is_demo": True},
+            headers=_auth(admin_token),
+        )
+    ).json()
+    tenant_id = await seed_tenant(dsns["admin"], "ilex", "I-Lex Asesoría")
+    await seed_user(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        email="admin@ilex.es",
+        role="tenant_admin",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    login_resp = await login(client, "ilex.localhost", "admin@ilex.es", USER_PASSWORD)
+    tenant_token = login_resp.json()["access_token"]
+
+    resp_convert = await client.post(
+        f"{URL}/{created['id']}/convert-to-production", headers=_auth(tenant_token)
+    )
+    resp_purge = await client.post(f"{URL}/{created['id']}/purge", headers=_auth(tenant_token))
+
+    assert resp_convert.status_code == 403
+    assert resp_purge.status_code == 403
+    assert await fetch_tenant_by_id(dsns, tenant_id=created["id"]) is not None
+
+
+async def test_s44_c11b_sin_autenticar_no_hay_acceso_a_convertir_ni_purgar(authapi: Api) -> None:
+    """C11 (401, simétrico a C9 de S4.1): sin token válido -> 401 en ambos endpoints nuevos."""
+    client, _dsns = authapi
+
+    resp_convert = await client.post(
+        f"{URL}/{uuid.uuid4()}/convert-to-production", headers=_auth("token-invalido")
+    )
+    resp_purge = await client.post(f"{URL}/{uuid.uuid4()}/purge", headers=_auth("token-invalido"))
+
+    assert resp_convert.status_code == 401
+    assert resp_purge.status_code == 401
+
+
+async def test_s44_purgar_no_afecta_a_otros_tenants_coexistentes(authapi: Api) -> None:
+    """Aislamiento de plataforma: purgar el tenant demo A no toca al tenant demo B (u otros)."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+    tenant_a = (
+        await client.post(
+            URL, json={"name": "Demo A", "slug": "demoa", "is_demo": True}, headers=_auth(token)
+        )
+    ).json()
+    tenant_b = (
+        await client.post(
+            URL, json={"name": "Demo B", "slug": "demob", "is_demo": True}, headers=_auth(token)
+        )
+    ).json()
+    await seed_company(dsns["admin"], tenant_id=tenant_a["id"], name="Empresa A", cif="A39031620")
+    await seed_company(dsns["admin"], tenant_id=tenant_b["id"], name="Empresa B", cif="B06183446")
+
+    resp = await client.post(f"{URL}/{tenant_a['id']}/purge", headers=_auth(token))
+
+    assert resp.status_code == 204, resp.text
+    assert await fetch_tenant_by_id(dsns, tenant_id=tenant_a["id"]) is None
+    assert await count_companies(dsns, tenant_id=tenant_a["id"]) == 0
+    assert await fetch_tenant_by_id(dsns, tenant_id=tenant_b["id"]) is not None
+    assert await count_companies(dsns, tenant_id=tenant_b["id"]) == 1
+    assert await fetch_branding(dsns, tenant_id=tenant_b["id"]) is not None
+
+
+async def test_s44_purgar_no_toca_cif_lookups_cache_global(authapi: Api) -> None:
+    """Invariante §4: `cif_lookups` es una caché global sin `tenant_id` (ADR-0011); purgar un
+    tenant no debe tocarla."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+    created = (
+        await client.post(
+            URL,
+            json={"name": "Demo Con Cache", "slug": "democache", "is_demo": True},
+            headers=_auth(token),
+        )
+    ).json()
+    await seed_cif_lookup(
+        dsns, cif="A39031620", source="aeat", exists=True, official_name="Empresa X SL"
+    )
+
+    resp = await client.post(f"{URL}/{created['id']}/purge", headers=_auth(token))
+
+    assert resp.status_code == 204, resp.text
+    assert await fetch_cif_lookup(dsns, cif="A39031620", source="aeat") is not None

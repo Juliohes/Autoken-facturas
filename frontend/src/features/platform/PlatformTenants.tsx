@@ -1,16 +1,33 @@
 // Panel de plataforma (S4.1): alta de tenants + listado de los ya existentes. Primera pantalla del
 // módulo `platform_admin`; exclusiva del rol `platform_admin` (portero en el backend, aquí no se
 // repite esa comprobación, mismo criterio que el resto de pantallas de gestión del proyecto).
+// Modo demo (S4.4): checkbox "Es demo" en el alta; en la tabla, cada fila demo gana dos acciones
+// ("Convertir a producción", "Purgar") ausentes en las filas de producción.
 import { useState, type FormEvent } from 'react'
 
+import { useConvertToProduction } from './useConvertToProduction'
 import { useCreateTenant } from './useCreateTenant'
+import { usePurgeTenant } from './usePurgeTenant'
 import { useTenants } from './useTenants'
 
-const EMPTY_FORM = { name: '', slug: '', logo_url: '', color_primary: '', color_secondary: '' }
+const EMPTY_FORM = {
+  name: '',
+  slug: '',
+  logo_url: '',
+  color_primary: '',
+  color_secondary: '',
+  is_demo: false,
+}
+
+const PURGE_CONFIRM_MESSAGE =
+  'Esto borra el tenant demo por completo (empresas, facturas, ficheros). No se puede deshacer. ' +
+  '¿Continuar?'
 
 export function PlatformTenants() {
   const tenants = useTenants()
   const createTenant = useCreateTenant()
+  const convertToProduction = useConvertToProduction()
+  const purgeTenant = usePurgeTenant()
   const [form, setForm] = useState(EMPTY_FORM)
 
   const rows = tenants.data ?? []
@@ -24,9 +41,15 @@ export function PlatformTenants() {
         logo_url: form.logo_url === '' ? null : form.logo_url,
         color_primary: form.color_primary === '' ? null : form.color_primary,
         color_secondary: form.color_secondary === '' ? null : form.color_secondary,
+        is_demo: form.is_demo,
       },
       { onSuccess: () => setForm(EMPTY_FORM) },
     )
+  }
+
+  const handlePurge = (tenantId: string) => {
+    if (!window.confirm(PURGE_CONFIRM_MESSAGE)) return
+    purgeTenant.mutate(tenantId)
   }
 
   return (
@@ -81,6 +104,14 @@ export function PlatformTenants() {
               className="w-28 rounded border border-slate-600 bg-slate-800 px-2 py-1"
             />
           </label>
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={form.is_demo}
+              onChange={(e) => setForm((f) => ({ ...f, is_demo: e.target.checked }))}
+            />
+            Es demo
+          </label>
           <button
             type="submit"
             disabled={createTenant.isPending}
@@ -106,6 +137,20 @@ export function PlatformTenants() {
         </p>
       )}
 
+      {convertToProduction.isError && (
+        <p role="alert" className="text-sm text-red-400">
+          {convertToProduction.error instanceof Error
+            ? convertToProduction.error.message
+            : 'No se pudo convertir a producción.'}
+        </p>
+      )}
+
+      {purgeTenant.isError && (
+        <p role="alert" className="text-sm text-red-400">
+          {purgeTenant.error instanceof Error ? purgeTenant.error.message : 'No se pudo purgar.'}
+        </p>
+      )}
+
       {!tenants.isLoading && !tenants.isError && rows.length === 0 && (
         <p className="text-slate-400">Todavía no hay tenants.</p>
       )}
@@ -120,6 +165,7 @@ export function PlatformTenants() {
                 <th className="p-2">Estado</th>
                 <th className="p-2">Demo</th>
                 <th className="p-2">Alta</th>
+                <th className="p-2">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
@@ -130,6 +176,28 @@ export function PlatformTenants() {
                   <td className="p-2">{tenant.status === 'active' ? 'Activo' : 'Suspendido'}</td>
                   <td className="p-2">{tenant.is_demo ? 'Sí' : 'No'}</td>
                   <td className="p-2">{tenant.created_at}</td>
+                  <td className="p-2">
+                    {tenant.is_demo && (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => convertToProduction.mutate(tenant.id)}
+                          disabled={convertToProduction.isPending}
+                          className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-100 disabled:opacity-40"
+                        >
+                          Convertir a producción
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePurge(tenant.id)}
+                          disabled={purgeTenant.isPending}
+                          className="rounded border border-red-500 px-2 py-1 text-xs text-red-400 disabled:opacity-40"
+                        >
+                          Purgar
+                        </button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

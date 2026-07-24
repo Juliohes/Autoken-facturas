@@ -205,14 +205,32 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   colores), ese icono a veces no llegara a aparecer — también corregido y con una prueba nueva que
   vigila que no vuelva a pasar.
 
+- **S4.4 — Modo demo** (24/07/2026): antes, dar de alta una asesoría para enseñarla en una reunión
+  comercial y dar de alta un cliente real era exactamente lo mismo, sin distinción, y no había forma
+  de deshacer una demo ni "graduarla" a cliente real sin borrar todo y volver a empezar. Ahora el
+  alta tiene una casilla "Es demo"; una asesoría demo funciona exactamente igual que cualquier otra
+  (login, facturas, logo/colores propios) pero gana dos botones nuevos en el panel de plataforma:
+  "Convertir a producción" (cuando el prospecto firma, sin perder nada de lo ya configurado) y
+  "Purgar" (la borra por completo — base de datos y ficheros — si no prospera). El botón de purgar
+  solo puede actuar sobre asesorías demo: esa condición está fijada dentro de la propia base de
+  datos, no en un interruptor que se pudiera manipular desde fuera, así que es estructuralmente
+  imposible borrar por accidente una asesoría real por esta vía. La auditoría (con tres revisores en
+  paralelo, cada uno mirando una cosa distinta) encontró un fallo real antes de cerrar la tarea: si
+  dos peticiones de purgar/convertir la misma asesoría demo llegaban casi a la vez, la segunda podía
+  acabar en un error feo en vez de una respuesta clara — se corrigió haciendo que la comprobación y
+  el borrado ocurran como una sola operación indivisible dentro de la base de datos, sin ese hueco
+  en medio. También se reforzaron las pruebas: que purgar una asesoría nunca toca a otra que
+  coexista, que la caché compartida de CIFs (que no pertenece a ninguna asesoría) no se ve afectada,
+  y los casos de error visibles en pantalla.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
   facturas (S3.3 solo trajo la capacidad de corregir con seguridad, no la pantalla para hacerlo cómodo),
   si hace falta más adelante.
-- **Sprint 4 en marcha** (S4.1-S4.3 cerrados 24/07/2026): quedan S4.4 (modo demo con un clic), S4.5
-  (panel de consumo: empresas/usuarios/facturas/coste por asesoría), S4.6 (dominios propios de
-  cliente) y S4.7 (suspender/exportar/borrar una asesoría). S4.2/S4.3 dejaron el logo/colores/icono
+- **Sprint 4 en marcha** (S4.1-S4.4 cerrados 24/07/2026): quedan S4.5 (panel de consumo:
+  empresas/usuarios/facturas/coste por asesoría), S4.6 (dominios propios de cliente) y S4.7
+  (suspender/exportar/borrar una asesoría real). S4.2/S4.3 dejaron el logo/colores/icono
   aplicados solo en el punto de entrada actual de la app, no todavía en cada pantalla ya construida
   (panel, empresas...) — eso encaja mejor junto con la tarea de "esqueleto" de abajo.
 - **Pendiente transversal, detectado el 23/07/2026**: las pantallas construidas hasta ahora (historial,
@@ -231,7 +249,7 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   falta construir un interruptor (solo para Julio) que permita apagar este modo experimental sin tocar
   código, porque cuesta dinero real en llamadas a las IAs.
 
-**Avance estimado hacia producción a día de hoy: ≈63%** (32 de 51 tareas del plan "core", sin contar el
+**Avance estimado hacia producción a día de hoy: ≈65%** (33 de 51 tareas del plan "core", sin contar el
 módulo de Verifactu, la limpieza final del servidor viejo, ni la ampliación del 22/07 —aún no tiene número
 de tarea fijo—, que van en paralelo y no bloquean el lanzamiento). **Sprint 3 completo; Sprint 4 en marcha
-(S4.1-S4.3 hechos, quedan S4.4-S4.7).**
+(S4.1-S4.4 hechos, quedan S4.5-S4.7).**

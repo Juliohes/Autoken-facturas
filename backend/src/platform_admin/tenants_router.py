@@ -25,13 +25,14 @@ Platform = Annotated[PlatformAuthContext, Depends(require_platform_admin())]
 
 
 class TenantCreateIn(BaseModel):
-    """Cuerpo de `POST /platform/tenants` (spec S4.1 §2/§3)."""
+    """Cuerpo de `POST /platform/tenants` (spec S4.1 §2/§3, `is_demo` desde S4.4)."""
 
     name: str
     slug: str
     logo_url: str | None = None
     color_primary: str | None = None
     color_secondary: str | None = None
+    is_demo: bool = False
 
 
 class TenantOut(BaseModel):
@@ -67,6 +68,7 @@ async def create_tenant(identity: Platform, body: TenantCreateIn) -> TenantOut:
             logo_url=body.logo_url,
             color_primary=body.color_primary,
             color_secondary=body.color_secondary,
+            is_demo=body.is_demo,
         )
     except service.InvalidName as exc:
         raise HTTPException(status_code=422, detail="El nombre no puede estar vacío") from exc
@@ -86,3 +88,24 @@ async def list_tenants(identity: Platform) -> list[TenantOut]:
     """Todos los tenants, más reciente primero (S4.1)."""
     records = await service.list_tenants(identity.session)
     return [_to_out(record) for record in records]
+
+
+@router.post("/{tenant_id}/convert-to-production")
+async def convert_to_production(identity: Platform, tenant_id: UUID) -> TenantOut:
+    """Pone `is_demo=false` (S4.4). Idempotente si ya era producción; id inexistente -> 404."""
+    try:
+        record = await service.convert_to_production(identity.session, tenant_id)
+    except service.TenantNotFound as exc:
+        raise HTTPException(status_code=404, detail="No existe ese tenant") from exc
+    return _to_out(record)
+
+
+@router.post("/{tenant_id}/purge", status_code=204)
+async def purge_demo_tenant(identity: Platform, tenant_id: UUID) -> None:
+    """Borra un tenant demo por completo (S4.4). Id inexistente -> 404; no es demo -> 409."""
+    try:
+        await service.purge_demo_tenant(identity.session, tenant_id)
+    except service.TenantNotFound as exc:
+        raise HTTPException(status_code=404, detail="No existe ese tenant") from exc
+    except service.TenantNotDemo as exc:
+        raise HTTPException(status_code=409, detail="Solo se pueden purgar tenants demo") from exc
