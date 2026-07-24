@@ -15,8 +15,10 @@ from invoice_intake import service as intake_service
 from invoice_intake import storage
 from platform_admin import repository
 from platform_admin.repository import TenantRecord
+from shared.config import get_settings
 from shared.integrity import violates_unique_constraint
 from tenancy.constants import RESERVED_SLUGS
+from tenancy.resolution import is_root_or_reserved_host
 
 # Etiqueta DNS de primer nivel (el slug se usa tal cual como subdominio): minúsculas, dígitos y
 # guiones, sin empezar/terminar en guión, 1-63 caracteres. La longitud se valida aquí (no solo se
@@ -28,7 +30,15 @@ _SLUG_FORMAT = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
 # (String(9): 1 `#` + hasta 8 hex).
 _COLOR_FORMAT = re.compile(r"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$")
 
+# FQDN de al menos dos etiquetas (nunca un slug suelto): letras/dígitos/guiones por etiqueta, sin
+# empezar/terminar en guión, separadas por puntos. No exige que cuelgue de un dominio de terceros
+# a propósito (spec S4.6 §3 decisión 4: el caso de prueba interno cuelga de `autoken.es`).
+_CUSTOM_DOMAIN_FORMAT = re.compile(
+    r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+)
+
 _SLUG_UNIQUE_CONSTRAINT = "tenants_slug_key"
+_CUSTOM_DOMAIN_UNIQUE_CONSTRAINT = "tenants_custom_domain_key"
 
 
 class PlatformError(Exception):
@@ -63,6 +73,14 @@ class TenantNotDemo(PlatformError):
     """El tenant existe pero no es demo: no se puede purgar por esta vía (-> 409, S4.4)."""
 
 
+class InvalidCustomDomain(PlatformError):
+    """El dominio propio no tiene forma de FQDN válida (-> 422, S4.6)."""
+
+
+class DuplicateCustomDomain(PlatformError):
+    """Ya existe un tenant con ese dominio propio (-> 409, S4.6)."""
+
+
 def _validated_name(name: str) -> str:
     if not name.strip():
         raise InvalidName
@@ -85,6 +103,25 @@ def _validated_color(color: str | None) -> str | None:
     if not _COLOR_FORMAT.match(color):
         raise InvalidColor
     return color
+
+
+def _validated_custom_domain(custom_domain: str | None) -> str | None:
+    if custom_domain is None:
+        return None
+    # Minúsculas antes de validar/guardar: DNS es insensible a mayúsculas y la resolución
+    # (`resolve_tenant_by_custom_domain`) normaliza el `Host` real a minúsculas, así que guardar
+    # tal cual `Facturas.Cliente.ES` dejaría el dominio asignado sin poder resolver nunca.
+    canonical = custom_domain.lower()
+    if not _CUSTOM_DOMAIN_FORMAT.match(canonical):
+        raise InvalidCustomDomain
+    # El dominio raíz o un subdominio reservado de plataforma (`autoken.es`, `panel.autoken.es`...)
+    # nunca llega a intentar la resolución por dominio propio (`is_root_or_reserved_host`, mismo
+    # guard que usa el middleware) — guardarlo igualmente dejaría una configuración muerta desde el
+    # instante en que se asigna, sin ningún aviso. Mismo criterio que `_validated_slug` ya aplica a
+    # `RESERVED_SLUGS` para el caso análogo del slug.
+    if is_root_or_reserved_host(canonical, get_settings().base_domain, allow_localhost=False):
+        raise InvalidCustomDomain
+    return canonical
 
 
 async def create_tenant(
@@ -128,6 +165,24 @@ async def convert_to_production(session: AsyncSession, tenant_id: UUID) -> Tenan
     """Pone `is_demo=false` (S4.4, spec §0 decisión 2). Idempotente si ya era producción; id
     inexistente -> `TenantNotFound`."""
     record = await repository.convert_tenant_to_production(session, tenant_id)
+    if record is None:
+        raise TenantNotFound()
+    return record
+
+
+async def set_custom_domain(
+    session: AsyncSession, tenant_id: UUID, custom_domain: str | None
+) -> TenantRecord:
+    """Asigna o quita (`None`) el dominio propio de un tenant (S4.6). Formato inválido ->
+    `InvalidCustomDomain`; id inexistente -> `TenantNotFound`; duplicado ->
+    `DuplicateCustomDomain`."""
+    canonical = _validated_custom_domain(custom_domain)
+    try:
+        record = await repository.set_tenant_custom_domain(session, tenant_id, canonical)
+    except IntegrityError as exc:
+        if violates_unique_constraint(exc, _CUSTOM_DOMAIN_UNIQUE_CONSTRAINT):
+            raise DuplicateCustomDomain() from exc
+        raise
     if record is None:
         raise TenantNotFound()
     return record

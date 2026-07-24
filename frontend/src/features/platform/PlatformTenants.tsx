@@ -3,6 +3,9 @@
 // repite esa comprobación, mismo criterio que el resto de pantallas de gestión del proyecto).
 // Modo demo (S4.4): checkbox "Es demo" en el alta; en la tabla, cada fila demo gana dos acciones
 // ("Convertir a producción", "Purgar") ausentes en las filas de producción.
+// Dominios propios (S4.6, alcance acotado — ver docs/specs/S4.6-dominios-propios.md §0): columna
+// de solo lectura con el dominio propio ya asignado, si lo hay. Sin formulario de edición todavía
+// (deliberado: se añade junto con la parte de infra real, Caddy/TLS, cuando se retome).
 import { useState, type FormEvent } from 'react'
 
 import { useConvertToProduction } from './useConvertToProduction'
@@ -166,6 +169,7 @@ export function PlatformTenants() {
                 <th className="p-2">Nombre</th>
                 <th className="p-2">Estado</th>
                 <th className="p-2">Demo</th>
+                <th className="p-2">Dominio propio</th>
                 <th className="p-2">Alta</th>
                 <th className="p-2">Acciones</th>
               </tr>
@@ -177,6 +181,7 @@ export function PlatformTenants() {
                   <td className="p-2">{tenant.name}</td>
                   <td className="p-2">{tenant.status === 'active' ? 'Activo' : 'Suspendido'}</td>
                   <td className="p-2">{tenant.is_demo ? 'Sí' : 'No'}</td>
+                  <td className="p-2">{tenant.custom_domain ?? '—'}</td>
                   <td className="p-2">{tenant.created_at}</td>
                   <td className="p-2">
                     {tenant.is_demo && (

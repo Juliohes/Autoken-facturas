@@ -239,15 +239,50 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   la tabla sea siempre el mismo; que ninguna prueba dejara colar un símbolo de moneda por
   descuido), y se añadieron esas pruebas antes de cerrar la tarea.
 
+- **S4.6 — Dominios propios de cliente (alcance acotado)** (24/07/2026): el plan pedía que una
+  asesoría pudiera usar su propio dominio (p. ej. `facturas.suasesoria.es`) en vez del
+  subdominio de Autoken, con el certificado de seguridad (HTTPS) emitiéndose solo automáticamente
+  al apuntar un dominio de verdad. Antes de construir nada se investigó y se confirmó que esta
+  tarea tiene dos partes muy distintas: (1) la aplicación reconociendo y guardando ese dominio
+  propio — verificable aquí, con pruebas automáticas reales — y (2) la pieza de infraestructura
+  real (el servidor que emite certificados solo al detectar tráfico de un dominio real, y
+  comprobarlo apuntando un dominio de verdad) — que necesita acceso al servidor de producción y a
+  un dominio real apuntándole, algo que este entorno de trabajo no tiene. En vez de fingir esa
+  segunda parte, se preguntó a Julio cómo seguir; decidió construir ya la primera parte (con sus
+  pruebas automáticas de verdad) y dejar la segunda explícitamente pendiente para una sesión con
+  acceso al servidor. Ahora el panel de plataforma permite asignar (o quitar) un dominio propio a
+  cada asesoría, y la aplicación ya sabe reconocer a qué asesoría pertenece una petición que llega
+  por ese dominio, exactamente igual que ya sabía hacerlo por subdominio. La auditoría (tres
+  revisores en paralelo, como siempre) encontró y corrigió 4 problemas reales antes de cerrar la
+  tarea: dos de diseño (se podía "asignar" un dominio que en la práctica nunca iba a funcionar
+  porque coincidía con uno reservado de la propia plataforma; y al pasar una asesoría de demo a
+  real se podía "perder de vista" —aunque no borrar— su dominio propio ya configurado, mostrando
+  un dato incorrecto), uno de seguridad (sin protección, cualquiera podía obligar a la aplicación a
+  consultar la base de datos una y otra vez mandando peticiones con un dominio inventado distinto
+  cada vez — corregido con el mismo mecanismo de caché que ya protegía la resolución por
+  subdominio) y uno más grave encontrado en la revisión final: el identificador interno de una de
+  las migraciones (los pasos que preparan la base de datos) era demasiado largo para la columna
+  donde Postgres guarda ese dato — habría roto la puesta al día de la base de datos en cualquier
+  entorno, no solo en pruebas. Corregido y blindado con una prueba que impide que vuelva a pasar.
+  También se encontró y corrigió, ya en la verificación final, que cualquier petición con una
+  dirección de una sola palabra (como la que usan las pruebas automáticas internas, o un chequeo
+  de salud del servidor) generaba una consulta a la base de datos sin ninguna posibilidad de
+  encontrar nada — descartada ahora sin tocar la base de datos, porque un dominio propio de verdad
+  siempre tiene al menos dos partes (p. ej. `facturas.algo`).
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
   facturas (S3.3 solo trajo la capacidad de corregir con seguridad, no la pantalla para hacerlo cómodo),
   si hace falta más adelante.
-- **Sprint 4 en marcha** (S4.1-S4.5 cerrados 24/07/2026): quedan S4.6 (dominios propios de cliente)
-  y S4.7 (suspender/exportar/borrar una asesoría real). S4.2/S4.3 dejaron el logo/colores/icono
-  aplicados solo en el punto de entrada actual de la app, no todavía en cada pantalla ya construida
-  (panel, empresas...) — eso encaja mejor junto con la tarea de "esqueleto" de abajo.
+- **Sprint 4 en marcha** (S4.1-S4.6 cerrados 24/07/2026): queda S4.7 (suspender/exportar/borrar una
+  asesoría real). S4.6 se cerró con alcance acotado (ver entrada de arriba): la mitad de
+  infraestructura real (el servidor emitiendo certificados de un dominio de verdad) queda
+  pendiente de una sesión futura con acceso al servidor de producción/staging y a un dominio real
+  — dominio ya reservado para esa prueba: `setex-facturas.autoken.es`. S4.2/S4.3 dejaron el
+  logo/colores/icono aplicados solo en el punto de entrada actual de la app, no todavía en cada
+  pantalla ya construida (panel, empresas...) — eso encaja mejor junto con la tarea de "esqueleto"
+  de abajo.
 - **Pendiente transversal, detectado el 23/07/2026**: las pantallas construidas hasta ahora (historial,
   confirmación, panel de facturas, empresas) existen y están probadas cada una por su cuenta, pero la
   aplicación todavía no tiene "esqueleto" que las una: no hay login real en pantalla, ni menú, ni forma de
@@ -264,7 +299,8 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   falta construir un interruptor (solo para Julio) que permita apagar este modo experimental sin tocar
   código, porque cuesta dinero real en llamadas a las IAs.
 
-**Avance estimado hacia producción a día de hoy: ≈67%** (34 de 51 tareas del plan "core", sin contar el
-módulo de Verifactu, la limpieza final del servidor viejo, ni la ampliación del 22/07 —aún no tiene número
-de tarea fijo—, que van en paralelo y no bloquean el lanzamiento). **Sprint 3 completo; Sprint 4 en marcha
-(S4.1-S4.5 hechos, quedan S4.6-S4.7).**
+**Avance estimado hacia producción a día de hoy: ≈67%** (34 de 51 tareas del plan "core" completas del
+todo, sin contar el módulo de Verifactu, la limpieza final del servidor viejo, ni la ampliación del
+22/07 —aún no tiene número de tarea fijo—, que van en paralelo y no bloquean el lanzamiento). **Sprint 3
+completo; Sprint 4 en marcha (S4.1-S4.5 hechos; S4.6 con su mecanismo de aplicación cerrado y
+mergeado, su mitad de infraestructura real pendiente de sesión futura; queda S4.7).**

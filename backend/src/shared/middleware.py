@@ -14,7 +14,9 @@ from tenancy.resolution import (
     ResolvedTenant,
     extract_subdomain,
     is_platform_host,
+    is_root_or_reserved_host,
     resolve_tenant,
+    resolve_tenant_by_custom_domain,
 )
 from tenancy.resolution_cache import NegativeTenantResolutionCache
 
@@ -57,6 +59,14 @@ async def _resolve_uncached(slug: str) -> ResolvedTenant | None:
     capturar la referencia en el constructor de la caché lo dejaría fijado y rompería ese seam.
     """
     return await resolve_tenant(slug)
+
+
+async def _resolve_custom_domain_uncached(host: str) -> ResolvedTenant | None:
+    """Resolver base de la caché de dominios propios (S4.6): misma indirección que
+    `_resolve_uncached`, para el mismo seam de test
+    (`shared.middleware.resolve_tenant_by_custom_domain`).
+    """
+    return await resolve_tenant_by_custom_domain(host)
 
 
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
@@ -104,13 +114,29 @@ class TenantResolutionMiddleware(BaseHTTPMiddleware):
         self._cache = NegativeTenantResolutionCache(
             _resolve_uncached, ttl_seconds=cache_ttl_seconds, max_size=cache_max_size
         )
+        # Misma protección para el fallback por dominio propio (S4.6): sin caché, un `Host`
+        # arbitrario (el atacante lo controla al 100%, a diferencia del subdominio, que ya lo
+        # protegía #52) generaría una consulta a Postgres nueva por petición sin límite —
+        # hallazgo de la auditoría de seguridad, corregido antes de mergear.
+        self._custom_domain_cache = NegativeTenantResolutionCache(
+            _resolve_custom_domain_uncached, ttl_seconds=cache_ttl_seconds, max_size=cache_max_size
+        )
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         host = request.headers.get("host", "")
         slug = extract_subdomain(host, self._base_domain, allow_localhost=self._allow_localhost)
-        request.state.tenant = await self._cache.resolve(slug) if slug is not None else None
+        tenant = await self._cache.resolve(slug) if slug is not None else None
+        if tenant is None and not is_root_or_reserved_host(
+            host, self._base_domain, allow_localhost=self._allow_localhost
+        ):
+            # El guard de arriba evita el round-trip extra en cada petición al panel de
+            # plataforma (host reservado, nunca puede ser un dominio propio de cliente); la
+            # caché (mismo patrón que el subdominio, #52) evita que un `Host` arbitrario
+            # controlado por un atacante martillee Postgres sin límite.
+            tenant = await self._custom_domain_cache.resolve(host)
+        request.state.tenant = tenant
         # El host de plataforma (panel) es el único donde entra un `platform_admin` (S1.6 C8).
         request.state.is_platform_host = is_platform_host(
             host, self._base_domain, allow_localhost=self._allow_localhost

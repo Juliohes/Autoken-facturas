@@ -87,17 +87,28 @@ async def provision_test_db() -> dict[str, str]:
     }
 
 
-async def seed_tenant(admin_dsn: str, slug: str, name: str, status: str = "active") -> str:
+async def seed_tenant(
+    admin_dsn: str,
+    slug: str,
+    name: str,
+    status: str = "active",
+    *,
+    custom_domain: str | None = None,
+    is_demo: bool = False,
+) -> str:
     """Inserta un tenant (como superusuario, saltando RLS) y devuelve su id."""
     conn = await asyncpg.connect(admin_dsn)
     try:
         tenant_id = str(uuid4())
         await conn.execute(
-            "INSERT INTO tenants (id, slug, name, status) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO tenants (id, slug, name, status, custom_domain, is_demo) "
+            "VALUES ($1, $2, $3, $4, $5, $6)",
             tenant_id,
             slug,
             name,
             status,
+            custom_domain,
+            is_demo,
         )
         return tenant_id
     finally:

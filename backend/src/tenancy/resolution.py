@@ -75,6 +75,25 @@ def extract_subdomain(host: str, base_domain: str, *, allow_localhost: bool = Tr
     return label
 
 
+def is_root_or_reserved_host(host: str, base_domain: str, *, allow_localhost: bool = True) -> bool:
+    """True si `host` es el dominio raíz o un subdominio reservado de plataforma bajo el dominio
+    base (`www`/`panel`/`panel-staging`) — nunca vale la pena intentar la resolución por
+    `custom_domain` en ese caso (S4.6): evita un round-trip a BD extra en el camino más caliente
+    del panel de plataforma. Un host ajeno al dominio base (candidato real a dominio propio) o un
+    subdominio del dominio base que simplemente no coincide con ningún slug registrado (p. ej. el
+    caso de prueba interno `setex-facturas.autoken.es`, spec S4.6 §0) devuelven `False`: para esos
+    sí vale la pena intentarlo.
+    """
+    hostname = host.split(":", 1)[0].strip().rstrip(".").lower()
+    bases = [base_domain.lower()]
+    if allow_localhost:
+        bases.append(_DEV_BASE)
+    if hostname in bases:
+        return True
+    label = _first_label(host, base_domain, allow_localhost=allow_localhost)
+    return label in RESERVED_SLUGS if label is not None else False
+
+
 def is_platform_host(host: str, base_domain: str, *, allow_localhost: bool = True) -> bool:
     """True si `host` es el panel de plataforma (`panel`/`panel-staging`).
 
@@ -91,6 +110,34 @@ async def resolve_tenant(slug: str) -> ResolvedTenant | None:
             await db_session.execute(
                 text("SELECT id, slug, name, is_demo FROM resolve_tenant(:slug)"),
                 {"slug": slug},
+            )
+        ).first()
+    if row is None:
+        return None
+    return ResolvedTenant(id=row.id, slug=row.slug, name=row.name, is_demo=row.is_demo)
+
+
+async def resolve_tenant_by_custom_domain(host: str) -> ResolvedTenant | None:
+    """Resuelve un `Host` a su tenant activo por dominio propio (S4.6), o `None` si ninguno lo usa.
+
+    Mismo contrato que `resolve_tenant`, distinta clave de búsqueda (el `Host` completo, no un
+    slug). `host` se normaliza igual que `_first_label` (sin puerto, sin punto final, minúsculas)
+    para que la comparación sea insensible a esas variaciones habituales de un `Host` real.
+
+    Sin punto -> nunca puede ser un `custom_domain` válido (`_CUSTOM_DOMAIN_FORMAT`, S4.6, exige al
+    menos dos etiquetas al guardarlo) y se descarta sin tocar la BD: sin este corte, un `Host` de
+    una sola etiqueta (p. ej. un healthcheck interno con `Host: <nombre-del-servicio>`, o el `Host`
+    fijo `"test"` que usa el cliente ASGI de test) generaría una consulta a Postgres en cada
+    petición sin ninguna posibilidad de resolver nunca.
+    """
+    hostname = host.split(":", 1)[0].strip().rstrip(".").lower()
+    if not hostname or "." not in hostname:
+        return None
+    async with session() as db_session:
+        row = (
+            await db_session.execute(
+                text("SELECT id, slug, name, is_demo FROM resolve_tenant_by_custom_domain(:host)"),
+                {"host": hostname},
             )
         ).first()
     if row is None:

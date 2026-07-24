@@ -429,6 +429,116 @@ async def test_fallo_de_bd_al_resolver_da_500_no_404(
     assert resp.status_code == 500
 
 
+# --- S4.6 Dominios propios de cliente (spec docs/specs/S4.6-dominios-propios.md, C7-C10) ----------
+
+
+async def test_s46_c7_resolucion_por_dominio_propio(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """C7: un `Host` que coincide con el `custom_domain` de un tenant activo resuelve a él."""
+    client, dsns = api
+    await seed_tenant(
+        dsns["admin"], "clientex", "Cliente X SL", custom_domain="facturas.clientex.es"
+    )
+    resp = await client.get(_CURRENT, headers=_host("facturas.clientex.es"))
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slug"] == "clientex"
+
+
+async def test_s46_c8_anticruce_dominio_propio_nunca_resuelve_a_otro_tenant(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """C8: cada dominio propio resuelve únicamente a SU tenant."""
+    client, dsns = api
+    await seed_tenant(dsns["admin"], "a", "Tenant A", custom_domain="facturas.a.es")
+    await seed_tenant(dsns["admin"], "b", "Tenant B", custom_domain="facturas.b.es")
+    resp_a = await client.get(_CURRENT, headers=_host("facturas.a.es"))
+    resp_b = await client.get(_CURRENT, headers=_host("facturas.b.es"))
+    assert resp_a.json()["slug"] == "a"
+    assert resp_b.json()["slug"] == "b"
+
+
+async def test_s46_c9_tenant_suspendido_no_resuelve_por_dominio_propio(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """C9: un tenant suspendido no resuelve ni por subdominio ni por dominio propio."""
+    client, dsns = api
+    await seed_tenant(
+        dsns["admin"],
+        "suspendido",
+        "Suspendido SL",
+        status="suspended",
+        custom_domain="facturas.suspendido.es",
+    )
+    resp = await client.get(_CURRENT, headers=_host("facturas.suspendido.es"))
+    assert resp.status_code == 404
+
+
+async def test_s46_host_de_una_sola_etiqueta_no_toca_la_bd(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """Un `Host` sin punto (p. ej. `"test"`, el que usa el cliente ASGI de test) nunca puede ser un
+    `custom_domain` válido (exige al menos dos etiquetas al guardarlo) y se descarta sin consultar
+    la BD — regresión real encontrada al cerrar S4.6: sin este corte, `GET /health` con un `Host`
+    de una sola etiqueta habría reventado con un error de conexión en vez de responder 200."""
+    client, _ = api
+    resp = await client.get(_HEALTH, headers=_host("test"))
+    assert resp.status_code == 200
+
+
+async def test_s46_c10_host_ajeno_sin_dominio_propio_no_resuelve(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """C10: un `Host` ajeno a `autoken.es` que ningún tenant usa como dominio propio no resuelve
+    (y `/health`, público, sigue respondiendo 200 — mismo criterio que C4)."""
+    client, _dsns = api
+    resp_current = await client.get(_CURRENT, headers=_host("nadie-lo-usa.example.com"))
+    resp_health = await client.get(_HEALTH, headers=_host("nadie-lo-usa.example.com"))
+    assert resp_current.status_code == 404
+    assert resp_health.status_code == 200
+
+
+async def test_s46_precedencia_subdominio_gana_sobre_dominio_propio_coincidente(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """Spec §5: si un slug y el prefijo de un `custom_domain` ajeno coinciden, gana el subdominio
+    — nunca se resuelve al tenant equivocado (caso límite documentado, no bloqueado activamente)."""
+    client, dsns = api
+    await seed_tenant(dsns["admin"], "facturas", "Tenant Dueño Del Slug")
+    await seed_tenant(
+        dsns["admin"],
+        "otro",
+        "Tenant Con Dominio Coincidente",
+        custom_domain="facturas.autoken.es",
+    )
+
+    resp = await client.get(_CURRENT, headers=_host("facturas.autoken.es"))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slug"] == "facturas"
+
+
+async def test_s46_normalizacion_a_minusculas_resuelve_de_verdad(
+    api: tuple[httpx.AsyncClient, dict[str, str]],
+) -> None:
+    """La normalización a minúsculas al guardar (S4.6) no solo se ve bien en la respuesta del
+    `PATCH`: un `Host` real en minúsculas resuelve de verdad tras guardar con mayúsculas."""
+    client, dsns = api
+    tenant_id = await seed_tenant(dsns["admin"], "clientex", "Cliente X SL")
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+    await client.patch(
+        f"/api/v1/platform/tenants/{tenant_id}/custom-domain",
+        json={"custom_domain": "Facturas.ClienteX.ES"},
+        headers={**_host("panel.localhost"), **bearer(token)},
+    )
+
+    resp = await client.get(_CURRENT, headers=_host("facturas.clientex.es"))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slug"] == "clientex"
+
+
 @pytest.mark.parametrize(
     ("host", "allow_localhost", "esperado"),
     [
@@ -457,3 +567,31 @@ def test_extract_subdomain(host: str, allow_localhost: bool, esperado: str | Non
     from tenancy.resolution import extract_subdomain
 
     assert extract_subdomain(host, "autoken.es", allow_localhost=allow_localhost) == esperado
+
+
+@pytest.mark.parametrize(
+    ("host", "esperado"),
+    [
+        ("autoken.es", True),  # raíz
+        ("AUTOKEN.ES", True),  # case-insensitive
+        ("autoken.es:8000", True),  # puerto ignorado
+        ("autoken.es.", True),  # FQDN con punto final
+        ("panel.autoken.es", True),  # plataforma
+        ("panel-staging.autoken.es", True),  # plataforma
+        ("www.autoken.es", True),  # reservado
+        ("ilex.autoken.es", False),  # subdominio real de tenant, no reservado
+        # Caso deliberado (S4.6 §0): un subdominio de autoken.es que no coincide con ningún slug
+        # reservado debe seguir siendo candidato a dominio propio (el middleware lo comprobará).
+        ("setex-facturas.autoken.es", False),
+        ("facturas.cliente.es", False),  # dominio de tercero, candidato real
+        ("a.b.autoken.es", False),  # prefijo multi-etiqueta: no es raíz ni reservado (ni resuelve)
+        ("1.2.3.4", False),  # IP
+        ("", False),  # host vacío
+    ],
+)
+def test_is_root_or_reserved_host(host: str, esperado: bool) -> None:
+    """`is_root_or_reserved_host` (S4.6): función pura, sin BD, que decide si vale la pena
+    intentar la resolución por dominio propio."""
+    from tenancy.resolution import is_root_or_reserved_host
+
+    assert is_root_or_reserved_host(host, "autoken.es", allow_localhost=False) == esperado

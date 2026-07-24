@@ -16,7 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 @dataclass(frozen=True)
 class TenantRecord:
-    """Un tenant tal como lo devuelven `create_tenant`/`list_tenants` (sin datos de branding)."""
+    """Un tenant tal como lo devuelven `create_tenant`/`list_tenants` (sin datos de branding).
+
+    `custom_domain` (S4.6) lo rellenan `list_tenants`, `convert_tenant_to_production` (migración
+    0014: un tenant demo puede tener ya uno asignado antes de convertirse a producción) y
+    `set_tenant_custom_domain`. Solo `create_tenant` lo deja siempre en `None`, porque un tenant
+    recién creado nunca tuvo tiempo de que se le asignara uno (spec S4.6 §3 decisión 3).
+    """
 
     id: UUID
     slug: str
@@ -24,6 +30,7 @@ class TenantRecord:
     status: str
     is_demo: bool
     created_at: datetime
+    custom_domain: str | None = None
 
 
 @dataclass(frozen=True)
@@ -96,29 +103,58 @@ async def create_tenant(
 
 
 async def list_tenants(session: AsyncSession) -> list[TenantRecord]:
-    """Todos los tenants, más reciente primero (spec S4.1 §3 C7)."""
+    """Todos los tenants, más reciente primero (spec S4.1 §3 C7); incluye `custom_domain` (S4.6)."""
     rows = (
         await session.execute(
-            text("SELECT id, slug, name, status, is_demo, created_at FROM list_tenants()")
+            text(
+                "SELECT id, slug, name, status, is_demo, created_at, custom_domain "
+                "FROM list_tenants()"
+            )
         )
     ).all()
-    return [_to_tenant_record(row) for row in rows]
+    return [
+        TenantRecord(
+            id=row.id,
+            slug=row.slug,
+            name=row.name,
+            status=row.status,
+            is_demo=row.is_demo,
+            created_at=row.created_at,
+            custom_domain=row.custom_domain,
+        )
+        for row in rows
+    ]
 
 
 async def convert_tenant_to_production(
     session: AsyncSession, tenant_id: UUID
 ) -> TenantRecord | None:
-    """Pone `is_demo=false` (idempotente, S4.4). `None` si el id no existe."""
+    """Pone `is_demo=false` (idempotente, S4.4). `None` si el id no existe.
+
+    Incluye `custom_domain` real (S4.6, migración 0014): un tenant demo puede tener ya uno
+    asignado antes de convertirse a producción; devolver siempre `None` ahí sería incorrecto, no
+    solo "sin rellenar" (a diferencia de `create_tenant`, donde `None` sí es siempre correcto).
+    """
     row = (
         await session.execute(
             text(
-                "SELECT id, slug, name, status, is_demo, created_at "
+                "SELECT id, slug, name, status, is_demo, created_at, custom_domain "
                 "FROM convert_tenant_to_production(:tenant_id)"
             ),
             {"tenant_id": tenant_id},
         )
     ).one_or_none()
-    return _to_tenant_record(row) if row is not None else None
+    if row is None:
+        return None
+    return TenantRecord(
+        id=row.id,
+        slug=row.slug,
+        name=row.name,
+        status=row.status,
+        is_demo=row.is_demo,
+        created_at=row.created_at,
+        custom_domain=row.custom_domain,
+    )
 
 
 async def purge_demo_tenant(session: AsyncSession, tenant_id: UUID) -> PurgeOutcome:
@@ -136,6 +172,36 @@ async def purge_demo_tenant(session: AsyncSession, tenant_id: UUID) -> PurgeOutc
         )
     ).one()
     return PurgeOutcome(existed=row.existed, was_demo=row.was_demo)
+
+
+async def set_tenant_custom_domain(
+    session: AsyncSession, tenant_id: UUID, custom_domain: str | None
+) -> TenantRecord | None:
+    """Asigna o quita (`None`) el dominio propio de un tenant (S4.6). `None` si el id no existe.
+
+    Duplicado -> `IntegrityError` (constraint `tenants_custom_domain_key`), sin capturar aquí: el
+    `service` lo traduce a `DuplicateCustomDomain`, mismo patrón que `create_tenant`/slug (S4.1).
+    """
+    row = (
+        await session.execute(
+            text(
+                "SELECT id, slug, name, status, is_demo, created_at, custom_domain "
+                "FROM set_tenant_custom_domain(:tenant_id, :custom_domain)"
+            ),
+            {"tenant_id": tenant_id, "custom_domain": custom_domain},
+        )
+    ).one_or_none()
+    if row is None:
+        return None
+    return TenantRecord(
+        id=row.id,
+        slug=row.slug,
+        name=row.name,
+        status=row.status,
+        is_demo=row.is_demo,
+        created_at=row.created_at,
+        custom_domain=row.custom_domain,
+    )
 
 
 async def tenant_metrics(session: AsyncSession) -> list[TenantMetrics]:

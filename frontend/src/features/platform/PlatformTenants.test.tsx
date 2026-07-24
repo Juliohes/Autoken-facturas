@@ -83,6 +83,20 @@ describe('PlatformTenants (S4.1)', () => {
     expect(rows[0]).toHaveTextContent('Sí')
   })
 
+  it('S4.6: muestra el dominio propio si está configurado, o un guion si no', async () => {
+    mockRoutes([
+      makeTenant({ id: 't1', slug: 'con-dominio', custom_domain: 'facturas.cliente.es' }),
+      makeTenant({ id: 't2', slug: 'sin-dominio', custom_domain: null }),
+    ])
+    renderPanel()
+
+    const rows = await screen.findAllByTestId('tenant-row')
+    const conDominio = rows.find((r) => r.textContent?.startsWith('con-dominio'))
+    const sinDominio = rows.find((r) => r.textContent?.startsWith('sin-dominio'))
+    expect(conDominio).toHaveTextContent('facturas.cliente.es')
+    expect(sinDominio).toHaveTextContent('—')
+  })
+
   it('C2: crear un tenant envía el alta con nombre, slug, logo y colores', async () => {
     mockRoutes([])
     postMock.mockResolvedValue({ data: makeTenant(), error: undefined })

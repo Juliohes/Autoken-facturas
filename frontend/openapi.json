@@ -1375,6 +1375,60 @@
           }
         }
       }
+    },
+    "/api/v1/platform/tenants/{tenant_id}/custom-domain": {
+      "patch": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Set Custom Domain",
+        "description": "Asigna o quita (`null`) el dominio propio de un tenant (S4.6, alcance acotado \u2014 ver spec\n\u00a70). Formato inv\u00e1lido -> 422; id inexistente -> 404; duplicado -> 409.",
+        "operationId": "set_custom_domain_api_v1_platform_tenants__tenant_id__custom_domain_patch",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomDomainIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1780,6 +1834,24 @@
         ],
         "title": "ConfirmIn",
         "description": "Cuerpo de la confirmaci\u00f3n (S2.5): datos confirmados por el humano."
+      },
+      "CustomDomainIn": {
+        "properties": {
+          "custom_domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Domain"
+          }
+        },
+        "type": "object",
+        "title": "CustomDomainIn",
+        "description": "Cuerpo de `PATCH /platform/tenants/{tenant_id}/custom-domain` (S4.6). `None` lo quita."
       },
       "DownloadUrlOut": {
         "properties": {
@@ -2933,6 +3005,17 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "custom_domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Domain"
           }
         },
         "type": "object",
@@ -2945,7 +3028,7 @@
           "created_at"
         ],
         "title": "TenantOut",
-        "description": "Un tenant en la respuesta (alta o listado)."
+        "description": "Un tenant en la respuesta (alta/listado/conversi\u00f3n a producci\u00f3n). `custom_domain` (S4.6)\nsolo `POST /platform/tenants` (alta) lo devuelve siempre `None`: un tenant reci\u00e9n creado\nnunca tuvo tiempo de que se le asignara uno (spec \u00a73 decisi\u00f3n 3)."
       },
       "UploadOut": {
         "properties": {
