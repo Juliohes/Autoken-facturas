@@ -160,6 +160,20 @@
   `features/companies/` por cohesión, evento `ended` del stream de cámara). **Verificación en
   Android/iPhone real explícitamente pendiente** de una sesión futura con hardware (decisión de
   dominio confirmada por Julio, mismo patrón que la infraestructura de S4.6).
+- **Hotfix (PR #94, mergeado 2026-07-24)**: `GET /auth/me` daba **401 siempre para `platform_admin`**
+  (usaba `current_identity`, que exige un tenant resuelto por subdominio) — regresión real desde
+  S4.9, que empezó a llamar `/auth/me` también tras el login de plataforma: el login del app-shell
+  para `platform_admin` estaba roto en producción desde que se mergeó S4.9, sin detectarse porque
+  los tests de frontend mockean el cliente API. Encontrado investigando el prerrequisito de S4.10 y
+  reproducido de extremo a extremo contra el backend real antes de arreglarlo. Nueva función SQL
+  `find_platform_admin_by_id` (migración 0016, mismo patrón `SECURITY DEFINER` que
+  `find_platform_admin` por email del login), nueva dependencia `current_identity_for_me` (admite
+  tenant y `platform_admin`), `MeOut.tenant` pasa a `str | null` (aditivo). Auditoría de 3
+  perspectivas: **SEGURO/SOLIDO** en seguridad (0 hallazgos); 1 hallazgo alto corregido (fuga de
+  cierre de sesión/transacción de BD en el camino de excepción de la nueva dependencia, un `async
+  for` desnudo no propagaba el cierre al generador interno — corregido con `contextlib.aclosing`) y
+  1 bajo corregido (mapeo de fila duplicado entre `read_identity`/`read_platform_identity`,
+  extraído a un helper común).
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11), aún sin construir**:
