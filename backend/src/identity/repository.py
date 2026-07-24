@@ -109,6 +109,24 @@ async def read_identity(session: AsyncSession, user_id: str) -> IdentityRow | No
     return IdentityRow(id=str(row.id), email=row.email, role=row.role)
 
 
+async def read_platform_identity(session: AsyncSession, user_id: str) -> IdentityRow | None:
+    """Lee la identidad pública de un `platform_admin` por id (hotfix S4.10, migración 0016).
+
+    Camino equivalente a `read_identity`, pero para una sesión sin contexto de tenant
+    (`platform_session`): la RLS bloquea el `SELECT` directo sobre `users` igual que siempre, así
+    que se salta por la misma función `SECURITY DEFINER` que ya usa el login por email.
+    """
+    row = (
+        await session.execute(
+            text("SELECT id, email, role FROM find_platform_admin_by_id(:id)"),
+            {"id": user_id},
+        )
+    ).first()
+    if row is None:
+        return None
+    return IdentityRow(id=str(row.id), email=row.email, role=row.role)
+
+
 class MisconfiguredUserCompany(Exception):
     """El `user` no resuelve a un contexto de empresa único: 0 o >1 empresas activas (1-A)."""
 

@@ -19,6 +19,7 @@ from identity.dependencies import (
     AuthContext,
     PlatformAuthContext,
     current_identity,
+    current_identity_for_me,
     current_platform_identity,
 )
 from tenancy.constants import Role
@@ -82,11 +83,14 @@ def declared_roles(dependant: Dependant) -> frozenset[str] | None:
 
 
 def requires_authentication(dependant: Dependant) -> bool:
-    """True si la ruta autentica (pasa por `current_identity`) en algún punto de su árbol.
+    """True si la ruta autentica (pasa por `current_identity`/`current_identity_for_me`) en algún
+    punto de su árbol.
 
     Sirve al guard C10 para verificar que una ruta abierta a propósito (p. ej. `/auth/me`, sin
-    roles) siga exigiendo identidad, aunque no restrinja por rol.
+    roles) siga exigiendo identidad, aunque no restrinja por rol. `current_identity_for_me` (hotfix
+    S4.10) es la variante que además admite a un `platform_admin`; cuenta igual porque decodifica y
+    valida el token en todos sus caminos (401 sin uno válido), igual que `current_identity`.
     """
-    if getattr(dependant, "call", None) is current_identity:
+    if getattr(dependant, "call", None) in (current_identity, current_identity_for_me):
         return True
     return any(requires_authentication(sub) for sub in dependant.dependencies)

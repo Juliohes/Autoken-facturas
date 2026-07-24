@@ -140,3 +140,42 @@ async def current_platform_identity(request: Request) -> AsyncIterator[PlatformA
 
     async with platform_session() as db_session:
         yield PlatformAuthContext(user_id=UUID(claims.sub), session=db_session)
+
+
+@dataclass(frozen=True)
+class MeIdentity:
+    """Identidad mínima para `GET /auth/me` (hotfix S4.10): admite tanto un usuario de tenant como
+    un `platform_admin` (sin tenant), a diferencia de `AuthContext` (que exige `tenant_id`/
+    `tenant_slug` no nulos) y de `PlatformAuthContext` (que no sirve para el camino de tenant).
+    """
+
+    user_id: UUID
+    session: AsyncSession
+    tenant_slug: str | None
+    company: CompanyRef | None
+
+
+async def current_identity_for_me(request: Request) -> AsyncIterator[MeIdentity]:
+    """Como `current_identity`, pero también deja pasar a un `platform_admin` sin tenant.
+
+    Antes de este hotfix, `/auth/me` solo pasaba por `current_identity`: un `platform_admin` (que
+    entra por `panel`, sin subdominio de tenant que resolver) recibía siempre 401 al llamarlo — una
+    regresión real desde que S4.9 (app-shell) empezó a llamar `/auth/me` también tras el login de
+    plataforma, no detectada porque los tests de frontend mockean el cliente API.
+    """
+    claims = _decode_bearer_claims(request)
+
+    if claims.role == Role.PLATFORM_ADMIN.value:
+        async with platform_session() as db_session:
+            yield MeIdentity(
+                user_id=UUID(claims.sub), session=db_session, tenant_slug=None, company=None
+            )
+        return
+
+    async for ctx in current_identity(request):
+        yield MeIdentity(
+            user_id=ctx.user_id,
+            session=ctx.session,
+            tenant_slug=ctx.tenant_slug,
+            company=ctx.company,
+        )

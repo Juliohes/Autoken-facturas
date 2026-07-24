@@ -183,10 +183,12 @@ export interface paths {
         };
         /**
          * Me
-         * @description Testigo protegido: la identidad del token, leída bajo el contexto del tenant (RLS).
+         * @description Testigo protegido: la identidad del token, leída bajo el contexto del tenant (RLS) o, para
+         *     un `platform_admin`, sin tenant (hotfix S4.10 — antes daba 401 siempre para ese rol).
          *
          *     Incluye `company` (id y nombre) para un `user` acotado a su empresa; `null` para un
-         *     `tenant_admin` (contexto de asesoría, ve todo el tenant). Ver spec S1.6 (C5/C6).
+         *     `tenant_admin` (contexto de asesoría, ve todo el tenant) o un `platform_admin`. Ver spec S1.6
+         *     (C5/C6).
          */
         get: operations["me_api_v1_auth_me_get"];
         put?: never;
@@ -1165,6 +1167,9 @@ export interface components {
          * MeOut
          * @description Respuesta de `GET /auth/me` (S1.6 C5/C6), tipada para que el cliente autogenerado la use
          *     sin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado).
+         *
+         *     `tenant`/`company` son `null` para un `platform_admin` (sin tenant, hotfix S4.10) además del
+         *     caso ya existente de `company=null` para un `tenant_admin`.
          */
         MeOut: {
             /** Id */
@@ -1174,7 +1179,7 @@ export interface components {
             /** Role */
             role: string;
             /** Tenant */
-            tenant: string;
+            tenant: string | null;
             company: components["schemas"]["MeCompanyOut"] | null;
         };
         /**
