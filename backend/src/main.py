@@ -18,6 +18,7 @@ from invoice_intake.service import DuplicateUpload
 from invoicing.router import invoices_router as invoicing_invoices_router
 from invoicing.router import router as invoicing_router
 from platform_admin.health import router as health_router
+from platform_admin.settings_router import router as platform_settings_router
 from platform_admin.tenants_router import router as platform_tenants_router
 from reporting.router import router as reporting_router
 from shared.config import Settings, get_settings
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(invoicing_invoices_router, prefix=settings.api_prefix)
     app.include_router(reporting_router, prefix=settings.api_prefix)
     app.include_router(platform_tenants_router, prefix=settings.api_prefix)
+    app.include_router(platform_settings_router, prefix=settings.api_prefix)
 
     # Un duplicado de intake (S2.1 C8/C14) responde 409 con `duplicate_of`; se maneja a nivel de app
     # para que la excepción propague desde el endpoint y la dependencia deshaga antes la

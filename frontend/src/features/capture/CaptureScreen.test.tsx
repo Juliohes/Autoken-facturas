@@ -42,7 +42,7 @@ const fileToJpegBlobMock = vi.mocked(fileToJpegBlob)
 
 const TENANT_ADMIN_SESSION = {
   status: 'authenticated' as const,
-  user: { id: 't1', email: 'ana@ilex.es', role: 'tenant_admin' as const, tenant: 'ilex', company: null },
+  user: { id: 't1', email: 'ana@ilex.es', role: 'tenant_admin' as const, tenant: 'ilex', company: null, is_admin_tech: false },
   login: vi.fn(),
   logout: vi.fn(),
 }
@@ -55,6 +55,7 @@ const USER_SESSION = {
     role: 'user' as const,
     tenant: 'ilex',
     company: { id: 'c1', name: 'Cliente SL' },
+    is_admin_tech: false,
   },
   login: vi.fn(),
   logout: vi.fn(),

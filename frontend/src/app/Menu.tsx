@@ -1,15 +1,24 @@
-// Menú superior (S4.9, C9-C11): enlaces según el rol de la sesión activa, más "Cerrar sesión"
-// siempre visible. Ocultar un enlace aquí es solo UX; el backend ya rechaza (401/403) cualquier
-// intento de saltárselo por URL directa (spec §4).
+// Menú superior (S4.9, C9-C11; S4.10 C8, enlace de Ajustes condicional al flag admin-tech): enlaces
+// según el rol de la sesión activa, más "Cerrar sesión" siempre visible. Ocultar un enlace aquí es
+// solo UX; el backend ya rechaza (401/403) cualquier intento de saltárselo por URL directa (spec §4).
 import { NavLink } from 'react-router-dom'
 
 import { useSession } from '../features/session/SessionProvider'
 import type { AppliedTheme } from '../features/tenancy/theme'
-import { menuLinksForRole, type Role } from './routes'
+import { menuLinksForRole, ROUTES, type MenuLink, type Role } from './routes'
 
-export function Menu({ role, theme }: { role: Role; theme: AppliedTheme }) {
+interface Props {
+  role: Role
+  isAdminTech: boolean
+  theme: AppliedTheme
+}
+
+export function Menu({ role, isAdminTech, theme }: Props) {
   const { logout } = useSession()
-  const links = menuLinksForRole(role)
+  const links: MenuLink[] = menuLinksForRole(role)
+  // Fuera de `ROUTE_DEFS` a propósito (S4.10 decisión 6): no es una visibilidad por rol, es por un
+  // flag adicional (`is_admin_tech`) que solo tiene sentido dentro del rol `platform_admin`.
+  if (isAdminTech) links.push({ to: ROUTES.platformSettings, label: 'Ajustes' })
 
   return (
     <nav className="flex items-center justify-between border-b border-slate-700 bg-slate-800 px-6 py-3 text-slate-100">

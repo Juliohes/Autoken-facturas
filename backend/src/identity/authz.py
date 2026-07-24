@@ -15,6 +15,7 @@ from typing import Annotated, Any
 from fastapi import Depends, HTTPException
 from fastapi.dependencies.models import Dependant
 
+from identity import repository
 from identity.dependencies import (
     AuthContext,
     PlatformAuthContext,
@@ -58,6 +59,29 @@ def require_platform_admin() -> Callable[..., Coroutine[Any, Any, PlatformAuthCo
     async def guard(
         identity: Annotated[PlatformAuthContext, Depends(current_platform_identity)],
     ) -> PlatformAuthContext:
+        return identity
+
+    setattr(guard, ROLES_MARKER, allowed)
+    return guard
+
+
+def require_admin_tech() -> Callable[..., Coroutine[Any, Any, PlatformAuthContext]]:
+    """Dependencia que exige un `platform_admin` con el flag `is_admin_tech` activo (S4.10).
+
+    A diferencia del rol (embebido en el JWT, exige relogin para cambiar), el flag se comprueba
+    fresco contra la BD en cada petición: es un ajuste sensible que puede revocarse directamente en
+    Postgres (spec §0 decisión 2, nunca desde la aplicación) y debe dejar de funcionar al instante,
+    sin esperar a que caduque el token — mismo criterio que ya aplica la suspensión de un tenant
+    (S1.6 C23) a la sesión de sus usuarios.
+    """
+    allowed = frozenset({str(Role.PLATFORM_ADMIN)})
+
+    async def guard(
+        identity: Annotated[PlatformAuthContext, Depends(current_platform_identity)],
+    ) -> PlatformAuthContext:
+        row = await repository.read_platform_identity(identity.session, str(identity.user_id))
+        if row is None or not row.is_admin_tech:
+            raise HTTPException(status_code=403, detail="Forbidden")
         return identity
 
     setattr(guard, ROLES_MARKER, allowed)

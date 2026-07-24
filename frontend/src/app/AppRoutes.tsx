@@ -18,6 +18,7 @@ import { CompaniesPanel } from '../features/companies/CompaniesPanel'
 import { ConfirmationScreen } from '../features/confirmation/ConfirmationScreen'
 import { InvoiceHistory } from '../features/history/InvoiceHistory'
 import { InvoicesPanel } from '../features/panel/InvoicesPanel'
+import { PlatformSettings } from '../features/platform/PlatformSettings'
 import { PlatformTenants } from '../features/platform/PlatformTenants'
 import { LoginScreen } from '../features/session/LoginScreen'
 import { useSession } from '../features/session/SessionProvider'
@@ -113,7 +114,9 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
 
   return (
     <>
-      {status === 'authenticated' && user && <Menu role={user.role} theme={theme} />}
+      {status === 'authenticated' && user && (
+        <Menu role={user.role} isAdminTech={user.is_admin_tech} theme={theme} />
+      )}
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path={ROUTES.login} element={<LoginRoute theme={theme} />} />
@@ -122,6 +125,14 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
           element={
             <ProtectedRoute path={ROUTES.platform}>
               <PlatformTenants />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.platformSettings}
+          element={
+            <ProtectedRoute path={ROUTES.platformSettings}>
+              <PlatformSettings />
             </ProtectedRoute>
           }
         />

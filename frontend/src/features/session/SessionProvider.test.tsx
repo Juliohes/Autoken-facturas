@@ -27,6 +27,7 @@ const ME_TENANT_ADMIN = {
   role: 'tenant_admin',
   tenant: 'ilex',
   company: null,
+  is_admin_tech: false,
 }
 
 function Harness() {

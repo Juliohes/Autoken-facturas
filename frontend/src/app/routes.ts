@@ -11,6 +11,7 @@ import type { Role } from '../features/session/SessionProvider'
 export const ROUTES = {
   login: '/login',
   platform: '/plataforma',
+  platformSettings: '/plataforma/ajustes',
   invoices: '/facturas',
   companies: '/empresas',
   history: '/historial',
@@ -35,6 +36,11 @@ interface RouteDef {
 
 const ROUTE_DEFS: RouteDef[] = [
   { path: ROUTES.platform, roles: ['platform_admin'], label: 'Plataforma' },
+  // Sin `label` a propósito (S4.10 decisión 6): el enlace de menú es condicional al flag
+  // `is_admin_tech`, no solo al rol — esa comprobación vive en `Menu.tsx`, no aquí (`ROUTE_DEFS`
+  // solo modela visibilidad por ROL). La ruta sigue protegida a nivel de rol como cualquier otra;
+  // dentro de la propia pantalla se comprueba el flag y se muestra "sin acceso" si falta.
+  { path: ROUTES.platformSettings, roles: ['platform_admin'] },
   { path: ROUTES.invoices, roles: ['tenant_admin'], label: 'Facturas' },
   { path: ROUTES.companies, roles: ['tenant_admin'], label: 'Empresas' },
   { path: ROUTES.history, roles: ['tenant_admin', 'user'], label: 'Historial' },

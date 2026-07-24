@@ -41,11 +41,17 @@ class AuthUser:
 
 @dataclass(frozen=True)
 class IdentityRow:
-    """Datos públicos de identidad de una fila de `users` (para `/auth/me` y la activación)."""
+    """Datos públicos de identidad de una fila de `users` (para `/auth/me` y la activación).
+
+    `is_admin_tech` (S4.10) solo tiene sentido real para un `platform_admin`; para un usuario de
+    tenant siempre es `False` (ni la consulta de `read_identity` lo selecciona ni el flag existiría
+    ahí de otra forma — un `tenant_admin`/`user` nunca pasa el CHECK de negocio de la columna).
+    """
 
     id: str
     email: str
     role: str
+    is_admin_tech: bool = False
 
 
 @dataclass(frozen=True)
@@ -97,11 +103,17 @@ async def load_for_login(
 
 
 def _identity_row(row: object | None) -> IdentityRow | None:
-    """Mapea la fila cruda (`id, email, role`) a `IdentityRow`, compartido por `read_identity`/
-    `read_platform_identity` (hallazgo de auditoría: el mapeo estaba duplicado literalmente)."""
+    """Mapea la fila cruda a `IdentityRow`, compartido por `read_identity`/`read_platform_identity`
+    (hallazgo de auditoría: el mapeo estaba duplicado literalmente). `is_admin_tech` con
+    `getattr(..., False)`: solo la consulta de `read_platform_identity` selecciona esa columna."""
     if row is None:
         return None
-    return IdentityRow(id=str(row.id), email=row.email, role=row.role)  # type: ignore[attr-defined]
+    return IdentityRow(
+        id=str(row.id),  # type: ignore[attr-defined]
+        email=row.email,  # type: ignore[attr-defined]
+        role=row.role,  # type: ignore[attr-defined]
+        is_admin_tech=getattr(row, "is_admin_tech", False),
+    )
 
 
 async def read_identity(session: AsyncSession, user_id: str) -> IdentityRow | None:
@@ -124,7 +136,7 @@ async def read_platform_identity(session: AsyncSession, user_id: str) -> Identit
     """
     row = (
         await session.execute(
-            text("SELECT id, email, role FROM find_platform_admin_by_id(:id)"),
+            text("SELECT id, email, role, is_admin_tech FROM find_platform_admin_by_id(:id)"),
             {"id": user_id},
         )
     ).first()

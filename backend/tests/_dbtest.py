@@ -152,19 +152,22 @@ async def seed_user(
     status: str = "active",
     password_hash: str | None = None,
     totp_secret: str | None = None,
+    is_admin_tech: bool = False,
 ) -> str:
     """Inserta un usuario (como superusuario, saltando RLS) y devuelve su id.
 
     `tenant_id=None` corresponde a un `platform_admin` (no pertenece a ninguna asesoría, S1.3): en
     el esquema definitivo `users.tenant_id` es nullable; hasta que exista esa migración, sembrar
-    un platform_admin fallará (parte del rojo del flujo de plataforma).
+    un platform_admin fallará (parte del rojo del flujo de plataforma). `is_admin_tech` (S4.10)
+    solo tiene sentido real junto a `role="platform_admin"`.
     """
     conn = await asyncpg.connect(admin_dsn)
     try:
         user_id = str(uuid4())
         await conn.execute(
-            "INSERT INTO users (id, tenant_id, email, role, status, password_hash, totp_secret) "
-            "VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            "INSERT INTO users "
+            "(id, tenant_id, email, role, status, password_hash, totp_secret, is_admin_tech) "
+            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             user_id,
             tenant_id,
             email,
@@ -172,6 +175,7 @@ async def seed_user(
             status,
             password_hash,
             totp_secret,
+            is_admin_tech,
         )
         return user_id
     finally:
