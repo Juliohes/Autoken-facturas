@@ -118,10 +118,26 @@
   export, tenant suspendido, tenant demo por la vía general, atomicidad bajo dos `DELETE`
   concurrentes). El panel de plataforma (`PlatformTenants.tsx`) se refactorizó extrayendo
   `TenantRowActions`/`MutationErrorBanner` tras crecer demasiado con las acciones de S4.4+S4.7.
-- **Hallazgo transversal (S3.4, 2026-07-23)**: las pantallas de frontend construidas hasta ahora
-  (historial, confirmación, panel de facturas, empresas, plataforma) viven y se prueban aisladas; falta
-  una tarea de integración (app-shell: login real, menú, routing) que las conecte entre sí antes de un
-  demo end-to-end.
+- **Hallazgo transversal (S3.4, 2026-07-23) → RESUELTO por S4.9 (2026-07-24)**: las pantallas de
+  frontend construidas hasta ahora vivían y se probaban aisladas, sin login real ni menú ni routing
+  que las conectara. **S4.9 (app-shell) cerrada**, primera tarea del lote de cierre de backlog
+  previo al Sprint 5 (decidido con Julio): `SessionProvider` (contexto de sesión, `access_token` en
+  memoria por ADR-0012, nunca persistido), `LoginScreen` (con segundo factor si aplica), middleware
+  nuevo en `api/client.ts` (inyecta `Authorization`, intercepta un 401 con refresh-y-reintento vía
+  `tokenStore`, deduplicando refresh concurrentes), `react-router-dom` (nueva dependencia) con rutas
+  y menú por rol derivados de una única tabla (`app/routes.ts`). `App.tsx` sustituye por completo al
+  placeholder de healthcheck de la Fase 0 (retirado, `api/health.ts` borrado por quedar sin uso).
+  Auditoría de 3 perspectivas: 1 hallazgo **crítico** corregido (un rol desconocido/corrupto en
+  `/auth/me` no invalidaba la sesión — dejaba al usuario atrapado en una pantalla en blanco con
+  menú vacío en vez de devolverlo a login, tal y como exige la spec; ahora `SessionProvider` valida
+  el rol contra un tipo cerrado antes de aceptar la identidad), 1 hallazgo **alto** de seguridad
+  corregido (la caché de TanStack Query no se limpiaba al cerrar sesión — un segundo usuario en la
+  misma pestaña podía ver brevemente datos del anterior; ahora `logout()` y el manejador de "no
+  autorizado" comparten un único `endSession()` que también limpia la caché), y varios medios/bajos
+  coincidentes en las tres lentes (guarda de `status==='loading'` que faltaba en la ruta de login,
+  fuga menor en el `Map` de reintentos ante fallos de red sin `onError`, tabla rol->ruta duplicada
+  entre el router y el menú, y `tokenStore` reubicado de `features/session/` a `api/` por dirección
+  de dependencias) — todos corregidos.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11), aún sin construir**:

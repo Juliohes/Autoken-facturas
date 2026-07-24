@@ -1,6 +1,7 @@
-// Tests de comportamiento de S4.2 (integración): la app aplica el tema del tenant al montarse. El
-// cliente de API está mockeado: se inyectan las respuestas de `health` y `tenants/current` de cada
-// escenario (sin navegador ni backend reales).
+// Tests de comportamiento de S4.2/S4.3 (theming) + S4.9 C14 (el branding se aplica también en
+// login). El cliente de API está mockeado (`tenants/current`); `fetch` global también, porque sin
+// sesión el arranque del app-shell intenta un refresh silencioso (401 esperado) antes de mostrar
+// login.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
@@ -11,18 +12,12 @@ import { DEFAULT_APP_NAME, DEFAULT_COLOR_PRIMARY, DEFAULT_COLOR_SECONDARY } from
 import type { CurrentTenant } from './features/tenancy/types'
 
 vi.mock('./api/client', () => ({
-  api: { GET: vi.fn() },
+  api: { GET: vi.fn(), POST: vi.fn() },
 }))
 
 type AsyncMock = Mock<(...args: never[]) => Promise<unknown>>
 const getMock = api.GET as unknown as AsyncMock
-
-const HEALTH_OK = {
-  status: 'ok',
-  service: 'autoken-facturas-backend',
-  version: '0.1.0',
-  environment: 'test',
-}
+const fetchMock = vi.fn()
 
 function makeTenant(over: Partial<CurrentTenant> = {}): CurrentTenant {
   return {
@@ -46,9 +41,6 @@ function mockRoutes(tenant: CurrentTenant | 'error') {
       }
       return Promise.resolve({ data: tenant, error: undefined })
     }
-    if (path.includes('/health')) {
-      return Promise.resolve({ data: HEALTH_OK, error: undefined })
-    }
     throw new Error(`ruta GET no mockeada: ${path}`)
   })
 }
@@ -64,16 +56,22 @@ function renderApp() {
 
 beforeEach(() => {
   getMock.mockReset()
+  vi.stubGlobal('fetch', fetchMock)
+  fetchMock.mockReset()
+  // Sin cookie de refresh válida: el app-shell arranca en login (mismo criterio en todos los casos
+  // de este fichero, que solo prueban theming, no sesión).
+  fetchMock.mockResolvedValue(new Response(null, { status: 401 }))
 })
 
 afterEach(() => {
+  vi.unstubAllGlobals()
   document.title = ''
   document.documentElement.style.removeProperty('--color-primary')
   document.documentElement.style.removeProperty('--color-secondary')
   document.getElementById('tenant-favicon')?.remove()
 })
 
-describe('App (S4.2 theming runtime)', () => {
+describe('App (S4.2/S4.3 theming runtime + S4.9 C14)', () => {
   it('C5: con branding, aplica colores y título del tenant', async () => {
     mockRoutes(
       makeTenant({ app_name: 'I-Lex', color_primary: '#112233', color_secondary: '#445566' }),
@@ -98,12 +96,14 @@ describe('App (S4.2 theming runtime)', () => {
     )
   })
 
-  it('C7: con logo, se muestra; sin logo, no hay hueco vacío', async () => {
+  it('C7 + S4.9 C14: con logo, se muestra ya en la pantalla de login', async () => {
     mockRoutes(makeTenant({ app_name: 'I-Lex', logo_url: 'https://cdn.x/logo.png' }))
     renderApp()
 
     const logo = await screen.findByAltText('I-Lex')
     expect(logo).toHaveAttribute('src', 'https://cdn.x/logo.png')
+    // El branding se aplicó ANTES/junto con el formulario de login (S4.9 decisión 9).
+    expect(screen.getByLabelText('Email')).toBeInTheDocument()
   })
 
   it('C7 (caso límite): sin logo_url, no se renderiza ninguna imagen', async () => {
@@ -115,8 +115,6 @@ describe('App (S4.2 theming runtime)', () => {
   })
 
   it('S4.3 C5: con favicon (aunque sea el único campo de branding), inyecta el link', async () => {
-    // Caso que reveló un bug real en auditoría: el tenant SOLO configura favicon (app_name/colores
-    // siguen en sus valores por defecto entre renders), y aun así el <link> debe inyectarse.
     mockRoutes(makeTenant({ favicon: 'https://cdn.x/favicon.png' }))
     renderApp()
 
@@ -143,8 +141,8 @@ describe('App (S4.2 theming runtime)', () => {
     expect(document.documentElement.style.getPropertyValue('--color-primary')).toBe(
       DEFAULT_COLOR_PRIMARY,
     )
-    // El healthcheck (contenido ya existente) sigue mostrándose con normalidad.
-    expect(await screen.findByText('ok')).toBeInTheDocument()
+    // El login (contenido por defecto sin sesión) sigue mostrándose con normalidad.
+    expect(await screen.findByLabelText('Email')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
