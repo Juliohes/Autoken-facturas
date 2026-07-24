@@ -96,6 +96,14 @@ async def load_for_login(
     )
 
 
+def _identity_row(row: object | None) -> IdentityRow | None:
+    """Mapea la fila cruda (`id, email, role`) a `IdentityRow`, compartido por `read_identity`/
+    `read_platform_identity` (hallazgo de auditoría: el mapeo estaba duplicado literalmente)."""
+    if row is None:
+        return None
+    return IdentityRow(id=str(row.id), email=row.email, role=row.role)  # type: ignore[attr-defined]
+
+
 async def read_identity(session: AsyncSession, user_id: str) -> IdentityRow | None:
     """Lee la identidad pública de un usuario dentro de la sesión ya abierta (RLS del tenant)."""
     row = (
@@ -104,9 +112,7 @@ async def read_identity(session: AsyncSession, user_id: str) -> IdentityRow | No
             {"id": user_id},
         )
     ).first()
-    if row is None:
-        return None
-    return IdentityRow(id=str(row.id), email=row.email, role=row.role)
+    return _identity_row(row)
 
 
 async def read_platform_identity(session: AsyncSession, user_id: str) -> IdentityRow | None:
@@ -122,9 +128,7 @@ async def read_platform_identity(session: AsyncSession, user_id: str) -> Identit
             {"id": user_id},
         )
     ).first()
-    if row is None:
-        return None
-    return IdentityRow(id=str(row.id), email=row.email, role=row.role)
+    return _identity_row(row)
 
 
 class MisconfiguredUserCompany(Exception):
