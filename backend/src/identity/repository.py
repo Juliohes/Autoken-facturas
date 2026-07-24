@@ -96,6 +96,14 @@ async def load_for_login(
     )
 
 
+def _identity_row(row: object | None) -> IdentityRow | None:
+    """Mapea la fila cruda (`id, email, role`) a `IdentityRow`, compartido por `read_identity`/
+    `read_platform_identity` (hallazgo de auditoría: el mapeo estaba duplicado literalmente)."""
+    if row is None:
+        return None
+    return IdentityRow(id=str(row.id), email=row.email, role=row.role)  # type: ignore[attr-defined]
+
+
 async def read_identity(session: AsyncSession, user_id: str) -> IdentityRow | None:
     """Lee la identidad pública de un usuario dentro de la sesión ya abierta (RLS del tenant)."""
     row = (
@@ -104,9 +112,23 @@ async def read_identity(session: AsyncSession, user_id: str) -> IdentityRow | No
             {"id": user_id},
         )
     ).first()
-    if row is None:
-        return None
-    return IdentityRow(id=str(row.id), email=row.email, role=row.role)
+    return _identity_row(row)
+
+
+async def read_platform_identity(session: AsyncSession, user_id: str) -> IdentityRow | None:
+    """Lee la identidad pública de un `platform_admin` por id (hotfix S4.10, migración 0016).
+
+    Camino equivalente a `read_identity`, pero para una sesión sin contexto de tenant
+    (`platform_session`): la RLS bloquea el `SELECT` directo sobre `users` igual que siempre, así
+    que se salta por la misma función `SECURITY DEFINER` que ya usa el login por email.
+    """
+    row = (
+        await session.execute(
+            text("SELECT id, email, role FROM find_platform_admin_by_id(:id)"),
+            {"id": user_id},
+        )
+    ).first()
+    return _identity_row(row)
 
 
 class MisconfiguredUserCompany(Exception):

@@ -16,7 +16,8 @@ cambia el formato del error 401 de autenticación.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import contextlib
+from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -64,8 +65,11 @@ class AuthContext:
     company: CompanyRef | None
 
 
-async def current_identity(request: Request) -> AsyncIterator[AuthContext]:
+async def current_identity(request: Request) -> AsyncGenerator[AuthContext, None]:
     """Valida el token, lo casa con el subdominio y cede una sesión dentro de `tenant_session`.
+
+    Tipado como `AsyncGenerator` (no `AsyncIterator`) a propósito: `current_identity_for_me` lo
+    envuelve en `contextlib.aclosing`, que exige un `aclose()` explícito en el tipo.
 
     Según el rol, fija el nivel de empresa de la RLS (ADR-0001, ADR-0013): un `user` corre acotado
     a su empresa (`app.company_id`); un `tenant_admin` corre en contexto de asesoría (sin
@@ -140,3 +144,48 @@ async def current_platform_identity(request: Request) -> AsyncIterator[PlatformA
 
     async with platform_session() as db_session:
         yield PlatformAuthContext(user_id=UUID(claims.sub), session=db_session)
+
+
+@dataclass(frozen=True)
+class MeIdentity:
+    """Identidad mínima para `GET /auth/me` (hotfix S4.10): admite tanto un usuario de tenant como
+    un `platform_admin` (sin tenant), a diferencia de `AuthContext` (que exige `tenant_id`/
+    `tenant_slug` no nulos) y de `PlatformAuthContext` (que no sirve para el camino de tenant).
+    """
+
+    user_id: UUID
+    session: AsyncSession
+    tenant_slug: str | None
+    company: CompanyRef | None
+
+
+async def current_identity_for_me(request: Request) -> AsyncIterator[MeIdentity]:
+    """Como `current_identity`, pero también deja pasar a un `platform_admin` sin tenant.
+
+    Antes de este hotfix, `/auth/me` solo pasaba por `current_identity`: un `platform_admin` (que
+    entra por `panel`, sin subdominio de tenant que resolver) recibía siempre 401 al llamarlo — una
+    regresión real desde que S4.9 (app-shell) empezó a llamar `/auth/me` también tras el login de
+    plataforma, no detectada porque los tests de frontend mockean el cliente API.
+    """
+    claims = _decode_bearer_claims(request)
+
+    if claims.role == Role.PLATFORM_ADMIN.value:
+        async with platform_session() as db_session:
+            yield MeIdentity(
+                user_id=UUID(claims.sub), session=db_session, tenant_slug=None, company=None
+            )
+        return
+
+    # `contextlib.aclosing` (no un `async for` desnudo, hallazgo de auditoría): FastAPI cierra esta
+    # dependencia con `agen.aclose()` en el camino de excepción (p. ej. un fallo de BD ya dentro del
+    # handler de `/me`), lanzando `GeneratorExit` en el punto donde está suspendida — un `async for`
+    # normal no propaga ese cierre al generador interno (`current_identity`), dejando su `async with
+    # tenant_session(...)` (transacción real) sin cerrar de forma determinista.
+    async with contextlib.aclosing(current_identity(request)) as identities:
+        async for ctx in identities:
+            yield MeIdentity(
+                user_id=ctx.user_id,
+                session=ctx.session,
+                tenant_slug=ctx.tenant_slug,
+                company=ctx.company,
+            )
