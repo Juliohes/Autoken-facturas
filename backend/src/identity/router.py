@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from identity import activation, repository, service, sessions
 from identity.client_ip import client_ip
-from identity.dependencies import AuthContext, current_identity
+from identity.dependencies import MeIdentity, current_identity_for_me
 from identity.passwords import validate_password_policy
 from identity.tokens import encode_access_token
 from shared.config import Settings, get_settings
@@ -220,23 +220,32 @@ class MeCompanyOut(BaseModel):
 
 class MeOut(BaseModel):
     """Respuesta de `GET /auth/me` (S1.6 C5/C6), tipada para que el cliente autogenerado la use
-    sin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado)."""
+    sin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado).
+
+    `tenant`/`company` son `null` para un `platform_admin` (sin tenant, hotfix S4.10) además del
+    caso ya existente de `company=null` para un `tenant_admin`.
+    """
 
     id: str
     email: str
     role: str
-    tenant: str
+    tenant: str | None
     company: MeCompanyOut | None
 
 
 @router.get("/me")
-async def me(identity: Annotated[AuthContext, Depends(current_identity)]) -> MeOut:
-    """Testigo protegido: la identidad del token, leída bajo el contexto del tenant (RLS).
+async def me(identity: Annotated[MeIdentity, Depends(current_identity_for_me)]) -> MeOut:
+    """Testigo protegido: la identidad del token, leída bajo el contexto del tenant (RLS) o, para
+    un `platform_admin`, sin tenant (hotfix S4.10 — antes daba 401 siempre para ese rol).
 
     Incluye `company` (id y nombre) para un `user` acotado a su empresa; `null` para un
-    `tenant_admin` (contexto de asesoría, ve todo el tenant). Ver spec S1.6 (C5/C6).
+    `tenant_admin` (contexto de asesoría, ve todo el tenant) o un `platform_admin`. Ver spec S1.6
+    (C5/C6).
     """
-    row = await repository.read_identity(identity.session, str(identity.user_id))
+    if identity.tenant_slug is None:
+        row = await repository.read_platform_identity(identity.session, str(identity.user_id))
+    else:
+        row = await repository.read_identity(identity.session, str(identity.user_id))
     if row is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     company = (

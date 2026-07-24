@@ -247,7 +247,7 @@
           "auth"
         ],
         "summary": "Me",
-        "description": "Testigo protegido: la identidad del token, le\u00edda bajo el contexto del tenant (RLS).\n\nIncluye `company` (id y nombre) para un `user` acotado a su empresa; `null` para un\n`tenant_admin` (contexto de asesor\u00eda, ve todo el tenant). Ver spec S1.6 (C5/C6).",
+        "description": "Testigo protegido: la identidad del token, le\u00edda bajo el contexto del tenant (RLS) o, para\nun `platform_admin`, sin tenant (hotfix S4.10 \u2014 antes daba 401 siempre para ese rol).\n\nIncluye `company` (id y nombre) para un `user` acotado a su empresa; `null` para un\n`tenant_admin` (contexto de asesor\u00eda, ve todo el tenant) o un `platform_admin`. Ver spec S1.6\n(C5/C6).",
         "operationId": "me_api_v1_auth_me_get",
         "responses": {
           "200": {
@@ -2738,7 +2738,14 @@
             "title": "Role"
           },
           "tenant": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Tenant"
           },
           "company": {
@@ -2761,7 +2768,7 @@
           "company"
         ],
         "title": "MeOut",
-        "description": "Respuesta de `GET /auth/me` (S1.6 C5/C6), tipada para que el cliente autogenerado la use\nsin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado)."
+        "description": "Respuesta de `GET /auth/me` (S1.6 C5/C6), tipada para que el cliente autogenerado la use\nsin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado).\n\n`tenant`/`company` son `null` para un `platform_admin` (sin tenant, hotfix S4.10) adem\u00e1s del\ncaso ya existente de `company=null` para un `tenant_admin`."
       },
       "PanelOut": {
         "properties": {
