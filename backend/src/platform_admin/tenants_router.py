@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from identity.authz import require_platform_admin
 from identity.dependencies import PlatformAuthContext
 from platform_admin import service
-from platform_admin.repository import TenantRecord
+from platform_admin.repository import TenantMetrics, TenantRecord
 
 router = APIRouter(prefix="/platform/tenants", tags=["platform"])
 
@@ -57,6 +57,33 @@ def _to_out(record: TenantRecord) -> TenantOut:
     )
 
 
+class TenantMetricsOut(BaseModel):
+    """Consumo agregado de un tenant (S4.5). `ocr_extractions_count` es un proxy de uso, nunca una
+    cifra monetaria (spec §0 decisión 1: no hay coste real en € disponible hoy)."""
+
+    tenant_id: UUID
+    slug: str
+    name: str
+    companies_count: int
+    active_users_count: int
+    invoices_this_month: int
+    ocr_extractions_count: int
+    last_activity_at: datetime | None
+
+
+def _metrics_to_out(record: TenantMetrics) -> TenantMetricsOut:
+    return TenantMetricsOut(
+        tenant_id=record.tenant_id,
+        slug=record.slug,
+        name=record.name,
+        companies_count=record.companies_count,
+        active_users_count=record.active_users_count,
+        invoices_this_month=record.invoices_this_month,
+        ocr_extractions_count=record.ocr_extractions_count,
+        last_activity_at=record.last_activity_at,
+    )
+
+
 @router.post("", status_code=201)
 async def create_tenant(identity: Platform, body: TenantCreateIn) -> TenantOut:
     """Da de alta un tenant operativo (S4.1). Slug/color inválidos -> 422; slug duplicado -> 409."""
@@ -88,6 +115,13 @@ async def list_tenants(identity: Platform) -> list[TenantOut]:
     """Todos los tenants, más reciente primero (S4.1)."""
     records = await service.list_tenants(identity.session)
     return [_to_out(record) for record in records]
+
+
+@router.get("/metrics")
+async def tenant_metrics(identity: Platform) -> list[TenantMetricsOut]:
+    """Consumo agregado de todos los tenants, ordenado por slug (S4.5)."""
+    records = await service.tenant_metrics(identity.session)
+    return [_metrics_to_out(record) for record in records]
 
 
 @router.post("/{tenant_id}/convert-to-production")

@@ -6,3 +6,6 @@ export type Tenant = components['schemas']['TenantOut']
 
 /** Cuerpo de alta de un tenant (spec §2/§3). */
 export type TenantCreate = components['schemas']['TenantCreateIn']
+
+/** Consumo agregado de un tenant (S4.5). */
+export type TenantMetrics = components['schemas']['TenantMetricsOut']

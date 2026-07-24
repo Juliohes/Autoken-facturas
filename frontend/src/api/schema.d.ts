@@ -589,6 +589,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/tenants/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tenant Metrics
+         * @description Consumo agregado de todos los tenants, ordenado por slug (S4.5).
+         */
+        get: operations["tenant_metrics_api_v1_platform_tenants_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform/tenants/{tenant_id}/convert-to-production": {
         parameters: {
             query?: never;
@@ -1158,6 +1178,32 @@ export interface components {
             app_name: string | null;
             /** Favicon */
             favicon: string | null;
+        };
+        /**
+         * TenantMetricsOut
+         * @description Consumo agregado de un tenant (S4.5). `ocr_extractions_count` es un proxy de uso, nunca una
+         *     cifra monetaria (spec §0 decisión 1: no hay coste real en € disponible hoy).
+         */
+        TenantMetricsOut: {
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            /** Companies Count */
+            companies_count: number;
+            /** Active Users Count */
+            active_users_count: number;
+            /** Invoices This Month */
+            invoices_this_month: number;
+            /** Ocr Extractions Count */
+            ocr_extractions_count: number;
+            /** Last Activity At */
+            last_activity_at: string | null;
         };
         /**
          * TenantOut
@@ -2073,6 +2119,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tenant_metrics_api_v1_platform_tenants_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantMetricsOut"][];
                 };
             };
         };

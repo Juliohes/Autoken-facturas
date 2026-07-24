@@ -9,6 +9,7 @@ tenant vs. tenant (por eso no vive en `test_tenant_isolation.py`).
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -17,6 +18,7 @@ from invoice_intake import storage
 from tests._auth import USER_PASSWORD, USER_PASSWORD_HASH, bearer, host, login
 from tests._counterparty import fetch_cif_lookup, seed_cif_lookup
 from tests._dbtest import seed_company, seed_tenant, seed_user
+from tests._invoicing import seed_invoice
 from tests._platform import (
     bucket_exists,
     count_companies,
@@ -25,12 +27,15 @@ from tests._platform import (
     fetch_tenant_by_id,
     fetch_tenant_by_slug,
     platform_token,
+    seed_audit_log,
+    seed_ocr_extraction,
     seed_platform_admin,
 )
 
 Api = tuple[httpx.AsyncClient, dict[str, str]]
 
 URL = "/api/v1/platform/tenants"
+METRICS_URL = f"{URL}/metrics"
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -522,3 +527,196 @@ async def test_s44_purgar_no_toca_cif_lookups_cache_global(authapi: Api) -> None
 
     assert resp.status_code == 204, resp.text
     assert await fetch_cif_lookup(dsns, cif="A39031620", source="aeat") is not None
+
+
+# --- S4.5 Métricas y consumo (spec docs/specs/S4.5-metricas-y-consumo.md, criterios C1-C6) --------
+
+
+def _metric_for(rows: list[dict], tenant_id: str) -> dict:
+    return next(row for row in rows if row["tenant_id"] == tenant_id)
+
+
+async def test_s45_c1_metricas_completas_de_un_tenant_con_datos(authapi: Api) -> None:
+    """C1: empresas/usuarios activos/facturas del mes/extracciones OCR/última actividad reales.
+
+    `companies_count` cuenta CUALQUIER estado (una empresa `pending` incluida) y
+    `ocr_extractions_count` cuenta CUALQUIER `status` de extracción (spec §0 decisión 5): se siembra
+    una empresa `pending` y una extracción `status="failed"` para blindar ambos contra un futuro
+    `WHERE status = ...` añadido "por consistencia" con el filtro de usuarios activos.
+    """
+    client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "conmetricas", "Con Métricas SL")
+    company_1 = await seed_company(dsns["admin"], tenant_id=tenant_id, name="A", cif="A39031620")
+    await seed_company(dsns["admin"], tenant_id=tenant_id, name="B", cif="B06183446")
+    await seed_company(
+        dsns["admin"], tenant_id=tenant_id, name="C", cif="B65053369", status="pending"
+    )
+    reused_user = await seed_user(
+        dsns["admin"], tenant_id=tenant_id, email="activo1@x.es", status="active"
+    )
+    await seed_user(dsns["admin"], tenant_id=tenant_id, email="activo2@x.es", status="active")
+    await seed_user(dsns["admin"], tenant_id=tenant_id, email="pendiente@x.es", status="pending")
+    await seed_invoice(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_1,
+        days_ago=0,
+        is_test=False,
+        confirmed_by=reused_user,
+    )
+    await seed_invoice(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_1,
+        days_ago=0,
+        is_test=True,
+        confirmed_by=reused_user,
+    )
+    for i in range(5):
+        await seed_ocr_extraction(
+            dsns, tenant_id=tenant_id, company_id=company_1, seed=i, uploaded_by=reused_user
+        )
+    await seed_ocr_extraction(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_1,
+        seed=99,
+        uploaded_by=reused_user,
+        status="failed",
+    )
+    latest_activity = datetime.now(UTC) - timedelta(hours=1)
+    await seed_audit_log(dsns, tenant_id=tenant_id, at=datetime.now(UTC) - timedelta(days=2))
+    await seed_audit_log(dsns, tenant_id=tenant_id, at=latest_activity)
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.get(METRICS_URL, headers=_auth(token))
+
+    assert resp.status_code == 200, resp.text
+    row = _metric_for(resp.json(), tenant_id)
+    assert row["companies_count"] == 3
+    assert row["active_users_count"] == 2
+    assert row["invoices_this_month"] == 1
+    assert row["ocr_extractions_count"] == 6
+    assert row["last_activity_at"] is not None
+    assert abs(datetime.fromisoformat(row["last_activity_at"]) - latest_activity) < timedelta(
+        seconds=1
+    )
+
+
+async def test_s45_c2_tenant_recien_creado_sin_datos(authapi: Api) -> None:
+    """C2: tenant sin nada -> todos los contadores a 0, `last_activity_at: null`, sin error."""
+    client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "vacio", "Vacío SL")
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.get(METRICS_URL, headers=_auth(token))
+
+    assert resp.status_code == 200, resp.text
+    row = _metric_for(resp.json(), tenant_id)
+    assert row["companies_count"] == 0
+    assert row["active_users_count"] == 0
+    assert row["invoices_this_month"] == 0
+    assert row["ocr_extractions_count"] == 0
+    assert row["last_activity_at"] is None
+
+
+async def test_s45_c3_facturas_este_mes_excluye_otros_meses_y_pruebas(authapi: Api) -> None:
+    """C3: solo cuenta facturas reales confirmadas dentro del mes en curso."""
+    client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "filtromes", "Filtro Mes SL")
+    company_id = await seed_company(dsns["admin"], tenant_id=tenant_id, name="A", cif="A39031620")
+    await seed_invoice(dsns, tenant_id=tenant_id, company_id=company_id, days_ago=45)
+    await seed_invoice(dsns, tenant_id=tenant_id, company_id=company_id, days_ago=0, is_test=True)
+    await seed_invoice(dsns, tenant_id=tenant_id, company_id=company_id, days_ago=0)
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.get(METRICS_URL, headers=_auth(token))
+
+    assert resp.status_code == 200, resp.text
+    assert _metric_for(resp.json(), tenant_id)["invoices_this_month"] == 1
+
+
+async def test_s45_c4_anticruce_las_metricas_de_un_tenant_no_contaminan_otro(
+    authapi: Api,
+) -> None:
+    """C4: dos tenants con datos propios -> cada fila trae solo los números de su tenant (los 5
+    campos, incluidos `active_users_count`/`last_activity_at`, no solo los 3 más fáciles de ver)."""
+    client, dsns = authapi
+    tenant_a = await seed_tenant(dsns["admin"], "tenanta", "Tenant A")
+    tenant_b = await seed_tenant(dsns["admin"], "tenantb", "Tenant B")
+    company_a = await seed_company(dsns["admin"], tenant_id=tenant_a, name="A", cif="A39031620")
+    company_b = await seed_company(dsns["admin"], tenant_id=tenant_b, name="B", cif="B06183446")
+    await seed_company(dsns["admin"], tenant_id=tenant_a, name="A2", cif="B06183446")
+    user_a = await seed_user(
+        dsns["admin"], tenant_id=tenant_a, email="activo@tenanta.es", status="active"
+    )
+    await seed_invoice(
+        dsns, tenant_id=tenant_a, company_id=company_a, days_ago=0, confirmed_by=user_a
+    )
+    await seed_ocr_extraction(dsns, tenant_id=tenant_b, company_id=company_b)
+    await seed_audit_log(dsns, tenant_id=tenant_a, at=datetime.now(UTC) - timedelta(hours=1))
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.get(METRICS_URL, headers=_auth(token))
+
+    assert resp.status_code == 200, resp.text
+    rows = resp.json()
+    row_a = _metric_for(rows, tenant_a)
+    row_b = _metric_for(rows, tenant_b)
+    assert row_a["companies_count"] == 2
+    assert row_a["active_users_count"] == 1
+    assert row_a["invoices_this_month"] == 1
+    assert row_a["ocr_extractions_count"] == 0
+    assert row_a["last_activity_at"] is not None
+    assert row_b["companies_count"] == 1
+    assert row_b["active_users_count"] == 1  # el uploader que crea seed_ocr_extraction por defecto
+    assert row_b["invoices_this_month"] == 0
+    assert row_b["ocr_extractions_count"] == 1
+    assert row_b["last_activity_at"] is None
+
+
+async def test_s45_orden_deterministico_por_slug(authapi: Api) -> None:
+    """Spec §0 decisión 3: orden por slug, no por fecha de alta (a diferencia de `list_tenants`)."""
+    client, dsns = authapi
+    await seed_tenant(dsns["admin"], "zzz-ultimo", "Último por slug")
+    await seed_tenant(dsns["admin"], "aaa-primero", "Primero por slug")
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.get(METRICS_URL, headers=_auth(token))
+
+    assert resp.status_code == 200, resp.text
+    slugs = [row["slug"] for row in resp.json()]
+    assert slugs.index("aaa-primero") < slugs.index("zzz-ultimo")
+
+
+async def test_s45_c5_un_tenant_admin_no_puede_ver_metricas(authapi: Api) -> None:
+    """C5: token de `tenant_admin` -> 403."""
+    client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "ilex", "I-Lex Asesoría")
+    await seed_user(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        email="admin@ilex.es",
+        role="tenant_admin",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    login_resp = await login(client, "ilex.localhost", "admin@ilex.es", USER_PASSWORD)
+    token = login_resp.json()["access_token"]
+
+    resp = await client.get(METRICS_URL, headers=_auth(token))
+
+    assert resp.status_code == 403
+
+
+async def test_s45_c6_sin_autenticar_no_hay_acceso_a_metricas(authapi: Api) -> None:
+    """C6: sin token válido -> 401."""
+    client, _dsns = authapi
+
+    resp = await client.get(METRICS_URL, headers=_auth("token-invalido"))
+
+    assert resp.status_code == 401

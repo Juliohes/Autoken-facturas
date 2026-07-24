@@ -8,6 +8,7 @@ import { useState, type FormEvent } from 'react'
 import { useConvertToProduction } from './useConvertToProduction'
 import { useCreateTenant } from './useCreateTenant'
 import { usePurgeTenant } from './usePurgeTenant'
+import { useTenantMetrics } from './useTenantMetrics'
 import { useTenants } from './useTenants'
 
 const EMPTY_FORM = {
@@ -25,6 +26,7 @@ const PURGE_CONFIRM_MESSAGE =
 
 export function PlatformTenants() {
   const tenants = useTenants()
+  const metrics = useTenantMetrics()
   const createTenant = useCreateTenant()
   const convertToProduction = useConvertToProduction()
   const purgeTenant = usePurgeTenant()
@@ -204,6 +206,47 @@ export function PlatformTenants() {
           </table>
         </div>
       )}
+
+      <div>
+        <h2 className="text-lg font-semibold">Métricas y consumo</h2>
+
+        {metrics.isLoading && <p className="text-slate-400">Cargando…</p>}
+
+        {metrics.isError && (
+          <p role="alert" className="text-red-400">
+            No se pudieron cargar las métricas. Inténtalo de nuevo.
+          </p>
+        )}
+
+        {!metrics.isLoading && !metrics.isError && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm" data-testid="tenant-metrics-table">
+              <thead className="text-slate-400">
+                <tr>
+                  <th className="p-2">Subdominio</th>
+                  <th className="p-2">Empresas</th>
+                  <th className="p-2">Usuarios activos</th>
+                  <th className="p-2">Facturas este mes</th>
+                  <th className="p-2">Facturas procesadas (OCR)</th>
+                  <th className="p-2">Último uso</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700">
+                {(metrics.data ?? []).map((row) => (
+                  <tr key={row.tenant_id} data-testid="tenant-metrics-row">
+                    <td className="p-2">{row.slug}</td>
+                    <td className="p-2">{row.companies_count}</td>
+                    <td className="p-2">{row.active_users_count}</td>
+                    <td className="p-2">{row.invoices_this_month}</td>
+                    <td className="p-2">{row.ocr_extractions_count}</td>
+                    <td className="p-2">{row.last_activity_at ?? 'Sin actividad'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </section>
   )
 }
