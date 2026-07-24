@@ -589,6 +589,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/tenants/{tenant_id}/convert-to-production": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Convert To Production
+         * @description Pone `is_demo=false` (S4.4). Idempotente si ya era producción; id inexistente -> 404.
+         */
+        post: operations["convert_to_production_api_v1_platform_tenants__tenant_id__convert_to_production_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenant_id}/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Purge Demo Tenant
+         * @description Borra un tenant demo por completo (S4.4). Id inexistente -> 404; no es demo -> 409.
+         */
+        post: operations["purge_demo_tenant_api_v1_platform_tenants__tenant_id__purge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1074,7 +1114,7 @@ export interface components {
         };
         /**
          * TenantCreateIn
-         * @description Cuerpo de `POST /platform/tenants` (spec S4.1 §2/§3).
+         * @description Cuerpo de `POST /platform/tenants` (spec S4.1 §2/§3, `is_demo` desde S4.4).
          */
         TenantCreateIn: {
             /** Name */
@@ -1087,6 +1127,11 @@ export interface components {
             color_primary?: string | null;
             /** Color Secondary */
             color_secondary?: string | null;
+            /**
+             * Is Demo
+             * @default false
+             */
+            is_demo: boolean;
         };
         /**
          * TenantCurrentOut
@@ -2020,6 +2065,66 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TenantOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    convert_to_production_api_v1_platform_tenants__tenant_id__convert_to_production_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_demo_tenant_api_v1_platform_tenants__tenant_id__purge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

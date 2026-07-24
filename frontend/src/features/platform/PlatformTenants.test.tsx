@@ -88,6 +88,7 @@ describe('PlatformTenants (S4.1)', () => {
           logo_url: 'https://cdn.x/logo.png',
           color_primary: '#112233',
           color_secondary: '#445566',
+          is_demo: false,
         },
       })
     })
@@ -116,5 +117,137 @@ describe('PlatformTenants (S4.1)', () => {
 
     expect(await screen.findByText('Todavía no hay tenants.')).toBeInTheDocument()
     expect(screen.queryByTestId('tenants-table')).not.toBeInTheDocument()
+  })
+})
+
+// --- S4.4 Modo demo (spec docs/specs/S4.4-modo-demo.md, criterios C12-C17 frontend) --------------
+
+describe('PlatformTenants — modo demo (S4.4)', () => {
+  it('C12/C13: el checkbox "Es demo" viaja en el alta (marcado -> true, sin marcar -> false)', async () => {
+    mockRoutes([])
+    postMock.mockResolvedValue({ data: makeTenant(), error: undefined })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findByText('Todavía no hay tenants.')
+
+    await user.type(screen.getByLabelText('Nombre'), 'Prospecto SL')
+    await user.type(screen.getByLabelText('Subdominio'), 'prospecto')
+    await user.click(screen.getByLabelText('Es demo'))
+    await user.click(screen.getByRole('button', { name: 'Nuevo tenant' }))
+
+    await waitFor(() => {
+      expect(postMock).toHaveBeenCalledWith(
+        '/api/v1/platform/tenants',
+        expect.objectContaining({ body: expect.objectContaining({ is_demo: true }) }),
+      )
+    })
+  })
+
+  it('C14: solo la fila demo muestra "Convertir a producción" y "Purgar"', async () => {
+    mockRoutes([
+      makeTenant({ id: 'demo-1', slug: 'demo', is_demo: true }),
+      makeTenant({ id: 'prod-1', slug: 'prod', is_demo: false }),
+    ])
+    renderPanel()
+
+    const rows = await screen.findAllByTestId('tenant-row')
+    expect(rows).toHaveLength(2)
+    const demoRow = rows.find((r) => r.textContent?.startsWith('demo'))
+    const prodRow = rows.find((r) => r.textContent?.startsWith('prod'))
+    expect(demoRow).toHaveTextContent('Convertir a producción')
+    expect(demoRow).toHaveTextContent('Purgar')
+    expect(prodRow).not.toHaveTextContent('Convertir a producción')
+    expect(prodRow).not.toHaveTextContent('Purgar')
+  })
+
+  it('C15: "Convertir a producción" refresca la fila a "No" y oculta los botones', async () => {
+    let tenants = [makeTenant({ id: 'demo-1', slug: 'demo', is_demo: true })]
+    getMock.mockImplementation(() => Promise.resolve({ data: tenants, error: undefined }))
+    postMock.mockImplementation((path: string) => {
+      if (path.includes('convert-to-production')) {
+        tenants = tenants.map((t) => ({ ...t, is_demo: false }))
+        return Promise.resolve({ data: tenants[0], error: undefined })
+      }
+      throw new Error(`ruta POST no mockeada: ${path}`)
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Convertir a producción' }))
+
+    await waitFor(() => {
+      const row = screen.getByTestId('tenant-row')
+      expect(row).toHaveTextContent('No')
+      expect(row).not.toHaveTextContent('Convertir a producción')
+    })
+  })
+
+  it('C16: "Purgar" cancelado no llama a la API', async () => {
+    mockRoutes([makeTenant({ id: 'demo-1', slug: 'demo', is_demo: true })])
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Purgar' }))
+
+    expect(postMock).not.toHaveBeenCalledWith(
+      '/api/v1/platform/tenants/{tenant_id}/purge',
+      expect.anything(),
+    )
+  })
+
+  it('un error del servidor al convertir a producción se muestra legible', async () => {
+    mockRoutes([makeTenant({ id: 'demo-1', slug: 'demo', is_demo: true })])
+    postMock.mockResolvedValue({
+      data: undefined,
+      error: { detail: 'No existe ese tenant' },
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Convertir a producción' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No existe ese tenant')
+  })
+
+  it('un error del servidor al purgar se muestra legible', async () => {
+    mockRoutes([makeTenant({ id: 'demo-1', slug: 'demo', is_demo: true })])
+    postMock.mockResolvedValue({
+      data: undefined,
+      error: { detail: 'Solo se pueden purgar tenants demo' },
+    })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Purgar' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Solo se pueden purgar tenants demo')
+  })
+
+  it('C17: "Purgar" confirmado hace desaparecer la fila', async () => {
+    let tenants = [makeTenant({ id: 'demo-1', slug: 'demo', is_demo: true })]
+    getMock.mockImplementation(() => Promise.resolve({ data: tenants, error: undefined }))
+    postMock.mockImplementation((path: string) => {
+      if (path.includes('/purge')) {
+        tenants = []
+        return Promise.resolve({ data: undefined, error: undefined })
+      }
+      throw new Error(`ruta POST no mockeada: ${path}`)
+    })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Purgar' }))
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('tenant-row')).not.toBeInTheDocument()
+    })
   })
 })

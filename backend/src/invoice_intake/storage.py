@@ -16,6 +16,7 @@ from datetime import timedelta
 from functools import lru_cache
 
 from minio import Minio
+from minio.deleteobjects import DeleteObject
 from minio.error import S3Error
 from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
@@ -151,3 +152,28 @@ def remove_object(bucket: str, key: str) -> None:
         client.remove_object(bucket, key)
     except (Urllib3HTTPError, S3Error, ConnectionError, OSError) as exc:
         raise StorageUnavailable(f"No se pudo borrar el objeto en MinIO: {exc}") from exc
+
+
+def remove_bucket_recursive(bucket: str) -> None:
+    """Vacía y borra el bucket `bucket` entero (purga de un tenant demo, S4.4).
+
+    Si el bucket no existe (tenant demo que nunca subió ningún fichero), es un éxito idempotente,
+    mismo criterio que `object_exists` aplica a "el objeto no existe": no es un fallo del almacén.
+    """
+    client = _client()
+    try:
+        objects = client.list_objects(bucket, recursive=True)
+        delete_errors = list(
+            client.remove_objects(bucket, (DeleteObject(obj.object_name) for obj in objects))
+        )
+        if delete_errors:
+            raise StorageUnavailable(
+                f"No se pudieron borrar todos los objetos de {bucket}: {delete_errors}"
+            )
+        client.remove_bucket(bucket)
+    except S3Error as exc:
+        if exc.code in _NOT_FOUND_CODES:
+            return
+        raise StorageUnavailable(f"No se pudo borrar el bucket {bucket}: {exc}") from exc
+    except (Urllib3HTTPError, ConnectionError, OSError) as exc:
+        raise StorageUnavailable(f"No se pudo borrar el bucket {bucket}: {exc}") from exc

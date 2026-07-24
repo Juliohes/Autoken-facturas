@@ -1268,6 +1268,87 @@
           }
         }
       }
+    },
+    "/api/v1/platform/tenants/{tenant_id}/convert-to-production": {
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Convert To Production",
+        "description": "Pone `is_demo=false` (S4.4). Idempotente si ya era producci\u00f3n; id inexistente -> 404.",
+        "operationId": "convert_to_production_api_v1_platform_tenants__tenant_id__convert_to_production_post",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/{tenant_id}/purge": {
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Purge Demo Tenant",
+        "description": "Borra un tenant demo por completo (S4.4). Id inexistente -> 404; no es demo -> 409.",
+        "operationId": "purge_demo_tenant_api_v1_platform_tenants__tenant_id__purge_post",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2642,6 +2723,11 @@
               }
             ],
             "title": "Color Secondary"
+          },
+          "is_demo": {
+            "type": "boolean",
+            "title": "Is Demo",
+            "default": false
           }
         },
         "type": "object",
@@ -2650,7 +2736,7 @@
           "slug"
         ],
         "title": "TenantCreateIn",
-        "description": "Cuerpo de `POST /platform/tenants` (spec S4.1 \u00a72/\u00a73)."
+        "description": "Cuerpo de `POST /platform/tenants` (spec S4.1 \u00a72/\u00a73, `is_demo` desde S4.4)."
       },
       "TenantCurrentOut": {
         "properties": {

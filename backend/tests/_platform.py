@@ -59,3 +59,29 @@ async def count_tenants(dsns: dict[str, str]) -> int:
         return int(await conn.fetchval("SELECT count(*) FROM tenants"))
     finally:
         await conn.close()
+
+
+async def fetch_tenant_by_id(dsns: dict[str, str], *, tenant_id: str) -> dict | None:
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        row = await conn.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
+        return dict(row) if row is not None else None
+    finally:
+        await conn.close()
+
+
+async def count_companies(dsns: dict[str, str], *, tenant_id: str) -> int:
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        return int(
+            await conn.fetchval("SELECT count(*) FROM companies WHERE tenant_id = $1", tenant_id)
+        )
+    finally:
+        await conn.close()
+
+
+def bucket_exists(tenant_id: str) -> bool:
+    """¿Existe el bucket de MinIO del tenant? (S4.4, import perezoso del almacén de producción)."""
+    from invoice_intake import storage
+
+    return storage._client().bucket_exists(storage.bucket_for(tenant_id))
