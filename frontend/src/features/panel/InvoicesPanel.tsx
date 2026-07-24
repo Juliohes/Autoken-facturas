@@ -24,8 +24,13 @@ function cleanFilters(raw: PanelFilters): PanelFilters {
   ) as PanelFilters
 }
 
-export function InvoicesPanel() {
-  const [rawFilters, setRawFilters] = useState<PanelFilters>({})
+interface Props {
+  /** Filtro inicial (S4.9): permite llegar aquí desde "Ver facturas" de una empresa ya filtrado. */
+  initialFilters?: PanelFilters
+}
+
+export function InvoicesPanel({ initialFilters }: Props = {}) {
+  const [rawFilters, setRawFilters] = useState<PanelFilters>(initialFilters ?? {})
   const filters = cleanFilters(rawFilters)
   const panel = useInvoicesPanel(filters)
   const companies = useCompanyOptions()

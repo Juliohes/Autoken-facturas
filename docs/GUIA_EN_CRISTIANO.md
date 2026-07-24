@@ -292,6 +292,26 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   guardada por separado. También se reforzaron los botones del panel (habían crecido demasiado
   juntos en una sola pantalla) separándolos en piezas más pequeñas y manejables.
 
+- **S4.9 — App-shell: login real, menú y navegación** (24/07/2026, primera tarea del lote de cierre
+  de backlog previo al Sprint 5, decidida junto con Julio): hasta ahora la aplicación tenía 5
+  pantallas completas y probadas (historial, confirmación, panel de facturas, empresas, plataforma)
+  pero **no había ninguna forma de llegar a ellas** — no existía pantalla de login, ni menú, ni
+  manera de pasar de una a otra con el ratón; lo que se veía al abrir la aplicación seguía siendo la
+  pantalla de comprobación técnica de la Fase 0. Esta tarea construye el "esqueleto" que faltaba:
+  una pantalla de inicio de sesión de verdad (con su segundo factor de verificación si el usuario lo
+  tiene activado), un menú superior que muestra solo las pantallas que le corresponden a cada tipo
+  de usuario (una asesoría no ve el panel de plataforma; el panel de plataforma no ve las pantallas
+  de una asesoría), y navegación real entre pantallas (p. ej. desde "Empresas", el botón "Ver
+  facturas" ahora sí lleva de verdad al panel de facturas de esa empresa). También resuelve algo
+  invisible pero importante: mantener la sesión activa de forma segura. La "llave" de acceso vive
+  solo en la memoria del navegador mientras se usa la aplicación (nunca guardada en el disco del
+  ordenador, para que no se pueda robar de ahí); si esa llave caduca a media sesión, la aplicación la
+  renueva sola por detrás sin interrumpir a quien la está usando, y solo si esa renovación falla de
+  verdad se le pide volver a iniciar sesión. Al cerrar sesión, todo rastro de esa llave se borra al
+  instante. La antigua pantalla de comprobación técnica de la Fase 0 (que ya no tenía ningún uso real
+  una vez la aplicación tiene pantallas de verdad) se retiró en esta misma tarea.
+- **Pendiente transversal detectado el 23/07/2026 → RESUELTO por S4.9** (ver entrada de arriba).
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
@@ -301,29 +321,19 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   multi-tenant). S4.6 se cerró con alcance acotado (ver entrada de arriba): la mitad de
   infraestructura real (el servidor emitiendo certificados de un dominio de verdad) queda
   pendiente de una sesión futura con acceso al servidor de producción/staging y a un dominio real
-  — dominio ya reservado para esa prueba: `setex-facturas.autoken.es`. S4.2/S4.3 dejaron el
-  logo/colores/icono aplicados solo en el punto de entrada actual de la app, no todavía en cada
-  pantalla ya construida (panel, empresas...) — eso encaja mejor junto con la tarea de "esqueleto"
-  de abajo.
-- **Pendiente transversal, detectado el 23/07/2026**: las pantallas construidas hasta ahora (historial,
-  confirmación, panel de facturas, empresas) existen y están probadas cada una por su cuenta, pero la
-  aplicación todavía no tiene "esqueleto" que las una: no hay login real en pantalla, ni menú, ni forma de
-  pasar de una a otra con el ratón. Es trabajo pendiente de una tarea de integración (aún sin número fijo)
-  antes de poder enseñarle la aplicación completa a un usuario real de principio a fin.
-- **Sprint 4**: panel de la plataforma (dar de alta asesorías nuevas en minutos) y personalización visual
-  por asesoría (cada una con su logo y colores).
+  — dominio ya reservado para esa prueba: `setex-facturas.autoken.es`.
+- **Lote de cierre de backlog previo al Sprint 5** (decidido con Julio el 24/07/2026, S4.9 primera
+  tarea ya cerrada): queda **S2.2** (captura guiada de fotos desde el móvil, el único hueco que le
+  queda a Sprint 2) y, tras eso, el interruptor solo-para-Julio + **S2.9/S2.10** (mejora automática
+  de la foto + comparativa) + **S4.8** (panel comparando varios "lectores de IA" a la vez), en ese
+  orden.
 - **Sprint 5**: refuerzo de seguridad y pruebas de carga antes de dar el paso final.
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
-- **Ampliación decidida el 22/07/2026** (fuera del orden anterior, aún sin empezar a construir): mejorar
-  automáticamente la foto de cada factura antes de leerla (más contraste/brillo) y comparar varios "lectores
-  de IA" a la vez en todas las facturas durante unos días, para medir cuál lee mejor cada campo. Antes hace
-  falta construir un interruptor (solo para Julio) que permita apagar este modo experimental sin tocar
-  código, porque cuesta dinero real en llamadas a las IAs.
 
-**Avance estimado hacia producción a día de hoy: ≈69%** (35 de 51 tareas del plan "core" completas del
-todo, sin contar el módulo de Verifactu, la limpieza final del servidor viejo, ni la ampliación del
-22/07 —aún no tiene número de tarea fijo—, que van en paralelo y no bloquean el lanzamiento). **Sprint 3
-completo; Sprint 4 COMPLETO (S4.1-S4.7 hechos; S4.6 con su mecanismo de aplicación cerrado y
-mergeado, su mitad de infraestructura real pendiente de sesión futura). Siguiente: Sprint 5
-(hardening/QA) o Fase Despliegue, a decidir con Julio.**
+**Avance estimado hacia producción a día de hoy: ≈70%** (36 de 52 tareas del plan "core" completas
+del todo — S4.9 es una tarea nueva, no estaba en el recuento original de 51, añadida para cerrar el
+hueco de integración detectado el 23/07/2026 — sin contar el módulo de Verifactu ni la limpieza
+final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 3 y Sprint 4
+completos. S4.9 (app-shell) cerrada: la aplicación ya se puede usar de principio a fin con login
+real. Siguiente: S2.2, luego S2.9/S2.10/S4.8, antes de entrar en Sprint 5.**

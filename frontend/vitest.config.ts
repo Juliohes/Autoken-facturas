@@ -8,6 +8,10 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    // Base real (S4.9): jsdom por defecto arranca en `about:blank`, sin origen. El middleware del
+    // cliente API (`api/client.ts`) usa URLs relativas de verdad (`fetch('/api/v1/...')`) para
+    // reconstruir peticiones tras un refresh — necesitan un origen válido para resolverse.
+    environmentOptions: { jsdom: { url: 'http://localhost/' } },
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
