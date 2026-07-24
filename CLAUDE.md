@@ -86,7 +86,24 @@
   `platform_tenant_metrics()`, mismo patrón `list_tenants`); "coste OCR acumulado" del CA no es
   construible hoy (no hay coste/tokens normalizados en `ocr_extractions` ni tabla de precios) —
   sustituido por `ocr_extractions_count`, nunca presentado como dinero (decisión de dominio
-  documentada en la spec, no una desviación silenciosa). Quedan S4.6-S4.7.
+  documentada en la spec, no una desviación silenciosa). **S4.6 (dominios propios) cerrado con
+  alcance acotado, decisión explícita de Julio tras preguntarle**: el mecanismo de aplicación (campo
+  `custom_domain` asignable desde el panel + resolución de tenant por él, migraciones 0013/0014)
+  está construido y probado con TDD contra Postgres real; el `Caddyfile`/TLS on-demand real y la
+  verificación con un dominio de verdad apuntando a la VPS quedan **explícitamente pendientes** de
+  una sesión futura con acceso a esa infraestructura (dominio ya reservado para esa prueba:
+  `setex-facturas.autoken.es`, no `setex.autoken.es`, reservado para D.2). Auditoría: 2 hallazgos de
+  arquitectura corregidos (validación no rechazaba un `custom_domain` reservado de plataforma, que
+  nunca habría podido resolver; `convert_tenant_to_production` no devolvía el `custom_domain` real
+  de un tenant demo que ya tuviera uno asignado), 1 de seguridad corregido (el fallback por dominio
+  propio no tenía caché, abriendo una vía de amplificación de peticiones a Postgres vía `Host`
+  arbitrario — se reutilizó la misma `NegativeTenantResolutionCache` que ya protege el subdominio,
+  #52), y 1 bloqueante de cobertura corregido (el `revision` de la migración 0014 tenía 40
+  caracteres, por encima del límite de `alembic_version.version_num` — habría roto `alembic upgrade
+  head` en cualquier entorno; blindado con un test guardarraíl nuevo). En la verificación final se
+  encontró y corrigió además una regresión real: cualquier `Host` de una sola etiqueta (sin punto,
+  como el que usa el cliente de test o un healthcheck interno) generaba una consulta a Postgres sin
+  ninguna posibilidad de resolver — descartado ahora antes de tocar la BD. Queda S4.7.
 - **Hallazgo transversal (S3.4, 2026-07-23)**: las pantallas de frontend construidas hasta ahora
   (historial, confirmación, panel de facturas, empresas, plataforma) viven y se prueban aisladas; falta
   una tarea de integración (app-shell: login real, menú, routing) que las conecte entre sí antes de un

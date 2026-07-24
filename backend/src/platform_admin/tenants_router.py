@@ -36,7 +36,9 @@ class TenantCreateIn(BaseModel):
 
 
 class TenantOut(BaseModel):
-    """Un tenant en la respuesta (alta o listado)."""
+    """Un tenant en la respuesta (alta/listado/conversión a producción). `custom_domain` (S4.6)
+    solo `POST /platform/tenants` (alta) lo devuelve siempre `None`: un tenant recién creado
+    nunca tuvo tiempo de que se le asignara uno (spec §3 decisión 3)."""
 
     id: UUID
     slug: str
@@ -44,6 +46,7 @@ class TenantOut(BaseModel):
     status: str
     is_demo: bool
     created_at: datetime
+    custom_domain: str | None = None
 
 
 def _to_out(record: TenantRecord) -> TenantOut:
@@ -54,7 +57,14 @@ def _to_out(record: TenantRecord) -> TenantOut:
         status=record.status,
         is_demo=record.is_demo,
         created_at=record.created_at,
+        custom_domain=record.custom_domain,
     )
+
+
+class CustomDomainIn(BaseModel):
+    """Cuerpo de `PATCH /platform/tenants/{tenant_id}/custom-domain` (S4.6). `None` lo quita."""
+
+    custom_domain: str | None = None
 
 
 class TenantMetricsOut(BaseModel):
@@ -143,3 +153,22 @@ async def purge_demo_tenant(identity: Platform, tenant_id: UUID) -> None:
         raise HTTPException(status_code=404, detail="No existe ese tenant") from exc
     except service.TenantNotDemo as exc:
         raise HTTPException(status_code=409, detail="Solo se pueden purgar tenants demo") from exc
+
+
+@router.patch("/{tenant_id}/custom-domain")
+async def set_custom_domain(identity: Platform, tenant_id: UUID, body: CustomDomainIn) -> TenantOut:
+    """Asigna o quita (`null`) el dominio propio de un tenant (S4.6, alcance acotado — ver spec
+    §0). Formato inválido -> 422; id inexistente -> 404; duplicado -> 409."""
+    try:
+        record = await service.set_custom_domain(identity.session, tenant_id, body.custom_domain)
+    except service.InvalidCustomDomain as exc:
+        raise HTTPException(
+            status_code=422, detail="El dominio propio no tiene formato válido"
+        ) from exc
+    except service.TenantNotFound as exc:
+        raise HTTPException(status_code=404, detail="No existe ese tenant") from exc
+    except service.DuplicateCustomDomain as exc:
+        raise HTTPException(
+            status_code=409, detail="Ya existe un tenant con ese dominio propio"
+        ) from exc
+    return _to_out(record)

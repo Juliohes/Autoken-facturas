@@ -649,6 +649,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/tenants/{tenant_id}/custom-domain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set Custom Domain
+         * @description Asigna o quita (`null`) el dominio propio de un tenant (S4.6, alcance acotado — ver spec
+         *     §0). Formato inválido -> 422; id inexistente -> 404; duplicado -> 409.
+         */
+        patch: operations["set_custom_domain_api_v1_platform_tenants__tenant_id__custom_domain_patch"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -808,6 +829,14 @@ export interface components {
              * @default false
              */
             is_test: boolean;
+        };
+        /**
+         * CustomDomainIn
+         * @description Cuerpo de `PATCH /platform/tenants/{tenant_id}/custom-domain` (S4.6). `None` lo quita.
+         */
+        CustomDomainIn: {
+            /** Custom Domain */
+            custom_domain?: string | null;
         };
         /**
          * DownloadUrlOut
@@ -1207,7 +1236,9 @@ export interface components {
         };
         /**
          * TenantOut
-         * @description Un tenant en la respuesta (alta o listado).
+         * @description Un tenant en la respuesta (alta/listado/conversión a producción). `custom_domain` (S4.6)
+         *     solo `POST /platform/tenants` (alta) lo devuelve siempre `None`: un tenant recién creado
+         *     nunca tuvo tiempo de que se le asignara uno (spec §3 decisión 3).
          */
         TenantOut: {
             /**
@@ -1228,6 +1259,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Custom Domain */
+            custom_domain?: string | null;
         };
         /**
          * UploadOut
@@ -2191,6 +2224,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_custom_domain_api_v1_platform_tenants__tenant_id__custom_domain_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomDomainIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantOut"];
+                };
             };
             /** @description Validation Error */
             422: {

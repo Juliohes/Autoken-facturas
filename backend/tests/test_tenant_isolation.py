@@ -70,6 +70,7 @@ _PROTECTED_ROUTES = {
     ("GET", f"{API}/platform/tenants/metrics"),
     ("POST", f"{API}/platform/tenants/{{tenant_id}}/convert-to-production"),
     ("POST", f"{API}/platform/tenants/{{tenant_id}}/purge"),
+    ("PATCH", f"{API}/platform/tenants/{{tenant_id}}/custom-domain"),
 }
 
 
@@ -112,6 +113,11 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ("GET", f"{API}/platform/tenants/metrics", {}),
         ("POST", f"{API}/platform/tenants/{dummy_id}/convert-to-production", {}),
         ("POST", f"{API}/platform/tenants/{dummy_id}/purge", {}),
+        (
+            "PATCH",
+            f"{API}/platform/tenants/{dummy_id}/custom-domain",
+            {"json": {"custom_domain": "facturas.x.es"}},
+        ),
     ]
 
 

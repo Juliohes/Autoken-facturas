@@ -720,3 +720,192 @@ async def test_s45_c6_sin_autenticar_no_hay_acceso_a_metricas(authapi: Api) -> N
     resp = await client.get(METRICS_URL, headers=_auth("token-invalido"))
 
     assert resp.status_code == 401
+
+
+# --- S4.6 Dominios propios de cliente (spec docs/specs/S4.6-dominios-propios.md, C1-C6) -----------
+
+
+async def test_s46_c1_asignar_un_dominio_propio_valido(authapi: Api) -> None:
+    """C1: `PATCH .../custom-domain` con un FQDN válido -> 200, persistido."""
+    client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "clientex", "Cliente X SL")
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.patch(
+        f"{URL}/{tenant_id}/custom-domain",
+        json={"custom_domain": "facturas.clientex.es"},
+        headers=_auth(token),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["custom_domain"] == "facturas.clientex.es"
+    tenant = await fetch_tenant_by_id(dsns, tenant_id=tenant_id)
+    assert tenant is not None
+    assert tenant["custom_domain"] == "facturas.clientex.es"
+
+
+async def test_s46_se_normaliza_a_minusculas_antes_de_guardar(authapi: Api) -> None:
+    """Invariante: DNS es insensible a mayúsculas; guardar tal cual dejaría el dominio sin poder
+    resolver nunca contra un `Host` real (que llega/se normaliza en minúsculas)."""
+    client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "clientex", "Cliente X SL")
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.patch(
+        f"{URL}/{tenant_id}/custom-domain",
+        json={"custom_domain": "Facturas.ClienteX.ES"},
+        headers=_auth(token),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["custom_domain"] == "facturas.clientex.es"
+
+
+async def test_s46_c2_quitar_un_dominio_propio(authapi: Api) -> None:
+    """C2: `PATCH .../custom-domain` con `null` -> 200, queda `null`."""
+    client, dsns = authapi
+    tenant_id = await seed_tenant(
+        dsns["admin"], "clientex", "Cliente X SL", custom_domain="facturas.clientex.es"
+    )
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.patch(
+        f"{URL}/{tenant_id}/custom-domain",
+        json={"custom_domain": None},
+        headers=_auth(token),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["custom_domain"] is None
+
+
+async def test_s46_c3_formato_invalido(authapi: Api) -> None:
+    """C3: sin forma de FQDN (espacios, sin punto, con protocolo) -> 422, nada cambia."""
+    client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "clientex", "Cliente X SL")
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    for bad in ["no es un dominio", "sinpunto", "https://facturas.clientex.es", "-empieza.mal.es"]:
+        resp = await client.patch(
+            f"{URL}/{tenant_id}/custom-domain",
+            json={"custom_domain": bad},
+            headers=_auth(token),
+        )
+        assert resp.status_code == 422, f"{bad!r}: {resp.text}"
+
+    tenant = await fetch_tenant_by_id(dsns, tenant_id=tenant_id)
+    assert tenant is not None
+    assert tenant["custom_domain"] is None
+
+
+async def test_s46_c4_duplicado(authapi: Api) -> None:
+    """C4: dominio ya usado por otro tenant -> 409, el segundo tenant no lo obtiene."""
+    client, dsns = authapi
+    await seed_tenant(dsns["admin"], "tenanta", "Tenant A", custom_domain="facturas.clientex.es")
+    tenant_b = await seed_tenant(dsns["admin"], "tenantb", "Tenant B")
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.patch(
+        f"{URL}/{tenant_b}/custom-domain",
+        json={"custom_domain": "facturas.clientex.es"},
+        headers=_auth(token),
+    )
+
+    assert resp.status_code == 409, resp.text
+    tenant = await fetch_tenant_by_id(dsns, tenant_id=tenant_b)
+    assert tenant is not None
+    assert tenant["custom_domain"] is None
+
+
+async def test_s46_c5_id_inexistente(authapi: Api) -> None:
+    """C5: id inexistente -> 404."""
+    client, dsns = authapi
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.patch(
+        f"{URL}/{uuid.uuid4()}/custom-domain",
+        json={"custom_domain": "facturas.clientex.es"},
+        headers=_auth(token),
+    )
+
+    assert resp.status_code == 404
+
+
+async def test_s46_c6_un_tenant_admin_no_puede_fijar_dominio_propio(authapi: Api) -> None:
+    """C6: token de `tenant_admin` -> 403."""
+    client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "clientex", "Cliente X SL")
+    await seed_user(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        email="admin@clientex.es",
+        role="tenant_admin",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    login_resp = await login(client, "clientex.localhost", "admin@clientex.es", USER_PASSWORD)
+    token = login_resp.json()["access_token"]
+
+    resp = await client.patch(
+        f"{URL}/{tenant_id}/custom-domain",
+        json={"custom_domain": "facturas.clientex.es"},
+        headers=_auth(token),
+    )
+
+    assert resp.status_code == 403
+
+
+async def test_s46_rechaza_el_dominio_raiz_o_reservado_de_plataforma(authapi: Api) -> None:
+    """Un dominio propio que sea el raíz o un reservado de plataforma nunca resolvería (mismo
+    guard que el middleware, `is_root_or_reserved_host`) -> 422, no se guarda una configuración
+    muerta desde el instante en que se asigna."""
+    client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "clientex", "Cliente X SL")
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    reserved_hosts = [
+        "autoken.es",
+        "www.autoken.es",
+        "panel.autoken.es",
+        "panel-staging.autoken.es",
+    ]
+    for reserved in reserved_hosts:
+        resp = await client.patch(
+            f"{URL}/{tenant_id}/custom-domain",
+            json={"custom_domain": reserved},
+            headers=_auth(token),
+        )
+        assert resp.status_code == 422, f"{reserved!r}: {resp.text}"
+
+    tenant = await fetch_tenant_by_id(dsns, tenant_id=tenant_id)
+    assert tenant is not None
+    assert tenant["custom_domain"] is None
+
+
+async def test_s46_convertir_a_produccion_conserva_el_dominio_propio_ya_asignado(
+    authapi: Api,
+) -> None:
+    """Un tenant demo con `custom_domain` ya asignado no lo pierde ni miente sobre él al
+    convertirse a producción (S4.4 x S4.6): la respuesta refleja el valor real de BD."""
+    client, dsns = authapi
+    tenant_id = await seed_tenant(
+        dsns["admin"],
+        "clientex",
+        "Cliente X SL",
+        custom_domain="facturas.clientex.es",
+        is_demo=True,
+    )
+    await seed_platform_admin(dsns)
+    token = await platform_token(client)
+
+    resp = await client.post(f"{URL}/{tenant_id}/convert-to-production", headers=_auth(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_demo"] is False
+    assert resp.json()["custom_domain"] == "facturas.clientex.es"
