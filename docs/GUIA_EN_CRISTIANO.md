@@ -270,13 +270,35 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   encontrar nada — descartada ahora sin tocar la base de datos, porque un dominio propio de verdad
   siempre tiene al menos dos partes (p. ej. `facturas.algo`).
 
+- **S4.7 — Ciclo de vida de una asesoría** (24/07/2026, última tarea del lote S4.4-S4.7): hasta
+  ahora no había forma, desde el panel de plataforma, de pausar temporalmente una asesoría sin
+  borrar nada, de sacarse una copia completa de sus datos, ni de darla de baja de forma segura.
+  Esta tarea cierra las tres piezas que faltaban. **Suspender/reactivar**: un botón que bloquea el
+  acceso de todos los usuarios de esa asesoría al instante (sin esperar a que caduque su sesión),
+  sin tocar ni un solo dato; reactivar lo revierte. **Exportar**: genera un fichero ZIP descargable
+  con una copia completa de todo lo que tiene la asesoría — sus datos (en ficheros de texto, uno
+  por cada tipo de información: empresas, usuarios, facturas...) y sus documentos originales
+  subidos. **Borrar**: a diferencia de "purgar" (S4.4, que solo podía borrar asesorías de prueba),
+  este botón SÍ puede borrar una asesoría real con datos de un cliente — la operación más peligrosa
+  de todo el panel hasta ahora. Por eso exige dos cosas antes de dejar borrar: escribir a mano el
+  nombre exacto de la asesoría (para no borrar la equivocada por error) y haber hecho antes al
+  menos una copia de seguridad con el botón de exportar (nunca se puede borrar algo de lo que no
+  quede copia). Dado lo delicado de esta tarea, la auditoría se hizo con especial cuidado en la
+  parte de seguridad: confirmó que es imposible borrar sin que ambas condiciones se cumplan de
+  verdad (comprobado línea a línea, incluido qué pasa si dos personas intentan borrar la misma
+  asesoría al mismo tiempo) y no encontró ningún fallo grave. Sí encontró y se corrigió un fallo
+  real de otro tipo: si se pedía exportar la misma asesoría dos veces muy seguidas, la segunda
+  copia podía sobrescribir a la primera en silencio sin avisar de nada — ahora cada copia queda
+  guardada por separado. También se reforzaron los botones del panel (habían crecido demasiado
+  juntos en una sola pantalla) separándolos en piezas más pequeñas y manejables.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
   facturas (S3.3 solo trajo la capacidad de corregir con seguridad, no la pantalla para hacerlo cómodo),
   si hace falta más adelante.
-- **Sprint 4 en marcha** (S4.1-S4.6 cerrados 24/07/2026): queda S4.7 (suspender/exportar/borrar una
-  asesoría real). S4.6 se cerró con alcance acotado (ver entrada de arriba): la mitad de
+- **Sprint 4 COMPLETO** (S4.1-S4.7 cerrados 24/07/2026 — panel de plataforma + white-label + PWA
+  multi-tenant). S4.6 se cerró con alcance acotado (ver entrada de arriba): la mitad de
   infraestructura real (el servidor emitiendo certificados de un dominio de verdad) queda
   pendiente de una sesión futura con acceso al servidor de producción/staging y a un dominio real
   — dominio ya reservado para esa prueba: `setex-facturas.autoken.es`. S4.2/S4.3 dejaron el
@@ -299,8 +321,9 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   falta construir un interruptor (solo para Julio) que permita apagar este modo experimental sin tocar
   código, porque cuesta dinero real en llamadas a las IAs.
 
-**Avance estimado hacia producción a día de hoy: ≈67%** (34 de 51 tareas del plan "core" completas del
+**Avance estimado hacia producción a día de hoy: ≈69%** (35 de 51 tareas del plan "core" completas del
 todo, sin contar el módulo de Verifactu, la limpieza final del servidor viejo, ni la ampliación del
 22/07 —aún no tiene número de tarea fijo—, que van en paralelo y no bloquean el lanzamiento). **Sprint 3
-completo; Sprint 4 en marcha (S4.1-S4.5 hechos; S4.6 con su mecanismo de aplicación cerrado y
-mergeado, su mitad de infraestructura real pendiente de sesión futura; queda S4.7).**
+completo; Sprint 4 COMPLETO (S4.1-S4.7 hechos; S4.6 con su mecanismo de aplicación cerrado y
+mergeado, su mitad de infraestructura real pendiente de sesión futura). Siguiente: Sprint 5
+(hardening/QA) o Fase Despliegue, a decidir con Julio.**

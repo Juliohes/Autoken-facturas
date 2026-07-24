@@ -670,6 +670,89 @@ export interface paths {
         patch: operations["set_custom_domain_api_v1_platform_tenants__tenant_id__custom_domain_patch"];
         trace?: never;
     };
+    "/api/v1/platform/tenants/{tenant_id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suspend Tenant
+         * @description Bloquea el login de todos los usuarios del tenant, sin tocar datos (S4.7). Idempotente si
+         *     ya estaba suspendido; id inexistente -> 404.
+         */
+        post: operations["suspend_tenant_api_v1_platform_tenants__tenant_id__suspend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenant_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivate Tenant
+         * @description Revierte `suspend` (S4.7). Idempotente si ya estaba activo; id inexistente -> 404.
+         */
+        post: operations["reactivate_tenant_api_v1_platform_tenants__tenant_id__reactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenant_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export Tenant
+         * @description Genera un ZIP completo (BD + ficheros) del tenant y devuelve una URL de descarga firmada
+         *     (S4.7). Id inexistente -> 404.
+         */
+        post: operations["export_tenant_api_v1_platform_tenants__tenant_id__export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Tenant
+         * @description Borra un tenant entero (S4.7, alcance real: no solo demo, a diferencia de `purge`). Id
+         *     inexistente -> 404; `confirm_slug` no coincide -> 422; sin ningún export previo -> 409.
+         */
+        delete: operations["delete_tenant_api_v1_platform_tenants__tenant_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -839,6 +922,15 @@ export interface components {
             custom_domain?: string | null;
         };
         /**
+         * DeleteTenantIn
+         * @description Cuerpo de `DELETE /platform/tenants/{tenant_id}` (S4.7): segundo factor de confirmación
+         *     verificado en servidor, spec §3 decisión 4.
+         */
+        DeleteTenantIn: {
+            /** Confirm Slug */
+            confirm_slug: string;
+        };
+        /**
          * DownloadUrlOut
          * @description URL firmada de descarga de un fichero (respuesta 200, S2.7).
          */
@@ -857,6 +949,14 @@ export interface components {
             row: number;
             /** Cif */
             cif: string;
+        };
+        /**
+         * ExportOut
+         * @description Respuesta de `POST /platform/tenants/{tenant_id}/export` (S4.7).
+         */
+        ExportOut: {
+            /** Download Url */
+            download_url: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2259,6 +2359,132 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TenantOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suspend_tenant_api_v1_platform_tenants__tenant_id__suspend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reactivate_tenant_api_v1_platform_tenants__tenant_id__reactivate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_tenant_api_v1_platform_tenants__tenant_id__export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_tenant_api_v1_platform_tenants__tenant_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteTenantIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

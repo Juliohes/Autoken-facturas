@@ -42,6 +42,18 @@ def key_for(company_id: object, sha256: str) -> str:
     return f"{company_id}/{sha256}"
 
 
+# Bucket único de plataforma para los ZIP de export de tenants (S4.7), deliberadamente DISTINTO del
+# bucket de cada tenant (`bucket_for`): si el export viviera dentro del bucket del propio tenant,
+# borrar el tenant se llevaría el export por delante justo cuando más falta hace (spec S4.7 §0
+# decisión 2).
+PLATFORM_EXPORTS_BUCKET = "platform-exports"
+
+
+def export_key_for(tenant_id: object, timestamp: str) -> str:
+    """Clave del ZIP de export de un tenant dentro de `PLATFORM_EXPORTS_BUCKET`."""
+    return f"{tenant_id}/{timestamp}.zip"
+
+
 class StorageError(Exception):
     """Raíz de los errores del object storage del intake."""
 

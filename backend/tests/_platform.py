@@ -154,3 +154,59 @@ async def seed_audit_log(
         )
     finally:
         await conn.close()
+
+
+async def seed_invoice_edit(
+    dsns: dict[str, str],
+    *,
+    tenant_id: str,
+    company_id: str,
+    invoice_id: str,
+    edited_by: str,
+    field: str = "total_amount",
+) -> None:
+    """Inserta una fila mínima de `invoice_edits` (S4.7: cobertura del export de las 12 tablas)."""
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        await conn.execute(
+            "INSERT INTO invoice_edits (id, tenant_id, company_id, invoice_id, field, "
+            "old_value, new_value, edited_by) VALUES ($1,$2,$3,$4,$5,'100.00','110.00',$6)",
+            str(uuid4()),
+            tenant_id,
+            company_id,
+            invoice_id,
+            field,
+            edited_by,
+        )
+    finally:
+        await conn.close()
+
+
+async def seed_ocr_correction(
+    dsns: dict[str, str],
+    *,
+    tenant_id: str,
+    company_id: str,
+    invoice_id: str,
+    uploaded_file_id: str,
+    corrected_by: str,
+    field: str = "total_amount",
+) -> None:
+    """Inserta una fila mínima de `ocr_corrections` (S4.7: cobertura del export de las 12
+    tablas)."""
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        await conn.execute(
+            "INSERT INTO ocr_corrections (id, tenant_id, company_id, invoice_id, "
+            "uploaded_file_id, field, ai_value, human_value, corrected_by) "
+            "VALUES ($1,$2,$3,$4,$5,$6,'100.00','110.00',$7)",
+            str(uuid4()),
+            tenant_id,
+            company_id,
+            invoice_id,
+            uploaded_file_id,
+            field,
+            corrected_by,
+        )
+    finally:
+        await conn.close()

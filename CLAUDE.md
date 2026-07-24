@@ -103,7 +103,21 @@
   head` en cualquier entorno; blindado con un test guardarraíl nuevo). En la verificación final se
   encontró y corrigió además una regresión real: cualquier `Host` de una sola etiqueta (sin punto,
   como el que usa el cliente de test o un healthcheck interno) generaba una consulta a Postgres sin
-  ninguna posibilidad de resolver — descartado ahora antes de tocar la BD. Queda S4.7.
+  ninguna posibilidad de resolver — descartado ahora antes de tocar la BD. **S4.7 (ciclo de vida
+  tenant) cerrado y mergeado — SPRINT 4 COMPLETO**: `suspend_tenant`/`reactivate_tenant` (bloquean
+  login al instante, sin tocar datos, reutilizando el mecanismo de `status` ya construido en
+  S1.2/S1.6), `export_tenant` (ZIP con las 12 tablas del tenant vía `tenant_session` + ficheros de
+  MinIO, sin función `SECURITY DEFINER` de lectura por tabla) y `delete_tenant` (a diferencia de
+  `purge_demo_tenant`/S4.4, puede borrar un tenant REAL: exige `confirm_slug` exacto + un export
+  previo, condición atómica en una única función SQL con `SELECT ... FOR UPDATE`, migración 0015).
+  Auditoría de 3 perspectivas, especialmente rigurosa por ser la operación más peligrosa del
+  proyecto hasta ahora: la función `delete_tenant` se confirmó correcta y atómica rama a rama (sin
+  hallazgos de seguridad media/alta); sí se corrigió 1 bug real de comportamiento (`export_key_for`
+  con precisión de segundo permitía que dos exports seguidos del mismo tenant se pisaran en
+  silencio en MinIO — ahora lleva un sufijo `uuid4`) y se reforzó la cobertura (12 tablas del
+  export, tenant suspendido, tenant demo por la vía general, atomicidad bajo dos `DELETE`
+  concurrentes). El panel de plataforma (`PlatformTenants.tsx`) se refactorizó extrayendo
+  `TenantRowActions`/`MutationErrorBanner` tras crecer demasiado con las acciones de S4.4+S4.7.
 - **Hallazgo transversal (S3.4, 2026-07-23)**: las pantallas de frontend construidas hasta ahora
   (historial, confirmación, panel de facturas, empresas, plataforma) viven y se prueban aisladas; falta
   una tarea de integración (app-shell: login real, menú, routing) que las conecte entre sí antes de un

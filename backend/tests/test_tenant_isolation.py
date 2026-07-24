@@ -71,6 +71,10 @@ _PROTECTED_ROUTES = {
     ("POST", f"{API}/platform/tenants/{{tenant_id}}/convert-to-production"),
     ("POST", f"{API}/platform/tenants/{{tenant_id}}/purge"),
     ("PATCH", f"{API}/platform/tenants/{{tenant_id}}/custom-domain"),
+    ("POST", f"{API}/platform/tenants/{{tenant_id}}/suspend"),
+    ("POST", f"{API}/platform/tenants/{{tenant_id}}/reactivate"),
+    ("POST", f"{API}/platform/tenants/{{tenant_id}}/export"),
+    ("DELETE", f"{API}/platform/tenants/{{tenant_id}}"),
 }
 
 
@@ -117,6 +121,14 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
             "PATCH",
             f"{API}/platform/tenants/{dummy_id}/custom-domain",
             {"json": {"custom_domain": "facturas.x.es"}},
+        ),
+        ("POST", f"{API}/platform/tenants/{dummy_id}/suspend", {}),
+        ("POST", f"{API}/platform/tenants/{dummy_id}/reactivate", {}),
+        ("POST", f"{API}/platform/tenants/{dummy_id}/export", {}),
+        (
+            "DELETE",
+            f"{API}/platform/tenants/{dummy_id}",
+            {"json": {"confirm_slug": "loquesea"}},
         ),
     ]
 
