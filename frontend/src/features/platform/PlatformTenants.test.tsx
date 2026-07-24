@@ -11,12 +11,13 @@ import { PlatformTenants } from './PlatformTenants'
 import type { Tenant, TenantMetrics } from './types'
 
 vi.mock('../../api/client', () => ({
-  api: { GET: vi.fn(), POST: vi.fn() },
+  api: { GET: vi.fn(), POST: vi.fn(), DELETE: vi.fn() },
 }))
 
 type AsyncMock = Mock<(...args: never[]) => Promise<unknown>>
 const getMock = api.GET as unknown as AsyncMock
 const postMock = api.POST as unknown as AsyncMock
+const deleteMock = api.DELETE as unknown as AsyncMock
 
 function makeTenant(over: Partial<Tenant> = {}): Tenant {
   return {
@@ -68,6 +69,7 @@ function renderPanel() {
 beforeEach(() => {
   getMock.mockReset()
   postMock.mockReset()
+  deleteMock.mockReset()
 })
 
 describe('PlatformTenants (S4.1)', () => {
@@ -336,5 +338,162 @@ describe('PlatformTenants — métricas y consumo (S4.5)', () => {
 
     const row = await screen.findByTestId('tenant-metrics-row')
     expect(row).toHaveTextContent('Sin actividad')
+  })
+})
+
+// --- S4.7 Ciclo de vida tenant (spec docs/specs/S4.7-ciclo-de-vida-tenant.md, C15-C16) ------------
+
+describe('PlatformTenants — ciclo de vida (S4.7)', () => {
+  it('C15: fila activa muestra "Suspender", fila suspendida muestra "Reactivar"', async () => {
+    mockRoutes([
+      makeTenant({ id: 't-activo', slug: 'activo', status: 'active' }),
+      makeTenant({ id: 't-suspendido', slug: 'suspendido', status: 'suspended' }),
+    ])
+    renderPanel()
+
+    const rows = await screen.findAllByTestId('tenant-row')
+    const activo = rows.find((r) => r.textContent?.startsWith('activo'))
+    const suspendido = rows.find((r) => r.textContent?.startsWith('suspendido'))
+    expect(activo).toHaveTextContent('Suspender')
+    expect(activo).not.toHaveTextContent('Reactivar')
+    expect(suspendido).toHaveTextContent('Reactivar')
+    expect(suspendido).not.toHaveTextContent('Suspender')
+  })
+
+  it('suspender llama al endpoint con el id del tenant', async () => {
+    mockRoutes([makeTenant({ id: 't1', slug: 'nueva', status: 'active' })])
+    postMock.mockResolvedValue({ data: makeTenant({ status: 'suspended' }), error: undefined })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Suspender' }))
+
+    await waitFor(() => {
+      expect(postMock).toHaveBeenCalledWith(
+        '/api/v1/platform/tenants/{tenant_id}/suspend',
+        expect.objectContaining({ params: { path: { tenant_id: 't1' } } }),
+      )
+    })
+  })
+
+  it('exportar abre la URL de descarga en una pestaña nueva', async () => {
+    mockRoutes([makeTenant({ id: 't1', slug: 'nueva' })])
+    postMock.mockResolvedValue({
+      data: { download_url: 'https://minio.local/export.zip' },
+      error: undefined,
+    })
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Exportar' }))
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith(
+        'https://minio.local/export.zip',
+        '_blank',
+        'noopener,noreferrer',
+      )
+    })
+  })
+
+  it('C16: el botón de confirmar borrado está deshabilitado hasta escribir el slug exacto', async () => {
+    mockRoutes([makeTenant({ id: 't1', slug: 'clientex' })])
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Borrar' }))
+    const confirmButton = screen.getByRole('button', { name: 'Confirmar borrado' })
+    expect(confirmButton).toBeDisabled()
+
+    const input = screen.getByLabelText('Escribe "clientex" para confirmar el borrado')
+    await user.type(input, 'algo-distinto')
+    expect(confirmButton).toBeDisabled()
+
+    await user.clear(input)
+    await user.type(input, 'clientex')
+    expect(confirmButton).toBeEnabled()
+  })
+
+  it('C16: confirmar borrado con el slug exacto llama al DELETE con confirm_slug', async () => {
+    mockRoutes([makeTenant({ id: 't1', slug: 'clientex' })])
+    deleteMock.mockResolvedValue({ data: undefined, error: undefined })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Borrar' }))
+    await user.type(
+      screen.getByLabelText('Escribe "clientex" para confirmar el borrado'),
+      'clientex',
+    )
+    await user.click(screen.getByRole('button', { name: 'Confirmar borrado' }))
+
+    await waitFor(() => {
+      expect(deleteMock).toHaveBeenCalledWith('/api/v1/platform/tenants/{tenant_id}', {
+        params: { path: { tenant_id: 't1' } },
+        body: { confirm_slug: 'clientex' },
+      })
+    })
+  })
+
+  it('un error del servidor al suspender se muestra legible', async () => {
+    mockRoutes([makeTenant({ id: 't1', slug: 'nueva', status: 'active' })])
+    postMock.mockResolvedValue({ data: undefined, error: { detail: 'No existe ese tenant' } })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Suspender' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No existe ese tenant')
+  })
+
+  it('un error del servidor al reactivar se muestra legible', async () => {
+    mockRoutes([makeTenant({ id: 't1', slug: 'nueva', status: 'suspended' })])
+    postMock.mockResolvedValue({ data: undefined, error: { detail: 'No existe ese tenant' } })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Reactivar' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No existe ese tenant')
+  })
+
+  it('un error del servidor al exportar se muestra legible', async () => {
+    mockRoutes([makeTenant({ id: 't1', slug: 'nueva' })])
+    postMock.mockResolvedValue({ data: undefined, error: { detail: 'No existe ese tenant' } })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Exportar' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No existe ese tenant')
+  })
+
+  it('un error del servidor al borrar se muestra legible', async () => {
+    mockRoutes([makeTenant({ id: 't1', slug: 'clientex' })])
+    deleteMock.mockResolvedValue({
+      error: { detail: 'Hace falta exportar el tenant antes de poder borrarlo' },
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(screen.getByRole('button', { name: 'Borrar' }))
+    await user.type(
+      screen.getByLabelText('Escribe "clientex" para confirmar el borrado'),
+      'clientex',
+    )
+    await user.click(screen.getByRole('button', { name: 'Confirmar borrado' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Hace falta exportar el tenant antes de poder borrarlo',
+    )
   })
 })

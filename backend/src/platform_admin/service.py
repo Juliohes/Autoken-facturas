@@ -5,8 +5,10 @@ la violación del UNIQUE de `tenants.slug` a un error de dominio. El router es f
 
 from __future__ import annotations
 
+import contextlib
 import re
-from uuid import UUID
+from datetime import UTC, datetime
+from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,11 +16,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from invoice_intake import service as intake_service
 from invoice_intake import storage
 from platform_admin import repository
+from platform_admin.export import TENANT_TABLES, build_tenant_export_zip, extension_for_content_type
 from platform_admin.repository import TenantRecord
 from shared.config import get_settings
+from shared.db import tenant_session
 from shared.integrity import violates_unique_constraint
 from tenancy.constants import RESERVED_SLUGS
 from tenancy.resolution import is_root_or_reserved_host
+
+_EXPORT_URL_TTL_SECONDS = 3600  # 1h: fichero más grande que las descargas de un objeto (S2.7).
 
 # Etiqueta DNS de primer nivel (el slug se usa tal cual como subdominio): minúsculas, dígitos y
 # guiones, sin empezar/terminar en guión, 1-63 caracteres. La longitud se valida aquí (no solo se
@@ -79,6 +85,14 @@ class InvalidCustomDomain(PlatformError):
 
 class DuplicateCustomDomain(PlatformError):
     """Ya existe un tenant con ese dominio propio (-> 409, S4.6)."""
+
+
+class TenantSlugMismatch(PlatformError):
+    """El `confirm_slug` del borrado no coincide con el slug real del tenant (-> 422, S4.7)."""
+
+
+class TenantExportRequired(PlatformError):
+    """El tenant nunca se exportó: no se puede borrar sin un export previo (-> 409, S4.7)."""
 
 
 def _validated_name(name: str) -> str:
@@ -210,3 +224,92 @@ async def purge_demo_tenant(session: AsyncSession, tenant_id: UUID) -> None:
 async def tenant_metrics(session: AsyncSession) -> list[repository.TenantMetrics]:
     """Consumo agregado de todos los tenants (S4.5 §3 C1-C4). Solo lectura."""
     return await repository.tenant_metrics(session)
+
+
+async def suspend_tenant(session: AsyncSession, tenant_id: UUID) -> TenantRecord:
+    """Bloquea el login de todos los usuarios del tenant sin tocar ningún dato (S4.7 §3 decisión
+    1). Idempotente si ya estaba suspendido; id inexistente -> `TenantNotFound`."""
+    record = await repository.suspend_tenant(session, tenant_id)
+    if record is None:
+        raise TenantNotFound()
+    return record
+
+
+async def reactivate_tenant(session: AsyncSession, tenant_id: UUID) -> TenantRecord:
+    """Revierte `suspend_tenant` (S4.7 §3 decisión 1). Idempotente si ya estaba activo; id
+    inexistente -> `TenantNotFound`."""
+    record = await repository.reactivate_tenant(session, tenant_id)
+    if record is None:
+        raise TenantNotFound()
+    return record
+
+
+async def export_tenant(session: AsyncSession, tenant_id: UUID) -> str:
+    """Genera el ZIP completo del tenant (BD + ficheros), lo sube a `PLATFORM_EXPORTS_BUCKET` y
+    marca `last_export_at` (S4.7 §3 decisión 2). Devuelve la URL de descarga firmada. Id
+    inexistente -> `TenantNotFound`.
+
+    Lee la BD del tenant abriendo su PROPIA `tenant_session` (no la sesión de plataforma del
+    llamador, que no tiene `app.tenant_id` fijado): la RLS de dos niveles ya acota el resultado a
+    ese tenant completo (`company_id` sin fijar = todas las empresas), sin necesitar una función
+    `SECURITY DEFINER` de lectura por tabla (spec §0).
+    """
+    tenants = await repository.list_tenants(session)
+    if not any(t.id == tenant_id for t in tenants):
+        raise TenantNotFound()
+
+    async with tenant_session(tenant_id) as ts:
+        tables = {
+            table: await repository.fetch_tenant_table_rows(ts, table) for table in TENANT_TABLES
+        }
+
+    files: list[tuple[str, bytes]] = []
+    for uploaded_file in tables["uploaded_files"]:
+        content = storage.get_object(uploaded_file["storage_bucket"], uploaded_file["storage_key"])
+        extension = extension_for_content_type(uploaded_file["content_type"])
+        files.append((f"{uploaded_file['id']}{extension}", content))
+
+    zip_bytes = build_tenant_export_zip(tables, files)
+    # Sufijo aleatorio, no solo el timestamp (hallazgo real de la auditoría de cobertura, verificado
+    # con un test que reprodujo el bug): dos exports dentro del mismo segundo generaban la MISMA
+    # clave y el segundo pisaba en silencio el ZIP del primero en MinIO. `uuid4` hace la colisión
+    # estructuralmente imposible, no solo improbable.
+    timestamp = f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}"
+    export_key = storage.export_key_for(tenant_id, timestamp)
+    storage.put_object(
+        storage.PLATFORM_EXPORTS_BUCKET, export_key, zip_bytes, len(zip_bytes), "application/zip"
+    )
+    download_url = storage.presigned_get_url(
+        storage.PLATFORM_EXPORTS_BUCKET, export_key, _EXPORT_URL_TTL_SECONDS
+    )
+
+    marked_at = await repository.mark_tenant_exported(session, tenant_id)
+    if marked_at is None:
+        # El tenant se borró concurrentemente mientras se generaba este export (posible solo si ya
+        # tenía uno anterior: `delete_tenant` exige un export previo). El ZIP ya subido quedaría
+        # huérfano en `PLATFORM_EXPORTS_BUCKET`, sin URL entregada a nadie (hallazgo de la
+        # auditoría de seguridad) — se borra por compensación antes de propagar el 404.
+        with contextlib.suppress(storage.StorageUnavailable):
+            storage.remove_object(storage.PLATFORM_EXPORTS_BUCKET, export_key)
+        raise TenantNotFound()
+    return download_url
+
+
+async def delete_tenant(session: AsyncSession, tenant_id: UUID, confirm_slug: str) -> None:
+    """Borra un tenant entero: fila + cascada + bucket de MinIO (S4.7 §3 decisión 4). Id
+    inexistente -> `TenantNotFound`; `confirm_slug` no coincide -> `TenantSlugMismatch`; sin
+    ningún export previo -> `TenantExportRequired`.
+
+    La condición completa (existe, el slug coincide, hay un export previo) vive en una única
+    sentencia SQL atómica dentro de `delete_tenant` (`SELECT ... FOR UPDATE` + `DELETE`, migración
+    0015) — mismo patrón que `purge_demo_tenant` (S4.4), sin pre-chequeo aparte en Python.
+    """
+    outcome = await repository.delete_tenant(session, tenant_id, confirm_slug)
+    if not outcome.existed:
+        raise TenantNotFound()
+    if not outcome.slug_matched:
+        raise TenantSlugMismatch()
+    if not outcome.exported:
+        raise TenantExportRequired()
+
+    intake_service.schedule_bucket_cleanup(session, storage.bucket_for(tenant_id))

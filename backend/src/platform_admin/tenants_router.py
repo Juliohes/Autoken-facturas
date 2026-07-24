@@ -67,6 +67,19 @@ class CustomDomainIn(BaseModel):
     custom_domain: str | None = None
 
 
+class ExportOut(BaseModel):
+    """Respuesta de `POST /platform/tenants/{tenant_id}/export` (S4.7)."""
+
+    download_url: str
+
+
+class DeleteTenantIn(BaseModel):
+    """Cuerpo de `DELETE /platform/tenants/{tenant_id}` (S4.7): segundo factor de confirmación
+    verificado en servidor, spec §3 decisión 4."""
+
+    confirm_slug: str
+
+
 class TenantMetricsOut(BaseModel):
     """Consumo agregado de un tenant (S4.5). `ocr_extractions_count` es un proxy de uso, nunca una
     cifra monetaria (spec §0 decisión 1: no hay coste real en € disponible hoy)."""
@@ -172,3 +185,53 @@ async def set_custom_domain(identity: Platform, tenant_id: UUID, body: CustomDom
             status_code=409, detail="Ya existe un tenant con ese dominio propio"
         ) from exc
     return _to_out(record)
+
+
+@router.post("/{tenant_id}/suspend")
+async def suspend_tenant(identity: Platform, tenant_id: UUID) -> TenantOut:
+    """Bloquea el login de todos los usuarios del tenant, sin tocar datos (S4.7). Idempotente si
+    ya estaba suspendido; id inexistente -> 404."""
+    try:
+        record = await service.suspend_tenant(identity.session, tenant_id)
+    except service.TenantNotFound as exc:
+        raise HTTPException(status_code=404, detail="No existe ese tenant") from exc
+    return _to_out(record)
+
+
+@router.post("/{tenant_id}/reactivate")
+async def reactivate_tenant(identity: Platform, tenant_id: UUID) -> TenantOut:
+    """Revierte `suspend` (S4.7). Idempotente si ya estaba activo; id inexistente -> 404."""
+    try:
+        record = await service.reactivate_tenant(identity.session, tenant_id)
+    except service.TenantNotFound as exc:
+        raise HTTPException(status_code=404, detail="No existe ese tenant") from exc
+    return _to_out(record)
+
+
+@router.post("/{tenant_id}/export")
+async def export_tenant(identity: Platform, tenant_id: UUID) -> ExportOut:
+    """Genera un ZIP completo (BD + ficheros) del tenant y devuelve una URL de descarga firmada
+    (S4.7). Id inexistente -> 404."""
+    try:
+        download_url = await service.export_tenant(identity.session, tenant_id)
+    except service.TenantNotFound as exc:
+        raise HTTPException(status_code=404, detail="No existe ese tenant") from exc
+    return ExportOut(download_url=download_url)
+
+
+@router.delete("/{tenant_id}", status_code=204)
+async def delete_tenant(identity: Platform, tenant_id: UUID, body: DeleteTenantIn) -> None:
+    """Borra un tenant entero (S4.7, alcance real: no solo demo, a diferencia de `purge`). Id
+    inexistente -> 404; `confirm_slug` no coincide -> 422; sin ningún export previo -> 409."""
+    try:
+        await service.delete_tenant(identity.session, tenant_id, body.confirm_slug)
+    except service.TenantNotFound as exc:
+        raise HTTPException(status_code=404, detail="No existe ese tenant") from exc
+    except service.TenantSlugMismatch as exc:
+        raise HTTPException(
+            status_code=422, detail="El nombre de confirmación no coincide con el slug del tenant"
+        ) from exc
+    except service.TenantExportRequired as exc:
+        raise HTTPException(
+            status_code=409, detail="Hace falta exportar el tenant antes de poder borrarlo"
+        ) from exc

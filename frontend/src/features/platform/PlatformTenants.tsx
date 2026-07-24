@@ -1,16 +1,16 @@
 // Panel de plataforma (S4.1): alta de tenants + listado de los ya existentes. Primera pantalla del
 // módulo `platform_admin`; exclusiva del rol `platform_admin` (portero en el backend, aquí no se
 // repite esa comprobación, mismo criterio que el resto de pantallas de gestión del proyecto).
-// Modo demo (S4.4): checkbox "Es demo" en el alta; en la tabla, cada fila demo gana dos acciones
-// ("Convertir a producción", "Purgar") ausentes en las filas de producción.
-// Dominios propios (S4.6, alcance acotado — ver docs/specs/S4.6-dominios-propios.md §0): columna
-// de solo lectura con el dominio propio ya asignado, si lo hay. Sin formulario de edición todavía
-// (deliberado: se añade junto con la parte de infra real, Caddy/TLS, cuando se retome).
+// Modo demo (S4.4) + dominios propios (S4.6, alcance acotado — ver
+// docs/specs/S4.6-dominios-propios.md §0, columna de solo lectura, sin formulario de edición
+// todavía) + ciclo de vida (S4.7: suspender/reactivar/exportar/borrar). Las acciones por fila viven
+// en `TenantRowActions` (extraído tras la auditoría de S4.7: la celda había crecido demasiado
+// mezclando 4 flujos de mutación distintos).
 import { useState, type FormEvent } from 'react'
 
-import { useConvertToProduction } from './useConvertToProduction'
+import { MutationErrorBanner } from './MutationErrorBanner'
+import { TenantRowActions } from './TenantRowActions'
 import { useCreateTenant } from './useCreateTenant'
-import { usePurgeTenant } from './usePurgeTenant'
 import { useTenantMetrics } from './useTenantMetrics'
 import { useTenants } from './useTenants'
 
@@ -23,16 +23,10 @@ const EMPTY_FORM = {
   is_demo: false,
 }
 
-const PURGE_CONFIRM_MESSAGE =
-  'Esto borra el tenant demo por completo (empresas, facturas, ficheros). No se puede deshacer. ' +
-  '¿Continuar?'
-
 export function PlatformTenants() {
   const tenants = useTenants()
   const metrics = useTenantMetrics()
   const createTenant = useCreateTenant()
-  const convertToProduction = useConvertToProduction()
-  const purgeTenant = usePurgeTenant()
   const [form, setForm] = useState(EMPTY_FORM)
 
   const rows = tenants.data ?? []
@@ -50,11 +44,6 @@ export function PlatformTenants() {
       },
       { onSuccess: () => setForm(EMPTY_FORM) },
     )
-  }
-
-  const handlePurge = (tenantId: string) => {
-    if (!window.confirm(PURGE_CONFIRM_MESSAGE)) return
-    purgeTenant.mutate(tenantId)
   }
 
   return (
@@ -125,13 +114,7 @@ export function PlatformTenants() {
             {createTenant.isPending ? 'Creando…' : 'Nuevo tenant'}
           </button>
         </form>
-        {createTenant.isError && (
-          <p role="alert" className="mt-2 text-sm text-red-400">
-            {createTenant.error instanceof Error
-              ? createTenant.error.message
-              : 'No se pudo crear el tenant.'}
-          </p>
-        )}
+        <MutationErrorBanner mutation={createTenant} fallback="No se pudo crear el tenant." />
       </div>
 
       {tenants.isLoading && <p className="text-slate-400">Cargando…</p>}
@@ -139,20 +122,6 @@ export function PlatformTenants() {
       {tenants.isError && (
         <p role="alert" className="text-red-400">
           No se pudieron cargar los tenants. Inténtalo de nuevo.
-        </p>
-      )}
-
-      {convertToProduction.isError && (
-        <p role="alert" className="text-sm text-red-400">
-          {convertToProduction.error instanceof Error
-            ? convertToProduction.error.message
-            : 'No se pudo convertir a producción.'}
-        </p>
-      )}
-
-      {purgeTenant.isError && (
-        <p role="alert" className="text-sm text-red-400">
-          {purgeTenant.error instanceof Error ? purgeTenant.error.message : 'No se pudo purgar.'}
         </p>
       )}
 
@@ -184,26 +153,7 @@ export function PlatformTenants() {
                   <td className="p-2">{tenant.custom_domain ?? '—'}</td>
                   <td className="p-2">{tenant.created_at}</td>
                   <td className="p-2">
-                    {tenant.is_demo && (
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => convertToProduction.mutate(tenant.id)}
-                          disabled={convertToProduction.isPending}
-                          className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-100 disabled:opacity-40"
-                        >
-                          Convertir a producción
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handlePurge(tenant.id)}
-                          disabled={purgeTenant.isPending}
-                          className="rounded border border-red-500 px-2 py-1 text-xs text-red-400 disabled:opacity-40"
-                        >
-                          Purgar
-                        </button>
-                      </div>
-                    )}
+                    <TenantRowActions tenant={tenant} />
                   </td>
                 </tr>
               ))}

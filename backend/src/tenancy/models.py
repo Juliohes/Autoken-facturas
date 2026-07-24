@@ -60,6 +60,9 @@ class Tenant(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    # Último export completo (S4.7, migración 0015): `NULL` si nunca se exportó. `delete_tenant`
+    # exige que no sea `NULL` antes de poder borrar (spec S4.7 §3 decisión 4).
+    last_export_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class TenantBranding(Base):

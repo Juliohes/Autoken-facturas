@@ -1429,6 +1429,185 @@
           }
         }
       }
+    },
+    "/api/v1/platform/tenants/{tenant_id}/suspend": {
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Suspend Tenant",
+        "description": "Bloquea el login de todos los usuarios del tenant, sin tocar datos (S4.7). Idempotente si\nya estaba suspendido; id inexistente -> 404.",
+        "operationId": "suspend_tenant_api_v1_platform_tenants__tenant_id__suspend_post",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/{tenant_id}/reactivate": {
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Reactivate Tenant",
+        "description": "Revierte `suspend` (S4.7). Idempotente si ya estaba activo; id inexistente -> 404.",
+        "operationId": "reactivate_tenant_api_v1_platform_tenants__tenant_id__reactivate_post",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/{tenant_id}/export": {
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Export Tenant",
+        "description": "Genera un ZIP completo (BD + ficheros) del tenant y devuelve una URL de descarga firmada\n(S4.7). Id inexistente -> 404.",
+        "operationId": "export_tenant_api_v1_platform_tenants__tenant_id__export_post",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/{tenant_id}": {
+      "delete": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Delete Tenant",
+        "description": "Borra un tenant entero (S4.7, alcance real: no solo demo, a diferencia de `purge`). Id\ninexistente -> 404; `confirm_slug` no coincide -> 422; sin ning\u00fan export previo -> 409.",
+        "operationId": "delete_tenant_api_v1_platform_tenants__tenant_id__delete",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteTenantIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1853,6 +2032,20 @@
         "title": "CustomDomainIn",
         "description": "Cuerpo de `PATCH /platform/tenants/{tenant_id}/custom-domain` (S4.6). `None` lo quita."
       },
+      "DeleteTenantIn": {
+        "properties": {
+          "confirm_slug": {
+            "type": "string",
+            "title": "Confirm Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirm_slug"
+        ],
+        "title": "DeleteTenantIn",
+        "description": "Cuerpo de `DELETE /platform/tenants/{tenant_id}` (S4.7): segundo factor de confirmaci\u00f3n\nverificado en servidor, spec \u00a73 decisi\u00f3n 4."
+      },
       "DownloadUrlOut": {
         "properties": {
           "url": {
@@ -1890,6 +2083,20 @@
         ],
         "title": "DuplicateRowOut",
         "description": "Fila omitida por CIF ya existente en el informe: n\u00famero de fila (1-based) y CIF."
+      },
+      "ExportOut": {
+        "properties": {
+          "download_url": {
+            "type": "string",
+            "title": "Download Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "download_url"
+        ],
+        "title": "ExportOut",
+        "description": "Respuesta de `POST /platform/tenants/{tenant_id}/export` (S4.7)."
       },
       "HTTPValidationError": {
         "properties": {
