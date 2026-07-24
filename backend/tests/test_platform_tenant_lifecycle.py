@@ -391,9 +391,7 @@ async def test_c11_con_export_previo_y_slug_correcto_borra_todo(authapi: Api) ->
     tenant_id = await seed_tenant(dsns["admin"], "clientex", "Cliente X SL")
     company_id = await seed_company(dsns["admin"], tenant_id=tenant_id, name="A", cif="A39031620")
     uploader = await seed_user(dsns["admin"], tenant_id=tenant_id, email="u@clientex.es")
-    await seed_uploaded_file(
-        dsns, tenant_id=tenant_id, company_id=company_id, uploaded_by=uploader
-    )
+    await seed_uploaded_file(dsns, tenant_id=tenant_id, company_id=company_id, uploaded_by=uploader)
     await seed_platform_admin(dsns)
     token = await platform_token(client)
     await client.post(f"{URL}/{tenant_id}/export", headers=_auth(token))
