@@ -312,6 +312,31 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   una vez la aplicación tiene pantallas de verdad) se retiró en esta misma tarea.
 - **Pendiente transversal detectado el 23/07/2026 → RESUELTO por S4.9** (ver entrada de arriba).
 
+- **S2.2 — Captura guiada de fotos desde el móvil** (24/07/2026, segunda tarea del lote de cierre de
+  backlog, cierra el último hueco de Sprint 2): hasta ahora no había ninguna forma real de subir una
+  factura nueva desde el móvil. Esta tarea añade la pantalla "Subir factura", nueva en el menú y
+  además la primera pantalla que ve un usuario raso al iniciar sesión (antes era el historial: subir
+  facturas es su tarea del día a día, no consultarlas). Pide la cámara trasera del móvil y muestra
+  la imagen en vivo dentro de un marco guía; si la foto sale bien enfocada y se reconoce un
+  documento dentro del marco, **se hace la foto ella sola**, sin tener que pulsar nada — y si sale
+  borrosa o no hay nada reconocible, sigue esperando en vez de hacer una foto mala. También se puede
+  forzar la foto a mano en cualquier momento. Tras capturarla, si se detectan los 4 bordes del
+  documento, la aplicación **recorta y endereza la imagen sola** (como si se hubiera escaneado en
+  plano, no fotografiado en ángulo) usando una librería de visión por ordenador (OpenCV, la misma
+  que usan miles de aplicaciones de escaneo de documentos) que corre entera dentro del propio
+  navegador del móvil, sin mandar nada a ningún servidor externo para ese paso. Antes de subir nada,
+  siempre se enseña la foto ya procesada para que la persona la revise y decida si la usa o repite —
+  nunca se sube una foto sin que alguien la haya visto antes. Si el móvil no da permiso de cámara (o
+  el navegador no la soporta), la aplicación ofrece el selector de foto normal del sistema operativo
+  como alternativa, sin quedarse bloqueada. Un detalle técnico importante para el resto del
+  proyecto: esta es la primera vez que se prueban de verdad, con imágenes reales (generadas por
+  código, no fotos guardadas en el repo), los algoritmos de nitidez y detección de bordes — no solo
+  que "no fallan", sino que de verdad distinguen una foto nítida de una borrosa y encuentran las
+  esquinas de un documento cuando existen. **Verificación pendiente**: como este entorno de trabajo
+  no tiene un móvil ni un navegador con cámara real, la comprobación final en un Android/iPhone de
+  verdad queda pendiente de que Julio la pruebe tras el despliegue (mismo caso que la infraestructura
+  real de S4.6).
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
@@ -322,18 +347,18 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   infraestructura real (el servidor emitiendo certificados de un dominio de verdad) queda
   pendiente de una sesión futura con acceso al servidor de producción/staging y a un dominio real
   — dominio ya reservado para esa prueba: `setex-facturas.autoken.es`.
-- **Lote de cierre de backlog previo al Sprint 5** (decidido con Julio el 24/07/2026, S4.9 primera
-  tarea ya cerrada): queda **S2.2** (captura guiada de fotos desde el móvil, el único hueco que le
-  queda a Sprint 2) y, tras eso, el interruptor solo-para-Julio + **S2.9/S2.10** (mejora automática
-  de la foto + comparativa) + **S4.8** (panel comparando varios "lectores de IA" a la vez), en ese
-  orden.
+- **Sprint 2 COMPLETO** con el cierre de S2.2 (24/07/2026) — verificación en dispositivo real
+  pendiente (ver entrada de arriba), igual que la infra de S4.6.
+- **Lote de cierre de backlog previo al Sprint 5** (decidido con Julio el 24/07/2026; S4.9 y S2.2 ya
+  cerradas): queda el interruptor solo-para-Julio + **S2.9/S2.10** (mejora automática de la foto +
+  comparativa) + **S4.8** (panel comparando varios "lectores de IA" a la vez).
 - **Sprint 5**: refuerzo de seguridad y pruebas de carga antes de dar el paso final.
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
 
-**Avance estimado hacia producción a día de hoy: ≈70%** (36 de 52 tareas del plan "core" completas
+**Avance estimado hacia producción a día de hoy: ≈71%** (37 de 52 tareas del plan "core" completas
 del todo — S4.9 es una tarea nueva, no estaba en el recuento original de 51, añadida para cerrar el
 hueco de integración detectado el 23/07/2026 — sin contar el módulo de Verifactu ni la limpieza
-final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 3 y Sprint 4
-completos. S4.9 (app-shell) cerrada: la aplicación ya se puede usar de principio a fin con login
-real. Siguiente: S2.2, luego S2.9/S2.10/S4.8, antes de entrar en Sprint 5.**
+final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2 y Sprint 3 y
+Sprint 4 completos. S4.9 (app-shell) y S2.2 (captura guiada) cerradas. Siguiente: interruptor
+admin-tech + S2.9/S2.10/S4.8, antes de entrar en Sprint 5.**

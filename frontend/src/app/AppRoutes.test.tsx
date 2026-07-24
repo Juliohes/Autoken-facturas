@@ -111,7 +111,7 @@ describe('AppRoutes (S4.9)', () => {
     expect(within(nav).queryByText('Historial')).not.toBeInTheDocument()
   })
 
-  it('C10: tenant_admin ve Facturas/Empresas/Historial, no Plataforma', async () => {
+  it('C10: tenant_admin ve Facturas/Empresas/Historial/Subir factura, no Plataforma', async () => {
     mockAuthenticatedAs('tenant_admin')
     renderApp('/facturas')
 
@@ -120,19 +120,28 @@ describe('AppRoutes (S4.9)', () => {
     expect(within(nav).getByText('Facturas')).toBeInTheDocument()
     expect(within(nav).getByText('Empresas')).toBeInTheDocument()
     expect(within(nav).getByText('Historial')).toBeInTheDocument()
+    expect(within(nav).getByText('Subir factura')).toBeInTheDocument()
     expect(within(nav).queryByText('Plataforma')).not.toBeInTheDocument()
   })
 
-  it('C11: user solo ve Historial en el menú', async () => {
+  it('C11: user ve Historial y Subir factura en el menú, nada más', async () => {
     mockAuthenticatedAs('user')
     renderApp('/historial')
 
     await waitFor(() => expect(screen.getByRole('navigation')).toBeInTheDocument())
     const nav = screen.getByRole('navigation')
     expect(within(nav).getByText('Historial')).toBeInTheDocument()
+    expect(within(nav).getByText('Subir factura')).toBeInTheDocument()
     expect(within(nav).queryByText('Facturas')).not.toBeInTheDocument()
     expect(within(nav).queryByText('Empresas')).not.toBeInTheDocument()
     expect(within(nav).queryByText('Plataforma')).not.toBeInTheDocument()
+  })
+
+  it('S2.2 decisión 1: la ruta de inicio de user es /capturar, no /historial', async () => {
+    mockAuthenticatedAs('user')
+    renderApp('/')
+
+    expect(await screen.findByRole('heading', { name: 'Capturar factura' })).toBeInTheDocument()
   })
 
   it('un tenant_admin no puede entrar a /plataforma: vuelve a su ruta de inicio', async () => {

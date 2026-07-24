@@ -12,6 +12,8 @@ import {
 } from 'react-router-dom'
 import type { ReactNode } from 'react'
 
+import { CaptureScreen } from '../features/capture/CaptureScreen'
+import type { Direction } from '../features/capture/types'
 import { CompaniesPanel } from '../features/companies/CompaniesPanel'
 import { ConfirmationScreen } from '../features/confirmation/ConfirmationScreen'
 import { InvoiceHistory } from '../features/history/InvoiceHistory'
@@ -79,13 +81,27 @@ function InvoicesRoute() {
   return <InvoicesPanel initialFilters={companyId ? { company_id: companyId } : undefined} />
 }
 
+function CaptureRoute() {
+  const navigate = useNavigate()
+  return (
+    <CaptureScreen
+      onUploaded={(fileId, direction) =>
+        navigate(ROUTES.confirmation(fileId), { state: { direction } })
+      }
+    />
+  )
+}
+
 function ConfirmationRoute() {
   const { fileId } = useParams<{ fileId: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   if (!fileId) return <Navigate to={ROUTES.history} replace />
+  const direction = (location.state as { direction?: Direction } | null)?.direction
   return (
     <ConfirmationScreen
       fileId={fileId}
+      direction={direction}
       onConfirmed={() => navigate(ROUTES.history)}
       onRetry={() => navigate(ROUTES.history)}
     />
@@ -130,6 +146,14 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
           element={
             <ProtectedRoute path={ROUTES.history}>
               <InvoiceHistory />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.capture}
+          element={
+            <ProtectedRoute path={ROUTES.capture}>
+              <CaptureRoute />
             </ProtectedRoute>
           }
         />
