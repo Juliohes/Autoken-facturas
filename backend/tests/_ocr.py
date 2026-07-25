@@ -106,13 +106,15 @@ def build_extracted(
     total: Decimal | None = Decimal("121.00"),
     rate: Decimal = Decimal("21"),
     confidence: str = "alta",
+    engine: str = "fake",
+    model: str = "fake-1",
 ):
     """Construye un `ExtractedInvoice` de prueba (import perezoso de los tipos de producción).
 
     Por defecto: factura legible y coherente (own presente, contraparte válida, cuadre OK, alto).
     Los tests sobreescriben el campo que quieren romper. `own_cif=None` -> el CIF propio no aparece
-    (C4); `counterparty_cif=None` -> contraparte no legible (C2).
-    """
+    (C4); `counterparty_cif=None` -> contraparte no legible (C2). `engine`/`model`: identidad del
+    motor (S4.8, ranking multi-modelo — distinguir varios motores dobles entre sí)."""
     from ocr.extraction import ExtractedInvoice, ExtractedTaxId, ExtractedTaxLine
 
     tax_ids: list = []
@@ -138,8 +140,8 @@ def build_extracted(
         tax_amount=tax,
         tax_lines=tax_lines,
         tax_ids=tuple(tax_ids),
-        engine="fake",
-        model="fake-1",
+        engine=engine,
+        model=model,
         raw={},
     )
 
@@ -154,6 +156,22 @@ def make_extractor(invoice=None, *, error: Exception | None = None):
             return invoice
 
     return _FakeExtractor()
+
+
+def make_counting_extractor(invoice):
+    """Extractor doble que cuenta cuántas veces se llama `.extract()` (regresión S4.8: el motor por
+    defecto no debe llamarse dos veces por factura cuando el ranking multi-modelo reutiliza la
+    lectura ya calculada — ver `jobs.ocr.run_ocr`/`jobs.ocr_ranking.run_ocr_ranking`)."""
+
+    class _CountingExtractor:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def extract(self, content: bytes, content_type: str):  # noqa: ARG002
+            self.calls += 1
+            return invoice
+
+    return _CountingExtractor()
 
 
 def make_comparison_extractor(*, original, enhanced, error_on: str | None = None):
@@ -179,11 +197,23 @@ def make_comparison_extractor(*, original, enhanced, error_on: str | None = None
     return _ComparisonExtractor()
 
 
-async def run_ocr(*, tenant_id: str, company_id: str, file_id: str, extractor) -> None:
-    """Invoca el job del worker directamente (import perezoso; sin arq corriendo)."""
+async def run_ocr(
+    *, tenant_id: str, company_id: str, file_id: str, extractor, ranking_extractors
+) -> None:
+    """Invoca el job del worker directamente (import perezoso; sin arq corriendo).
+
+    `ranking_extractors` es OBLIGATORIO (sin default): pásalo siempre explícito, aunque sea `[]`.
+    Dejarlo con un default en `None` fue precisamente el incidente real durante el desarrollo de
+    S4.8 — un test con el interruptor encendido llamó a `run_ocr` sin pasarlo y `run_ocr` construyó
+    los motores reales desde la config, disparando llamadas de pago de verdad en un entorno con
+    credenciales reales configuradas (ver docstring de `jobs.ocr.run_ocr`). Quitarle el default aquí
+    obliga a cada test a decidir explícitamente qué motores usar.
+    """
     from jobs.ocr import run_ocr as _run
 
-    await _run(tenant_id, company_id, file_id, extractor=extractor)
+    await _run(
+        tenant_id, company_id, file_id, extractor=extractor, ranking_extractors=ranking_extractors
+    )
 
 
 async def set_ocr_experiment_enabled(dsns: dict[str, str], enabled: bool) -> None:
@@ -287,5 +317,74 @@ async def comparison_runs_visible_as_tenant(
             "SELECT set_config('app.company_id', $1, false)", company_id if company_id else ""
         )
         return int(await conn.fetchval("SELECT count(*) FROM ocr_comparison_runs"))
+    finally:
+        await conn.close()
+
+
+# --- Consultas de efecto del ranking multi-modelo S4.8 (superusuario, saltando RLS) ----------
+async def seed_ranking_entry(
+    dsns: dict[str, str],
+    *,
+    tenant_id: str,
+    company_id: str,
+    uploaded_file_id: str,
+    engine: str,
+    score: int,
+    model: str = "modelo-de-prueba",
+) -> None:
+    """Inserta directamente una fila de `ocr_ranking_entries` (superusuario), como recomienda la
+    spec S4.8 §7 para probar la agregación del panel (C11) sin depender de motores reales."""
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        await conn.execute(
+            "INSERT INTO ocr_ranking_entries "
+            "(tenant_id, company_id, uploaded_file_id, engine, model, reading, score) "
+            "VALUES ($1,$2,$3,$4,$5,'{}'::jsonb,$6) "
+            "ON CONFLICT (uploaded_file_id, engine) DO UPDATE SET score = EXCLUDED.score",
+            tenant_id,
+            company_id,
+            uploaded_file_id,
+            engine,
+            model,
+            score,
+        )
+    finally:
+        await conn.close()
+
+
+async def fetch_ranking_entries(dsns: dict[str, str], *, file_id: str) -> list[dict]:
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        rows = await conn.fetch(
+            "SELECT * FROM ocr_ranking_entries WHERE uploaded_file_id = $1 ORDER BY engine", file_id
+        )
+        return [dict(row) for row in rows]
+    finally:
+        await conn.close()
+
+
+async def count_ranking_entries(dsns: dict[str, str], *, file_id: str) -> int:
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        return int(
+            await conn.fetchval(
+                "SELECT count(*) FROM ocr_ranking_entries WHERE uploaded_file_id = $1", file_id
+            )
+        )
+    finally:
+        await conn.close()
+
+
+async def ranking_entries_visible_as_tenant(
+    dsns: dict[str, str], *, tenant_id: str, company_id: str | None = None
+) -> int:
+    """Igual que `extractions_visible_as_tenant`, pero sobre `ocr_ranking_entries` (C9)."""
+    conn = await asyncpg.connect(dsns["app"])
+    try:
+        await conn.execute("SELECT set_config('app.tenant_id', $1, false)", tenant_id)
+        await conn.execute(
+            "SELECT set_config('app.company_id', $1, false)", company_id if company_id else ""
+        )
+        return int(await conn.fetchval("SELECT count(*) FROM ocr_ranking_entries"))
     finally:
         await conn.close()
