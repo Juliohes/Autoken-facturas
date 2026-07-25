@@ -223,7 +223,8 @@ class MeOut(BaseModel):
     sin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado).
 
     `tenant`/`company` son `null` para un `platform_admin` (sin tenant, hotfix S4.10) además del
-    caso ya existente de `company=null` para un `tenant_admin`.
+    caso ya existente de `company=null` para un `tenant_admin`. `is_admin_tech` (S4.10): siempre
+    `False` salvo para un `platform_admin` con el flag activado (nunca desde la aplicación).
     """
 
     id: str
@@ -231,6 +232,7 @@ class MeOut(BaseModel):
     role: str
     tenant: str | None
     company: MeCompanyOut | None
+    is_admin_tech: bool
 
 
 @router.get("/me")
@@ -254,5 +256,10 @@ async def me(identity: Annotated[MeIdentity, Depends(current_identity_for_me)]) 
         else None
     )
     return MeOut(
-        id=row.id, email=row.email, role=row.role, tenant=identity.tenant_slug, company=company
+        id=row.id,
+        email=row.email,
+        role=row.role,
+        tenant=identity.tenant_slug,
+        company=company,
+        is_admin_tech=row.is_admin_tech,
     )

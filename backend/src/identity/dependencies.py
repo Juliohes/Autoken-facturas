@@ -19,12 +19,18 @@ from __future__ import annotations
 import contextlib
 from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from identity.repository import CompanyRef, MisconfiguredUserCompany, resolve_user_company
+from identity.repository import (
+    CompanyRef,
+    MisconfiguredUserCompany,
+    read_platform_identity,
+    resolve_user_company,
+)
 from identity.scoping import RlsScope, RoleNotAuthorized, scope_for_role
 from identity.tokens import AccessClaims, InvalidAccessToken, decode_access_token
 from shared.config import get_settings
@@ -144,6 +150,38 @@ async def current_platform_identity(request: Request) -> AsyncIterator[PlatformA
 
     async with platform_session() as db_session:
         yield PlatformAuthContext(user_id=UUID(claims.sub), session=db_session)
+
+
+@dataclass(frozen=True)
+class AdminTechAuthContext:
+    """Como `PlatformAuthContext`, con el flag `is_admin_tech` ya resuelto (S4.10).
+
+    La resolución de identidad (I/O contra BD) vive aquí, no en `authz.py` (hallazgo de auditoría:
+    el guard original consultaba la BD él mismo, mezclando "decidir según datos ya cargados" -su
+    única responsabilidad hasta ahora- con "cargar esos datos"). Mismo criterio que
+    `current_identity` ya aplica al resolver `company` por petición antes de ceder el contexto.
+    """
+
+    user_id: UUID
+    session: AsyncSession
+    is_admin_tech: bool
+
+
+async def current_admin_tech_identity(
+    identity: Annotated[PlatformAuthContext, Depends(current_platform_identity)],
+) -> AdminTechAuthContext:
+    """Enriquece la identidad de plataforma con `is_admin_tech`, leído fresco en cada petición.
+
+    Fresco y no embebido en el JWT a propósito (spec S4.10 decisión 2): el flag se revoca
+    directamente en Postgres y debe dejar de funcionar al instante, sin esperar a que caduque el
+    token. Reutiliza la sesión ya abierta por `current_platform_identity`, sin una segunda
+    transacción.
+    """
+    row = await read_platform_identity(identity.session, str(identity.user_id))
+    is_admin_tech = row is not None and row.is_admin_tech
+    return AdminTechAuthContext(
+        user_id=identity.user_id, session=identity.session, is_admin_tech=is_admin_tech
+    )
 
 
 @dataclass(frozen=True)

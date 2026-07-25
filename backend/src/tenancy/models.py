@@ -115,6 +115,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
     totp_secret: Mapped[str | None] = mapped_column(Text)
+    is_admin_tech: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

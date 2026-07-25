@@ -1608,6 +1608,66 @@
           }
         }
       }
+    },
+    "/api/v1/platform/settings": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Get Settings",
+        "operationId": "get_settings_api_v1_platform_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettingsOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Set Settings",
+        "operationId": "set_settings_api_v1_platform_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformSettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2757,6 +2817,10 @@
                 "type": "null"
               }
             ]
+          },
+          "is_admin_tech": {
+            "type": "boolean",
+            "title": "Is Admin Tech"
           }
         },
         "type": "object",
@@ -2765,10 +2829,11 @@
           "email",
           "role",
           "tenant",
-          "company"
+          "company",
+          "is_admin_tech"
         ],
         "title": "MeOut",
-        "description": "Respuesta de `GET /auth/me` (S1.6 C5/C6), tipada para que el cliente autogenerado la use\nsin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado).\n\n`tenant`/`company` son `null` para un `platform_admin` (sin tenant, hotfix S4.10) adem\u00e1s del\ncaso ya existente de `company=null` para un `tenant_admin`."
+        "description": "Respuesta de `GET /auth/me` (S1.6 C5/C6), tipada para que el cliente autogenerado la use\nsin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado).\n\n`tenant`/`company` son `null` para un `platform_admin` (sin tenant, hotfix S4.10) adem\u00e1s del\ncaso ya existente de `company=null` para un `tenant_admin`. `is_admin_tech` (S4.10): siempre\n`False` salvo para un `platform_admin` con el flag activado (nunca desde la aplicaci\u00f3n)."
       },
       "PanelOut": {
         "properties": {
@@ -2798,6 +2863,32 @@
         ],
         "title": "PanelOut",
         "description": "Respuesta de `GET /reporting/invoices`: una p\u00e1gina del panel (spec \u00a72)."
+      },
+      "PlatformSettingsIn": {
+        "properties": {
+          "ocr_experiment_enabled": {
+            "type": "boolean",
+            "title": "Ocr Experiment Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ocr_experiment_enabled"
+        ],
+        "title": "PlatformSettingsIn"
+      },
+      "PlatformSettingsOut": {
+        "properties": {
+          "ocr_experiment_enabled": {
+            "type": "boolean",
+            "title": "Ocr Experiment Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ocr_experiment_enabled"
+        ],
+        "title": "PlatformSettingsOut"
       },
       "PurgeResultOut": {
         "properties": {

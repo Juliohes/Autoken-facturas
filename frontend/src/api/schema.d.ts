@@ -755,6 +755,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Settings */
+        get: operations["get_settings_api_v1_platform_settings_get"];
+        /** Set Settings */
+        put: operations["set_settings_api_v1_platform_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1169,7 +1187,8 @@ export interface components {
          *     sin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado).
          *
          *     `tenant`/`company` son `null` para un `platform_admin` (sin tenant, hotfix S4.10) además del
-         *     caso ya existente de `company=null` para un `tenant_admin`.
+         *     caso ya existente de `company=null` para un `tenant_admin`. `is_admin_tech` (S4.10): siempre
+         *     `False` salvo para un `platform_admin` con el flag activado (nunca desde la aplicación).
          */
         MeOut: {
             /** Id */
@@ -1181,6 +1200,8 @@ export interface components {
             /** Tenant */
             tenant: string | null;
             company: components["schemas"]["MeCompanyOut"] | null;
+            /** Is Admin Tech */
+            is_admin_tech: boolean;
         };
         /**
          * PanelOut
@@ -1191,6 +1212,16 @@ export interface components {
             items: components["schemas"]["InvoiceRowOut"][];
             /** Next Cursor */
             next_cursor: string | null;
+        };
+        /** PlatformSettingsIn */
+        PlatformSettingsIn: {
+            /** Ocr Experiment Enabled */
+            ocr_experiment_enabled: boolean;
+        };
+        /** PlatformSettingsOut */
+        PlatformSettingsOut: {
+            /** Ocr Experiment Enabled */
+            ocr_experiment_enabled: boolean;
         };
         /**
          * PurgeResultOut
@@ -2490,6 +2521,59 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_settings_api_v1_platform_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformSettingsOut"];
+                };
+            };
+        };
+    };
+    set_settings_api_v1_platform_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformSettingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformSettingsOut"];
+                };
             };
             /** @description Validation Error */
             422: {

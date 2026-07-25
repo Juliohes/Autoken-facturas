@@ -1,7 +1,10 @@
 // Fuente única de rutas y visibilidad por rol (S4.9 decisión 5). `AppRoutes.tsx` (protección por
 // rol) y `Menu.tsx` (enlaces visibles) derivan ambos de `ROUTE_DEFS`, para no duplicar la tabla
 // rol->ruta en dos sitios (hallazgo de auditoría: antes `AppRoutes.tsx` repetía a mano los mismos
-// roles que ya vivían en el menú, sin nada que avisara si un día divergían).
+// roles que ya vivían en el menú, sin nada que avisara si un día divergían). Visibilidad adicional
+// dentro de un rol ya permitido (p. ej. el flag `is_admin_tech`, S4.10) también se declara aquí, vía
+// `visible`, en vez de que `Menu.tsx` la resuelva por su cuenta (hallazgo de auditoría S4.10: un
+// `if` suelto en `Menu.tsx` habría reabierto la duplicación que esta misma tarea cerró).
 //
 // `Role` se importa de `features/session/SessionProvider` (no se redeclara aquí): la dirección de
 // dependencia correcta es `app/` -> `features/session/` (identidad es de más bajo nivel que
@@ -11,6 +14,7 @@ import type { Role } from '../features/session/SessionProvider'
 export const ROUTES = {
   login: '/login',
   platform: '/plataforma',
+  platformSettings: '/plataforma/ajustes',
   invoices: '/facturas',
   companies: '/empresas',
   history: '/historial',
@@ -26,15 +30,33 @@ export interface MenuLink {
   label: string
 }
 
+/** Contexto de visibilidad más allá del rol, para el predicado `visible` de un `RouteDef`. */
+export interface MenuVisibilityContext {
+  isAdminTech: boolean
+}
+
 interface RouteDef {
   path: string
   roles: Role[]
   /** Presente => aparece en el menú con este texto; ausente => ruta protegida pero no navegable desde el menú. */
   label?: string
+  /**
+   * Visibilidad adicional dentro de un rol ya permitido (p. ej. el flag `is_admin_tech`). Ausente
+   * => visible siempre que el rol coincida. Solo afecta al MENÚ, nunca a la protección de la ruta
+   * (`rolesAllowedFor`): la ruta sigue accesible por rol como cualquier otra; la pantalla en sí
+   * decide si muestra su contenido o un "sin acceso" (S4.10 decisión 6).
+   */
+  visible?: (ctx: MenuVisibilityContext) => boolean
 }
 
 const ROUTE_DEFS: RouteDef[] = [
   { path: ROUTES.platform, roles: ['platform_admin'], label: 'Plataforma' },
+  {
+    path: ROUTES.platformSettings,
+    roles: ['platform_admin'],
+    label: 'Ajustes',
+    visible: (ctx) => ctx.isAdminTech,
+  },
   { path: ROUTES.invoices, roles: ['tenant_admin'], label: 'Facturas' },
   { path: ROUTES.companies, roles: ['tenant_admin'], label: 'Empresas' },
   { path: ROUTES.history, roles: ['tenant_admin', 'user'], label: 'Historial' },
@@ -54,8 +76,10 @@ export function homeRouteForRole(role: Role): string {
   return ROLE_HOME[role]
 }
 
-export function menuLinksForRole(role: Role): MenuLink[] {
-  return ROUTE_DEFS.filter((def) => def.label && def.roles.includes(role)).map((def) => ({
+export function menuLinksForRole(role: Role, ctx: MenuVisibilityContext): MenuLink[] {
+  return ROUTE_DEFS.filter(
+    (def) => def.label && def.roles.includes(role) && (def.visible?.(ctx) ?? true),
+  ).map((def) => ({
     to: def.path,
     label: def.label as string,
   }))

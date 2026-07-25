@@ -337,6 +337,24 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   verdad queda pendiente de que Julio la pruebe tras el despliegue (mismo caso que la infraestructura
   real de S4.6).
 
+- **S4.10 — El interruptor solo-para-Julio** (25/07/2026, tercera y última tarea del lote de cierre de
+  backlog previo al Sprint 5): las dos próximas mejoras del lector automático (S2.9/S2.10, realzar la foto
+  antes de leerla; S4.8, comparar varios "lectores de IA" a la vez) cuestan dinero real cada vez que se
+  usan, así que antes de construirlas hacía falta un interruptor para poder apagarlas de golpe si el gasto
+  se dispara — y que solo Julio (o Alberto) pueda tocarlo, nadie más. Esta tarea construye exactamente eso,
+  sin encender todavía ninguna de las dos mejoras: una nueva pantalla "Ajustes" dentro del panel de
+  plataforma, que solo aparece en el menú de la cuenta que tenga marcada la casilla especial "admin-tech" —
+  ni siquiera Julio la ve si esa casilla no está marcada en su cuenta. Esa casilla es a propósito imposible
+  de marcar desde la propia aplicación (para evitar que alguien se la active a sí mismo por error o por
+  malicia): solo se puede activar entrando directamente a la base de datos, algo que solo hace el equipo
+  técnico. Una vez revisado el trabajo, se hizo una limpieza de código (sin cambiar nada de lo que ve el
+  usuario): había tres sitios donde el código mezclaba dos trabajos distintos en uno — por ejemplo, la
+  pieza que "decide si dejas pasar la petición" también iba a buscar el dato a la base de datos ella misma,
+  en vez de que otra pieza se lo trajera ya preparado. Tenerlo mezclado dificulta mantener y revisar ese
+  código con el tiempo; separarlo no cambia lo que hace la aplicación, la deja más ordenada por dentro. Se
+  comprobó con las **554 pruebas automáticas del motor + las 184 de las pantallas**, todas en verde, que
+  nada se rompió con esa limpieza.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
@@ -349,9 +367,9 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   — dominio ya reservado para esa prueba: `setex-facturas.autoken.es`.
 - **Sprint 2 COMPLETO** con el cierre de S2.2 (24/07/2026) — verificación en dispositivo real
   pendiente (ver entrada de arriba), igual que la infra de S4.6.
-- **Lote de cierre de backlog previo al Sprint 5** (decidido con Julio el 24/07/2026; S4.9 y S2.2 ya
-  cerradas): queda el interruptor solo-para-Julio + **S2.9/S2.10** (mejora automática de la foto +
-  comparativa) + **S4.8** (panel comparando varios "lectores de IA" a la vez).
+- **Lote de cierre de backlog previo al Sprint 5** (decidido con Julio el 24/07/2026; S4.9, S2.2 y S4.10 ya
+  cerradas): queda **S2.9/S2.10** (mejora automática de la foto + comparativa) + **S4.8** (panel comparando
+  varios "lectores de IA" a la vez), ambas ya desbloqueadas por el interruptor de S4.10.
 - **Sprint 5**: refuerzo de seguridad y pruebas de carga antes de dar el paso final.
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
@@ -360,5 +378,5 @@ en un teléfono real y queda pendiente hasta disponer de uno.
 del todo — S4.9 es una tarea nueva, no estaba en el recuento original de 51, añadida para cerrar el
 hueco de integración detectado el 23/07/2026 — sin contar el módulo de Verifactu ni la limpieza
 final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2 y Sprint 3 y
-Sprint 4 completos. S4.9 (app-shell) y S2.2 (captura guiada) cerradas. Siguiente: interruptor
-admin-tech + S2.9/S2.10/S4.8, antes de entrar en Sprint 5.**
+Sprint 4 completos. S4.9 (app-shell), S2.2 (captura guiada) y S4.10 (interruptor admin-tech) cerradas.
+Siguiente: S2.9/S2.10/S4.8, antes de entrar en Sprint 5.**

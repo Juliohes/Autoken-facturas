@@ -16,8 +16,10 @@ from fastapi import Depends, HTTPException
 from fastapi.dependencies.models import Dependant
 
 from identity.dependencies import (
+    AdminTechAuthContext,
     AuthContext,
     PlatformAuthContext,
+    current_admin_tech_identity,
     current_identity,
     current_identity_for_me,
     current_platform_identity,
@@ -58,6 +60,29 @@ def require_platform_admin() -> Callable[..., Coroutine[Any, Any, PlatformAuthCo
     async def guard(
         identity: Annotated[PlatformAuthContext, Depends(current_platform_identity)],
     ) -> PlatformAuthContext:
+        return identity
+
+    setattr(guard, ROLES_MARKER, allowed)
+    return guard
+
+
+def require_admin_tech() -> Callable[..., Coroutine[Any, Any, AdminTechAuthContext]]:
+    """Dependencia que exige un `platform_admin` con el flag `is_admin_tech` activo (S4.10).
+
+    Chequeo puro sobre un campo ya resuelto (`AdminTechAuthContext.is_admin_tech`), igual que
+    `require_roles`/`require_platform_admin`: la resolución fresca contra BD del flag (es un ajuste
+    revocable directamente en Postgres, spec §0 decisión 2, que debe dejar de funcionar al instante
+    sin esperar a que caduque el token) vive en `current_admin_tech_identity`
+    (`identity/dependencies.py`), no aquí — `authz.py` decide según datos ya cargados, nunca los
+    carga él mismo.
+    """
+    allowed = frozenset({str(Role.PLATFORM_ADMIN)})
+
+    async def guard(
+        identity: Annotated[AdminTechAuthContext, Depends(current_admin_tech_identity)],
+    ) -> AdminTechAuthContext:
+        if not identity.is_admin_tech:
+            raise HTTPException(status_code=403, detail="Forbidden")
         return identity
 
     setattr(guard, ROLES_MARKER, allowed)

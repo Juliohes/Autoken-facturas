@@ -30,9 +30,38 @@ const postMock = api.POST as unknown as AsyncMock
 const fetchMock = vi.fn()
 
 const ME_BY_ROLE = {
-  platform_admin: { id: 'p1', email: 'julio@autoken.es', role: 'platform_admin', tenant: 'plataforma', company: null },
-  tenant_admin: { id: 't1', email: 'ana@ilex.es', role: 'tenant_admin', tenant: 'ilex', company: null },
-  user: { id: 'u1', email: 'raul@ilex.es', role: 'user', tenant: 'ilex', company: { id: 'c1', name: 'Cliente SL' } },
+  platform_admin: {
+    id: 'p1',
+    email: 'julio@autoken.es',
+    role: 'platform_admin',
+    tenant: null,
+    company: null,
+    is_admin_tech: false,
+  },
+  admin_tech: {
+    id: 'p1',
+    email: 'julio@autoken.es',
+    role: 'platform_admin',
+    tenant: null,
+    company: null,
+    is_admin_tech: true,
+  },
+  tenant_admin: {
+    id: 't1',
+    email: 'ana@ilex.es',
+    role: 'tenant_admin',
+    tenant: 'ilex',
+    company: null,
+    is_admin_tech: false,
+  },
+  user: {
+    id: 'u1',
+    email: 'raul@ilex.es',
+    role: 'user',
+    tenant: 'ilex',
+    company: { id: 'c1', name: 'Cliente SL' },
+    is_admin_tech: false,
+  },
 }
 
 const COMPANIES = [
@@ -47,6 +76,9 @@ function mockAuthenticatedAs(role: keyof typeof ME_BY_ROLE) {
     if (path.includes('/auth/me')) return Promise.resolve({ data: ME_BY_ROLE[role], error: undefined })
     if (path.includes('/platform/tenants/metrics')) return Promise.resolve({ data: [], error: undefined })
     if (path.includes('/platform/tenants')) return Promise.resolve({ data: [], error: undefined })
+    if (path.includes('/platform/settings')) {
+      return Promise.resolve({ data: { ocr_experiment_enabled: false }, error: undefined })
+    }
     if (path.includes('/reporting/invoices')) {
       return Promise.resolve({ data: { items: [], next_cursor: null }, error: undefined })
     }
@@ -109,6 +141,26 @@ describe('AppRoutes (S4.9)', () => {
     expect(within(nav).queryByText('Facturas')).not.toBeInTheDocument()
     expect(within(nav).queryByText('Empresas')).not.toBeInTheDocument()
     expect(within(nav).queryByText('Historial')).not.toBeInTheDocument()
+  })
+
+  it('S4.10 C8: un platform_admin normal (sin flag) no ve "Ajustes" en el menú', async () => {
+    mockAuthenticatedAs('platform_admin')
+    renderApp('/plataforma')
+
+    await screen.findByRole('heading', { name: 'Plataforma — Asesorías' })
+    expect(within(screen.getByRole('navigation')).queryByText('Ajustes')).not.toBeInTheDocument()
+  })
+
+  it('S4.10 C8: admin-tech sí ve "Ajustes" en el menú y puede entrar', async () => {
+    mockAuthenticatedAs('admin_tech')
+    renderApp('/plataforma')
+    const user = userEvent.setup()
+
+    await screen.findByRole('heading', { name: 'Plataforma — Asesorías' })
+    const ajustesLink = within(screen.getByRole('navigation')).getByText('Ajustes')
+    await user.click(ajustesLink)
+
+    expect(await screen.findByRole('heading', { name: 'Ajustes de plataforma' })).toBeInTheDocument()
   })
 
   it('C10: tenant_admin ve Facturas/Empresas/Historial/Subir factura, no Plataforma', async () => {

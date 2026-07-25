@@ -75,6 +75,8 @@ _PROTECTED_ROUTES = {
     ("POST", f"{API}/platform/tenants/{{tenant_id}}/reactivate"),
     ("POST", f"{API}/platform/tenants/{{tenant_id}}/export"),
     ("DELETE", f"{API}/platform/tenants/{{tenant_id}}"),
+    ("GET", f"{API}/platform/settings"),
+    ("PUT", f"{API}/platform/settings"),
 }
 
 
@@ -130,6 +132,8 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
             f"{API}/platform/tenants/{dummy_id}",
             {"json": {"confirm_slug": "loquesea"}},
         ),
+        ("GET", f"{API}/platform/settings", {}),
+        ("PUT", f"{API}/platform/settings", {"json": {"ocr_experiment_enabled": True}}),
     ]
 
 
