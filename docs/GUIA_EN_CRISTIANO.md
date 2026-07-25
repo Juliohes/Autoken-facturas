@@ -355,6 +355,29 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   comprobó con las **554 pruebas automáticas del motor + las 184 de las pantallas**, todas en verde, que
   nada se rompió con esa limpieza.
 
+- **S2.9/S2.10 — Realzar la foto y comprobar si de verdad ayuda** (25/07/2026, segunda pieza del lote
+  de coste acotado): muchas facturas llegan fotografiadas con el móvil con poca luz o poco contraste.
+  La idea es sencilla: antes de que el lector de IA lea la foto, se le puede aplicar un pequeño
+  "retoque" automático (más contraste, más brillo, un poco más de color) — como el filtro que mejora
+  una foto en el móvil, pero pensado para que un texto se lea mejor, no para que quede bonita. El
+  problema es que nadie sabe de antemano si ese retoque ayuda de verdad o no — podría incluso
+  empeorar la lectura en algunos casos. Así que en vez de asumirlo, la aplicación ahora puede leer
+  **las dos versiones de la misma foto** (la original y la retocada) y anotar cuál acertó más datos,
+  usando las mismas comprobaciones matemáticas que ya usa para decidir si una factura necesita
+  revisión (que el NIF cuadre, que las cuentas salgan). Nunca "opina" una IA sobre cuál es mejor — se
+  cuenta objetivamente. Esto cuesta dinero real cada vez que se hace (se le pide al lector que lea dos
+  veces en vez de una), así que **está apagado por defecto** y solo se enciende con el interruptor que
+  ya construyó S4.10 — mientras esté apagado, no cambia nada ni cuesta nada. También se construyó (sin
+  ejecutarlo) un mecanismo para aplicar esto retroactivamente a las facturas ya existentes, cuando
+  Julio decida que merece la pena gastar en ello. La revisión final antes de cerrar la tarea encontró
+  y corrigió un fallo real de diseño: la primera versión pedía la lectura "original" **dos veces** en
+  vez de reutilizar la que ya se había hecho — con el interruptor encendido, cada factura iba a costar
+  el **triple** de lo previsto en vez del doble. También se blindó contra un fichero de imagen
+  "trampa" (unas dimensiones declaradas absurdamente grandes que podrían agotar la memoria del
+  servidor al intentar abrirlo) y se movió el trabajo pesado de retocar la imagen fuera del camino
+  principal, para que una factura problemática no ralentizara el procesamiento de las demás asesorías
+  a la vez. 554 pruebas automáticas previas + 20 nuevas, todas en verde.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
@@ -367,9 +390,9 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   — dominio ya reservado para esa prueba: `setex-facturas.autoken.es`.
 - **Sprint 2 COMPLETO** con el cierre de S2.2 (24/07/2026) — verificación en dispositivo real
   pendiente (ver entrada de arriba), igual que la infra de S4.6.
-- **Lote de cierre de backlog previo al Sprint 5** (decidido con Julio el 24/07/2026; S4.9, S2.2 y S4.10 ya
-  cerradas): queda **S2.9/S2.10** (mejora automática de la foto + comparativa) + **S4.8** (panel comparando
-  varios "lectores de IA" a la vez), ambas ya desbloqueadas por el interruptor de S4.10.
+- **Lote de cierre de backlog previo al Sprint 5** (decidido con Julio el 24/07/2026; S4.9, S2.2, S4.10 y
+  S2.9/S2.10 ya cerradas): queda **S4.8** (panel comparando varios "lectores de IA" a la vez), la última
+  tarea del lote, ya desbloqueada por el interruptor de S4.10.
 - **Sprint 5**: refuerzo de seguridad y pruebas de carga antes de dar el paso final.
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
@@ -378,5 +401,5 @@ en un teléfono real y queda pendiente hasta disponer de uno.
 del todo — S4.9 es una tarea nueva, no estaba en el recuento original de 51, añadida para cerrar el
 hueco de integración detectado el 23/07/2026 — sin contar el módulo de Verifactu ni la limpieza
 final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2 y Sprint 3 y
-Sprint 4 completos. S4.9 (app-shell), S2.2 (captura guiada) y S4.10 (interruptor admin-tech) cerradas.
-Siguiente: S2.9/S2.10/S4.8, antes de entrar en Sprint 5.**
+Sprint 4 completos. S4.9 (app-shell), S2.2 (captura guiada), S4.10 (interruptor admin-tech) y
+S2.9/S2.10 (realce de imagen + comparativa) cerradas. Siguiente: S4.8, antes de entrar en Sprint 5.**
