@@ -378,6 +378,46 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   principal, para que una factura problemática no ralentizara el procesamiento de las demás asesorías
   a la vez. 554 pruebas automáticas previas + 20 nuevas, todas en verde.
 
+- **S4.8 — Comparar varios "lectores de IA" a la vez** (25/07/2026, última tarea del lote de cierre
+  de backlog previo al Sprint 5, con el alcance completo que pidió Julio): igual que S2.9/S2.10
+  comparaba "la foto original" contra "la foto retocada", esta tarea compara **6 lectores de IA
+  distintos** leyendo la misma factura (Gemini en dos versiones, Claude, un modelo de OpenAI, el
+  lector especializado en facturas de Microsoft, y un OCR puro de Mistral), para saber con datos
+  reales cuál acierta más antes de decidir con cuál quedarse en producción. Hay un matiz importante:
+  no todos son iguales por dentro. Cuatro de ellos son "se les puede preguntar" (se les manda la
+  imagen y un texto pidiéndoles que devuelvan los datos en un formato concreto); pero el lector de
+  Microsoft tiene su propio formato fijo de respuesta (hay que "traducirlo" al formato común de la
+  aplicación) y el de Mistral es un OCR puro — solo transcribe el texto que ve, no entiende qué es
+  "la fecha" o "el importe", así que sus resultados siempre salen vacíos en los campos concretos, **a
+  propósito, no por un fallo**: el panel ahora avisa de esto junto al nombre de esos dos motores para
+  que no se lea como si hubieran fallado. Igual que S2.9/S2.10, todo esto está detrás del mismo
+  interruptor de S4.10, apagado por defecto: mientras esté apagado no cuesta nada. Un nuevo panel
+  "Ranking OCR", visible solo con el interruptor encendido, muestra por cada motor cuántas facturas
+  ha leído, su puntuación media, y en cuántas quedó en primer puesto (un empate cuenta para los dos
+  motores empatados, nunca se inventa un ganador único).
+
+  **Un incidente real durante la construcción de esta tarea, contado con total transparencia**: en
+  un momento del desarrollo, una prueba automática con el interruptor encendido se ejecutó sin
+  indicarle explícitamente qué "lectores de mentira" usar para la prueba — y el código, al no
+  recibir nada, construyó los 6 lectores REALES a partir de las claves configuradas en este entorno
+  de trabajo (que sí tiene credenciales de verdad de los 6 proveedores), y les mandó una imagen de
+  prueba sin sentido. Esto disparó de verdad 6 llamadas de pago reales, de coste pequeño y acotado,
+  a los 6 proveedores. Se avisó a Julio de esto en el momento en que ocurrió. Corregido de raíz, no
+  solo parcheado: ahora la única pieza del código con permiso para "si no te dicen qué usar,
+  construye los lectores reales" es la pieza principal del trabajador OCR en producción — ninguna
+  otra pieza interna tiene ese permiso, así que una prueba futura que se olvide de indicar los
+  lectores de mentira simplemente falla al momento en vez de arriesgarse a llamar a algo real. La
+  revisión final encontró además, por su cuenta, un segundo bug de coste real: el lector "por
+  defecto" (Gemini) se estaba llamando **dos veces** por factura (una para el resultado normal, otra
+  para el ranking) en vez de reutilizar la lectura que ya se había hecho — el mismo tipo de fallo que
+  ya se había corregido en S2.9/S2.10, colado de nuevo aquí sin querer. Ya corregido. 623 pruebas
+  automáticas del motor + 191 de las pantallas, todas en verde.
+
+**Con S4.8 cerrado, el lote de cierre de backlog previo al Sprint 5 queda COMPLETO**: S4.9
+(app-shell), S2.2 (captura guiada), S4.10 (interruptor admin-tech), S2.9/S2.10 (realce + comparativa)
+y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas. Toca planificar el Sprint 5 con
+Julio antes de seguir.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
@@ -390,16 +430,17 @@ en un teléfono real y queda pendiente hasta disponer de uno.
   — dominio ya reservado para esa prueba: `setex-facturas.autoken.es`.
 - **Sprint 2 COMPLETO** con el cierre de S2.2 (24/07/2026) — verificación en dispositivo real
   pendiente (ver entrada de arriba), igual que la infra de S4.6.
-- **Lote de cierre de backlog previo al Sprint 5** (decidido con Julio el 24/07/2026; S4.9, S2.2, S4.10 y
-  S2.9/S2.10 ya cerradas): queda **S4.8** (panel comparando varios "lectores de IA" a la vez), la última
-  tarea del lote, ya desbloqueada por el interruptor de S4.10.
-- **Sprint 5**: refuerzo de seguridad y pruebas de carga antes de dar el paso final.
+- **Lote de cierre de backlog previo al Sprint 5 — COMPLETO** (decidido con Julio el 24/07/2026):
+  las 5 tareas (S4.9 app-shell, S2.2 captura guiada, S4.10 interruptor admin-tech, S2.9/S2.10
+  realce+comparativa, S4.8 ranking multi-modelo) cerradas y mergeadas el 25/07/2026.
+- **Sprint 5**: refuerzo de seguridad y pruebas de carga antes de dar el paso final. Toca planificarlo
+  con Julio.
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
 
-**Avance estimado hacia producción a día de hoy: ≈71%** (37 de 52 tareas del plan "core" completas
+**Avance estimado hacia producción a día de hoy: ≈73%** (38 de 52 tareas del plan "core" completas
 del todo — S4.9 es una tarea nueva, no estaba en el recuento original de 51, añadida para cerrar el
 hueco de integración detectado el 23/07/2026 — sin contar el módulo de Verifactu ni la limpieza
-final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2 y Sprint 3 y
-Sprint 4 completos. S4.9 (app-shell), S2.2 (captura guiada), S4.10 (interruptor admin-tech) y
-S2.9/S2.10 (realce de imagen + comparativa) cerradas. Siguiente: S4.8, antes de entrar en Sprint 5.**
+final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2, Sprint 3 y
+Sprint 4 completos. Lote de cierre de backlog previo al Sprint 5 COMPLETO (S4.9, S2.2, S4.10,
+S2.9/S2.10, S4.8). Siguiente: planificar el Sprint 5 con Julio.**

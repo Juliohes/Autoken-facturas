@@ -223,12 +223,46 @@
   constantes en `ocr/analysis.py`, filtro de content-types soportados movido de SQL a Python (fuente
   única de verdad), `GRANT SELECT` a nivel de columna en vez de tabla completa, aislamiento de fallos
   por candidato en el backfill real. 554 tests de backend previos + 20 nuevos, todos en verde.
+- **S4.8 (panel de ranking multi-modelo) cerrada (PR #98) — última tarea del lote de cierre de backlog
+  previo al Sprint 5, LOTE COMPLETO**: alcance completo decidido explícitamente por Julio (los 6 motores,
+  no un MVP de 2) — Gemini 3 Flash/Pro, Claude Vertex, gpt-5.1, Azure DocIntel (`prebuilt-invoice`) y
+  Mistral OCR4 leyendo la misma factura, puntuados con el mismo `ocr.analysis.analyze_invoice` que ya usa
+  producción. Extractores estructurados nuevos para los 5 motores que no lo tenían (Gemini ya lo tenía de
+  la Fase 1): prompt/parseo JSON compartido (`ocr/extraction_json.py`) para los promptables (Claude,
+  gpt-5.1), mapeo del esquema propio de Azure DocIntel, Mistral siempre con campos vacíos por diseño de su
+  API (OCR puro, no promptable — asimetría documentada en la spec §0 y en el propio panel del frontend, no
+  solo en el código). `ocr_ranking_entries` (migración 0019, RLS de dos niveles, N filas por fichero — una
+  por motor, no columnas fijas) + función `SECURITY DEFINER` `ocr_ranking_summary()` (mismo patrón que
+  `platform_tenant_metrics`) para el agregado cruzando tenants del panel; enganchado a `jobs.ocr.run_ocr`
+  detrás del mismo interruptor de S4.10; backfill retroactivo propio; `GET /platform/ocr-ranking` protegido
+  por `require_admin_tech()`; pantalla `OcrRanking.tsx` (motor / facturas leídas / puntuación media / primer
+  puesto, empate a puntuación máxima cuenta para todos los empatados).
+
+  **Incidente de seguridad real durante el desarrollo, divulgado a Julio en su momento**: un test con el
+  interruptor de S4.10 encendido llamó al worker sin inyectar los motores del ranking; el código construyó
+  los 6 extractores reales desde la config del entorno (que en este sandbox de desarrollo SÍ tiene
+  credenciales reales configuradas), disparando llamadas de pago reales a los 6 proveedores con una imagen
+  sintética. **Corregido de raíz, no solo parcheado**: `jobs.ocr_ranking.run_ocr_ranking` ya no tiene NINGÚN
+  fallback interno a motores reales (su parámetro `extractors` es obligatorio); el único punto de
+  producción legítimo que construye motores reales desde `.env` es `jobs.ocr.run_ocr`; el wrapper de test
+  (`tests/_ocr.py::run_ocr`) exige `ranking_extractors` explícito, sin default — se auditaron y corrigieron
+  los ~30 sitios de llamada afectados. Verificado además con la suite completa bajo
+  `-W error::DeprecationWarning` (habría fallado si se importase cualquier SDK de proveedor real). La
+  auditoría de 3 lentes (SOLID, arquitectura, patrones+seguridad) encontró **de forma independiente** un
+  segundo bug de coste real: el motor por defecto (Gemini Flash) se llamaba DOS veces por factura (una para
+  el resultado principal, otra para el ranking) — el mismo bug de coste duplicado que ya se había corregido
+  en S2.10, reintroducido aquí; corregido reutilizando la lectura ya calculada (`default_reading`) en vez de
+  repetir la llamada. Resto de hallazgos corregidos: test de agregación del panel que faltaba (spec §7 C11,
+  multi-tenant, empates, aislamiento entre tenants), `serialize_reading` reubicado de `ocr/comparison.py` a
+  `ocr/scoring.py` por cohesión, mapeo de Azure DocIntel movido dentro de su propio `try/except`, docstring
+  incorrecto sobre manejo de PDF multi-página en el extractor de gpt-5.1. 623 tests de backend + 191 de
+  frontend, todos en verde.
+- **LOTE DE CIERRE DE BACKLOG PREVIO AL SPRINT 5 — COMPLETO (2026-07-25)**: las 5 tareas (S4.9 app-shell,
+  S2.2 captura guiada, S4.10 interruptor admin-tech, S2.9/S2.10 realce+comparativa, S4.8 ranking
+  multi-modelo) cerradas y mergeadas. Toca planificar el Sprint 5 con Julio antes de seguir.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:
-  - **S4.8** (desbloqueada por S4.10, última pendiente del lote de backlog): panel de ranking
-    multi-modelo (Azure DocIntel, gpt-5.1, Gemini 3 Flash/Pro, Claude Vertex, Mistral OCR4...),
-    **activo automáticamente en todas las facturas** (nuevas + backfill), mismo interruptor.
   - **Kimi K3 aparcado**: servidores en Singapur, sin DPA/SCC — incumple la decisión ya cerrada de residencia
     UE (§11.7). Candidatos alternativos investigados: **dots.ocr** (autoalojable, resuelve RGPD de raíz),
     Qwen2.5-VL 72B, InternVL3 76B.
