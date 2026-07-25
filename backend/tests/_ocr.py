@@ -20,11 +20,13 @@ Contrato que el `implementer` debe respetar (lo fija esta fase roja):
 
 from __future__ import annotations
 
+import io
 from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
 import asyncpg
+from PIL import Image
 
 from invoice_intake import storage
 from tests._intake import JPEG, JPEG_CT
@@ -34,6 +36,17 @@ OWN_CIF = "B06183446"
 COUNTERPARTY_CIF = "A39031620"
 # CIF con dígito de control inválido (para C5): mismo número, letra de control equivocada.
 INVALID_COUNTERPARTY_CIF = "A39031621"
+
+
+def real_jpeg_bytes() -> bytes:
+    """Un JPEG de verdad (decodificable por Pillow), a diferencia de `tests._intake.JPEG` (un
+    fixture mínimo que basta para el resto del pipeline OCR, que nunca decodifica la imagen). La
+    comparativa de S2.10 SÍ la decodifica para realzarla (S2.9), así que los tests que la ejercitan
+    de extremo a extremo necesitan una imagen real."""
+    image = Image.new("RGB", (100, 60), "white")
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG")
+    return buffer.getvalue()
 
 
 async def seed_uploaded_file(
@@ -143,11 +156,49 @@ def make_extractor(invoice=None, *, error: Exception | None = None):
     return _FakeExtractor()
 
 
+def make_comparison_extractor(*, original, enhanced, error_on: str | None = None):
+    """Doble content-type-aware para S2.10 (C2/C5/C6/C7): distingue la llamada "original" de la
+    "realzada" por el `content_type` recibido, sin depender de bytes reales ni de un motor real.
+
+    El realce (`ocr.preprocess.enhance.enhance_invoice_image`) siempre produce `image/png` — esa
+    es la señal que usa este doble para saber qué lectura devolver. `error_on`
+    ("original" | "enhanced") simula que esa llamada en concreto falla (C5), la otra intacta.
+    """
+    from ocr.extraction import InvoiceExtractionError
+    from ocr.preprocess.enhance import ENHANCED_CONTENT_TYPE
+
+    class _ComparisonExtractor:
+        async def extract(self, content: bytes, content_type: str):  # noqa: ARG002
+            is_enhanced_call = content_type == ENHANCED_CONTENT_TYPE
+            if error_on == "enhanced" and is_enhanced_call:
+                raise InvoiceExtractionError("fallo simulado de la lectura realzada")
+            if error_on == "original" and not is_enhanced_call:
+                raise InvoiceExtractionError("fallo simulado de la lectura original")
+            return enhanced if is_enhanced_call else original
+
+    return _ComparisonExtractor()
+
+
 async def run_ocr(*, tenant_id: str, company_id: str, file_id: str, extractor) -> None:
     """Invoca el job del worker directamente (import perezoso; sin arq corriendo)."""
     from jobs.ocr import run_ocr as _run
 
     await _run(tenant_id, company_id, file_id, extractor=extractor)
+
+
+async def set_ocr_experiment_enabled(dsns: dict[str, str], enabled: bool) -> None:
+    """Enciende/apaga el interruptor admin-tech (S4.10) directamente en BD (superusuario).
+
+    La fila única de `platform_settings` ya existe (la inserta la migración 0017); aquí solo se
+    actualiza, sin pasar por el endpoint HTTP (ese camino ya lo prueba `test_platform_settings.py`).
+    """
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        await conn.execute(
+            "UPDATE platform_settings SET ocr_experiment_enabled = $1 WHERE id = true", enabled
+        )
+    finally:
+        await conn.close()
 
 
 # --- Consultas de efecto (superusuario, saltando RLS) --------------------------------------------
@@ -197,5 +248,44 @@ async def extractions_visible_as_tenant(
             "SELECT set_config('app.company_id', $1, false)", company_id if company_id else ""
         )
         return int(await conn.fetchval("SELECT count(*) FROM ocr_extractions"))
+    finally:
+        await conn.close()
+
+
+# --- Consultas de efecto de la comparativa S2.10 (superusuario, saltando RLS) ----------------
+async def fetch_comparison_run(dsns: dict[str, str], *, file_id: str) -> dict | None:
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        row = await conn.fetchrow(
+            "SELECT * FROM ocr_comparison_runs WHERE uploaded_file_id = $1", file_id
+        )
+        return dict(row) if row is not None else None
+    finally:
+        await conn.close()
+
+
+async def count_comparison_runs(dsns: dict[str, str], *, file_id: str) -> int:
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        return int(
+            await conn.fetchval(
+                "SELECT count(*) FROM ocr_comparison_runs WHERE uploaded_file_id = $1", file_id
+            )
+        )
+    finally:
+        await conn.close()
+
+
+async def comparison_runs_visible_as_tenant(
+    dsns: dict[str, str], *, tenant_id: str, company_id: str | None = None
+) -> int:
+    """Igual que `extractions_visible_as_tenant`, pero sobre `ocr_comparison_runs` (C9)."""
+    conn = await asyncpg.connect(dsns["app"])
+    try:
+        await conn.execute("SELECT set_config('app.tenant_id', $1, false)", tenant_id)
+        await conn.execute(
+            "SELECT set_config('app.company_id', $1, false)", company_id if company_id else ""
+        )
+        return int(await conn.fetchval("SELECT count(*) FROM ocr_comparison_runs"))
     finally:
         await conn.close()
