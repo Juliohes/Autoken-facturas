@@ -69,6 +69,7 @@ async def test_c13_lista_solo_los_ficheros_elegibles(authapi: Api) -> None:
         company_id=c_ya,
         file_id=f_ya,
         extractor=make_extractor(build_extracted()),
+        ranking_extractors=[],
     )
     await set_ocr_experiment_enabled(dsns, False)
 

@@ -39,3 +39,16 @@ def test_un_pdf_ilegible_da_error_tipado(tmp_path: Path) -> None:
     roto.write_bytes(b"%PDF-1.4 esto no es un PDF valido")
     with pytest.raises(RasterizeError):
         rasterize_pdf(roto)
+
+
+def test_acepta_bytes_en_memoria_ademas_de_ruta(tmp_path: Path) -> None:
+    """S4.8: el extractor de gpt-5.1 no tiene fichero en disco, solo `content: bytes`."""
+    path = _pdf(tmp_path, pages=2)
+    paginas = rasterize_pdf(path.read_bytes())
+    assert len(paginas) == 2
+    assert all(png.startswith(_PNG_SIGNATURE) for png in paginas)
+
+
+def test_bytes_ilegibles_dan_error_tipado() -> None:
+    with pytest.raises(RasterizeError):
+        rasterize_pdf(b"%PDF-1.4 esto no es un PDF valido")

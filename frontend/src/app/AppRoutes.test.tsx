@@ -79,6 +79,9 @@ function mockAuthenticatedAs(role: keyof typeof ME_BY_ROLE) {
     if (path.includes('/platform/settings')) {
       return Promise.resolve({ data: { ocr_experiment_enabled: false }, error: undefined })
     }
+    if (path.includes('/platform/ocr-ranking')) {
+      return Promise.resolve({ data: [], error: undefined })
+    }
     if (path.includes('/reporting/invoices')) {
       return Promise.resolve({ data: { items: [], next_cursor: null }, error: undefined })
     }
@@ -161,6 +164,26 @@ describe('AppRoutes (S4.9)', () => {
     await user.click(ajustesLink)
 
     expect(await screen.findByRole('heading', { name: 'Ajustes de plataforma' })).toBeInTheDocument()
+  })
+
+  it('S4.8 C10: un platform_admin normal (sin flag) no ve "Ranking OCR" en el menú', async () => {
+    mockAuthenticatedAs('platform_admin')
+    renderApp('/plataforma')
+
+    await screen.findByRole('heading', { name: 'Plataforma — Asesorías' })
+    expect(within(screen.getByRole('navigation')).queryByText('Ranking OCR')).not.toBeInTheDocument()
+  })
+
+  it('S4.8 C10: admin-tech sí ve "Ranking OCR" en el menú y puede entrar', async () => {
+    mockAuthenticatedAs('admin_tech')
+    renderApp('/plataforma')
+    const user = userEvent.setup()
+
+    await screen.findByRole('heading', { name: 'Plataforma — Asesorías' })
+    const rankingLink = within(screen.getByRole('navigation')).getByText('Ranking OCR')
+    await user.click(rankingLink)
+
+    expect(await screen.findByRole('heading', { name: 'Ranking OCR multi-modelo' })).toBeInTheDocument()
   })
 
   it('C10: tenant_admin ve Facturas/Empresas/Historial/Subir factura, no Plataforma', async () => {

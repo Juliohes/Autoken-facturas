@@ -77,6 +77,7 @@ _PROTECTED_ROUTES = {
     ("DELETE", f"{API}/platform/tenants/{{tenant_id}}"),
     ("GET", f"{API}/platform/settings"),
     ("PUT", f"{API}/platform/settings"),
+    ("GET", f"{API}/platform/ocr-ranking"),
 }
 
 
@@ -134,6 +135,7 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ),
         ("GET", f"{API}/platform/settings", {}),
         ("PUT", f"{API}/platform/settings", {"json": {"ocr_experiment_enabled": True}}),
+        ("GET", f"{API}/platform/ocr-ranking", {}),
     ]
 
 

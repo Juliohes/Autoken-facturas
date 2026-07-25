@@ -4,6 +4,10 @@ Los motores de visión (gpt) no aceptan PDF; se les manda cada página como PNG.
 (motor PDFium, licencia permisiva Apache/BSD, sin binarios de sistema) para renderizar y Pillow
 para codificar el PNG. La resolución por defecto (`_DEFAULT_DPI`) es holgada para no perder el
 texto pequeño de la factura (CIF/NIF, §11.8).
+
+Acepta una ruta de fichero (uso original, Fase 1) o bytes en memoria (S4.8, ranking multi-modelo:
+el extractor de gpt-5.1 recibe `content: bytes` de `InvoiceExtractor`, sin fichero en disco).
+`pypdfium2.PdfDocument` soporta ambos de forma nativa (`FPDF_LoadMemDocument64` para bytes).
 """
 
 from __future__ import annotations
@@ -24,17 +28,18 @@ class RasterizeError(Exception):
     """El PDF no se pudo rasterizar (corrupto, cifrado o no es realmente un PDF)."""
 
 
-def rasterize_pdf(path: str | Path, *, dpi: int = _DEFAULT_DPI) -> list[bytes]:
+def rasterize_pdf(source: str | Path | bytes, *, dpi: int = _DEFAULT_DPI) -> list[bytes]:
     """Renderiza cada página del PDF y devuelve su PNG en bytes (una entrada por página).
 
-    Lanza `RasterizeError` ante cualquier fallo de la librería nativa: nada crudo cruza la frontera.
+    `source` es una ruta de fichero o los bytes del PDF ya en memoria. Lanza `RasterizeError` ante
+    cualquier fallo de la librería nativa: nada crudo cruza la frontera.
     """
-    path = Path(path)
+    label = source if isinstance(source, bytes) else Path(source).name
     scale = dpi / _PDF_POINTS_PER_INCH
     try:
-        document = pdfium.PdfDocument(path)
+        document = pdfium.PdfDocument(source if isinstance(source, bytes) else Path(source))
     except Exception as exc:  # PDF ilegible: no dejamos escapar la excepción nativa
-        raise RasterizeError(f"No se pudo abrir el PDF {path.name}: {exc}") from exc
+        raise RasterizeError(f"No se pudo abrir el PDF {_describe(label)}: {exc}") from exc
 
     try:
         pages: list[bytes] = []
@@ -45,10 +50,14 @@ def rasterize_pdf(path: str | Path, *, dpi: int = _DEFAULT_DPI) -> list[bytes]:
             image.save(buffer, format="PNG")
             pages.append(buffer.getvalue())
     except Exception as exc:
-        raise RasterizeError(f"No se pudo rasterizar el PDF {path.name}: {exc}") from exc
+        raise RasterizeError(f"No se pudo rasterizar el PDF {_describe(label)}: {exc}") from exc
     finally:
         document.close()
 
     if not pages:
-        raise RasterizeError(f"El PDF {path.name} no tiene páginas que rasterizar")
+        raise RasterizeError(f"El PDF {_describe(label)} no tiene páginas que rasterizar")
     return pages
+
+
+def _describe(label: str | bytes) -> str:
+    return "(bytes en memoria)" if isinstance(label, bytes) else label

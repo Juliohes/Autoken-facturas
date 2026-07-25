@@ -122,3 +122,43 @@ class OcrComparisonRun(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class OcrRankingEntry(Base):
+    """Lectura de UN motor candidato sobre UNA factura, para el ranking multi-modelo (S4.8).
+
+    Generaliza `OcrComparisonRun` (S2.10, 2 lecturas fijas) a N motores: una fila por
+    `(uploaded_file_id, engine)` en vez de una fila por fichero con columnas fijas. Detrás del mismo
+    interruptor `platform_settings.ocr_experiment_enabled`; nunca decide el resultado que ve el
+    usuario (eso lo sigue decidiendo `ocr_extractions`, la lectura de producción).
+    """
+
+    __tablename__ = "ocr_ranking_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "uploaded_file_id", "engine", name="ocr_ranking_entries_file_engine_unique"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    uploaded_file_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("uploaded_files.id", ondelete="CASCADE"), nullable=False
+    )
+    engine: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    reading: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

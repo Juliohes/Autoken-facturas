@@ -53,6 +53,7 @@ async def test_c1_interruptor_apagado_no_genera_comparativa(authapi: Api) -> Non
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted()),
+        ranking_extractors=[],
     )
 
     assert await count_comparison_runs(dsns, file_id=file_id) == 0
@@ -70,6 +71,7 @@ async def test_c2_interruptor_encendido_genera_la_comparativa(authapi: Api) -> N
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted()),
+        ranking_extractors=[],
     )
 
     row = await fetch_comparison_run(dsns, file_id=file_id)
@@ -90,6 +92,7 @@ async def test_c3_pdf_no_genera_comparativa(authapi: Api) -> None:
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted()),
+        ranking_extractors=[],
     )
 
     assert await count_comparison_runs(dsns, file_id=file_id) == 0
@@ -109,6 +112,7 @@ async def test_c4_extraccion_principal_falla_no_hay_comparativa(authapi: Api) ->
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(error=InvoiceExtractionError("proveedor caído")),
+        ranking_extractors=[],
     )
 
     assert await count_comparison_runs(dsns, file_id=file_id) == 0
@@ -127,6 +131,7 @@ async def test_c5_fallo_de_la_comparativa_no_afecta_al_resultado_principal(autha
         company_id=company_id,
         file_id=file_id,
         extractor=make_comparison_extractor(original=buena, enhanced=buena, error_on="enhanced"),
+        ranking_extractors=[],
     )
 
     assert await count_comparison_runs(dsns, file_id=file_id) == 0
@@ -145,6 +150,7 @@ async def test_c8_reprocesar_no_duplica_la_comparativa(authapi: Api) -> None:
             company_id=company_id,
             file_id=file_id,
             extractor=make_extractor(build_extracted()),
+            ranking_extractors=[],
         )
 
     assert await count_comparison_runs(dsns, file_id=file_id) == 1
@@ -162,6 +168,7 @@ async def test_c9_aislamiento_por_tenant(authapi: Api) -> None:
         company_id=company_a,
         file_id=file_a,
         extractor=make_extractor(build_extracted()),
+        ranking_extractors=[],
     )
 
     assert await comparison_runs_visible_as_tenant(dsns, tenant_id=tenant_a) == 1

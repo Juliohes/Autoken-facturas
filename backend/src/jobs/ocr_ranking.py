@@ -1,0 +1,114 @@
+"""Ranking multi-modelo (S4.8): job que compara varios motores OCR sobre la misma factura.
+
+`run_ocr_ranking` es paralela y ortogonal a `jobs.ocr.run_ocr_comparison` (S2.10) — comparan ejes
+distintos (S2.10: misma imagen, misma variante de un motor, original-vs-realzada; S4.8: misma
+imagen original, N motores distintos) y viven en tablas separadas
+(`ocr_comparison_runs`/`ocr_ranking_entries`), pero comparten el mismo interruptor
+`platform_settings.ocr_experiment_enabled` (decisión ya tomada en el plan, no de esta tarea).
+
+Reutiliza el análisis de dominio ya auditado (`ocr.analysis.analyze_invoice`,
+`ocr.scoring.score_analysis`, `ocr.scoring.serialize_reading`) para puntuar y guardar cada
+lectura — nunca inventa un criterio nuevo de "qué es una buena lectura".
+
+Transacción PROPIA, llamada tras el resultado principal ya confirmado (desde `jobs.ocr.run_ocr`) o
+de forma independiente desde el backfill retroactivo (`jobs.ocr_ranking_backfill`). El fallo de UN
+motor (sin configurar o fallo puntual de esa factura) nunca bloquea a los demás (spec C3/C4); el
+fallo de la orquestación entera nunca propaga al llamador (mismo criterio que C5 de S2.10).
+
+`extractors` es un parámetro OBLIGATORIO, sin fallback interno a la config real (auditoría,
+hallazgo alto): quien construye motores reales desde `.env` cuando el llamador no inyecta nada es
+`jobs.ocr.run_ocr` (el único punto de producción legítimo para ese fallback), nunca esta función.
+Así, llamar a `run_ocr_ranking` directamente (como hacen la mayoría de los tests) no puede disparar
+llamadas de pago reales por omisión — el incidente real de S4.8 (ver docstring de
+`jobs.ocr.run_ocr`) vivía precisamente en un fallback como este, un nivel más abajo de lo que
+corresponde.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from uuid import UUID
+
+import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ocr import ranking_repository
+from ocr.analysis import analyze_invoice
+from ocr.extraction import ExtractedInvoice, InvoiceExtractor
+from ocr.scoring import score_analysis, serialize_reading
+from platform_admin import settings_repository
+from shared.db import tenant_session
+
+logger = structlog.get_logger(__name__)
+
+__all__ = ["run_ocr_ranking"]
+
+
+async def run_ocr_ranking(
+    tenant_id: UUID,
+    company_id: UUID,
+    uploaded_file_id: UUID,
+    *,
+    content: bytes,
+    content_type: str,
+    own_cif: str,
+    extractors: list[InvoiceExtractor],
+    default_reading: ExtractedInvoice | None = None,
+) -> None:
+    """Compara los motores candidatos disponibles sobre esta factura y guarda su ranking.
+
+    `extractors`: motores a los que SÍ se les pide `.extract()` aquí (los tests inyectan dobles;
+    `jobs.ocr.run_ocr` construye los reales desde la config cuando no le pasan nada).
+    `default_reading` (S4.8, auditoría, hallazgo crítico): si el llamador ya tiene la lectura del
+    motor por defecto (camino en vivo: `run_ocr` acaba de calcularla como `reconciled`),
+    se reutiliza tal cual y NO se vuelve a pedir a Gemini Flash — pedirla otra vez pagaría esa
+    llamada DOS veces por factura, el mismo bug de coste duplicado que ya se corrigió en S2.10 para
+    `run_ocr_comparison`. Si es `None` (backfill retroactivo, sin ninguna lectura previa en
+    memoria), el motor por defecto debe venir incluido en `extractors` para que se le llame también.
+    Nunca propaga una excepción.
+    """
+    try:
+        async with tenant_session(tenant_id, company_id) as session:
+            settings_row = await settings_repository.get_settings(session)
+            if not settings_row.ocr_experiment_enabled:
+                return
+            if not extractors and default_reading is None:
+                return
+
+            if default_reading is not None:
+                await _persist(session, company_id, uploaded_file_id, own_cif, default_reading)
+
+            readings = await asyncio.gather(
+                *(engine.extract(content, content_type) for engine in extractors),
+                return_exceptions=True,
+            )
+            for reading in readings:
+                if isinstance(reading, BaseException):
+                    logger.error(
+                        "ranking.engine_failed",
+                        uploaded_file_id=str(uploaded_file_id),
+                        error=str(reading),
+                    )
+                    continue
+                await _persist(session, company_id, uploaded_file_id, own_cif, reading)
+    except Exception as exc:  # noqa: BLE001  (experimento de fondo: nunca debe tumbar al llamador)
+        logger.error("ranking.failed", uploaded_file_id=str(uploaded_file_id), error=str(exc))
+
+
+async def _persist(
+    session: AsyncSession,
+    company_id: UUID,
+    uploaded_file_id: UUID,
+    own_cif: str,
+    reading: ExtractedInvoice,
+) -> None:
+    analysis = analyze_invoice(reading, own_cif)
+    await ranking_repository.upsert_ranking_entry(
+        session,
+        company_id=company_id,
+        uploaded_file_id=uploaded_file_id,
+        engine=reading.engine,
+        model=reading.model,
+        reading=serialize_reading(reading, analysis),
+        score=score_analysis(analysis),
+    )

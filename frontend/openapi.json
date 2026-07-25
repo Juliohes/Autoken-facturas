@@ -1668,6 +1668,31 @@
           }
         }
       }
+    },
+    "/api/v1/platform/ocr-ranking": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Get Ranking",
+        "operationId": "get_ranking_api_v1_platform_ocr_ranking_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EngineRankingOut"
+                  },
+                  "type": "array",
+                  "title": "Response Get Ranking Api V1 Platform Ocr Ranking Get"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2143,6 +2168,34 @@
         ],
         "title": "DuplicateRowOut",
         "description": "Fila omitida por CIF ya existente en el informe: n\u00famero de fila (1-based) y CIF."
+      },
+      "EngineRankingOut": {
+        "properties": {
+          "engine": {
+            "type": "string",
+            "title": "Engine"
+          },
+          "invoices_read": {
+            "type": "integer",
+            "title": "Invoices Read"
+          },
+          "average_score": {
+            "type": "number",
+            "title": "Average Score"
+          },
+          "first_place_count": {
+            "type": "integer",
+            "title": "First Place Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "engine",
+          "invoices_read",
+          "average_score",
+          "first_place_count"
+        ],
+        "title": "EngineRankingOut"
       },
       "ExportOut": {
         "properties": {
