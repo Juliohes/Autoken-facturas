@@ -21,6 +21,7 @@ import counterparty.models  # noqa: F401  (efecto secundario: registrar `counter
 import invoice_intake.models  # noqa: F401  (efecto secundario: registrar `uploaded_files`)
 import invoicing.models  # noqa: F401  (efecto secundario: registrar `invoices`/`invoice_tax_lines`/`ocr_corrections`)
 import ocr.models  # noqa: F401  (efecto secundario: registrar `ocr_extractions`)
+import platform_admin.models  # noqa: F401  (efecto secundario: registrar `platform_settings`)
 import tenancy.models  # noqa: F401  (efecto secundario: registrar tablas del núcleo)
 
 config = context.config
