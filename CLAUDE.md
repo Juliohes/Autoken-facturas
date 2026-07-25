@@ -194,16 +194,41 @@
   predicado `visible` junto al resto de la tabla; y la pantalla de ajustes lanzaba un GET que el backend
   iba a rechazar con 403 igualmente para quien no tiene el flag — ahora condicionado con `enabled`. Suite
   completa verificada en verde tras el refactor: 554 tests de backend + 184 de frontend.
+- **S2.9+S2.10 (preprocesado de imagen + comparativa original-vs-realzada) cerradas — segunda pieza del
+  lote de coste acotado tras S4.10**: `ocr/preprocess/enhance.py` (S2.9, Pillow `ImageEnhance`
+  contraste/brillo/saturación, parámetros conservadores sin afinar contra el bench real — eso exige
+  llamadas de pago, spec §6) + `ocr/comparison.py`/`ocr/comparison_repository.py`/tabla
+  `ocr_comparison_runs` (S2.10, migración 0018, RLS de dos niveles igual que `ocr_extractions`):
+  compara la lectura original vs la realzada puntuando con el MISMO `ocr.analysis.analyze_invoice`
+  que ya usa producción (reutilizado, no reinventado); empate exacto -> `tie`, nunca un ganador
+  inventado. Enganchada a `jobs.ocr.run_ocr` (`run_ocr_comparison`) en su PROPIA transacción, tras la
+  principal ya confirmada: un fallo de la comparativa nunca toca el resultado real. Todo detrás de
+  `platform_settings.ocr_experiment_enabled` (S4.10), **apagado por defecto** — coste cero hasta que
+  Julio lo active. Backfill retroactivo construido (`jobs/ocr_backfill.py` + función `SECURITY
+  DEFINER` `ocr_backfill_candidates()` + CLI `scripts/backfill_ocr_comparison.py`), probado solo en
+  modo simulación: la ejecución real dispara llamadas de pago sobre el histórico completo y queda
+  pendiente de que Julio la autorice, igual que activar el interruptor de verdad. **Auditoría en 3
+  lentes (SOLID, arquitectura, patrones+seguridad), 2 hallazgos altos coincidentes en dos lentes + 2
+  hallazgos altos de seguridad de la tercera, todos corregidos antes de cerrar**: `ocr/backfill.py`
+  invertía la dirección de dependencias `jobs->ocr` (importaba de `jobs.ocr`) — movido a
+  `jobs/ocr_backfill.py`; el camino en vivo pedía la lectura "original" DOS veces al lector (una en
+  `run_ocr`, otra dentro de la comparativa), triplicando en vez de doblando el coste real por factura
+  — corregido pasando la lectura ya calculada como parámetro opcional; sin tope de dimensiones antes
+  de decodificar con Pillow bytes no confiables (riesgo de decompression bomb, cualquier tenant podía
+  subir una imagen adversarial) — `ImageTooLargeError`, tope 40M píxeles, chequeado antes de `.load()`;
+  el realce (CPU/memoria) corría síncrono sobre el event loop compartido del worker arq, congelando el
+  OCR de TODOS los tenants por un solo fichero — envuelto en `asyncio.to_thread`, igual que la
+  descarga de MinIO. También varias duplicaciones (DRY): `serialize_tax_lines` compartida
+  (`ocr/extraction.py`), constante `ENHANCED_CONTENT_TYPE` compartida, claves de `validations` como
+  constantes en `ocr/analysis.py`, filtro de content-types soportados movido de SQL a Python (fuente
+  única de verdad), `GRANT SELECT` a nivel de columna en vez de tabla completa, aislamiento de fallos
+  por candidato en el backfill real. 554 tests de backend previos + 20 nuevos, todos en verde.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:
-  - **S2.9/S2.10** (siguiente en el lote, ya desbloqueadas por S4.10): preprocesado de imagen
-    (contraste/brillo/saturación máx.) + comparativa original-vs-realzada, **activo automáticamente en
-    todas las facturas** (nuevas + backfill retroactivo de las existentes), apagable con el interruptor
-    admin-tech ya construido — experimento de coste acotado en el tiempo.
-  - **S4.8** (desbloqueada por S4.10): panel de ranking multi-modelo (Azure DocIntel, gpt-5.1, Gemini 3
-    Flash/Pro, Claude Vertex, Mistral OCR4...), **activo automáticamente en todas las facturas** (nuevas +
-    backfill), mismo interruptor.
+  - **S4.8** (desbloqueada por S4.10, última pendiente del lote de backlog): panel de ranking
+    multi-modelo (Azure DocIntel, gpt-5.1, Gemini 3 Flash/Pro, Claude Vertex, Mistral OCR4...),
+    **activo automáticamente en todas las facturas** (nuevas + backfill), mismo interruptor.
   - **Kimi K3 aparcado**: servidores en Singapur, sin DPA/SCC — incumple la decisión ya cerrada de residencia
     UE (§11.7). Candidatos alternativos investigados: **dots.ocr** (autoalojable, resuelve RGPD de raíz),
     Qwen2.5-VL 72B, InternVL3 76B.
