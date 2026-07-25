@@ -16,9 +16,11 @@ from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     Text,
     UniqueConstraint,
@@ -71,6 +73,49 @@ class OcrExtraction(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False)
     # `created_at` es INMUTABLE (primera extracción del fichero); `updated_at` se refresca en cada
     # reproceso (upsert). El reprocesado idempotente (C10) no miente la fecha de creación.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class OcrComparisonRun(Base):
+    """Comparativa original-vs-realzada de una lectura OCR (S2.10), detrás del interruptor de S4.10.
+
+    Una fila vigente por `uploaded_file_id` (UNIQUE, mismo patrón de idempotencia que
+    `OcrExtraction`). Experimento de coste acotado en el tiempo: nunca decide el resultado que ve el
+    usuario (eso lo sigue decidiendo `ocr_extractions`, la lectura original).
+    """
+
+    __tablename__ = "ocr_comparison_runs"
+    __table_args__ = (
+        UniqueConstraint("uploaded_file_id", name="ocr_comparison_runs_uploaded_file_unique"),
+        CheckConstraint(
+            "winner IN ('original', 'enhanced', 'tie')", name="ocr_comparison_runs_winner_valid"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    uploaded_file_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("uploaded_files.id", ondelete="CASCADE"), nullable=False
+    )
+    original_reading: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    enhanced_reading: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    original_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    enhanced_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    winner: Mapped[str] = mapped_column(Text, nullable=False)
+    engine: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

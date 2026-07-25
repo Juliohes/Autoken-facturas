@@ -28,11 +28,27 @@ from ocr.extraction import (
 from ocr.verification import TaxLine, check_invoice_totals
 from shared.tax_id import normalize_tax_id, validate_tax_id
 
-__all__ = ["InvoiceAnalysis", "STATUS_AUTO_OK", "STATUS_NEEDS_REVIEW", "analyze_invoice"]
+__all__ = [
+    "InvoiceAnalysis",
+    "STATUS_AUTO_OK",
+    "STATUS_NEEDS_REVIEW",
+    "VALIDATION_KEY_COUNTERPARTY_MOD23",
+    "VALIDATION_KEY_TOTALS",
+    "VALIDATION_FIELD_VALID",
+    "analyze_invoice",
+]
 
 # Estados globales de la extracción (columna `ocr_extractions.status`).
 STATUS_AUTO_OK = "auto_ok"
 STATUS_NEEDS_REVIEW = "needs_review"
+
+# Claves de `InvoiceAnalysis.validations` (dict sin tipar por ser JSON-friendly de cara a
+# `ocr_extractions.validations`). Se exponen como constantes para que otros consumidores del
+# análisis (p. ej. `ocr.comparison`, S2.10) no repitan los literales — si cambiaran aquí sin
+# actualizar un consumidor con el literal repetido, fallaría en silencio (auditoría).
+VALIDATION_KEY_COUNTERPARTY_MOD23 = "counterparty_mod23"
+VALIDATION_KEY_TOTALS = "totals"
+VALIDATION_FIELD_VALID = "valid"
 
 
 @dataclass(frozen=True)
@@ -61,7 +77,7 @@ def analyze_invoice(invoice: ExtractedInvoice, own_cif: str) -> InvoiceAnalysis:
     mod23: dict[str, Any] | None = None
     if counterparty is not None:
         check = validate_tax_id(counterparty.value)
-        mod23 = {"valid": check.valid, "reason": check.reason}
+        mod23 = {VALIDATION_FIELD_VALID: check.valid, "reason": check.reason}
 
     # Cuadre aritmético: solo verificable con total y al menos un tramo; su ausencia no es un KO
     # (evita falsos descuadres que molestan al usuario).
@@ -72,7 +88,7 @@ def analyze_invoice(invoice: ExtractedInvoice, own_cif: str) -> InvoiceAnalysis:
             for line in invoice.tax_lines
         ]
         check = check_invoice_totals(lines, invoice.total_amount)
-        totals = {"valid": check.valid, "reason": check.reason}
+        totals = {VALIDATION_FIELD_VALID: check.valid, "reason": check.reason}
 
     confidences = {
         "issue_date": invoice.issue_date_confidence,
@@ -81,8 +97,8 @@ def analyze_invoice(invoice: ExtractedInvoice, own_cif: str) -> InvoiceAnalysis:
     }
     validations = {
         "own_tax_id_present": own_present,
-        "counterparty_mod23": mod23,
-        "totals": totals,
+        VALIDATION_KEY_COUNTERPARTY_MOD23: mod23,
+        VALIDATION_KEY_TOTALS: totals,
     }
 
     needs_review = _needs_review(invoice, counterparty, own_present, mod23, totals)

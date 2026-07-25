@@ -27,6 +27,7 @@ __all__ = [
     "ExtractedInvoice",
     "InvoiceExtractor",
     "InvoiceExtractionError",
+    "serialize_tax_lines",
 ]
 
 # Confianza por campo (enrutado): `alta` = fiable; `media` = dudoso; `baja` = no fiable (revisar).
@@ -86,6 +87,19 @@ class ExtractedInvoice:
     engine: str
     model: str
     raw: dict[str, Any]
+
+
+def serialize_tax_lines(invoice: ExtractedInvoice) -> list[dict[str, str]]:
+    """Tramos a JSON-friendly: los importes como `str` para no perder precisión decimal en jsonb.
+
+    Compartida entre `jobs.ocr` (persistencia de `ocr_extractions`) y `ocr.comparison`
+    (persistencia de `ocr_comparison_runs`, S2.10): mismo criterio de serialización en un único
+    sitio, para que no puedan divergir en silencio (auditoría, hallazgo de duplicación).
+    """
+    return [
+        {"base": str(line.base), "rate": str(line.rate), "cuota": str(line.cuota)}
+        for line in invoice.tax_lines
+    ]
 
 
 class InvoiceExtractionError(Exception):
