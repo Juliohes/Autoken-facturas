@@ -174,19 +174,40 @@
   for` desnudo no propagaba el cierre al generador interno — corregido con `contextlib.aclosing`) y
   1 bajo corregido (mapeo de fila duplicado entre `read_identity`/`read_platform_identity`,
   extraído a un helper común).
+- **S4.10 (interruptor admin-tech) cerrada — tercera y última tarea del lote de cierre de backlog previo
+  al Sprint 5**: prerrequisito de S2.9/S2.10/S4.8 (decisión de Julio 2026-07-22), solo el mecanismo del
+  interruptor, sin engancharlo todavía al pipeline OCR. `users.is_admin_tech` (migración 0017): flag sobre
+  una cuenta `platform_admin` ya existente, nunca activable desde la aplicación (decisión de Julio: flag,
+  no un rol nuevo en el enum cerrado) — `find_platform_admin_by_id` (0016) pasa a devolverlo también.
+  `platform_settings`: tabla de una sola fila (mismo patrón `id boolean PK DEFAULT true CHECK(id)` que el
+  resto de `platform_admin`) con el único ajuste, `ocr_experiment_enabled`, tras `GET/PUT
+  /platform/settings` protegido por `require_admin_tech()` (exige `platform_admin` + el flag, comprobado
+  fresco contra Postgres en cada petición — no embebido en el JWT, para que revocarlo en Postgres surta
+  efecto al instante). `GET /auth/me` expone `is_admin_tech`. Frontend: ruta `/plataforma/ajustes` y
+  enlace "Ajustes" en el menú condicional al flag (no solo al rol), pantalla con el interruptor sin estado
+  optimista (activarlo dispara gasto real en cuanto lo lean S2.9/S2.10/S4.8). **Auditoría posterior (SOLID,
+  3 hallazgos corregidos)**: `authz.py` consultaba la BD él mismo dentro de `require_admin_tech()`,
+  mezclando "decidir según datos ya cargados" con "cargar esos datos" — la carga se extrajo a
+  `current_admin_tech_identity()` en `identity/dependencies.py` (nuevo `AdminTechAuthContext`); la
+  visibilidad del enlace "Ajustes" vivía en un `if` suelto de `Menu.tsx` en vez de en `ROUTE_DEFS`
+  (`app/routes.ts`), reabriendo la duplicación rol->ruta que S4.9 ya había cerrado — se declaró como
+  predicado `visible` junto al resto de la tabla; y la pantalla de ajustes lanzaba un GET que el backend
+  iba a rechazar con 403 igualmente para quien no tiene el flag — ahora condicionado con `enabled`. Suite
+  completa verificada en verde tras el refactor: 554 tests de backend + 184 de frontend.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
-- **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11), aún sin construir**:
-  - **S2.9/S2.10**: preprocesado de imagen (contraste/brillo/saturación máx.) + comparativa original-vs-realzada,
-    **activo automáticamente en todas las facturas** (nuevas + backfill retroactivo de las existentes), con
-    interruptor admin-tech (solo Julio) para apagarlo — experimento de coste acotado en el tiempo.
-  - **S4.8**: panel de ranking multi-modelo (Azure DocIntel, gpt-5.1, Gemini 3 Flash/Pro, Claude Vertex,
-    Mistral OCR4...), **activo automáticamente en todas las facturas** (nuevas + backfill), mismo interruptor.
+- **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:
+  - **S2.9/S2.10** (siguiente en el lote, ya desbloqueadas por S4.10): preprocesado de imagen
+    (contraste/brillo/saturación máx.) + comparativa original-vs-realzada, **activo automáticamente en
+    todas las facturas** (nuevas + backfill retroactivo de las existentes), apagable con el interruptor
+    admin-tech ya construido — experimento de coste acotado en el tiempo.
+  - **S4.8** (desbloqueada por S4.10): panel de ranking multi-modelo (Azure DocIntel, gpt-5.1, Gemini 3
+    Flash/Pro, Claude Vertex, Mistral OCR4...), **activo automáticamente en todas las facturas** (nuevas +
+    backfill), mismo interruptor.
   - **Kimi K3 aparcado**: servidores en Singapur, sin DPA/SCC — incumple la decisión ya cerrada de residencia
     UE (§11.7). Candidatos alternativos investigados: **dots.ocr** (autoalojable, resuelve RGPD de raíz),
     Qwen2.5-VL 72B, InternVL3 76B.
   - **Formato IVA sin ".0"/",0" superfluo**: implementado (`percentage.ts`, PR #78).
-- **Pendiente de construir**: interruptor global (feature flag) + rol admin-tech, prerrequisito de S2.9/S2.10/S4.8.
 
 ---
 
