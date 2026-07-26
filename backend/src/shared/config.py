@@ -134,6 +134,16 @@ class Settings(BaseSettings):
     # en staging/producción se inyecta por env var. No se conecta en 0.4.
     database_url: str = "postgresql+asyncpg://autoken_app:autoken@postgres:5432/autoken"
 
+    # Tamaño del pool de conexiones de SQLAlchemy (S5.5, hallazgo real de la prueba de carga): sin
+    # fijarlo, el default de SQLAlchemy (`pool_size=5, max_overflow=10`, 15 conexiones simultáneas
+    # como máximo) se agota con una carga de subida de facturas moderadamente concurrente, dejando
+    # peticiones en cola hasta `pool_timeout` (30s) y fallando después — exactamente lo que se
+    # reprodujo con 50 subidas a la vez (43/50 fallos, p95 ~32s) antes de subir estos valores.
+    # Configurable, no hardcodeado en `shared/db.py`: en un despliegue con varias réplicas de la
+    # app, el total de conexiones a Postgres es la suma de todas — ajustar aquí, no en el código.
+    db_pool_size: int = 20
+    db_max_overflow: int = 20
+
     # Dominio base para extraer el subdominio->tenant (S1.2). `localhost` se acepta además en
     # desarrollo (p. ej. `ilex.localhost`). Los subdominios de plataforma no resuelven a tenant.
     base_domain: str = "autoken.es"
