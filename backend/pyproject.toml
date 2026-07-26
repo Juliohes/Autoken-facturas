@@ -130,6 +130,11 @@ module = "requests.*"
 ignore_missing_imports = true
 follow_imports = "skip"
 
+# asyncpg (conexión directa admin/bypass-RLS del restore drill, S5.3) no publica marcador py.typed.
+[[tool.mypy.overrides]]
+module = "asyncpg.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 asyncio_mode = "auto"
