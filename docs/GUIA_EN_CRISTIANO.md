@@ -440,6 +440,27 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   (una sesión caducada, por ejemplo) podían acabar bloqueando también a los demás. Los dos quedaron
   corregidos antes de cerrar. 631 pruebas automáticas del motor, todas en verde.
 
+- **S5.6 — Que alguien se entere si algo va mal** (26/07/2026, segunda tarea del Sprint 5): hasta
+  ahora, si el servicio caía, se llenaba el disco del servidor, o las facturas se quedaban
+  atascadas esperando a ser leídas, nadie se enteraba hasta que un cliente se quejaba. Esta tarea
+  construye dos cosas. Primero, un "termómetro" nuevo: la aplicación ahora publica en una dirección
+  interna (`/metrics`) cuántas peticiones está recibiendo, cuántas fallan, y cuántas facturas
+  llevan esperando a que un motor de IA las lea (y desde cuándo la más antigua). Segundo, la
+  maquinaria completa para vigilar ese termómetro y avisar sola: Prometheus (lo lee cada 15
+  segundos), Grafana (lo dibuja en un panel visual) y Alertmanager (decide a quién avisar si algo
+  se sale de lo normal — el servicio caído, muchos errores seguidos, facturas atascadas más de 10
+  minutos, o el disco por debajo del 10% libre). Está todo construido y probado, pero **todavía no
+  encendido de verdad**: hace falta desplegarlo en el servidor real (sesión futura, como el
+  certificado de dominio propio de S4.6) y que Julio decida a qué correo o canal llegan los avisos.
+  También queda preparado (pero apagado) un servicio externo, Sentry, que guardaría el detalle
+  técnico de cada error para poder investigarlo después — se activará cuando Julio se cree una
+  cuenta, sin coste mientras tanto. La revisión final encontró y corrigió un fallo de diseño real:
+  el "termómetro" apuntaba el método de cada petición web (GET, POST...) tal cual llegaba, y como
+  ese dato lo puede inventar cualquiera que llame a la aplicación, alguien podría haber mandado
+  miles de peticiones con métodos inventados distintos para ir llenando la memoria del servidor
+  poco a poco — corregido para que solo cuenten los métodos reales que la aplicación usa, y todo lo
+  demás se agrupe junto. 638 pruebas automáticas del motor, todas en verde.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
@@ -456,15 +477,17 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   las 5 tareas (S4.9 app-shell, S2.2 captura guiada, S4.10 interruptor admin-tech, S2.9/S2.10
   realce+comparativa, S4.8 ranking multi-modelo) cerradas y mergeadas el 25/07/2026.
 - **Sprint 5 (hardening+QA) en marcha** (arrancado 25/07/2026, orden acordado con Julio): S5.1
-  (cabeceras y límites) cerrada; quedan S5.6 (monitorización), S5.2 (cifrado por tenant), S5.4
-  (pentest propio), S5.5 (pruebas de carga) y S5.3 (backups + restore drill, la más dependiente de
-  infraestructura/accesos reales) antes de dar el paso final.
+  (cabeceras y límites) y S5.6 (monitorización y alertas) cerradas; quedan S5.2 (cifrado por
+  tenant), S5.4 (pentest propio), S5.5 (pruebas de carga) y S5.3 (backups + restore drill, la más
+  dependiente de infraestructura/accesos reales) antes de dar el paso final. El propio stack de
+  monitorización de S5.6 (Prometheus/Grafana/Alertmanager) está construido pero no desplegado de
+  verdad todavía — pendiente de una sesión futura con acceso a la VPS B.
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
 
-**Avance estimado hacia producción a día de hoy: ≈74%** (39 de 53 tareas del plan "core" completas
+**Avance estimado hacia producción a día de hoy: ≈75%** (40 de 53 tareas del plan "core" completas
 del todo — S4.9 es una tarea nueva, no estaba en el recuento original de 51, añadida para cerrar el
 hueco de integración detectado el 23/07/2026 — sin contar el módulo de Verifactu ni la limpieza
 final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2, Sprint 3 y
 Sprint 4 completos. Lote de cierre de backlog previo al Sprint 5 COMPLETO. Sprint 5 en marcha: S5.1
-cerrada. Siguiente: S5.6 (monitorización y alertas).**
+y S5.6 cerradas. Siguiente: S5.2 (cifrado por tenant).**

@@ -281,6 +281,31 @@
   resetea tras una rotación exitosa); cabeceras ausentes en la respuesta `413` del middleware de tamaño de
   petición (es el más externo a propósito, nunca pasaba por `SecurityHeadersMiddleware` — corregido,
   aplica el mismo conjunto directamente). 631 tests de backend en verde.
+- **S5.6 (monitorización y alertas) cerrada (PR #102) — segunda tarea del Sprint 5**: decisiones de infra
+  confirmadas por Julio (§0 de la spec): stack self-hosted en la VPS B, no SaaS; Sentry integrado pero
+  apagado hasta que Julio cree la cuenta. Captura de errores opcional (`shared/error_tracking.py`, solo con
+  `SENTRY_DSN`, `send_default_pii=False`/`max_request_body_size="never"` explícitos), `GET
+  /api/v1/metrics` (`jobs/metrics_router.py`, formato Prometheus: contador HTTP por método+código vía
+  `MetricsMiddleware` + salud de la cola OCR de arq vía `jobs/monitoring.py`, API pública `queued_jobs()`
+  sin reconstruir claves de Redis a mano) — público a propósito, solo agregados operativos, añadido a las
+  listas de rutas públicas de RBAC/aislamiento de tenants. Infraestructura como código completa en
+  `infrastructure/`: Prometheus (scrape + reglas de alerta: caída de la API, tasa de 5xx, cola OCR
+  atascada >10 min, disco <10%), Alertmanager (receptor `null` hasta que Julio decida el canal real),
+  Grafana (datasource + dashboard básico), validados con `docker compose config`/`promtool check
+  config`+`check rules`/`amtool check-config` reales (vía Docker). **Desplegar de verdad el stack contra la
+  VPS B queda pendiente de una sesión futura con ese acceso** (mismo patrón que el Caddy/TLS real de S4.6;
+  runbook en `docs/runbooks/observabilidad.md`). **Auditoría de 3 lentes: 1 ALTO + 6 medios/bajos, todos
+  corregidos**: DoS de cardinalidad (el método HTTP se etiquetaba tal cual en el contador Prometheus; un
+  atacante podía mandar métodos arbitrarios y agotar memoria del proceso con series nuevas sin límite —
+  corregido con lista blanca de métodos conocidos, el resto se agrupa en "OTHER"); inversión de
+  dependencias (`shared/metrics.py` importaba de `jobs.monitoring`; movido el endpoint agregador a
+  `jobs/metrics_router.py`, `shared` deja solo la primitiva transversal); amplificación (`/metrics`
+  público abría/cerraba un pool de Redis por petición sin límite de frecuencia — cacheado con TTL de 10s);
+  fail-open de infraestructura (`GRAFANA_ADMIN_PASSWORD` con default `admin`; puertos de
+  Prometheus/Alertmanager/Grafana en todas las interfaces sin autenticación propia — corregido: contraseña
+  obligatoria + puertos en loopback); `uid` del datasource de Grafana ausente (el dashboard habría
+  quedado en blanco en el primer despliegue real); docstring engañoso sobre una dimensión de "ruta" nunca
+  implementada; imágenes `:latest` fijadas a versión. 638 tests de backend en verde.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:
