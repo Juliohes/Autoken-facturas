@@ -27,6 +27,26 @@
         }
       }
     },
+    "/api/v1/metrics": {
+      "get": {
+        "tags": [
+          "observability"
+        ],
+        "summary": "Metrics",
+        "description": "Peticiones HTTP + salud de la cola OCR, en formato de texto Prometheus.",
+        "operationId": "metrics_api_v1_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tenants/current": {
       "get": {
         "tags": [
@@ -115,7 +135,7 @@
           "auth"
         ],
         "summary": "Refresh",
-        "description": "Rota el refresh de la cookie: nuevo access + nueva cookie; el anterior queda invalidado.",
+        "description": "Rota el refresh de la cookie: nuevo access + nueva cookie; el anterior queda invalidado.\n\nSin cookie se trata igual que una cookie inv\u00e1lida (S5.1 C7): cuenta para el rate-limit por IP\nen vez de responder 401 sin m\u00e1s, para que machacar el endpoint sin cookie tampoco sea gratis.",
         "operationId": "refresh_api_v1_auth_refresh_post",
         "responses": {
           "200": {
@@ -201,7 +221,7 @@
           "auth"
         ],
         "summary": "Activate Confirm",
-        "description": "Confirma el TOTP: enrola el segundo factor y consume el token de activaci\u00f3n (un solo uso).",
+        "description": "Confirma el TOTP: enrola el segundo factor y consume el token de activaci\u00f3n (un solo uso).\n\nRate-limit por token (S5.1 C3/C5): un c\u00f3digo incorrecto repetido contra el MISMO token da 429\ntras agotar el tope, sin afectar a la activaci\u00f3n de otro usuario en curso.",
         "operationId": "activate_confirm_api_v1_auth_activate_confirm_post",
         "requestBody": {
           "content": {
@@ -927,7 +947,7 @@
           "reporting"
         ],
         "summary": "List Invoices",
-        "description": "Facturas confirmadas de la asesor\u00eda, filtradas y paginadas (S3.1). Ver spec S3.1.",
+        "description": "Facturas confirmadas de la asesor\u00eda, filtradas y paginadas (S3.1). Ver spec S3.1.\n\n`counterparty_tax_id` filtra por CIF EXACTO de contraparte (S5.2 C5): ya no admite texto libre\npor nombre (el nombre vive cifrado sin \u00edndice ciego desde S5.2, decisi\u00f3n de Julio).",
         "operationId": "list_invoices_api_v1_reporting_invoices_get",
         "parameters": [
           {
@@ -965,7 +985,7 @@
             }
           },
           {
-            "name": "q",
+            "name": "counterparty_tax_id",
             "in": "query",
             "required": false,
             "schema": {
@@ -977,7 +997,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Q"
+              "title": "Counterparty Tax Id"
             }
           },
           {
@@ -1115,7 +1135,7 @@
             }
           },
           {
-            "name": "q",
+            "name": "counterparty_tax_id",
             "in": "query",
             "required": false,
             "schema": {
@@ -1127,7 +1147,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Q"
+              "title": "Counterparty Tax Id"
             }
           },
           {

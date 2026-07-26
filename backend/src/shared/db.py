@@ -40,7 +40,16 @@ def _get_sessionmaker() -> async_sessionmaker[AsyncSession]:
     """
     global _engine, _sessionmaker
     if _sessionmaker is None:
-        _engine = create_async_engine(get_settings().database_url, pool_pre_ping=True)
+        # `hide_parameters=True` (S5.2, hallazgo de auditoría de seguridad): sin esto, cualquier
+        # `StatementError`/`DBAPIError` de SQLAlchemy incluye en su mensaje los bind params reales
+        # de la sentencia — para las consultas que cifran/descifran (`pgp_sym_encrypt`/
+        # `pgp_sym_decrypt`), eso es la CLAVE de cifrado del tenant en texto plano dentro del propio
+        # mensaje de la excepción, que acaba en logs (`logger.exception`) y en Sentry si se activa
+        # (S5.6). Se oculta siempre, no solo en producción: un `.env` de desarrollo también deriva
+        # claves reales si `DB_ENCRYPTION_MASTER_KEY` está puesta.
+        _engine = create_async_engine(
+            get_settings().database_url, pool_pre_ping=True, hide_parameters=True
+        )
         _sessionmaker = async_sessionmaker(_engine, expire_on_commit=False)
     return _sessionmaker
 

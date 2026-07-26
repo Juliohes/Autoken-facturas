@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from companies import repository, service
 from companies.service import CompanyError, InvalidTaxId, is_cif_unique_violation
 from companies.service import persist_new_company as _persist_new_company
+from shared.config import Settings
 
 _NAME_HEADER = "Nombre"
 _CIF_HEADER = "CIF/NIF"
@@ -138,7 +139,13 @@ def _parse_rows(content: bytes, *, max_rows: int) -> tuple[list[_ParsedRow], boo
 
 
 async def import_companies(
-    session: AsyncSession, *, actor_id: UUID, content: bytes, max_rows: int
+    session: AsyncSession,
+    *,
+    actor_id: UUID,
+    tenant_id: UUID,
+    settings: Settings,
+    content: bytes,
+    max_rows: int,
 ) -> ImportReport:
     """Importa el Excel: crea las filas válidas y no duplicadas y devuelve el informe.
 
@@ -148,12 +155,14 @@ async def import_companies(
     anti-DoS): el resto no se procesa y se marca `truncated`.
 
     Cada INSERT de fila corre en su propio SAVEPOINT (`begin_nested`): si una fila viola el UNIQUE
-    `(tenant_id, cif)` (p. ej. una carrera que esquiva el pre-check), se revierte solo esa fila —se
-    reporta como duplicada— y la importación continúa, preservando el éxito parcial (C11).
+    `(tenant_id, cif_blind_index)` (p. ej. una carrera que esquiva el pre-check), se revierte solo
+    esa fila —se reporta como duplicada— y la importación continúa, preservando el éxito parcial
+    (C11).
     """
     parsed, truncated = _parse_rows(content, max_rows=max_rows)
     report = ImportReport(truncated=truncated)
-    seen = await repository.existing_cifs(session)
+    encryption_key = service.tenant_encryption_key(settings, tenant_id)
+    seen = await repository.existing_cifs(session, encryption_key=encryption_key)
 
     for row in parsed:
         if not row.name:
@@ -174,7 +183,12 @@ async def import_companies(
         try:
             async with session.begin_nested():
                 await _persist_new_company(
-                    session, actor_id=actor_id, name=row.name, canonical_cif=canonical
+                    session,
+                    actor_id=actor_id,
+                    tenant_id=tenant_id,
+                    settings=settings,
+                    name=row.name,
+                    canonical_cif=canonical,
                 )
         except IntegrityError as exc:
             if not is_cif_unique_violation(exc):

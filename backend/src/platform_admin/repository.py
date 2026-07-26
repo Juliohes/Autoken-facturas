@@ -13,7 +13,9 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from invoicing.repository import SENSITIVE_EDIT_FIELDS
 from platform_admin.export import TENANT_TABLES
+from shared.encryption import ENCRYPTED_COLUMNS
 
 
 @dataclass(frozen=True)
@@ -276,7 +278,9 @@ async def delete_tenant(session: AsyncSession, tenant_id: UUID, confirm_slug: st
     )
 
 
-async def fetch_tenant_table_rows(session: AsyncSession, table: str) -> list[dict[str, Any]]:
+async def fetch_tenant_table_rows(
+    session: AsyncSession, table: str, *, encryption_key: str
+) -> list[dict[str, Any]]:
     """Todas las filas de `table` visibles en la sesión (S4.7): pensada para llamarse dentro de un
     `tenant_session(tenant_id)` (RLS ya acota a ese tenant, `company_id` sin fijar = toda la
     asesoría) — este repositorio no filtra por `tenant_id` aparte, confía en la RLS ya probada por
@@ -286,8 +290,73 @@ async def fetch_tenant_table_rows(session: AsyncSession, table: str) -> list[dic
     nombre de tabla vía bind param (solo valores), así que se valida contra esa lista blanca antes
     de interpolarlo — nunca llega aquí un nombre de tabla que no sea esa constante interna, pero la
     comprobación es defensa en profundidad barata frente a un futuro llamador que se equivoque.
+
+    Las columnas de `shared.encryption.ENCRYPTED_COLUMNS` (S5.2, fuente única compartida con
+    `jobs.key_rotation`) se piden DOS veces: la original (bytea, vía `SELECT *`) y una versión
+    descifrada bajo un alias `__decrypted_<col>` (nombre que no puede chocar con ninguna columna
+    real de la tabla); en Python se descarta la bytea y se deja el valor legible en su sitio, para
+    que el JSON del ZIP no lleve nunca ciphertext.
     """
     if table not in TENANT_TABLES:
         raise ValueError(f"Tabla no reconocida para export de tenant: {table!r}")
-    rows = (await session.execute(text(f"SELECT * FROM {table}"))).mappings().all()  # noqa: S608
-    return [dict(row) for row in rows]
+    if table == "invoice_edits":
+        return await _fetch_invoice_edits_rows(session, encryption_key=encryption_key)
+    encrypted_cols = tuple(ENCRYPTED_COLUMNS.get(table, {}))
+    if not encrypted_cols:
+        rows = (await session.execute(text(f"SELECT * FROM {table}"))).mappings().all()  # noqa: S608
+        return [dict(row) for row in rows]
+    decrypt_select = ", ".join(
+        f"pgp_sym_decrypt({col}, :key)::text AS __decrypted_{col}" for col in encrypted_cols
+    )
+    rows = (
+        (
+            await session.execute(
+                text(f"SELECT *, {decrypt_select} FROM {table}"),  # noqa: S608
+                {"key": encryption_key},
+            )
+        )
+        .mappings()
+        .all()
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        for col in encrypted_cols:
+            item[col] = item.pop(f"__decrypted_{col}")
+        result.append(item)
+    return result
+
+
+async def _fetch_invoice_edits_rows(
+    session: AsyncSession, *, encryption_key: str
+) -> list[dict[str, Any]]:
+    """Filas de `invoice_edits` para el export (S5.2 C6/C7): `old_value`/`new_value` solo van
+    cifrados (base64 de `pgp_sym_encrypt`) cuando `field` es sensible (`SENSITIVE_EDIT_FIELDS`,
+    `invoicing.repository`); el resto de campos siguen en claro. El `CASE` decide por fila, no por
+    columna entera (a diferencia de `_ENCRYPTED_TABLE_COLUMNS`): la misma columna TEXT mezcla filas
+    cifradas y sin cifrar según qué campo se editó.
+    """
+    sensitive = ", ".join(f"'{field}'" for field in SENSITIVE_EDIT_FIELDS)
+    decrypt_col = (
+        f"CASE WHEN field IN ({sensitive}) "
+        "THEN pgp_sym_decrypt(decode({col}, 'base64'), :key)::text "
+        "ELSE {col} END AS __decrypted_{col}"
+    )
+    decrypt_select = ", ".join(decrypt_col.format(col=col) for col in ("old_value", "new_value"))
+    rows = (
+        (
+            await session.execute(
+                text(f"SELECT *, {decrypt_select} FROM invoice_edits"),  # noqa: S608
+                {"key": encryption_key},
+            )
+        )
+        .mappings()
+        .all()
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item["old_value"] = item.pop("__decrypted_old_value")
+        item["new_value"] = item.pop("__decrypted_new_value")
+        result.append(item)
+    return result

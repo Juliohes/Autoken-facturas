@@ -105,22 +105,26 @@ async def tenant_admin_emails(session: AsyncSession) -> list[str]:
     return [r.email for r in rows]
 
 
-async def list_pending(session: AsyncSession) -> list[PendingRegistration]:
+async def list_pending(session: AsyncSession, *, encryption_key: str) -> list[PendingRegistration]:
     """Lista los registros pendientes de la asesoría (usuario + empresa), por antigüedad.
 
     Trae también el estado de la empresa vinculada: si es `active`, el registro se une a una empresa
     ya existente (regla 1-A) y no crea una nueva, señal para la pantalla de aprobación (M2).
+
+    `companies.name` vive cifrado desde S5.2: se descifra aquí con la clave del tenant del contexto.
     """
     rows = (
         await session.execute(
             text(
-                "SELECT u.id, u.email, c.name AS company, c.status AS company_status FROM users u "
+                "SELECT u.id, u.email, "
+                " pgp_sym_decrypt(c.name, :key)::text AS company, c.status AS company_status "
+                "FROM users u "
                 "LEFT JOIN memberships m ON m.user_id = u.id "
                 "LEFT JOIN companies c ON c.id = m.company_id "
                 "WHERE u.status = :pending AND u.role = :role "
                 "ORDER BY u.created_at"
             ),
-            {"pending": UserStatus.PENDING.value, "role": Role.USER.value},
+            {"pending": UserStatus.PENDING.value, "role": Role.USER.value, "key": encryption_key},
         )
     ).all()
     return [

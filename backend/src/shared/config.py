@@ -20,6 +20,10 @@ _DEV_JWT_SECRET = "dev-insecure-jwt-secret-change-me"  # noqa: S105  (solo dev/t
 # debilita la firma y facilita falsificar sesiones).
 _MIN_JWT_SECRET_BYTES = 32
 
+# Mismo criterio que `_DEV_JWT_SECRET`, para la clave maestra de cifrado en reposo (S5.2).
+_DEV_ENCRYPTION_MASTER_KEY = "dev-insecure-encryption-master-key-change-me"  # noqa: S105
+_MIN_ENCRYPTION_MASTER_KEY_BYTES = 32
+
 
 def _find_project_root() -> Path:
     """Raíz del monorepo: la carpeta que contiene `.env.example` (marcador estable del repo).
@@ -103,6 +107,29 @@ class Settings(BaseSettings):
                 )
         return self
 
+    @model_validator(mode="after")
+    def _reject_insecure_encryption_master_key_in_production(self) -> Self:
+        """En producción, una `db_encryption_master_key` débil hace fallar el arranque (fail-loud,
+        S5.2 spec §5): con una clave predecible, el cifrado en reposo de CIF/nombre no protege nada
+        de verdad. Mismo criterio que `jwt_secret`."""
+        if self.app_env is AppEnv.PRODUCTION:
+            if self.db_encryption_master_key == _DEV_ENCRYPTION_MASTER_KEY:
+                raise ValueError(
+                    "DB_ENCRYPTION_MASTER_KEY no puede ser el valor por defecto de desarrollo en "
+                    "producción: inyecta una clave real por la variable de entorno "
+                    "DB_ENCRYPTION_MASTER_KEY."
+                )
+            if (
+                len(self.db_encryption_master_key.encode("utf-8"))
+                < _MIN_ENCRYPTION_MASTER_KEY_BYTES
+            ):
+                raise ValueError(
+                    "DB_ENCRYPTION_MASTER_KEY debe tener al menos "
+                    f"{_MIN_ENCRYPTION_MASTER_KEY_BYTES} bytes en producción para derivar claves "
+                    "de cifrado por tenant con suficiente entropía."
+                )
+        return self
+
     # Base de datos (asyncpg). En desarrollo se puede dejar por defecto;
     # en staging/producción se inyecta por env var. No se conecta en 0.4.
     database_url: str = "postgresql+asyncpg://autoken_app:autoken@postgres:5432/autoken"
@@ -129,6 +156,12 @@ class Settings(BaseSettings):
     jwt_secret: str = _DEV_JWT_SECRET
     jwt_access_ttl: int = 15 * 60  # access token de vida corta (15 min), en segundos
     jwt_refresh_ttl: int = 14 * 24 * 60 * 60  # refresh de vida larga (14 días), en segundos
+
+    # Cifrado en reposo por tenant (S5.2, `shared/encryption.py`): clave maestra única de la que se
+    # DERIVAN (nunca se guardan) una clave de cifrado y una de índice ciego distintas por tenant.
+    # Mismo criterio que `jwt_secret`: SECRETO, por env var `DB_ENCRYPTION_MASTER_KEY` en
+    # staging/producción, nunca en el repo.
+    db_encryption_master_key: str = _DEV_ENCRYPTION_MASTER_KEY
 
     # Política de contraseñas y límite de fuerza bruta (por (IP+email) y un tope más grueso por IP).
     password_min_length: int = 12

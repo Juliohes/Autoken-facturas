@@ -9,8 +9,10 @@ Contrato que el `implementer` debe respetar (lo fija esta fase roja):
   (coroutine; abre su propia sesión con contexto de tenant). Devuelve un `CounterpartyVerdict` con
   `status` ∈ {"valid","invalid","not_found","unverified"}, `name_match` (bool|None), `official_name`
   (str|None), `source` (str) y `checked_sources` (tupla).
-- `counterparty.service.record_confirmation(tenant_id, cif, name, *, source="human")`: upsert del
-  supplier master (incrementa `times_seen` en confirmaciones repetidas).
+- `counterparty.service.record_confirmation(tenant_id, cif, name, *, settings, source="human")`:
+  upsert del supplier master (incrementa `times_seen` en confirmaciones repetidas). `cif`/`name`
+  viven cifrados desde S5.2 (`counterparties.cif`/`name`, pgcrypto por tenant + índice ciego del
+  CIF).
 - Resolver: objeto con `.source` (str), `.negative_authoritative` (bool) y
   `async resolve(cif, name_read) -> result` con atributos `exists` (bool), `official_name`
   (str|None), `name_match` (bool|None). Un timeout/caída se señala lanzando `TimeoutError` (lo trata
@@ -77,15 +79,27 @@ async def seed_counterparty(
     source: str = "human",
     times_seen: int = 1,
 ) -> None:
-    """Inserta una fila en el supplier master del tenant (`counterparties`)."""
+    """Inserta una fila en el supplier master del tenant (`counterparties`).
+
+    `cif`/`name` viven cifrados desde S5.2 (`pgp_sym_encrypt`, clave derivada por tenant) más un
+    índice ciego del CIF. Se cifra con la MISMA clave maestra que usará la aplicación bajo test.
+    """
+    from shared.config import get_settings
+    from shared.encryption import derive_tenant_encryption_key
+    from tests._dbtest import cif_blind_index_for
+
+    key = derive_tenant_encryption_key(get_settings().db_encryption_master_key, tenant_id)
+    idx = cif_blind_index_for(tenant_id, cif)
     conn = await asyncpg.connect(dsns["admin"])
     try:
         await conn.execute(
             "INSERT INTO counterparties "
-            "(tenant_id, cif, name, name_source, times_seen, verified_at) "
-            "VALUES ($1, $2, $3, $4, $5, now())",
+            "(tenant_id, cif, cif_blind_index, name, name_source, times_seen, verified_at) "
+            "VALUES ($1, pgp_sym_encrypt($2, $3), $4, pgp_sym_encrypt($5, $3), $6, $7, now())",
             tenant_id,
             cif,
+            key,
+            idx,
             name,
             source,
             times_seen,
@@ -145,16 +159,30 @@ async def verify(
 
 async def confirm(dsns: dict[str, str], *, tenant_id: str, cif: str, name: str) -> None:
     from counterparty.service import record_confirmation
+    from shared.config import get_settings
 
-    await record_confirmation(tenant_id, cif, name)
+    await record_confirmation(tenant_id, cif, name, settings=get_settings())
 
 
 # --- Consultas de efecto -------------------------------------------------------------------------
 async def fetch_counterparty(dsns: dict[str, str], *, tenant_id: str, cif: str) -> dict | None:
+    """Fila de `counterparties` por su CIF (buscado por índice ciego, S5.2; `name`/`cif`
+    descifrados)."""
+    from shared.config import get_settings
+    from shared.encryption import derive_tenant_encryption_key
+    from tests._dbtest import cif_blind_index_for
+
+    key = derive_tenant_encryption_key(get_settings().db_encryption_master_key, tenant_id)
+    idx = cif_blind_index_for(tenant_id, cif)
     conn = await asyncpg.connect(dsns["admin"])
     try:
         row = await conn.fetchrow(
-            "SELECT * FROM counterparties WHERE tenant_id = $1 AND cif = $2", tenant_id, cif
+            "SELECT id, tenant_id, pgp_sym_decrypt(cif, $2)::text AS cif, "
+            "pgp_sym_decrypt(name, $2)::text AS name, name_source, times_seen, verified_at "
+            "FROM counterparties WHERE tenant_id = $1 AND cif_blind_index = $3",
+            tenant_id,
+            key,
+            idx,
         )
         return dict(row) if row is not None else None
     finally:

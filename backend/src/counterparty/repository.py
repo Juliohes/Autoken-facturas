@@ -4,7 +4,13 @@ La sesión llega ya abierta en el contexto de aislamiento del tenant (`shared.db
 `counterparties` la RLS de S1.1 decide qué filas se ven/escriben, así que las consultas NO filtran
 ni insertan `tenant_id` por parámetro: sale de `app.tenant_id` (misma fuente que la RLS), como en
 `ocr.repository`. `cif_lookups` es GLOBAL (sin RLS de tenant): se lee/escribe por `(cif, source)` y
-es visible entre asesorías (solo datos públicos, ADR-0011).
+es visible entre asesorías (solo datos públicos, ADR-0011) — queda FUERA del cifrado de S5.2 a
+propósito (spec §4): no encaja en el modelo de clave por tenant.
+
+`counterparties.cif`/`name` viven cifrados desde S5.2 (`pgp_sym_encrypt`/`pgp_sym_decrypt`, clave
+por tenant) con un índice ciego del CIF (`cif_blind_index`) para `WHERE`/`UNIQUE` — mismo patrón que
+`companies.repository`. El repositorio recibe la clave y el índice ya calculados por
+`counterparty.service`; nunca deriva claves por su cuenta.
 """
 
 from __future__ import annotations
@@ -38,14 +44,20 @@ class CifLookupRow:
 
 
 # --- Supplier master (`counterparties`, por tenant vía RLS) --------------------------------------
-_SELECT_MASTER = text("SELECT name, name_source FROM counterparties WHERE cif = :cif")
+_SELECT_MASTER = text(
+    "SELECT pgp_sym_decrypt(name, :key)::text AS name, name_source FROM counterparties "
+    "WHERE cif_blind_index = :idx"
+)
 
-# Upsert de confirmación (C12): en conflicto por `(tenant_id, cif)` incrementa `times_seen` y
-# refresca nombre, procedencia y `verified_at`. El `tenant_id` sale del contexto (como la RLS).
+# Upsert de confirmación (C12): en conflicto por `(tenant_id, cif_blind_index)` incrementa
+# `times_seen` y refresca nombre, procedencia y `verified_at`. El `tenant_id` sale del contexto
+# (como la RLS).
 _UPSERT_MASTER = text(
-    f"INSERT INTO counterparties (tenant_id, cif, name, name_source, times_seen, verified_at) "
-    f"VALUES ({_TENANT_FROM_CONTEXT}, :cif, :name, :name_source, 1, now()) "
-    f"ON CONFLICT (tenant_id, cif) DO UPDATE SET "
+    f"INSERT INTO counterparties "
+    f"(tenant_id, cif, cif_blind_index, name, name_source, times_seen, verified_at) "
+    f"VALUES ({_TENANT_FROM_CONTEXT}, pgp_sym_encrypt(:cif, :key), :idx, "
+    f" pgp_sym_encrypt(:name, :key), :name_source, 1, now()) "
+    f"ON CONFLICT (tenant_id, cif_blind_index) DO UPDATE SET "
     f"  times_seen = counterparties.times_seen + 1, "
     f"  name = EXCLUDED.name, "
     f"  name_source = EXCLUDED.name_source, "
@@ -78,19 +90,39 @@ _UPSERT_LOOKUP = text(
 )
 
 
-async def get_supplier_master(session: AsyncSession, *, cif: str) -> SupplierMasterRow | None:
-    """Busca el CIF en el supplier master del tenant del contexto (L2). `None` si no está."""
-    row = (await session.execute(_SELECT_MASTER, {"cif": cif})).first()
+async def get_supplier_master(
+    session: AsyncSession, *, cif_blind_index: str, encryption_key: str
+) -> SupplierMasterRow | None:
+    """Busca el CIF (por su índice ciego) en el supplier master del tenant del contexto (L2).
+    `None` si no está."""
+    row = (
+        await session.execute(_SELECT_MASTER, {"idx": cif_blind_index, "key": encryption_key})
+    ).first()
     if row is None:
         return None
     return SupplierMasterRow(name=row.name, name_source=row.name_source)
 
 
 async def upsert_supplier_master(
-    session: AsyncSession, *, cif: str, name: str, name_source: str
+    session: AsyncSession,
+    *,
+    cif: str,
+    cif_blind_index: str,
+    name: str,
+    name_source: str,
+    encryption_key: str,
 ) -> None:
     """Upserta la confirmación en el supplier master del tenant del contexto (times_seen++)."""
-    await session.execute(_UPSERT_MASTER, {"cif": cif, "name": name, "name_source": name_source})
+    await session.execute(
+        _UPSERT_MASTER,
+        {
+            "cif": cif,
+            "idx": cif_blind_index,
+            "name": name,
+            "name_source": name_source,
+            "key": encryption_key,
+        },
+    )
 
 
 async def get_tenant_cif_sources(session: AsyncSession) -> list[str] | None:

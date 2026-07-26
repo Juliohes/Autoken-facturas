@@ -4,6 +4,13 @@ La sesión llega ya abierta en el contexto de aislamiento del tenant (S1.1): la 
 decide qué filas se ven y se escriben. El `tenant_id` de las escrituras NO viaja por parámetro: sale
 de `app.tenant_id` (la misma fuente que la RLS), de modo que ninguna fila cruce el tenant de la
 petición. Todas las escrituras participan en la transacción de la petición (atomicidad, spec §4).
+
+`invoices.counterparty_tax_id`/`counterparty_name` viven cifrados desde S5.2 (`pgp_sym_encrypt`/
+`pgp_sym_decrypt`, clave por tenant), con un índice ciego del CIF
+(`counterparty_tax_id_blind_index`) que sustituye al filtro `ILIKE` retirado del panel (spec C5). El
+repositorio recibe la clave y el índice ya calculados por `invoicing.service`; nunca deriva claves.
+Nulos se conservan tal cual (anti-alucinación: contraparte no legible = NULL, spec §5) porque
+`pgp_sym_encrypt`/`pgp_sym_decrypt` son funciones STRICT (NULL entra, NULL sale).
 """
 
 from __future__ import annotations
@@ -81,7 +88,9 @@ def is_duplicate_invoice(exc: IntegrityError) -> bool:
     return violates_unique_constraint(exc, _UPLOADED_FILE_UNIQUE)
 
 
-async def get_invoice(session: AsyncSession, invoice_id: UUID) -> InvoiceRecord | None:
+async def get_invoice(
+    session: AsyncSession, invoice_id: UUID, *, encryption_key: str
+) -> InvoiceRecord | None:
     """Estado actual de una factura visible en el contexto (RLS), o `None` (S3.3).
 
     Usado para calcular el diff de una edición contra el valor anterior; sin filtro de
@@ -91,11 +100,13 @@ async def get_invoice(session: AsyncSession, invoice_id: UUID) -> InvoiceRecord 
     row = (
         await session.execute(
             text(
-                "SELECT id, company_id, issue_date, counterparty_tax_id, counterparty_name, "
+                "SELECT id, company_id, issue_date, "
+                " pgp_sym_decrypt(counterparty_tax_id, :key)::text AS counterparty_tax_id, "
+                " pgp_sym_decrypt(counterparty_name, :key)::text AS counterparty_name, "
                 " counterparty_cif_status, net_amount, tax_amount, total_amount, irpf_amount "
                 "FROM invoices WHERE id = :id"
             ),
-            {"id": str(invoice_id)},
+            {"id": str(invoice_id), "key": encryption_key},
         )
     ).first()
     if row is None:
@@ -127,6 +138,7 @@ async def update_invoice(
     *,
     issue_date: date | None,
     counterparty_tax_id: str | None,
+    counterparty_tax_id_blind_index: str | None,
     counterparty_name: str | None,
     counterparty_cif_status: str,
     net_amount: Decimal | None,
@@ -134,6 +146,7 @@ async def update_invoice(
     total_amount: Decimal | None,
     irpf_amount: Decimal | None,
     balance_ok: bool | None,
+    encryption_key: str,
 ) -> None:
     """Actualiza los campos editables de una factura ya confirmada (S3.3). Siempre el conjunto
     completo (el servicio ya fusionó el `PATCH` parcial con el valor anterior): evita construir SQL
@@ -141,7 +154,9 @@ async def update_invoice(
     await session.execute(
         text(
             "UPDATE invoices SET issue_date = :issue_date, "
-            " counterparty_tax_id = :counterparty_tax_id, counterparty_name = :counterparty_name, "
+            " counterparty_tax_id = pgp_sym_encrypt(:counterparty_tax_id, :key), "
+            " counterparty_tax_id_blind_index = :counterparty_tax_id_blind_index, "
+            " counterparty_name = pgp_sym_encrypt(:counterparty_name, :key), "
             " counterparty_cif_status = :counterparty_cif_status, net_amount = :net_amount, "
             " tax_amount = :tax_amount, total_amount = :total_amount, "
             " irpf_amount = :irpf_amount, balance_ok = :balance_ok "
@@ -151,6 +166,7 @@ async def update_invoice(
             "id": str(invoice_id),
             "issue_date": issue_date,
             "counterparty_tax_id": counterparty_tax_id,
+            "counterparty_tax_id_blind_index": counterparty_tax_id_blind_index,
             "counterparty_name": counterparty_name,
             "counterparty_cif_status": counterparty_cif_status,
             "net_amount": net_amount,
@@ -158,6 +174,7 @@ async def update_invoice(
             "total_amount": total_amount,
             "irpf_amount": irpf_amount,
             "balance_ok": balance_ok,
+            "key": encryption_key,
         },
     )
 
@@ -181,6 +198,7 @@ async def insert_invoice(
     direction: str,
     issue_date: date | None,
     counterparty_tax_id: str | None,
+    counterparty_tax_id_blind_index: str | None,
     counterparty_name: str | None,
     counterparty_cif_status: str,
     net_amount: Decimal | None,
@@ -191,6 +209,7 @@ async def insert_invoice(
     balance_ok: bool | None,
     snapshot: dict[str, Any],
     confirmed_by: UUID,
+    encryption_key: str,
 ) -> UUID:
     """Inserta la factura confirmada en el tenant del contexto y devuelve su id.
 
@@ -203,11 +222,13 @@ async def insert_invoice(
             text(
                 f"INSERT INTO invoices "
                 f"(tenant_id, company_id, uploaded_file_id, direction, issue_date, "
-                f" counterparty_tax_id, counterparty_name, counterparty_cif_status, "
+                f" counterparty_tax_id, counterparty_tax_id_blind_index, counterparty_name, "
+                f" counterparty_cif_status, "
                 f" net_amount, tax_amount, total_amount, irpf_amount, is_test, balance_ok, "
                 f" snapshot, status, confirmed_by) "
                 f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :uploaded_file_id, :direction, "
-                f" :issue_date, :counterparty_tax_id, :counterparty_name, "
+                f" :issue_date, pgp_sym_encrypt(:counterparty_tax_id, :key), "
+                f" :counterparty_tax_id_blind_index, pgp_sym_encrypt(:counterparty_name, :key), "
                 f" :counterparty_cif_status, "
                 f" :net_amount, :tax_amount, :total_amount, :irpf_amount, :is_test, :balance_ok, "
                 f" CAST(:snapshot AS jsonb), 'confirmed', :confirmed_by) "
@@ -219,6 +240,7 @@ async def insert_invoice(
                 "direction": direction,
                 "issue_date": issue_date,
                 "counterparty_tax_id": counterparty_tax_id,
+                "counterparty_tax_id_blind_index": counterparty_tax_id_blind_index,
                 "counterparty_name": counterparty_name,
                 "counterparty_cif_status": counterparty_cif_status,
                 "net_amount": net_amount,
@@ -229,6 +251,7 @@ async def insert_invoice(
                 "balance_ok": balance_ok,
                 "snapshot": json.dumps(snapshot),
                 "confirmed_by": str(confirmed_by),
+                "key": encryption_key,
             },
         )
     ).one()
@@ -327,6 +350,13 @@ async def insert_corrections(
         )
 
 
+# Campos sensibles cuyo old_value/new_value en `invoice_edits` se cifran (spec S5.2 C7): el resto
+# (importe, fecha, líneas de IVA...) sigue en claro, como antes de S5.2. `invoice_edits.old_value`/
+# `new_value` son columnas TEXT (no bytea, spec del esquema original): para las filas sensibles se
+# guarda `encode(pgp_sym_encrypt(valor, clave), 'base64')` en ese mismo TEXT, no una columna nueva.
+SENSITIVE_EDIT_FIELDS = frozenset({"counterparty_tax_id", "counterparty_name"})
+
+
 async def insert_edits(
     session: AsyncSession,
     *,
@@ -334,21 +364,30 @@ async def insert_edits(
     company_id: UUID,
     edited_by: UUID,
     edits: list[Correction],
+    encryption_key: str,
 ) -> None:
     """Inserta una fila por campo que cambió en una edición post-confirmación (S3.3, spec §2).
 
     Reutiliza `Correction` (mismo diff que `ocr_corrections`, `invoicing.corrections`): `ai_value`
     es aquí el valor ANTERIOR de la factura, `human_value` el editado (nombres del dataclass
     genéricos; las columnas de `invoice_edits` sí se llaman `old_value`/`new_value`, más precisas
-    para este caso de uso humano-vs-humano).
+    para este caso de uso humano-vs-humano). Un campo de `SENSITIVE_EDIT_FIELDS` (CIF/nombre de
+    contraparte, spec S5.2 C7) se cifra; el resto se guarda en claro, igual que siempre.
     """
     for edit in edits:
+        sensitive = edit.field in SENSITIVE_EDIT_FIELDS
+        old_expr = (
+            "encode(pgp_sym_encrypt(:old_value, :key), 'base64')" if sensitive else ":old_value"
+        )
+        new_expr = (
+            "encode(pgp_sym_encrypt(:new_value, :key), 'base64')" if sensitive else ":new_value"
+        )
         await session.execute(
             text(
                 f"INSERT INTO invoice_edits "
                 f"(tenant_id, company_id, invoice_id, field, old_value, new_value, edited_by) "
-                f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :invoice_id, :field, :old_value, "
-                f" :new_value, :edited_by)"
+                f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :invoice_id, :field, {old_expr}, "
+                f" {new_expr}, :edited_by)"
             ),
             {
                 "company_id": str(company_id),
@@ -357,11 +396,12 @@ async def insert_edits(
                 "old_value": edit.ai_value,
                 "new_value": edit.human_value,
                 "edited_by": str(edited_by),
+                "key": encryption_key,
             },
         )
 
 
-async def list_history(session: AsyncSession) -> list[HistoryEntry]:
+async def list_history(session: AsyncSession, *, encryption_key: str) -> list[HistoryEntry]:
     """Facturas confirmadas de los últimos 7 días del contexto (S2.6), la más reciente primero.
 
     Sin filtro de `tenant_id`/`company_id` por parámetro: la RLS de dos niveles de `invoices`
@@ -372,7 +412,9 @@ async def list_history(session: AsyncSession) -> list[HistoryEntry]:
     rows = (
         await session.execute(
             text(
-                "SELECT id, issue_date, direction, counterparty_tax_id, counterparty_name, "
+                "SELECT id, issue_date, direction, "
+                " pgp_sym_decrypt(counterparty_tax_id, :key)::text AS counterparty_tax_id, "
+                " pgp_sym_decrypt(counterparty_name, :key)::text AS counterparty_name, "
                 " counterparty_cif_status, total_amount, confirmed_at "
                 "FROM invoices "
                 "WHERE is_test = false AND confirmed_at >= "
@@ -380,7 +422,7 @@ async def list_history(session: AsyncSession) -> list[HistoryEntry]:
                 "ORDER BY confirmed_at DESC "
                 "LIMIT :limit"
             ),
-            {"limit": HISTORY_LIMIT},
+            {"limit": HISTORY_LIMIT, "key": encryption_key},
         )
     ).all()
     if len(rows) == HISTORY_LIMIT:

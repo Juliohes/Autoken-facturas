@@ -20,6 +20,7 @@ from platform_admin.export import TENANT_TABLES, build_tenant_export_zip, extens
 from platform_admin.repository import TenantRecord
 from shared.config import get_settings
 from shared.db import tenant_session
+from shared.encryption import tenant_encryption_key
 from shared.integrity import violates_unique_constraint
 from tenancy.constants import RESERVED_SLUGS
 from tenancy.resolution import is_root_or_reserved_host
@@ -258,9 +259,13 @@ async def export_tenant(session: AsyncSession, tenant_id: UUID) -> str:
     if not any(t.id == tenant_id for t in tenants):
         raise TenantNotFound()
 
+    encryption_key = tenant_encryption_key(get_settings(), tenant_id)
     async with tenant_session(tenant_id) as ts:
         tables = {
-            table: await repository.fetch_tenant_table_rows(ts, table) for table in TENANT_TABLES
+            table: await repository.fetch_tenant_table_rows(
+                ts, table, encryption_key=encryption_key
+            )
+            for table in TENANT_TABLES
         }
 
     files: list[tuple[str, bytes]] = []

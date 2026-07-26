@@ -1,9 +1,10 @@
 """Modelos ORM de la persistencia de facturas: invoices + tax_lines + ocr_corrections (S2.5) +
 invoice_edits (S3.3).
 
-El esquema aquí debe coincidir con las migraciones 0007/0008 (el guard `alembic check` de CI detecta
-la deriva ORM<->migración). Las políticas RLS de dos niveles y los grants viven en la migración, no
-en el ORM, igual que en `uploaded_files` (0004) y `ocr_extractions` (0005).
+El esquema aquí debe coincidir con las migraciones 0007/0008 + su enmienda de cifrado en la 0020
+(S5.2; el guard `alembic check` de CI detecta la deriva ORM<->migración). Las políticas RLS de dos
+niveles y los grants viven en la migración, no en el ORM, igual que en `uploaded_files` (0004) y
+`ocr_extractions` (0005).
 
 Una factura vigente por `uploaded_file_id` (UNIQUE): reconfirmar es 409, no duplica.
 """
@@ -26,7 +27,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import BYTEA, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -58,8 +59,13 @@ class Invoice(Base):
     )
     direction: Mapped[str] = mapped_column(Text, nullable=False)
     issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    counterparty_tax_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    counterparty_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # `counterparty_tax_id`/`counterparty_name` viven cifrados desde S5.2 (`pgp_sym_encrypt`); NULL
+    # se conserva tal cual (anti-alucinación: contraparte no legible). El ORM nunca los lee/escribe
+    # directamente (SQL crudo en `invoicing.repository`); `counterparty_tax_id_blind_index`
+    # sustituye al filtro `ILIKE` retirado del panel (spec S5.2 C5).
+    counterparty_tax_id: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
+    counterparty_tax_id_blind_index: Mapped[str | None] = mapped_column(Text, nullable=True)
+    counterparty_name: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
     counterparty_cif_status: Mapped[str] = mapped_column(Text, nullable=False)
     net_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     tax_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)

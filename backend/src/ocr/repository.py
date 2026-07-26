@@ -9,6 +9,12 @@ petición. El upsert por `uploaded_file_id` (UNIQUE) garantiza una extracción v
 El SQL de `uploaded_files` (ubicación + transición de estado) NO vive aquí: es dominio de
 `invoice_intake` (`invoice_intake.repository`), que el job invoca. Esta capa solo escribe la
 extracción; no toca la máquina de estados del fichero.
+
+`counterparty_tax_id`/`counterparty_name` viven cifrados desde S5.2 (`pgp_sym_encrypt`/
+`pgp_sym_decrypt`, clave por tenant), sin índice ciego: es la lectura cruda del OCR antes de
+confirmar, sin ningún UNIQUE ni comparación por igualdad sobre esas columnas. El repositorio recibe
+la clave ya calculada por el llamante; nunca la deriva. Nulos se conservan tal cual (anti-
+alucinación: contraparte no legible = NULL) porque `pgp_sym_encrypt`/`pgp_sym_decrypt` son STRICT.
 """
 
 from __future__ import annotations
@@ -35,8 +41,9 @@ _UPSERT = text(
     f" tax_lines, counterparty_tax_id, counterparty_name, own_tax_id_present, confidences, "
     f" validations, engine, model, raw, status) "
     f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :uploaded_file_id, :issue_date, :total_amount, "
-    f" :net_amount, :tax_amount, CAST(:tax_lines AS jsonb), :counterparty_tax_id, "
-    f" :counterparty_name, :own_tax_id_present, CAST(:confidences AS jsonb), "
+    f" :net_amount, :tax_amount, CAST(:tax_lines AS jsonb), pgp_sym_encrypt(:counterparty_tax_id, "
+    f" :key), pgp_sym_encrypt(:counterparty_name, :key), :own_tax_id_present, "
+    f" CAST(:confidences AS jsonb), "
     f" CAST(:validations AS jsonb), :engine, :model, CAST(:raw AS jsonb), :status) "
     f"ON CONFLICT (uploaded_file_id) DO UPDATE SET "
     f" issue_date = EXCLUDED.issue_date, total_amount = EXCLUDED.total_amount, "
@@ -69,7 +76,9 @@ class ExtractionRecord:
     status: str
 
 
-async def get_extraction(session: AsyncSession, uploaded_file_id: UUID) -> ExtractionRecord | None:
+async def get_extraction(
+    session: AsyncSession, uploaded_file_id: UUID, *, encryption_key: str
+) -> ExtractionRecord | None:
     """Lee la extracción vigente de un fichero en el contexto (RLS), o `None` si no hay.
 
     La usan la pantalla de revisión (S2.4) y la confirmación (S2.5): el baseline del OCR (S2.3) para
@@ -80,10 +89,12 @@ async def get_extraction(session: AsyncSession, uploaded_file_id: UUID) -> Extra
         await session.execute(
             text(
                 "SELECT issue_date, total_amount, net_amount, tax_amount, tax_lines, "
-                "counterparty_tax_id, counterparty_name, own_tax_id_present, confidences, status "
+                "pgp_sym_decrypt(counterparty_tax_id, :key)::text AS counterparty_tax_id, "
+                "pgp_sym_decrypt(counterparty_name, :key)::text AS counterparty_name, "
+                "own_tax_id_present, confidences, status "
                 "FROM ocr_extractions WHERE uploaded_file_id = :fid"
             ),
-            {"fid": str(uploaded_file_id)},
+            {"fid": str(uploaded_file_id), "key": encryption_key},
         )
     ).first()
     if row is None:
@@ -121,6 +132,7 @@ async def upsert_extraction(
     model: str,
     raw: dict[str, Any],
     status: str,
+    encryption_key: str,
 ) -> None:
     """Inserta o reemplaza la extracción del fichero en el tenant del contexto (idempotente)."""
     await session.execute(
@@ -142,5 +154,6 @@ async def upsert_extraction(
             "model": model,
             "raw": json.dumps(raw),
             "status": status,
+            "key": encryption_key,
         },
     )

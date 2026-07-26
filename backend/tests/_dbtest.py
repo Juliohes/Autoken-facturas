@@ -191,6 +191,16 @@ async def suspend_tenant(admin_dsn: str, tenant_id: str) -> None:
         await conn.close()
 
 
+def cif_blind_index_for(tenant_id: str, cif: str) -> str:
+    """Índice ciego (S5.2) de `cif` para este tenant, con la MISMA clave maestra que usa la app en
+    test (`shared.config.get_settings()`). Para comparar `cif_blind_index` en SQL crudo desde los
+    tests, sin tener que descifrar (`WHERE cif_blind_index = <esto>`, igual que hace la app)."""
+    from shared.config import get_settings
+    from shared.encryption import blind_index
+
+    return blind_index(get_settings().db_encryption_master_key, tenant_id, cif)
+
+
 async def seed_company(
     admin_dsn: str,
     *,
@@ -200,17 +210,30 @@ async def seed_company(
     status: str = "active",
     notes: str | None = None,
 ) -> str:
-    """Inserta una empresa del tenant (como superusuario, saltando RLS) y devuelve su id."""
+    """Inserta una empresa del tenant (como superusuario, saltando RLS) y devuelve su id.
+
+    `name`/`cif` viven cifrados desde S5.2 (`pgp_sym_encrypt`, clave derivada por tenant) más un
+    índice ciego del CIF para `WHERE`/`UNIQUE`. Se cifra aquí con la MISMA clave maestra que usará
+    la aplicación (`shared.config.get_settings().db_encryption_master_key`), para que lo sembrado
+    sea descifrable de verdad por el código bajo test.
+    """
+    from shared.config import get_settings
+    from shared.encryption import derive_tenant_encryption_key
+
+    key = derive_tenant_encryption_key(get_settings().db_encryption_master_key, tenant_id)
+    idx = cif_blind_index_for(tenant_id, cif)
     conn = await asyncpg.connect(admin_dsn)
     try:
         company_id = str(uuid4())
         await conn.execute(
-            "INSERT INTO companies (id, tenant_id, name, cif, status, notes) "
-            "VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO companies (id, tenant_id, name, cif, cif_blind_index, status, notes) "
+            "VALUES ($1, $2, pgp_sym_encrypt($3, $4), pgp_sym_encrypt($5, $4), $6, $7, $8)",
             company_id,
             tenant_id,
             name,
+            key,
             cif,
+            idx,
             status,
             notes,
         )

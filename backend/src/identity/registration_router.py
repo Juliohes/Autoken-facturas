@@ -1,8 +1,9 @@
 """Endpoints HTTP del registro con aprobación (S1.4): alta pública + gestión del `tenant_admin`.
 
-Capa HTTP **fina**: traduce la petición a un caso de uso (`identity.registration`) o a una lectura
-(`identity.registration_repo`) y su resultado/excepción de dominio a la respuesta. Sin SQL ni reglas
-de negocio (ni siquiera el rate-limit del alta, que vive en el caso de uso, autocontenido).
+Capa HTTP **fina**: traduce la petición a un caso de uso (`identity.registration`) y su resultado o
+excepción de dominio a la respuesta. Sin SQL ni reglas de negocio (ni siquiera el rate-limit del
+alta, ni la derivación de la clave de cifrado del listado, S5.2 — ambos viven en el caso de uso,
+autocontenido).
 
 `POST /register` es **público** en el subdominio: no pasa por `require_roles` (no hay token), abre
 el contexto del tenant desde el host (`public_tenant_context`) y se limita por IP (anti-spam). La
@@ -18,7 +19,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from identity import registration, registration_repo
+from identity import registration
 from identity.authz import require_roles
 from identity.client_ip import client_ip
 from identity.dependencies import AuthContext
@@ -88,6 +89,7 @@ async def register(
             context.session,
             redis=get_redis(),
             ip=ip,
+            tenant_id=context.tenant.id,
             email=body.email,
             company_name=body.company_name,
             cif=body.cif,
@@ -111,7 +113,9 @@ async def register(
 @router.get("/registrations")
 async def list_registrations(identity: TenantAdmin) -> list[RegistrationOut]:
     """Lista los registros pendientes de la asesoría (solo `tenant_admin`; la RLS acota)."""
-    rows = await registration_repo.list_pending(identity.session)
+    rows = await registration.list_pending_registrations(
+        identity.session, tenant_id=identity.tenant_id, settings=get_settings()
+    )
     return [
         RegistrationOut(
             id=r.id,

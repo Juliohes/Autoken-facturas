@@ -211,10 +211,12 @@ async def test_m2_carrera_en_unique_se_traduce_a_conflicto(
 ) -> None:
     """M2: si el pre-check no ve el duplicado (carrera), el UNIQUE se traduce a conflicto (409).
 
-    Determinista: se saltea el pre-check `cif_exists` a nivel de repositorio para forzar el camino
-    de captura de la `IntegrityError` del UNIQUE `(tenant_id, cif)`, sin simular concurrencia real.
+    Determinista: se saltea el pre-check `cif_blind_index_exists` a nivel de repositorio para forzar
+    el camino de captura de la `IntegrityError` del UNIQUE `(tenant_id, cif_blind_index)`, sin
+    simular concurrencia real.
     """
     from companies import repository, service
+    from shared.config import get_settings
     from shared.db import tenant_session
 
     _, dsns = authapi
@@ -224,10 +226,16 @@ async def test_m2_carrera_en_unique_se_traduce_a_conflicto(
     async def _pre_check_ciego(*args: object, **kwargs: object) -> bool:
         return False  # simula la carrera: el pre-check no ve el duplicado ya presente
 
-    monkeypatch.setattr(repository, "cif_exists", _pre_check_ciego)
+    monkeypatch.setattr(repository, "cif_blind_index_exists", _pre_check_ciego)
 
     with pytest.raises(service.DuplicateCif):
         async with tenant_session(UUID(tid)) as session:
             await service.create_company(
-                session, actor_id=UUID(admin_id), name="Otra", cif=VALID_CIF, notes=None
+                session,
+                actor_id=UUID(admin_id),
+                tenant_id=UUID(tid),
+                settings=get_settings(),
+                name="Otra",
+                cif=VALID_CIF,
+                notes=None,
             )

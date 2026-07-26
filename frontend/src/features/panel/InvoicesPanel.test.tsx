@@ -115,7 +115,7 @@ describe('InvoicesPanel (S3.1)', () => {
 
     expect(screen.getByText('Desde')).toBeInTheDocument()
     expect(screen.getByText('Hasta')).toBeInTheDocument()
-    expect(screen.getByText('Proveedor / CIF')).toBeInTheDocument()
+    expect(screen.getByText('CIF de contraparte')).toBeInTheDocument()
     expect(screen.getByText('Estado del CIF')).toBeInTheDocument()
     expect(screen.getByText('Empresa')).toBeInTheDocument()
   })

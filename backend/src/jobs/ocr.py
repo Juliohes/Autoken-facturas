@@ -29,6 +29,7 @@ from uuid import UUID
 import structlog
 
 from companies import repository as companies_repo
+from companies.service import tenant_encryption_key as company_encryption_key
 from invoice_intake import repository as intake_repo
 from invoice_intake import storage
 from invoice_intake.constants import FileStatus
@@ -97,7 +98,9 @@ async def run_ocr(
             logger.error("ocr.file_not_found", uploaded_file_id=str(fid), tenant_id=str(tid))
             return
 
-        company = await companies_repo.get_company(session, cid)
+        company = await companies_repo.get_company(
+            session, cid, encryption_key=company_encryption_key(get_settings(), tid)
+        )
         if company is None:
             logger.error("ocr.company_not_found", company_id=str(cid), tenant_id=str(tid))
             await intake_repo.transition_status(session, fid, FileStatus.OCR_FAILED)
@@ -137,6 +140,7 @@ async def run_ocr(
             model=reconciled.model,
             raw=reconciled.raw,
             status=analysis.status,
+            encryption_key=company_encryption_key(get_settings(), tid),
         )
         await intake_repo.transition_status(session, fid, file_status)
         logger.info(

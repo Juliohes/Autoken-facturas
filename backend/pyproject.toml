@@ -28,6 +28,9 @@ dependencies = [
     "pyjwt>=2.9",
     "pyotp>=2.9",
     "redis>=5.0",
+    # Derivación de claves por tenant (S5.2, `shared/encryption.py`, HKDF sobre la clave maestra).
+    # Ya llegaba transitivamente (pyjwt/anthropic), se declara explícita al depender de ella directo.
+    "cryptography>=43",
     # Importación en bloque de la cartera de empresas desde el Excel del cliente (companies, S1.5).
     "openpyxl>=3.1",
     # Parseo de multipart/form-data para la subida del Excel (`POST /companies/import`).

@@ -74,11 +74,12 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
           />
         </label>
         <label className="flex flex-col text-sm text-slate-300">
-          Proveedor / CIF
+          CIF de contraparte
           <input
             type="text"
-            value={rawFilters.q ?? ''}
-            onChange={(e) => set({ q: e.target.value })}
+            value={rawFilters.counterparty_tax_id ?? ''}
+            onChange={(e) => set({ counterparty_tax_id: e.target.value })}
+            placeholder="CIF exacto"
             className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
           />
         </label>

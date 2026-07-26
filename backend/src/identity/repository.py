@@ -18,6 +18,8 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from companies.service import tenant_encryption_key as company_encryption_key
+from shared.config import get_settings
 from shared.db import session as db_session
 from shared.db import tenant_session
 from tenancy.resolution import ResolvedTenant
@@ -161,15 +163,16 @@ async def resolve_user_company(tenant_id: UUID, user_id: str) -> CompanyRef:
     - 0 o >1 -> cuenta mal configurada (`MisconfiguredUserCompany`); el llamante responde 403 sin
       servir datos (nunca un contexto ambiguo).
     """
+    encryption_key = company_encryption_key(get_settings(), tenant_id)
     async with tenant_session(tenant_id) as sess:
         rows = (
             await sess.execute(
                 text(
-                    "SELECT c.id, c.name FROM memberships m "
+                    "SELECT c.id, pgp_sym_decrypt(c.name, :key)::text AS name FROM memberships m "
                     "JOIN companies c ON c.id = m.company_id "
                     "WHERE m.user_id = :uid AND c.status = 'active'"
                 ),
-                {"uid": user_id},
+                {"uid": user_id, "key": encryption_key},
             )
         ).all()
     if len(rows) != 1:
