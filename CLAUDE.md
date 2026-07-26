@@ -369,6 +369,21 @@
   ya construida en tareas anteriores (gracias a las auditorías de 3 lentes de cada tarea previa)
   resistió el ataque tal cual estaba. Sin auditoría de 3 lentes propia (no hay código de producción
   nuevo que auditar, solo tests). 663 tests de backend en verde (655 previos + 8 nuevos).
+- **S5.5 (pruebas de carga) cerrada (PR #108) — quinta tarea del Sprint 5**: prueba de carga real con k6
+  (50 subidas concurrentes contra `POST /uploads`, Postgres/Redis/MinIO reales de este entorno de trabajo,
+  sin ningún worker `arq` arrancado — el intake nunca dispara coste real de IA). **Hallazgo real, no
+  teórico**: con los valores por defecto de SQLAlchemy (`pool_size=5`, `max_overflow=10`, 15 conexiones
+  simultáneas como máximo), 43 de 50 peticiones fallaban con `QueuePool limit... timeout 30.00` y p95 de
+  ~32s, porque cada subida retiene una conexión durante varias consultas secuenciales (comprobación de
+  membership, insert). Corregido haciendo `db_pool_size`/`db_max_overflow` configurables
+  (`shared/config.py`, default 20/20, sin hardcodear en `shared/db.py`) y **verificado empíricamente con un
+  segundo run de k6 tras el fix**: 0 fallos de 50, p95 = 2.59s. Durante la verificación, una corrida
+  intermedia mostró 43/50 éxito y 7 "fallos" que resultaron ser `409 duplicate_of` (deduplicación por
+  sha256 funcionando correctamente contra ficheros ya subidos en la corrida original, antes del fix) — se
+  investigó el cuerpo real de la respuesta antes de concluir nada, para no confundir un artefacto de test
+  con una regresión. Sin auditoría de 3 lentes propia (cambio de configuración acotado, sin lógica de
+  dominio nueva). 663 tests de backend en verde. Herramientas del load test (k6, guion `upload_test.js`,
+  ficheros JPEG generados) no versionadas en el repo (fuera de alcance de la spec, herramienta puntual).
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:

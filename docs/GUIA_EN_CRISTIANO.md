@@ -534,6 +534,29 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   anteriores estaba bien hecho. 663 pruebas automáticas del motor, todas en verde (las 655 de
   antes + 8 nuevas de este pentest).
 
+- **S5.5 — Comprobar que la aplicación aguanta cuando varias personas suben facturas a la vez**
+  (26/07/2026, quinta tarea del Sprint 5): antes de que esto vaya a producción hay que saber si
+  aguanta el pico real de una asesoría (varios empleados subiendo facturas al final de mes), no
+  suponerlo. Se instaló una herramienta de prueba de carga (k6) y se lanzaron **50 subidas de
+  facturas reales a la vez** contra la aplicación funcionando de verdad (con su base de datos, su
+  almacén de ficheros y su caché reales, sin gastar dinero en IA porque el robot que lee las
+  facturas estaba apagado durante la prueba). **El resultado fue un fallo real y medible**: 43 de
+  las 50 peticiones se quedaban colgadas hasta 32 segundos y acababan fallando. La causa: la
+  aplicación mantiene un "grupo" de conexiones ya abiertas a la base de datos para no tener que
+  abrir una nueva en cada petición (abrir una es caro); ese grupo tenía sitio para solo 15
+  conexiones simultáneas, y cada subida de factura ocupa una conexión durante varios pasos
+  seguidos (comprobar que la factura no está duplicada, guardarla) — con 50 subidas a la vez, se
+  llenaba enseguida y las peticiones de más se quedaban esperando en cola hasta agotar la
+  paciencia y fallar. Se corrigió ampliando ese grupo a un tamaño más generoso (configurable, no
+  un número fijo escondido en el código) y se **repitió la misma prueba** para comprobar que de
+  verdad se había arreglado, no solo de teoría: la segunda vez, las 50 peticiones tardaron entre 1
+  y 3 segundos cada una y ninguna falló. Un dato curioso durante la comprobación: en una prueba
+  intermedia salieron 7 "fallos" que resultaron no ser fallos de verdad, sino la propia aplicación
+  rechazando subir dos veces la misma factura (protección que ya existía) porque esos ficheros ya
+  se habían subido con éxito en la prueba anterior al arreglo — se comprobó el motivo exacto de
+  cada fallo antes de dar la tarea por buena, para no confundir "la app protegiéndose bien" con
+  "la app rota". 663 pruebas automáticas del motor, todas en verde.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
@@ -550,8 +573,8 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   las 5 tareas (S4.9 app-shell, S2.2 captura guiada, S4.10 interruptor admin-tech, S2.9/S2.10
   realce+comparativa, S4.8 ranking multi-modelo) cerradas y mergeadas el 25/07/2026.
 - **Sprint 5 (hardening+QA) en marcha** (arrancado 25/07/2026, orden acordado con Julio): S5.1
-  (cabeceras y límites), S5.6 (monitorización y alertas), S5.2 (cifrado por tenant) y S5.4 (pentest
-  propio) cerradas; quedan S5.5 (pruebas de carga) y S5.3 (backups + restore drill, la más
+  (cabeceras y límites), S5.6 (monitorización y alertas), S5.2 (cifrado por tenant), S5.4 (pentest
+  propio) y S5.5 (pruebas de carga) cerradas; queda S5.3 (backups + restore drill, la más
   dependiente de infraestructura/accesos reales) antes de dar el paso final. El propio stack de
   monitorización de S5.6 (Prometheus/Grafana/Alertmanager) está construido pero no desplegado de
   verdad todavía — pendiente de una sesión futura con acceso a la VPS B. El script de rotación de
@@ -565,4 +588,4 @@ del todo — S4.9 es una tarea nueva, no estaba en el recuento original de 51, a
 hueco de integración detectado el 23/07/2026 — sin contar el módulo de Verifactu ni la limpieza
 final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2, Sprint 3 y
 Sprint 4 completos. Lote de cierre de backlog previo al Sprint 5 COMPLETO. Sprint 5 en marcha: S5.1,
-S5.6, S5.2 y S5.4 cerradas. Siguiente: S5.5 (pruebas de carga).**
+S5.6, S5.2, S5.4 y S5.5 cerradas. Siguiente: S5.3 (backups + restore drill).**
