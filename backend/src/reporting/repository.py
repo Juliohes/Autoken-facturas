@@ -7,6 +7,15 @@ de empresas (S3.4).
 juntos, filtrados/ordenados/agregados, para las pantallas de la asesoría. Igual que el resto de
 repositorios del proyecto, la sesión llega ya abierta en el contexto de aislamiento del tenant (RLS
 de dos niveles, migraciones 0001/0004/0007); `reporting` nunca escribe, solo lee.
+
+`invoices.counterparty_tax_id`/`counterparty_name` y `companies.cif`/`name` viven cifrados desde
+S5.2 (pgcrypto, clave por tenant); el repositorio recibe la clave ya calculada por
+`reporting.service`. El filtro de texto libre por nombre de contraparte (`q`, `ILIKE`) se RETIRÓ del
+panel (decisión de Julio, spec S5.2 §0): un nombre cifrado sin índice ciego no admite subcadena sin
+descifrar fila a fila. Lo sustituye un filtro EXACTO por CIF vía `counterparty_tax_id_blind_index`
+(spec C5). `list_companies` no puede `ORDER BY` un nombre cifrado: se ordena en Python tras
+descifrar (mismo motivo que `companies.repository.list_companies` pasó a ordenar por `id`, pero
+aquí el volumen por tenant es pequeño y el orden alfabético importa para la pantalla "Empresas").
 """
 
 from __future__ import annotations
@@ -106,11 +115,11 @@ class CompanyRow:
 
 @dataclass(frozen=True)
 class Filters:
-    """Filtros del panel, todos opcionales y combinables por AND (spec §2)."""
+    """Filtros del panel, todos opcionales y combinables por AND (spec §2, S5.2 C5)."""
 
     date_from: date | None = None
     date_to: date | None = None
-    q: str | None = None
+    counterparty_tax_id_blind_index: str | None = None
     confirmed_by: UUID | None = None
     cif_status: str | None = None
     company_id: UUID | None = None
@@ -122,15 +131,6 @@ class Cursor:
 
     confirmed_at: datetime
     id: UUID
-
-
-def _escape_ilike(value: str) -> str:
-    """Escapa `\\`, `%` y `_` de un texto libre antes de envolverlo en un `ILIKE` (spec C3).
-
-    Sin esto, un usuario que buscara literalmente "50%" (p. ej. un descuento en el nombre del
-    proveedor) casaría de más: `%` e `_` son comodines de `LIKE`/`ILIKE`, no texto literal.
-    """
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _build_where(filters: Filters, cursor: Cursor | None) -> tuple[str, dict[str, object]]:
@@ -147,12 +147,9 @@ def _build_where(filters: Filters, cursor: Cursor | None) -> tuple[str, dict[str
     if filters.date_to is not None:
         conditions.append("i.issue_date <= :date_to")
         params["date_to"] = filters.date_to
-    if filters.q:
-        conditions.append(
-            "(i.counterparty_name ILIKE :q ESCAPE '\\' "
-            "OR i.counterparty_tax_id ILIKE :q ESCAPE '\\')"
-        )
-        params["q"] = f"%{_escape_ilike(filters.q)}%"
+    if filters.counterparty_tax_id_blind_index is not None:
+        conditions.append("i.counterparty_tax_id_blind_index = :cp_idx")
+        params["cp_idx"] = filters.counterparty_tax_id_blind_index
     if filters.confirmed_by is not None:
         conditions.append("i.confirmed_by = :confirmed_by")
         params["confirmed_by"] = str(filters.confirmed_by)
@@ -170,7 +167,7 @@ def _build_where(filters: Filters, cursor: Cursor | None) -> tuple[str, dict[str
 
 
 async def list_invoices(
-    session: AsyncSession, *, filters: Filters, cursor: Cursor | None
+    session: AsyncSession, *, filters: Filters, cursor: Cursor | None, encryption_key: str
 ) -> list[InvoiceRow]:
     """Página de facturas confirmadas del contexto (S3.1), filtradas y ordenadas.
 
@@ -181,11 +178,14 @@ async def list_invoices(
     """
     where, params = _build_where(filters, cursor)
     params["limit"] = PAGE_SIZE + 1
+    params["key"] = encryption_key
     rows = (
         await session.execute(
             text(
-                "SELECT i.id, i.issue_date, i.direction, i.counterparty_tax_id, "
-                " i.counterparty_name, i.counterparty_cif_status, i.net_amount, i.tax_amount, "
+                "SELECT i.id, i.issue_date, i.direction, "
+                " pgp_sym_decrypt(i.counterparty_tax_id, :key)::text AS counterparty_tax_id, "
+                " pgp_sym_decrypt(i.counterparty_name, :key)::text AS counterparty_name, "
+                " i.counterparty_cif_status, i.net_amount, i.tax_amount, "
                 " i.total_amount, i.irpf_amount, i.confirmed_at, i.confirmed_by, "
                 " i.uploaded_file_id, uf.created_at AS uploaded_at "
                 "FROM invoices i "
@@ -221,7 +221,9 @@ async def list_invoices(
     ]
 
 
-async def list_for_export(session: AsyncSession, *, filters: Filters) -> list[ExportRow]:
+async def list_for_export(
+    session: AsyncSession, *, filters: Filters, encryption_key: str
+) -> list[ExportRow]:
     """Todas las facturas que casan los filtros, sin paginar, hasta `EXPORT_LIMIT` (S3.2 §2/§4).
 
     A diferencia de `list_invoices` (panel, paginado), el export trae todo de una vez: no acepta
@@ -229,11 +231,15 @@ async def list_for_export(session: AsyncSession, *, filters: Filters) -> list[Ex
     """
     where, params = _build_where(filters, cursor=None)
     params["limit"] = EXPORT_LIMIT
+    params["key"] = encryption_key
     rows = (
         await session.execute(
             text(
-                "SELECT i.id, c.name AS company_name, i.issue_date, i.counterparty_tax_id, "
-                " i.counterparty_name, i.counterparty_cif_status, i.net_amount, i.tax_amount, "
+                "SELECT i.id, "
+                " pgp_sym_decrypt(c.name, :key)::text AS company_name, i.issue_date, "
+                " pgp_sym_decrypt(i.counterparty_tax_id, :key)::text AS counterparty_tax_id, "
+                " pgp_sym_decrypt(i.counterparty_name, :key)::text AS counterparty_name, "
+                " i.counterparty_cif_status, i.net_amount, i.tax_amount, "
                 " i.total_amount, i.irpf_amount, uf.created_at AS uploaded_at, "
                 " u.email AS confirmed_by_email "
                 "FROM invoices i "
@@ -270,7 +276,7 @@ async def list_for_export(session: AsyncSession, *, filters: Filters) -> list[Ex
     ]
 
 
-async def list_companies(session: AsyncSession) -> list[CompanyRow]:
+async def list_companies(session: AsyncSession, *, encryption_key: str) -> list[CompanyRow]:
     """Ficha agregada de las empresas del contexto (S3.4): datos propios + contadores agregados.
 
     `reporting` no posee `companies`/`memberships`/`users`/`invoices` (los poseen `companies`/
@@ -283,11 +289,16 @@ async def list_companies(session: AsyncSession) -> list[CompanyRow]:
     relaciones 1-a-N (`memberships`, `invoices`) en el mismo `SELECT` multiplicaría filas entre sí
     (nº de usuarios × nº de facturas por empresa) antes de agregar, un producto cartesiano
     innecesario que esta forma evita.
+
+    El orden alfabético (spec §3 C1) ya no lo hace Postgres (`c.name` va cifrado desde S5.2, un
+    `ORDER BY` sobre el texto cifrado no sería alfabético): se descifra y se ordena en Python. El
+    volumen por tenant (empresas de una asesoría) es pequeño, así que el coste es despreciable.
     """
     rows = (
         await session.execute(
             text(
-                "SELECT c.id, c.name, c.cif, c.status, c.notes, c.created_at, "
+                "SELECT c.id, pgp_sym_decrypt(c.name, :key)::text AS name, "
+                " pgp_sym_decrypt(c.cif, :key)::text AS cif, c.status, c.notes, c.created_at, "
                 " COALESCE(uc.user_count, 0) AS user_count, "
                 " COALESCE(ic.invoice_count, 0) AS invoice_count, "
                 " ic.last_invoice_at "
@@ -304,25 +315,28 @@ async def list_companies(session: AsyncSession) -> list[CompanyRow]:
                 "  FROM invoices i "
                 "  WHERE i.is_test = false "
                 "  GROUP BY i.company_id"
-                ") ic ON ic.company_id = c.id "
-                "ORDER BY c.name"
-            )
+                ") ic ON ic.company_id = c.id"
+            ),
+            {"key": encryption_key},
         )
     ).all()
-    return [
-        CompanyRow(
-            id=row.id,
-            name=row.name,
-            cif=row.cif,
-            status=row.status,
-            notes=row.notes,
-            created_at=row.created_at,
-            user_count=row.user_count,
-            invoice_count=row.invoice_count,
-            last_invoice_at=row.last_invoice_at,
-        )
-        for row in rows
-    ]
+    return sorted(
+        (
+            CompanyRow(
+                id=row.id,
+                name=row.name,
+                cif=row.cif,
+                status=row.status,
+                notes=row.notes,
+                created_at=row.created_at,
+                user_count=row.user_count,
+                invoice_count=row.invoice_count,
+                last_invoice_at=row.last_invoice_at,
+            )
+            for row in rows
+        ),
+        key=lambda c: c.name,
+    )
 
 
 async def _tax_lines_for(

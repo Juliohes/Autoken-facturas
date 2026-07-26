@@ -24,6 +24,8 @@ from sqlalchemy.orm import Session
 
 from companies import repository as companies_repo
 from companies.service import InvalidTaxId, is_cif_unique_violation, validated_cif
+from companies.service import cif_blind_index as company_cif_blind_index
+from companies.service import tenant_encryption_key as company_encryption_key
 from identity import ratelimit, registration_repo
 from identity.passwords import hash_password, validate_password_policy
 from notifications import Message, Notifier
@@ -85,6 +87,7 @@ async def register(
     *,
     redis: aioredis.Redis,
     ip: str,
+    tenant_id: UUID,
     email: str,
     company_name: str,
     cif: str,
@@ -120,6 +123,8 @@ async def register(
 
     if not await _persist_registration(
         session,
+        tenant_id=tenant_id,
+        settings=settings,
         email=email,
         company_name=company_name,
         canonical_cif=canonical_cif,
@@ -141,6 +146,8 @@ def _validated_cif(cif: str) -> str:
 async def _persist_registration(
     session: AsyncSession,
     *,
+    tenant_id: UUID,
+    settings: Settings,
     email: str,
     company_name: str,
     canonical_cif: str,
@@ -161,7 +168,11 @@ async def _persist_registration(
         try:
             async with session.begin_nested():
                 company_id = await _resolve_company(
-                    session, name=company_name, canonical_cif=canonical_cif
+                    session,
+                    tenant_id=tenant_id,
+                    settings=settings,
+                    name=company_name,
+                    canonical_cif=canonical_cif,
                 )
                 user_id = await registration_repo.insert_pending_user(
                     session, email=email, password_hash=password_hash
@@ -185,13 +196,25 @@ async def _persist_registration(
             raise  # cualquier otra violación de integridad no se enmascara
 
 
-async def _resolve_company(session: AsyncSession, *, name: str, canonical_cif: str) -> UUID:
+async def _resolve_company(
+    session: AsyncSession, *, tenant_id: UUID, settings: Settings, name: str, canonical_cif: str
+) -> UUID:
     """Regla 1-A: vincula a la empresa existente por CIF o crea una nueva `pending`. Una empresa."""
-    existing = await companies_repo.get_company_by_cif(session, canonical_cif)
+    encryption_key = company_encryption_key(settings, tenant_id)
+    idx = company_cif_blind_index(settings, tenant_id, canonical_cif)
+    existing = await companies_repo.get_company_by_cif_blind_index(
+        session, idx, encryption_key=encryption_key
+    )
     if existing is not None:
         return existing.id
     record = await companies_repo.insert_company(
-        session, name=name, cif=canonical_cif, status=CompanyStatus.PENDING.value, notes=None
+        session,
+        name=name,
+        cif=canonical_cif,
+        cif_blind_index=idx,
+        status=CompanyStatus.PENDING.value,
+        notes=None,
+        encryption_key=encryption_key,
     )
     return record.id
 
@@ -230,6 +253,16 @@ def _dispatch_after_commit(
             notifier.send(message)
 
     event.listen(session.sync_session, "after_commit", _send, once=True)
+
+
+async def list_pending_registrations(
+    session: AsyncSession, *, tenant_id: UUID, settings: Settings
+) -> list[registration_repo.PendingRegistration]:
+    """Lista los registros pendientes de la asesoría (solo lectura): deriva la clave aquí, nunca en
+    el router (hallazgo de auditoría S5.2 — la derivación de clave es del servicio, no del router,
+    mismo criterio que `companies.service.list_companies`)."""
+    encryption_key = company_encryption_key(settings, tenant_id)
+    return await registration_repo.list_pending(session, encryption_key=encryption_key)
 
 
 async def approve(session: AsyncSession, *, actor_id: UUID, user_id: UUID) -> None:

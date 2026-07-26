@@ -168,6 +168,55 @@ async def test_c5_cambiar_a_un_cif_valido_actualiza_el_estado_del_cif(authapi: A
     assert invoice["counterparty_cif_status"] == "valid"
 
 
+async def test_s5_2_c7_editar_un_campo_sensible_cifra_el_rastro_de_invoice_edits(
+    authapi: Api,
+) -> None:
+    """S5.2 C7: editar el CIF/nombre de contraparte NO deja `invoice_edits.old_value`/`new_value`
+    en texto plano — cifrarlos en la factura y dejarlos en claro en su auditoría sería una vía de
+    fuga paralela del mismo dato que se acaba de proteger."""
+    import asyncpg
+
+    from tests._counterparty import seed_counterparty  # noqa: PLC0415
+    from tests._invoicing import fetch_invoice_edits  # noqa: PLC0415
+
+    client, dsns = authapi
+    tenant_id, _admin_id, _company_id, token, invoice_id = await _seed_confirmed_invoice(
+        dsns, client, counterparty_tax_id=COUNTERPARTY_CIF, counterparty_name="Proveedor SA"
+    )
+    await seed_counterparty(dsns, tenant_id=tenant_id, cif=OWN_CIF, name="Otro Proveedor SA")
+
+    resp = await client.patch(
+        edit_url(invoice_id),
+        headers=auth(token, "ilex.localhost"),
+        json={"counterparty_tax_id": OWN_CIF, "counterparty_name": "Otro Proveedor SA"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    # La fila cruda (superusuario, sin descifrar) no contiene el CIF/nombre en claro.
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        rows = await conn.fetch(
+            "SELECT field, old_value, new_value FROM invoice_edits WHERE invoice_id = $1",
+            invoice_id,
+        )
+    finally:
+        await conn.close()
+    by_field = {r["field"]: r for r in rows}
+    assert COUNTERPARTY_CIF not in by_field["counterparty_tax_id"]["old_value"]
+    assert OWN_CIF not in by_field["counterparty_tax_id"]["new_value"]
+    assert "Proveedor SA" not in by_field["counterparty_name"]["old_value"]
+    assert "Otro Proveedor SA" not in by_field["counterparty_name"]["new_value"]
+
+    # El helper que descifra (mismo camino que usaría un export/auditoría legítima) sí recupera
+    # los valores originales.
+    edits = await fetch_invoice_edits(dsns, invoice_id=invoice_id)
+    by_field_decrypted = {e["field"]: e for e in edits}
+    assert by_field_decrypted["counterparty_tax_id"]["old_value"] == COUNTERPARTY_CIF
+    assert by_field_decrypted["counterparty_tax_id"]["new_value"] == OWN_CIF
+    assert by_field_decrypted["counterparty_name"]["old_value"] == "Proveedor SA"
+    assert by_field_decrypted["counterparty_name"]["new_value"] == "Otro Proveedor SA"
+
+
 async def test_c6_editar_tramos_de_iva_reemplaza_el_conjunto_completo(authapi: Api) -> None:
     """C6: editar tax_lines reemplaza los tramos existentes por los nuevos, no los acumula."""
     client, dsns = authapi

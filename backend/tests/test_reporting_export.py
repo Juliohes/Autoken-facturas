@@ -238,7 +238,9 @@ async def test_c1b_sin_resultados_da_excel_solo_con_cabecera(authapi: Api) -> No
     _tenant_id, _admin_id, _company_id, token = await _admin(dsns, client)
 
     resp = await client.get(
-        EXPORT_URL, params={"q": "no-existe-nadie"}, headers=auth(token, "ilex.localhost")
+        EXPORT_URL,
+        params={"counterparty_tax_id": "A00000000"},
+        headers=auth(token, "ilex.localhost"),
     )
 
     assert resp.status_code == 200, resp.text

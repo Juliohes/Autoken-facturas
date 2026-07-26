@@ -22,7 +22,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import BYTEA, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -122,11 +122,20 @@ class User(Base):
 
 
 class Company(Base):
-    """Empresa cliente de una asesoría. Se importan desde el Excel de la asesoría (S1.5)."""
+    """Empresa cliente de una asesoría. Se importan desde el Excel de la asesoría (S1.5).
+
+    `cif`/`name` viven cifrados desde S5.2 (`pgp_sym_encrypt`, migración 0020): el ORM nunca los
+    lee/escribe directamente (todo el acceso pasa por SQL crudo en `companies.repository`, con
+    `pgp_sym_encrypt`/`pgp_sym_decrypt`), pero el esquema declarado aquí debe seguir coincidiendo
+    con la migración real (`alembic check` lo exige) para que un futuro `--autogenerate` no
+    proponga revertir el cifrado.
+    """
 
     __tablename__ = "companies"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "cif", name="companies_tenant_cif_unique"),
+        UniqueConstraint(
+            "tenant_id", "cif_blind_index", name="companies_tenant_cif_blind_index_unique"
+        ),
         CheckConstraint(f"status IN {_COMPANY_STATUS}", name="companies_status_valid"),
         Index("ix_companies_tenant", "tenant_id", "id"),
     )
@@ -135,8 +144,9 @@ class Company(Base):
     tenant_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
-    name: Mapped[str] = mapped_column(Text, nullable=False)
-    cif: Mapped[str] = mapped_column(String(16), nullable=False)
+    name: Mapped[bytes] = mapped_column(BYTEA, nullable=False)
+    cif: Mapped[bytes] = mapped_column(BYTEA, nullable=False)
+    cif_blind_index: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(

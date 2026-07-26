@@ -21,7 +21,7 @@ from tests._companies import (
     seed_admin,
     valid_nif,
 )
-from tests._dbtest import seed_company, seed_membership, seed_user
+from tests._dbtest import cif_blind_index_for, seed_company, seed_membership, seed_user
 
 Api = tuple[httpx.AsyncClient, dict[str, str]]
 
@@ -75,7 +75,9 @@ async def test_c1_registro_valido_crea_usuario_pendiente(authapi: Api) -> None:
             tid,
         )
         company = await conn.fetchrow(
-            "SELECT id, status FROM companies WHERE tenant_id = $1 AND cif = $2", tid, VALID_CIF
+            "SELECT id, status FROM companies WHERE tenant_id = $1 AND cif_blind_index = $2",
+            tid,
+            cif_blind_index_for(tid, VALID_CIF),
         )
         members = await conn.fetchval(
             "SELECT count(*) FROM memberships WHERE user_id = $1 AND company_id = $2",
@@ -135,7 +137,9 @@ async def test_c5_cif_existente_vincula_a_la_empresa(authapi: Api) -> None:
     conn = await asyncpg.connect(dsns["admin"])
     try:
         companies = await conn.fetchval(
-            "SELECT count(*) FROM companies WHERE tenant_id = $1 AND cif = $2", tid, VALID_CIF
+            "SELECT count(*) FROM companies WHERE tenant_id = $1 AND cif_blind_index = $2",
+            tid,
+            cif_blind_index_for(tid, VALID_CIF),
         )
         user = await conn.fetchrow(
             "SELECT id FROM users WHERE tenant_id = $1 AND email = 'empleado@correo.es'", tid
@@ -211,7 +215,9 @@ async def test_c8_aprobar_activa_usuario_y_empresa(authapi: Api) -> None:
     try:
         user_status = await conn.fetchval("SELECT status FROM users WHERE id = $1", user["id"])
         company_status = await conn.fetchval(
-            "SELECT status FROM companies WHERE tenant_id = $1 AND cif = $2", tid, VALID_CIF
+            "SELECT status FROM companies WHERE tenant_id = $1 AND cif_blind_index = $2",
+            tid,
+            cif_blind_index_for(tid, VALID_CIF),
         )
     finally:
         await conn.close()
@@ -234,7 +240,9 @@ async def test_c9_rechazar_descarta_el_registro(authapi: Api) -> None:
     conn = await asyncpg.connect(dsns["admin"])
     try:
         companies = await conn.fetchval(
-            "SELECT count(*) FROM companies WHERE tenant_id = $1 AND cif = $2", tid, VALID_CIF
+            "SELECT count(*) FROM companies WHERE tenant_id = $1 AND cif_blind_index = $2",
+            tid,
+            cif_blind_index_for(tid, VALID_CIF),
         )
     finally:
         await conn.close()

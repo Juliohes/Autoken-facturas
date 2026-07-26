@@ -72,7 +72,7 @@ def _filters_from_query(
     *,
     date_from: date | None,
     date_to: date | None,
-    q: str | None,
+    counterparty_tax_id: str | None,
     confirmed_by: UUID | None,
     cif_status: str | None,
     company_id: UUID | None,
@@ -81,7 +81,7 @@ def _filters_from_query(
     return service.PanelFilters(
         date_from=date_from,
         date_to=date_to,
-        q=q,
+        counterparty_tax_id=counterparty_tax_id,
         confirmed_by=confirmed_by,
         cif_status=cif_status,
         company_id=company_id,
@@ -127,17 +127,21 @@ async def list_invoices(
     identity: TenantAdmin,
     date_from: date | None = None,
     date_to: date | None = None,
-    q: str | None = None,
+    counterparty_tax_id: str | None = None,
     confirmed_by: UUID | None = None,
     cif_status: str | None = None,
     company_id: UUID | None = None,
     cursor: str | None = None,
 ) -> PanelOut:
-    """Facturas confirmadas de la asesoría, filtradas y paginadas (S3.1). Ver spec S3.1."""
+    """Facturas confirmadas de la asesoría, filtradas y paginadas (S3.1). Ver spec S3.1.
+
+    `counterparty_tax_id` filtra por CIF EXACTO de contraparte (S5.2 C5): ya no admite texto libre
+    por nombre (el nombre vive cifrado sin índice ciego desde S5.2, decisión de Julio).
+    """
     filters = _filters_from_query(
         date_from=date_from,
         date_to=date_to,
-        q=q,
+        counterparty_tax_id=counterparty_tax_id,
         confirmed_by=confirmed_by,
         cif_status=cif_status,
         company_id=company_id,
@@ -183,7 +187,7 @@ async def export_invoices(
     identity: TenantAdmin,
     date_from: date | None = None,
     date_to: date | None = None,
-    q: str | None = None,
+    counterparty_tax_id: str | None = None,
     confirmed_by: UUID | None = None,
     cif_status: str | None = None,
     company_id: UUID | None = None,
@@ -195,7 +199,7 @@ async def export_invoices(
     filters = _filters_from_query(
         date_from=date_from,
         date_to=date_to,
-        q=q,
+        counterparty_tax_id=counterparty_tax_id,
         confirmed_by=confirmed_by,
         cif_status=cif_status,
         company_id=company_id,

@@ -59,9 +59,49 @@ def test_jwt_secret_inseguro_en_produccion_falla_al_arrancar(secreto_inseguro: s
 
 def test_jwt_secret_fuerte_en_produccion_no_falla() -> None:
     """Con un secreto fuerte (>= 32 bytes y distinto del default), producción arranca sin error."""
-    settings = Settings(app_env=AppEnv.PRODUCTION, jwt_secret="x" * 48)
+    settings = Settings(
+        app_env=AppEnv.PRODUCTION, jwt_secret="x" * 48, db_encryption_master_key="y" * 48
+    )
     assert settings.is_production
     assert settings.jwt_secret == "x" * 48
+
+
+@pytest.mark.parametrize(
+    "secreto_inseguro",
+    [
+        "dev-insecure-encryption-master-key-change-me",  # el default de dev: prohibido en prod
+        "corto",  # menos de 32 bytes
+        "x" * 31,  # justo por debajo del mínimo de 32 bytes
+    ],
+)
+def test_encryption_master_key_insegura_en_produccion_falla_al_arrancar(
+    secreto_inseguro: str,
+) -> None:
+    """S5.2 spec §5: una `db_encryption_master_key` débil en producción hace fallar el arranque
+    (fail-loud), mismo criterio que `jwt_secret`."""
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(
+            app_env=AppEnv.PRODUCTION,
+            jwt_secret="x" * 48,
+            db_encryption_master_key=secreto_inseguro,
+        )
+    assert "DB_ENCRYPTION_MASTER_KEY" in str(exc_info.value)
+
+
+def test_encryption_master_key_fuerte_en_produccion_no_falla() -> None:
+    """Con una clave fuerte (>= 32 bytes y distinta del default), producción arranca sin error."""
+    settings = Settings(
+        app_env=AppEnv.PRODUCTION, jwt_secret="x" * 48, db_encryption_master_key="y" * 48
+    )
+    assert settings.is_production
+    assert settings.db_encryption_master_key == "y" * 48
+
+
+@pytest.mark.parametrize("entorno", [AppEnv.DEVELOPMENT, AppEnv.STAGING])
+def test_encryption_master_key_default_es_aceptable_fuera_de_produccion(entorno: AppEnv) -> None:
+    """En development/staging el default de dev no rompe (los tests y el arranque local lo usan)."""
+    settings = Settings(app_env=entorno)
+    assert settings.app_env is entorno
 
 
 @pytest.mark.parametrize("entorno", [AppEnv.DEVELOPMENT, AppEnv.STAGING])

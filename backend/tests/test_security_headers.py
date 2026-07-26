@@ -62,8 +62,10 @@ async def prod_client() -> AsyncIterator[httpx.AsyncClient]:
 
     prev_env = os.environ.get("APP_ENV")
     prev_secret = os.environ.get("JWT_SECRET")
+    prev_encryption_key = os.environ.get("DB_ENCRYPTION_MASTER_KEY")
     os.environ["APP_ENV"] = "production"
     os.environ["JWT_SECRET"] = "x" * 40  # >= 32 bytes: válido en producción
+    os.environ["DB_ENCRYPTION_MASTER_KEY"] = "y" * 40  # >= 32 bytes: válido en producción (S5.2)
     config.get_settings.cache_clear()
     try:
         from main import create_app
@@ -72,7 +74,11 @@ async def prod_client() -> AsyncIterator[httpx.AsyncClient]:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
             yield ac
     finally:
-        for var, prev in (("APP_ENV", prev_env), ("JWT_SECRET", prev_secret)):
+        for var, prev in (
+            ("APP_ENV", prev_env),
+            ("JWT_SECRET", prev_secret),
+            ("DB_ENCRYPTION_MASTER_KEY", prev_encryption_key),
+        ):
             if prev is None:
                 os.environ.pop(var, None)
             else:

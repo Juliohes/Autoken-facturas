@@ -20,6 +20,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 
 from companies import repository as companies_repo
+from companies.service import tenant_encryption_key as company_encryption_key
 from counterparty.constants import CifStatus
 from counterparty.service import CounterpartyVerdict, record_confirmation, verify_counterparty
 from identity.dependencies import AuthContext
@@ -38,8 +39,14 @@ from ocr import repository as ocr_repo
 from ocr.repository import ExtractionRecord
 from ocr.verification import TaxLine, check_invoice_totals
 from shared.audit import write_audit
+from shared.config import get_settings
+from shared.encryption import tenant_encryption_key, tenant_tax_id_blind_index
 from shared.tax_id import normalize_tax_id
 from tenancy.constants import Role
+
+# `invoices.counterparty_tax_id`/`counterparty_name` viven cifrados por tenant desde S5.2 (pgcrypto,
+# clave derivada con HKDF, `shared.encryption`). `counterparty_tax_id_blind_index` sustituye al
+# filtro `ILIKE` retirado del panel (spec S5.2 C5): se recalcula aquí en cada escritura.
 
 # Estados del fichero desde los que se puede revisar/confirmar (spec §2/§5): ya hay datos del OCR.
 _CONFIRMABLE_STATES = frozenset({FileStatus.OCR_DONE.value, FileStatus.NEEDS_REVIEW.value})
@@ -305,14 +312,19 @@ async def review(identity: AuthContext, file_id: UUID) -> ReviewData:
     file_ctx = await _load_file(identity, file_id)
     if file_ctx.status not in _CONFIRMABLE_STATES:
         raise NotConfirmable
-    extraction = await ocr_repo.get_extraction(identity.session, file_id)
+    ocr_key = tenant_encryption_key(get_settings(), identity.tenant_id)
+    extraction = await ocr_repo.get_extraction(identity.session, file_id, encryption_key=ocr_key)
     if extraction is None:
         raise NotConfirmable
 
     verdict = await verify_counterparty(
         identity.tenant_id, extraction.counterparty_tax_id, extraction.counterparty_name
     )
-    own = await companies_repo.get_company(identity.session, file_ctx.company_id)
+    own = await companies_repo.get_company(
+        identity.session,
+        file_ctx.company_id,
+        encryption_key=company_encryption_key(get_settings(), identity.tenant_id),
+    )
 
     warnings: list[str] = []
     if _balance_ok(_extraction_tax_lines(extraction), extraction.total_amount) is False:
@@ -356,7 +368,8 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
         raise NotConfirmable
     if await repository.invoice_exists_for_file(identity.session, file_id):
         raise AlreadyConfirmed
-    extraction = await ocr_repo.get_extraction(identity.session, file_id)
+    ocr_key = tenant_encryption_key(get_settings(), identity.tenant_id)
+    extraction = await ocr_repo.get_extraction(identity.session, file_id, encryption_key=ocr_key)
     if extraction is None:
         raise NotConfirmable
 
@@ -382,6 +395,11 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
 
     corrections = _diff(extraction, command)
     snapshot = _snapshot(command, verdict, balance_ok)
+    settings = get_settings()
+    encryption_key = tenant_encryption_key(settings, identity.tenant_id)
+    tax_id_idx = tenant_tax_id_blind_index(
+        settings, identity.tenant_id, command.counterparty_tax_id
+    )
 
     # Persistencia atómica en la transacción de la petición (spec §4). El UNIQUE por fichero cierra
     # la carrera de dos confirmaciones concurrentes que ambas pasaron el pre-check: la violación se
@@ -394,6 +412,7 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
             direction=command.direction,
             issue_date=command.issue_date,
             counterparty_tax_id=command.counterparty_tax_id,
+            counterparty_tax_id_blind_index=tax_id_idx,
             counterparty_name=command.counterparty_name,
             counterparty_cif_status=verdict.status,
             net_amount=command.net_amount,
@@ -404,6 +423,7 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
             balance_ok=balance_ok,
             snapshot=snapshot,
             confirmed_by=identity.user_id,
+            encryption_key=encryption_key,
         )
     except IntegrityError as exc:
         if repository.is_duplicate_invoice(exc):
@@ -442,6 +462,7 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
         identity.tenant_id,
         command.counterparty_tax_id or "",
         command.counterparty_name or "",
+        settings=settings,
         session=identity.session,
     )
     return invoice_id
@@ -453,7 +474,10 @@ async def history(identity: AuthContext) -> list[HistoryItem]:
     Sin autorización adicional por fichero (a diferencia de `review`/`confirm`): la RLS de dos
     niveles ya acota el resultado al tenant/empresa de la sesión (spec §4).
     """
-    entries = await repository.list_history(identity.session)
+    entries = await repository.list_history(
+        identity.session,
+        encryption_key=tenant_encryption_key(get_settings(), identity.tenant_id),
+    )
     return [
         HistoryItem(
             id=entry.id,
@@ -603,7 +627,11 @@ async def edit_invoice(
     reales (el diff sale vacío) no escribe nada: ni `invoices`, ni `invoice_tax_lines`, ni
     `invoice_edits`, ni `audit_log` (spec §2, "sin cambios reales = sin efecto observable").
     """
-    current = await repository.get_invoice(identity.session, invoice_id)
+    settings = get_settings()
+    encryption_key = tenant_encryption_key(settings, identity.tenant_id)
+    current = await repository.get_invoice(
+        identity.session, invoice_id, encryption_key=encryption_key
+    )
     if current is None:
         raise InvoiceNotVisible
 
@@ -622,6 +650,9 @@ async def edit_invoice(
         invoice_id,
         issue_date=merged.issue_date,
         counterparty_tax_id=merged.counterparty_tax_id,
+        counterparty_tax_id_blind_index=tenant_tax_id_blind_index(
+            settings, identity.tenant_id, merged.counterparty_tax_id
+        ),
         counterparty_name=merged.counterparty_name,
         counterparty_cif_status=cif_status,
         net_amount=merged.net_amount,
@@ -629,6 +660,7 @@ async def edit_invoice(
         total_amount=merged.total_amount,
         irpf_amount=merged.irpf_amount,
         balance_ok=balance_ok,
+        encryption_key=encryption_key,
     )
     if "tax_lines" in patch:
         await repository.delete_tax_lines(identity.session, invoice_id)
@@ -644,6 +676,7 @@ async def edit_invoice(
         company_id=current.company_id,
         edited_by=identity.user_id,
         edits=edits,
+        encryption_key=encryption_key,
     )
     await write_audit(
         identity.session,

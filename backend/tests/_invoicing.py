@@ -50,6 +50,13 @@ def auth(token: str, hostname: str = "ilex.localhost") -> dict[str, str]:
     return {**host(hostname), **bearer(token)}
 
 
+def _encryption_key_for(tenant_id: str) -> str:
+    from shared.config import get_settings
+    from shared.encryption import derive_tenant_encryption_key
+
+    return derive_tenant_encryption_key(get_settings().db_encryption_master_key, tenant_id)
+
+
 async def seed_extraction(
     dsns: dict[str, str],
     *,
@@ -65,7 +72,13 @@ async def seed_extraction(
     tax: str = "21.00",
     status: str = "needs_review",
 ) -> None:
-    """Siembra la fila `ocr_extractions` (baseline del OCR para el diff de correcciones)."""
+    """Siembra la fila `ocr_extractions` (baseline del OCR para el diff de correcciones).
+
+    `counterparty_tax_id`/`counterparty_name` viven cifrados desde S5.2 (`pgp_sym_encrypt`, clave
+    derivada por tenant); se cifra aquí con la MISMA clave maestra que usará la aplicación bajo
+    test.
+    """
+    key = _encryption_key_for(tenant_id)
     conn = await asyncpg.connect(dsns["admin"])
     try:
         await conn.execute(
@@ -73,7 +86,8 @@ async def seed_extraction(
             "total_amount, net_amount, tax_amount, tax_lines, counterparty_tax_id, "
             "counterparty_name, "
             "own_tax_id_present, confidences, validations, engine, model, raw, status) VALUES "
-            "($1,$2,$3,$4,$5::date,$6::numeric,$7::numeric,$8::numeric,$9::jsonb,$10,$11,$12,"
+            "($1,$2,$3,$4,$5::date,$6::numeric,$7::numeric,$8::numeric,$9::jsonb,"
+            "pgp_sym_encrypt($10,$14),pgp_sym_encrypt($11,$14),$12,"
             "'{}'::jsonb,'{}'::jsonb,'fake','fake-1','{}'::jsonb,$13)",
             str(uuid4()),
             tenant_id,
@@ -88,6 +102,7 @@ async def seed_extraction(
             counterparty_name,
             own_tax_id_present,
             status,
+            key,
         )
     finally:
         await conn.close()
@@ -226,15 +241,21 @@ async def seed_invoice(
         content_type=JPEG_CT,
         status="confirmed",
     )
+    from tests._dbtest import cif_blind_index_for  # noqa: PLC0415
+
+    key = _encryption_key_for(tenant_id)
+    idx = cif_blind_index_for(tenant_id, counterparty_tax_id) if counterparty_tax_id else None
     conn = await asyncpg.connect(dsns["admin"])
     try:
         row = await conn.fetchrow(
             "INSERT INTO invoices "
             "(tenant_id, company_id, uploaded_file_id, direction, issue_date, "
-            " counterparty_tax_id, counterparty_name, counterparty_cif_status, "
+            " counterparty_tax_id, counterparty_tax_id_blind_index, counterparty_name, "
+            " counterparty_cif_status, "
             " net_amount, tax_amount, total_amount, irpf_amount, is_test, balance_ok, snapshot, "
             " status, confirmed_by, confirmed_at) "
-            "VALUES ($1,$2,$3,'recibida',$4::date,$5,$6,$7,$8::numeric,$9::numeric,"
+            "VALUES ($1,$2,$3,'recibida',$4::date,pgp_sym_encrypt($5,$15),$16,"
+            " pgp_sym_encrypt($6,$15),$7,$8::numeric,$9::numeric,"
             " $10::numeric,$11::numeric,$12,true,'{}'::jsonb,'confirmed',$13,$14) "
             "RETURNING id",
             tenant_id,
@@ -251,6 +272,8 @@ async def seed_invoice(
             is_test,
             confirmer,
             when,
+            key,
+            idx,
         )
         invoice_id = str(row["id"])
         for line in tax_lines or []:
@@ -270,11 +293,33 @@ async def seed_invoice(
 
 
 # --- Consultas de efecto (superusuario) ----------------------------------------------------------
+async def _fetch_invoice_by(conn: asyncpg.Connection, column: str, value: str) -> dict | None:
+    """Trae una factura por `id`/`uploaded_file_id`, con `counterparty_tax_id`/`counterparty_name`
+    descifrados (S5.2): dos consultas (la primera solo para saber el `tenant_id` y así derivar la
+    clave), ya que el nombre de la clave depende de la fila que aún no se ha leído."""
+    head = await conn.fetchrow(f"SELECT tenant_id FROM invoices WHERE {column} = $1", value)  # noqa: S608
+    if head is None:
+        return None
+    key = _encryption_key_for(str(head["tenant_id"]))
+    row = await conn.fetchrow(
+        f"SELECT *, pgp_sym_decrypt(counterparty_tax_id, $2)::text AS __ctid, "  # noqa: S608
+        f"pgp_sym_decrypt(counterparty_name, $2)::text AS __cname "
+        f"FROM invoices WHERE {column} = $1",
+        value,
+        key,
+    )
+    if row is None:
+        return None
+    item = dict(row)
+    item["counterparty_tax_id"] = item.pop("__ctid")
+    item["counterparty_name"] = item.pop("__cname")
+    return item
+
+
 async def fetch_invoice(dsns: dict[str, str], *, file_id: str) -> dict | None:
     conn = await asyncpg.connect(dsns["admin"])
     try:
-        row = await conn.fetchrow("SELECT * FROM invoices WHERE uploaded_file_id = $1", file_id)
-        return dict(row) if row is not None else None
+        return await _fetch_invoice_by(conn, "uploaded_file_id", file_id)
     finally:
         await conn.close()
 
@@ -282,8 +327,7 @@ async def fetch_invoice(dsns: dict[str, str], *, file_id: str) -> dict | None:
 async def fetch_invoice_by_id(dsns: dict[str, str], *, invoice_id: str) -> dict | None:
     conn = await asyncpg.connect(dsns["admin"])
     try:
-        row = await conn.fetchrow("SELECT * FROM invoices WHERE id = $1", invoice_id)
-        return dict(row) if row is not None else None
+        return await _fetch_invoice_by(conn, "id", invoice_id)
     finally:
         await conn.close()
 
@@ -300,12 +344,31 @@ async def fetch_tax_lines(dsns: dict[str, str], *, invoice_id: str) -> list[dict
 
 
 async def fetch_invoice_edits(dsns: dict[str, str], *, invoice_id: str) -> list[dict]:
+    """Ediciones auditadas de una factura, con `old_value`/`new_value` descifrados si el campo
+    editado es sensible (S5.2 C7, `invoicing.repository.SENSITIVE_EDIT_FIELDS`): mismo `CASE` que
+    `platform_admin.repository._fetch_invoice_edits_rows`, aquí en SQL crudo de test."""
+    from invoicing.repository import SENSITIVE_EDIT_FIELDS  # noqa: PLC0415
+
     conn = await asyncpg.connect(dsns["admin"])
     try:
+        head = await conn.fetchrow(
+            "SELECT tenant_id FROM invoice_edits WHERE invoice_id = $1 LIMIT 1", invoice_id
+        )
+        if head is None:
+            return []
+        key = _encryption_key_for(str(head["tenant_id"]))
+        sensitive = ", ".join(f"'{field}'" for field in SENSITIVE_EDIT_FIELDS)
         rows = await conn.fetch(
-            "SELECT field, old_value, new_value, edited_by FROM invoice_edits "
-            "WHERE invoice_id = $1",
+            f"SELECT field, "  # noqa: S608
+            f"CASE WHEN field IN ({sensitive}) "
+            f"THEN pgp_sym_decrypt(decode(old_value, 'base64'), $2)::text ELSE old_value END "
+            f"AS old_value, "
+            f"CASE WHEN field IN ({sensitive}) "
+            f"THEN pgp_sym_decrypt(decode(new_value, 'base64'), $2)::text ELSE new_value END "
+            f"AS new_value, "
+            f"edited_by FROM invoice_edits WHERE invoice_id = $1",
             invoice_id,
+            key,
         )
         return [dict(r) for r in rows]
     finally:
@@ -372,11 +435,17 @@ async def audit_count(dsns: dict[str, str], *, action: str, entity_id: str) -> i
 
 
 async def counterparty_exists(dsns: dict[str, str], *, tenant_id: str, cif: str) -> bool:
+    """Busca por índice ciego del CIF (S5.2): `counterparties.cif` ya no es comparable en claro."""
+    from tests._dbtest import cif_blind_index_for  # noqa: PLC0415
+
+    idx = cif_blind_index_for(tenant_id, cif)
     conn = await asyncpg.connect(dsns["admin"])
     try:
         return bool(
             await conn.fetchval(
-                "SELECT 1 FROM counterparties WHERE tenant_id = $1 AND cif = $2", tenant_id, cif
+                "SELECT 1 FROM counterparties WHERE tenant_id = $1 AND cif_blind_index = $2",
+                tenant_id,
+                idx,
             )
         )
     finally:

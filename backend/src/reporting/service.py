@@ -17,6 +17,8 @@ from uuid import UUID
 
 from identity.dependencies import AuthContext
 from reporting import repository
+from shared.config import get_settings
+from shared.encryption import tenant_encryption_key, tenant_tax_id_blind_index
 
 
 class ReportingError(Exception):
@@ -33,11 +35,16 @@ class InvalidCursor(ReportingError):
 
 @dataclass(frozen=True)
 class PanelFilters:
-    """Filtros del panel tal como los recibe el router, ya tipados (spec §2)."""
+    """Filtros del panel tal como los recibe el router, ya tipados (spec §2, S5.2 C5).
+
+    `counterparty_tax_id`: filtro EXACTO por CIF de contraparte (vía índice ciego, spec S5.2 C5).
+    Sustituye al antiguo `q` de texto libre (`ILIKE` sobre nombre/CIF), retirado porque el nombre
+    de contraparte vive cifrado sin índice ciego desde S5.2 (decisión de Julio).
+    """
 
     date_from: date | None = None
     date_to: date | None = None
-    q: str | None = None
+    counterparty_tax_id: str | None = None
     confirmed_by: UUID | None = None
     cif_status: str | None = None
     company_id: UUID | None = None
@@ -140,7 +147,10 @@ def _to_company_summary(row: repository.CompanyRow) -> CompanySummary:
 
 async def list_companies(identity: AuthContext) -> list[CompanySummary]:
     """Ficha agregada de las empresas de la asesoría del `tenant_admin` (S3.4). Solo lectura."""
-    rows = await repository.list_companies(identity.session)
+    rows = await repository.list_companies(
+        identity.session,
+        encryption_key=tenant_encryption_key(get_settings(), identity.tenant_id),
+    )
     return [_to_company_summary(row) for row in rows]
 
 
@@ -154,12 +164,14 @@ def _validate_date_range(filters: PanelFilters) -> None:
         raise InvalidDateRange
 
 
-def _repo_filters(filters: PanelFilters) -> repository.Filters:
+def _repo_filters(tenant_id: UUID, filters: PanelFilters) -> repository.Filters:
     """Traduce los filtros del servicio a los del repositorio (compartido por panel y export)."""
     return repository.Filters(
         date_from=filters.date_from,
         date_to=filters.date_to,
-        q=filters.q,
+        counterparty_tax_id_blind_index=tenant_tax_id_blind_index(
+            get_settings(), tenant_id, filters.counterparty_tax_id
+        ),
         confirmed_by=filters.confirmed_by,
         cif_status=filters.cif_status,
         company_id=filters.company_id,
@@ -230,7 +242,10 @@ async def list_invoices(
     decoded_cursor = _decode_cursor(cursor) if cursor is not None else None
 
     rows = await repository.list_invoices(
-        identity.session, filters=_repo_filters(filters), cursor=decoded_cursor
+        identity.session,
+        filters=_repo_filters(identity.tenant_id, filters),
+        cursor=decoded_cursor,
+        encryption_key=tenant_encryption_key(get_settings(), identity.tenant_id),
     )
 
     has_more = len(rows) > repository.PAGE_SIZE
@@ -242,5 +257,9 @@ async def list_invoices(
 async def export_invoices(identity: AuthContext, filters: PanelFilters) -> list[ExportItem]:
     """Todas las facturas que casan los filtros, sin paginar, para el export a Excel (S3.2)."""
     _validate_date_range(filters)
-    rows = await repository.list_for_export(identity.session, filters=_repo_filters(filters))
+    rows = await repository.list_for_export(
+        identity.session,
+        filters=_repo_filters(identity.tenant_id, filters),
+        encryption_key=tenant_encryption_key(get_settings(), identity.tenant_id),
+    )
     return [_to_export_item(row) for row in rows]

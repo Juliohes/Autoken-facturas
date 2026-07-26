@@ -18,10 +18,11 @@ from pydantic import BaseModel
 from companies import importer, repository, service
 from identity.authz import require_roles
 from identity.dependencies import AuthContext
-from shared.config import get_settings
+from shared.config import Settings, get_settings
 from tenancy.constants import Role
 
 router = APIRouter(prefix="/companies", tags=["companies"])
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 # Dependencia común: identidad autenticada y autorizada como `tenant_admin` (gestión de empresas).
 TenantAdmin = Annotated[AuthContext, Depends(require_roles(Role.TENANT_ADMIN))]
@@ -59,19 +60,25 @@ def _to_out(record: repository.CompanyRow | repository.CompanyRecord) -> Company
 
 
 @router.get("")
-async def list_companies(identity: TenantAdmin) -> list[CompanyOut]:
+async def list_companies(identity: TenantAdmin, settings: SettingsDep) -> list[CompanyOut]:
     """Lista las empresas de la asesoría (solo `tenant_admin`; la RLS acota lo visible)."""
-    rows = await repository.list_companies(identity.session)
+    rows = await service.list_companies(
+        identity.session, tenant_id=identity.tenant_id, settings=settings
+    )
     return [_to_out(row) for row in rows]
 
 
 @router.post("", status_code=201)
-async def create_company(identity: TenantAdmin, body: CompanyCreate) -> CompanyOut:
+async def create_company(
+    identity: TenantAdmin, settings: SettingsDep, body: CompanyCreate
+) -> CompanyOut:
     """Da de alta una empresa `active`. CIF inválido -> 422; CIF ya existente -> 409."""
     try:
         record = await service.create_company(
             identity.session,
             actor_id=identity.user_id,
+            tenant_id=identity.tenant_id,
+            settings=settings,
             name=body.name,
             cif=body.cif,
             notes=body.notes,
@@ -85,7 +92,7 @@ async def create_company(identity: TenantAdmin, body: CompanyCreate) -> CompanyO
 
 @router.patch("/{company_id}")
 async def update_company(
-    identity: TenantAdmin, company_id: UUID, body: CompanyUpdate
+    identity: TenantAdmin, settings: SettingsDep, company_id: UUID, body: CompanyUpdate
 ) -> CompanyOut:
     """Edita una empresa. CIF inválido -> 422; CIF duplicado -> 409; de otro tenant -> 404."""
     changes = body.model_dump(exclude_unset=True)
@@ -93,6 +100,8 @@ async def update_company(
         record = await service.update_company(
             identity.session,
             actor_id=identity.user_id,
+            tenant_id=identity.tenant_id,
+            settings=settings,
             company_id=company_id,
             changes=changes,
         )
@@ -145,7 +154,9 @@ class ImportReportOut(BaseModel):
 
 
 @router.post("/import")
-async def import_companies(identity: TenantAdmin, file: UploadFile) -> ImportReportOut:
+async def import_companies(
+    identity: TenantAdmin, settings: SettingsDep, file: UploadFile
+) -> ImportReportOut:
     """Importa un `.xlsx` (multipart `file`). Fichero/columnas inválidos -> 400 controlado.
 
     Guardarraíles anti-DoS por memoria (fichero compartido por todas las asesorías): se rechaza con
@@ -153,7 +164,6 @@ async def import_companies(identity: TenantAdmin, file: UploadFile) -> ImportRep
     materializar un `.xlsx` gigante o zip-bomb en memoria), y el parseo corta a
     `companies_import_max_rows` filas.
     """
-    settings = get_settings()
     max_bytes = settings.companies_import_max_bytes
     # Lectura acotada: como mucho `max_bytes + 1` bytes en memoria; si sobra, es que excede el tope.
     content = await file.read(max_bytes + 1)
@@ -166,6 +176,8 @@ async def import_companies(identity: TenantAdmin, file: UploadFile) -> ImportRep
         report = await importer.import_companies(
             identity.session,
             actor_id=identity.user_id,
+            tenant_id=identity.tenant_id,
+            settings=settings,
             content=content,
             max_rows=settings.companies_import_max_rows,
         )

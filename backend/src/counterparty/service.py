@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.config import Settings, get_settings
 from shared.db import tenant_session
+from shared.encryption import tenant_encryption_key, tenant_tax_id_blind_index
 from shared.logging import get_logger
 from shared.tax_id import normalize_tax_id, validate_tax_id
 
@@ -134,7 +135,12 @@ async def verify_counterparty(
 
     async with tenant_session(_as_uuid(tenant_id)) as session:
         # L2 - supplier master del tenant (gratis, corta antes de L3). C2/C3.
-        master = await get_supplier_master(session, cif=canonical)
+        encryption_key = tenant_encryption_key(settings, _as_uuid(tenant_id))
+        idx = tenant_tax_id_blind_index(settings, _as_uuid(tenant_id), canonical)
+        assert idx is not None  # `canonical` ya pasó L1 (estructura válida): nunca vacío
+        master = await get_supplier_master(
+            session, cif_blind_index=idx, encryption_key=encryption_key
+        )
         if master is not None:
             return CounterpartyVerdict(
                 status=CifStatus.VALID,
@@ -242,6 +248,7 @@ async def record_confirmation(
     cif: str,
     name: str,
     *,
+    settings: Settings,
     source: str = "human",
     session: AsyncSession | None = None,
 ) -> None:
@@ -263,5 +270,16 @@ async def record_confirmation(
             f"No se puede confirmar un CIF estructuralmente inválido: {structure.reason}"
         )
     canonical = normalize_tax_id(cif)
+    tid = _as_uuid(tenant_id)
+    encryption_key = tenant_encryption_key(settings, tid)
+    idx = tenant_tax_id_blind_index(settings, tid, canonical)
+    assert idx is not None  # `canonical` ya validado arriba (estructura correcta): nunca vacío
     async with _session_for(tenant_id, session) as sess:
-        await upsert_supplier_master(sess, cif=canonical, name=name, name_source=source)
+        await upsert_supplier_master(
+            sess,
+            cif=canonical,
+            cif_blind_index=idx,
+            name=name,
+            name_source=source,
+            encryption_key=encryption_key,
+        )

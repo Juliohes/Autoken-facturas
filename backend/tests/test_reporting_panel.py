@@ -61,8 +61,12 @@ async def test_c2_filtro_por_rango_de_fechas(authapi: Api) -> None:
     assert ids == {dentro}
 
 
-async def test_c3_filtro_por_proveedor_o_cif(authapi: Api) -> None:
-    """C3: filtro de texto libre casa por nombre o por CIF del proveedor."""
+async def test_c3_filtro_exacto_por_cif_de_proveedor(authapi: Api) -> None:
+    """C3/S5.2 C5: el filtro `counterparty_tax_id` casa EXACTO por CIF (vía índice ciego).
+
+    El nombre de contraparte vive cifrado sin índice ciego desde S5.2 (decisión de Julio): la
+    búsqueda de texto libre por nombre se retiró del panel, sustituida por este filtro exacto.
+    """
     client, dsns = authapi
     tenant_id, admin_id, company_id, token = await _admin(dsns, client)
     acme = await seed_invoice(
@@ -80,46 +84,47 @@ async def test_c3_filtro_por_proveedor_o_cif(authapi: Api) -> None:
         counterparty_tax_id="B06183446",
     )
 
-    by_name = await client.get(
-        PANEL_URL, params={"q": "ACME"}, headers=auth(token, "ilex.localhost")
-    )
-    assert {i["id"] for i in by_name.json()["items"]} == {acme}
-
     by_cif = await client.get(
-        PANEL_URL, params={"q": "A39031620"}, headers=auth(token, "ilex.localhost")
+        PANEL_URL,
+        params={"counterparty_tax_id": "A39031620"},
+        headers=auth(token, "ilex.localhost"),
     )
     assert {i["id"] for i in by_cif.json()["items"]} == {acme}
 
+    by_name = await client.get(
+        PANEL_URL, params={"counterparty_tax_id": "ACME"}, headers=auth(token, "ilex.localhost")
+    )
+    assert by_name.json()["items"] == []  # texto libre por nombre ya no casa nada (retirado)
 
-async def test_c3b_comodines_de_like_en_el_texto_libre_se_tratan_como_literales(
-    authapi: Api,
-) -> None:
-    """C3 (caso límite): un `%`/`_` en el texto de búsqueda es literal, no un comodín de SQL.
 
-    Sin escapar, buscar "50%" (p. ej. un proveedor con un descuento en el nombre) casaría con
-    CUALQUIER proveedor (`%` es "cualquier cosa" en LIKE/ILIKE), no solo con el que lo contiene.
-    """
+async def test_c3b_el_filtro_por_cif_es_insensible_al_formato(authapi: Api) -> None:
+    """C3 (caso límite, S5.2): el filtro normaliza el CIF igual que al confirmar (mismo índice
+    ciego), así que separadores/mayúsculas no cambian el resultado."""
     client, dsns = authapi
     tenant_id, admin_id, company_id, token = await _admin(dsns, client)
-    con_comodin = await seed_invoice(
+    acme = await seed_invoice(
         dsns,
         tenant_id=tenant_id,
         company_id=company_id,
-        counterparty_name="Descuentos 50% SL",
+        counterparty_name="ACME Suministros SL",
         counterparty_tax_id="A39031620",
     )
     await seed_invoice(
         dsns,
         tenant_id=tenant_id,
         company_id=company_id,
-        counterparty_name="Proveedor Normal SL",
+        counterparty_name="Otro Proveedor SL",
         counterparty_tax_id="B06183446",
     )
 
-    resp = await client.get(PANEL_URL, params={"q": "50%"}, headers=auth(token, "ilex.localhost"))
+    resp = await client.get(
+        PANEL_URL,
+        params={"counterparty_tax_id": "a-39.031.620"},
+        headers=auth(token, "ilex.localhost"),
+    )
 
     assert resp.status_code == 200, resp.text
-    assert {i["id"] for i in resp.json()["items"]} == {con_comodin}
+    assert {i["id"] for i in resp.json()["items"]} == {acme}
 
 
 async def test_c4_filtro_por_usuario_que_confirmo(authapi: Api) -> None:

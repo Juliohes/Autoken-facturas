@@ -1,13 +1,16 @@
 """Modelos ORM de S2.8: `counterparties` (supplier master) y `cif_lookups` (caché global).
 
-El esquema aquí debe coincidir con la migración 0006 (el guard `alembic check` de CI detecta la
-deriva ORM<->migración). Las políticas RLS y los grants viven en la migración, no en el ORM.
+El esquema aquí debe coincidir con la migración 0006 + su enmienda de cifrado en la 0020 (S5.2; el
+guard `alembic check` de CI detecta la deriva ORM<->migración). Las políticas RLS y los grants viven
+en la migración, no en el ORM.
 
 - `counterparties`: supplier master **por tenant** (RLS por `tenant_id`, patrón de `companies`), lo
-  que cada asesoría confirma vale solo para ella. UNIQUE `(tenant_id, cif)`.
+  que cada asesoría confirma vale solo para ella. UNIQUE `(tenant_id, cif_blind_index)` desde S5.2
+  (antes `(tenant_id, cif)` en claro); `cif`/`name` viven cifrados (`pgp_sym_encrypt`), el ORM nunca
+  los lee/escribe directamente (todo el acceso pasa por SQL crudo en `counterparty.repository`).
 - `cif_lookups`: caché **GLOBAL** de resoluciones de fuentes públicas, **SIN** `tenant_id` ni RLS de
   tenant (ADR-0011). Solo datos de registros públicos; compartirla no cruza información de negocio.
-  Clave `(cif, source)`.
+  Clave `(cif, source)`. Queda FUERA del cifrado de S5.2 a propósito (spec §4).
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import BYTEA, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -41,7 +44,9 @@ class Counterparty(Base):
 
     __tablename__ = "counterparties"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "cif", name="counterparties_tenant_cif_unique"),
+        UniqueConstraint(
+            "tenant_id", "cif_blind_index", name="counterparties_tenant_cif_blind_index_unique"
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -50,8 +55,9 @@ class Counterparty(Base):
     tenant_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
-    cif: Mapped[str] = mapped_column(Text, nullable=False)
-    name: Mapped[str] = mapped_column(Text, nullable=False)
+    cif: Mapped[bytes] = mapped_column(BYTEA, nullable=False)
+    cif_blind_index: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[bytes] = mapped_column(BYTEA, nullable=False)
     name_source: Mapped[str] = mapped_column(Text, nullable=False)
     times_seen: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

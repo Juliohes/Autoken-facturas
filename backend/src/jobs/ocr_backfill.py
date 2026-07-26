@@ -21,6 +21,7 @@ from dataclasses import dataclass
 import structlog
 
 from companies import repository as companies_repo
+from companies.service import tenant_encryption_key as company_encryption_key
 from invoice_intake import repository as intake_repo
 from invoice_intake import storage
 from jobs.ocr import run_ocr_comparison
@@ -56,7 +57,11 @@ async def _process_candidate(candidate: BackfillCandidate, *, extractor: Invoice
                 "backfill.file_not_found", uploaded_file_id=str(candidate.uploaded_file_id)
             )
             return
-        company = await companies_repo.get_company(session, candidate.company_id)
+        company = await companies_repo.get_company(
+            session,
+            candidate.company_id,
+            encryption_key=company_encryption_key(get_settings(), candidate.tenant_id),
+        )
         if company is None:
             logger.warning("backfill.company_not_found", company_id=str(candidate.company_id))
             return

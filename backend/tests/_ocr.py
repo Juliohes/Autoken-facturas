@@ -233,12 +233,34 @@ async def set_ocr_experiment_enabled(dsns: dict[str, str], enabled: bool) -> Non
 
 # --- Consultas de efecto (superusuario, saltando RLS) --------------------------------------------
 async def fetch_extraction(dsns: dict[str, str], *, file_id: str) -> dict | None:
+    """Extracción vigente de un fichero, con `counterparty_tax_id`/`counterparty_name` descifrados
+    (S5.2): dos consultas, la primera solo para conocer el `tenant_id` y derivar la clave."""
     conn = await asyncpg.connect(dsns["admin"])
     try:
-        row = await conn.fetchrow(
-            "SELECT * FROM ocr_extractions WHERE uploaded_file_id = $1", file_id
+        head = await conn.fetchrow(
+            "SELECT tenant_id FROM ocr_extractions WHERE uploaded_file_id = $1", file_id
         )
-        return dict(row) if row is not None else None
+        if head is None:
+            return None
+        from shared.config import get_settings  # noqa: PLC0415
+        from shared.encryption import derive_tenant_encryption_key  # noqa: PLC0415
+
+        key = derive_tenant_encryption_key(
+            get_settings().db_encryption_master_key, str(head["tenant_id"])
+        )
+        row = await conn.fetchrow(
+            "SELECT *, pgp_sym_decrypt(counterparty_tax_id, $2)::text AS __ctid, "
+            "pgp_sym_decrypt(counterparty_name, $2)::text AS __cname "
+            "FROM ocr_extractions WHERE uploaded_file_id = $1",
+            file_id,
+            key,
+        )
+        if row is None:
+            return None
+        item = dict(row)
+        item["counterparty_tax_id"] = item.pop("__ctid")
+        item["counterparty_name"] = item.pop("__cname")
+        return item
     finally:
         await conn.close()
 

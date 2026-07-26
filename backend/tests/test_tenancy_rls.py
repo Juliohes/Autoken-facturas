@@ -84,8 +84,24 @@ async def db() -> AsyncIterator[dict[str, str]]:
     yield {"admin": admin_dsn, "app": app_dsn, "app_async": app_async}
 
 
+def _company_encryption_params(tenant_id: str, cif: str) -> tuple[str, str]:
+    """Clave de cifrado + índice ciego del CIF para este tenant (S5.2), MISMA clave maestra que
+    usará la aplicación bajo test (`shared.config.get_settings()`)."""
+    from shared.config import get_settings
+    from shared.encryption import blind_index, derive_tenant_encryption_key
+
+    key = derive_tenant_encryption_key(get_settings().db_encryption_master_key, tenant_id)
+    idx = blind_index(get_settings().db_encryption_master_key, tenant_id, cif)
+    return key, idx
+
+
 async def _seed_company(admin_dsn: str, tenant_id: str, name: str, cif: str) -> str:
-    """Inserta (como superusuario, saltando RLS) una company de un tenant. Devuelve su id."""
+    """Inserta (como superusuario, saltando RLS) una company de un tenant. Devuelve su id.
+
+    `name`/`cif` viven cifrados desde S5.2 (`pgp_sym_encrypt`, clave por tenant) más un índice
+    ciego del CIF: se cifra aquí con la MISMA clave maestra que usará la aplicación bajo test.
+    """
+    key, idx = _company_encryption_params(tenant_id, cif)
     conn = await asyncpg.connect(admin_dsn)
     try:
         await conn.execute(
@@ -97,12 +113,14 @@ async def _seed_company(admin_dsn: str, tenant_id: str, name: str, cif: str) -> 
         )
         company_id = str(uuid4())
         await conn.execute(
-            "INSERT INTO companies (id, tenant_id, name, cif, status) "
-            "VALUES ($1, $2, $3, $4, 'pending')",
+            "INSERT INTO companies (id, tenant_id, name, cif, cif_blind_index, status) "
+            "VALUES ($1, $2, pgp_sym_encrypt($3, $5), pgp_sym_encrypt($4, $5), $6, 'pending')",
             company_id,
             tenant_id,
             name,
             cif,
+            key,
+            idx,
         )
         return company_id
     finally:
@@ -171,12 +189,16 @@ async def test_c5_escribir_en_otro_tenant_se_rechaza(db: dict[str, str]) -> None
     try:
         async with conn.transaction():
             await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_a)
+            key, idx = _company_encryption_params(tenant_b, "B12345674")
             with pytest.raises(asyncpg.PostgresError):
                 await conn.execute(
-                    "INSERT INTO companies (id, tenant_id, name, cif, status) "
-                    "VALUES ($1, $2, 'INTRUSA', 'B12345674', 'pending')",
+                    "INSERT INTO companies (id, tenant_id, name, cif, cif_blind_index, status) "
+                    "VALUES ($1, $2, pgp_sym_encrypt('INTRUSA', $3), "
+                    "pgp_sym_encrypt('B12345674', $3), $4, 'pending')",
                     str(uuid4()),
                     tenant_b,
+                    key,
+                    idx,
                 )
     finally:
         await conn.close()

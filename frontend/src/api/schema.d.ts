@@ -27,6 +27,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Metrics
+         * @description Peticiones HTTP + salud de la cola OCR, en formato de texto Prometheus.
+         */
+        get: operations["metrics_api_v1_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenants/current": {
         parameters: {
             query?: never;
@@ -106,6 +126,9 @@ export interface paths {
         /**
          * Refresh
          * @description Rota el refresh de la cookie: nuevo access + nueva cookie; el anterior queda invalidado.
+         *
+         *     Sin cookie se trata igual que una cookie inválida (S5.1 C7): cuenta para el rate-limit por IP
+         *     en vez de responder 401 sin más, para que machacar el endpoint sin cookie tampoco sea gratis.
          */
         post: operations["refresh_api_v1_auth_refresh_post"];
         delete?: never;
@@ -166,6 +189,9 @@ export interface paths {
         /**
          * Activate Confirm
          * @description Confirma el TOTP: enrola el segundo factor y consume el token de activación (un solo uso).
+         *
+         *     Rate-limit por token (S5.1 C3/C5): un código incorrecto repetido contra el MISMO token da 429
+         *     tras agotar el tope, sin afectar a la activación de otro usuario en curso.
          */
         post: operations["activate_confirm_api_v1_auth_activate_confirm_post"];
         delete?: never;
@@ -535,6 +561,9 @@ export interface paths {
         /**
          * List Invoices
          * @description Facturas confirmadas de la asesoría, filtradas y paginadas (S3.1). Ver spec S3.1.
+         *
+         *     `counterparty_tax_id` filtra por CIF EXACTO de contraparte (S5.2 C5): ya no admite texto libre
+         *     por nombre (el nombre vive cifrado sin índice ciego desde S5.2, decisión de Julio).
          */
         get: operations["list_invoices_api_v1_reporting_invoices_get"];
         put?: never;
@@ -1499,6 +1528,26 @@ export interface operations {
             };
         };
     };
+    metrics_api_v1_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     current_tenant_api_v1_tenants_current_get: {
         parameters: {
             query?: never;
@@ -2199,7 +2248,7 @@ export interface operations {
             query?: {
                 date_from?: string | null;
                 date_to?: string | null;
-                q?: string | null;
+                counterparty_tax_id?: string | null;
                 confirmed_by?: string | null;
                 cif_status?: string | null;
                 company_id?: string | null;
@@ -2236,7 +2285,7 @@ export interface operations {
             query?: {
                 date_from?: string | null;
                 date_to?: string | null;
-                q?: string | null;
+                counterparty_tax_id?: string | null;
                 confirmed_by?: string | null;
                 cif_status?: string | null;
                 company_id?: string | null;
