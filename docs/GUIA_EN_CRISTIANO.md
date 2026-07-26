@@ -509,6 +509,31 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   anotado como pendiente de decidir con Julio antes de encenderlos alguna vez en producción, no
   como un descuido. 655 pruebas automáticas del motor + 191 de las pantallas, todas en verde.
 
+- **S5.4 — Ponerse en la piel de alguien que intenta romper la aplicación** (26/07/2026, cuarta
+  tarea del Sprint 5): a diferencia de las tareas anteriores, aquí no se construyó ninguna
+  funcionalidad nueva — se dedicó la sesión a intentar **atacar de verdad** la aplicación ya
+  construida, como haría alguien de fuera sin ver el código, siguiendo una checklist estándar de la
+  industria (OWASP Top 10: control de acceso roto, inyección, fallos de autenticación, ficheros
+  subidos maliciosos). Antes de lanzar un solo ataque, se repasó a fondo qué defensas ya existían
+  de tareas anteriores — y resultó ser mucho: cada tarea de este proyecto termina con una revisión
+  de seguridad, así que ya había protección real contra casi todo lo típico. Con eso claro, el
+  esfuerzo se centró en cuatro ataques concretos que nadie había probado todavía de verdad: (1)
+  fabricar a mano credenciales de acceso falsificadas de varias formas distintas (una sin firma en
+  absoluto, una del tipo equivocado, una firmada con una clave inventada, una caducada) para
+  confirmar que la aplicación las rechaza todas sin excepción; (2) disparar **dos peticiones para
+  renovar la sesión al mismo tiempo, de verdad** con la misma credencial de renovación, para
+  comprobar que exactamente una tiene éxito y la otra falla — un tipo de fallo que solo se ve
+  provocando la carrera de verdad, nunca leyendo el código con calma; (3) hacer que dos asesorías
+  distintas importen una empresa con el mismo CIF a la vez, para confirmar que no se mezclan ni
+  chocan entre sí; (4) comprobar que meter código malicioso típico de bases de datos en un campo de
+  texto normal (nombre de empresa, email de alta) se trata como texto inofensivo, nunca como una
+  orden que se ejecuta. **El resultado real de este pentest fue que las cuatro pruebas pasaron sin
+  tener que tocar ni una línea del código de la aplicación** — todas las protecciones que ya se
+  habían construido en tareas anteriores aguantaron el ataque tal cual estaban. Es un resultado
+  bueno y real (no es "no se hizo nada"): significa que el trabajo de seguridad de las tareas
+  anteriores estaba bien hecho. 663 pruebas automáticas del motor, todas en verde (las 655 de
+  antes + 8 nuevas de este pentest).
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
@@ -525,8 +550,8 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   las 5 tareas (S4.9 app-shell, S2.2 captura guiada, S4.10 interruptor admin-tech, S2.9/S2.10
   realce+comparativa, S4.8 ranking multi-modelo) cerradas y mergeadas el 25/07/2026.
 - **Sprint 5 (hardening+QA) en marcha** (arrancado 25/07/2026, orden acordado con Julio): S5.1
-  (cabeceras y límites), S5.6 (monitorización y alertas) y S5.2 (cifrado por tenant) cerradas;
-  quedan S5.4 (pentest propio), S5.5 (pruebas de carga) y S5.3 (backups + restore drill, la más
+  (cabeceras y límites), S5.6 (monitorización y alertas), S5.2 (cifrado por tenant) y S5.4 (pentest
+  propio) cerradas; quedan S5.5 (pruebas de carga) y S5.3 (backups + restore drill, la más
   dependiente de infraestructura/accesos reales) antes de dar el paso final. El propio stack de
   monitorización de S5.6 (Prometheus/Grafana/Alertmanager) está construido pero no desplegado de
   verdad todavía — pendiente de una sesión futura con acceso a la VPS B. El script de rotación de
@@ -535,9 +560,9 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
 
-**Avance estimado hacia producción a día de hoy: ≈77%** (41 de 53 tareas del plan "core" completas
+**Avance estimado hacia producción a día de hoy: ≈79%** (42 de 53 tareas del plan "core" completas
 del todo — S4.9 es una tarea nueva, no estaba en el recuento original de 51, añadida para cerrar el
 hueco de integración detectado el 23/07/2026 — sin contar el módulo de Verifactu ni la limpieza
 final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2, Sprint 3 y
 Sprint 4 completos. Lote de cierre de backlog previo al Sprint 5 COMPLETO. Sprint 5 en marcha: S5.1,
-S5.6 y S5.2 cerradas. Siguiente: S5.4 (pentest básico propio).**
+S5.6, S5.2 y S5.4 cerradas. Siguiente: S5.5 (pruebas de carga).**
