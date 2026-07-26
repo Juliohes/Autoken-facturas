@@ -283,6 +283,10 @@ class Settings(BaseSettings):
     # cambian rara vez; 30 días equilibra frescura y ahorro de cuota/latencia.
     cif_cache_ttl_seconds: int = 30 * 24 * 60 * 60
 
+    # --- Observabilidad S5.6 (captura de errores + métricas) ------------------------------------
+    # Sentry se activa SOLO si hay DSN (`shared.error_tracking.init_sentry`); sin él, no hace nada.
+    sentry_dsn: str | None = None
+
     @property
     def is_production(self) -> bool:
         return self.app_env is AppEnv.PRODUCTION

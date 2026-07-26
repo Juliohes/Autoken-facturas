@@ -1,0 +1,74 @@
+# Reglas de alerta (S5.6): evaluadas por Prometheus sobre las métricas scrapeadas
+# (prometheus.yml), disparadas a Alertmanager. El canal real de aviso (email/Slack) es una
+# decisión de Julio pendiente de tomar cuando se despliegue de verdad (spec S5.6 §6) —
+# alertmanager.yml deja un receptor de ejemplo sin credenciales, no envía nada todavía.
+#
+# NO incluye una regla de expiración de certificados TLS: requeriría una sonda (blackbox_exporter)
+# contra un dominio público real con TLS (Caddy on-demand, S4.6), que todavía no existe en ningún
+# entorno accesible desde aquí. Se añadirá cuando exista ese dominio real (spec §6), no se inventa
+# contra nada.
+
+groups:
+  - name: autoken-caida
+    rules:
+      - alert: AutokenApiDown
+        expr: up{job="autoken-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "La API de Autoken Facturas no responde"
+          description: >-
+            Prometheus lleva más de 2 minutos sin poder scrapear /api/v1/metrics de la API.
+            El servicio puede estar caído o inalcanzable.
+
+  - name: autoken-errores
+    rules:
+      - alert: AutokenTasaAltaDe5xx
+        # Proporción de respuestas 5xx sobre el total de peticiones en los últimos 5 minutos.
+        expr: >-
+          (
+            sum(rate(autoken_http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(autoken_http_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tasa de errores 5xx por encima del 5%"
+          description: "Más del 5% de las peticiones de los últimos 5 minutos han sido 5xx."
+
+  - name: autoken-cola-ocr
+    rules:
+      - alert: AutokenColaOcrAtascada
+        # Cola con trabajos pendientes Y el más viejo lleva más de 10 minutos esperando: el worker
+        # no los está consumiendo (o va más lento de lo que llegan). Umbral generoso a propósito
+        # (una factura tarda segundos, no minutos, en condiciones normales).
+        expr: autoken_ocr_queue_depth > 0 and autoken_ocr_queue_oldest_pending_seconds > 600
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "La cola OCR lleva atascada más de 10 minutos"
+          description: >-
+            Hay trabajos OCR pendientes y el más antiguo lleva más de 10 minutos sin procesarse.
+            Revisar si el worker está vivo y consumiendo la cola.
+
+  - name: autoken-disco
+    rules:
+      # Estándar node-exporter: espacio disponible por debajo del 10% en un filesystem real (se
+      # excluyen tmpfs/overlay para no disparar en falso por sistemas de ficheros virtuales).
+      - alert: AutokenDiscoBajoMinimo
+        expr: >-
+          (
+            node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+            /
+            node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}
+          ) < 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Menos del 10% de espacio libre en disco"
+          description: "El sistema de ficheros {{ $labels.mountpoint }} tiene menos del 10% libre."

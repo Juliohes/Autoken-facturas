@@ -1,0 +1,26 @@
+# Configuración de Alertmanager (S5.6): recibe las alertas disparadas por Prometheus
+# (alerts.yml) y decide a quién avisar.
+#
+# El receptor real (a qué correo/Slack llega la alerta) es una decisión de Julio pendiente de
+# tomar cuando se despliegue de verdad (spec S5.6 §6) — este fichero deja un receptor "null"
+# (no envía nada a ningún sitio) para que el stack levante sin credenciales reales. Sustituir
+# `null-receiver` por un receptor real (`email_configs`/`slack_configs`) cuando exista el canal.
+
+route:
+  receiver: null-receiver
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: null-receiver
+    # Ejemplo de receptor por email, comentado a propósito hasta que Julio decida el canal real:
+    #
+    # - name: email
+    #   email_configs:
+    #     - to: "alertas@autoken.es"
+    #       from: "alertmanager@autoken.es"
+    #       smarthost: "smtp.ejemplo.com:587"
+    #       auth_username: "alertmanager@autoken.es"
+    #       auth_password_file: /run/secrets/smtp_password

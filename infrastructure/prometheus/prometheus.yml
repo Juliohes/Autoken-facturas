@@ -1,0 +1,37 @@
+# Configuración de Prometheus (S5.6): scrapea la API (métricas de aplicación, `GET /metrics`) y
+# node-exporter (métricas del host: disco, CPU, memoria). Las reglas de alerta viven aparte, en
+# alerts.yml, y se evalúan sobre estas mismas métricas; Alertmanager decide a quién avisar.
+#
+# Pendiente de una sesión futura con acceso a la VPS B real (spec S5.6 §6): desplegar este stack de
+# verdad y verificar que las reglas disparan contra tráfico/carga reales.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  # API (S5.6 C3-C6): contador de peticiones HTTP por método/código (deriva la tasa de 5xx) y salud
+  # de la cola OCR (profundidad + antigüedad del trabajo pendiente más viejo).
+  - job_name: autoken-api
+    metrics_path: /api/v1/metrics
+    static_configs:
+      - targets: ["api:8000"]
+
+  # Métricas del host (disco, CPU, memoria) — el propio Prometheus, para saber si él mismo cae.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # node-exporter (disco de la VPS, spec §6): mide el host real; sin la VPS desplegada no hay nada
+  # que scrapear todavía, pero el job queda listo para cuando exista.
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]

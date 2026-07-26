@@ -41,6 +41,10 @@ dependencies = [
     # censal (mutual-TLS) y VIES. BORME usa httpx (ya presente). Solo se ejerce en staging; en CI
     # los resolvers van doblados. zeep no publica marcador py.typed (ver override de mypy).
     "zeep>=4.2",
+    # Observabilidad S5.6: captura de errores (Sentry, apagado sin DSN) y métricas Prometheus
+    # (`GET /metrics`, scrapeadas por el Prometheus de `infrastructure/`, visualizadas en Grafana).
+    "sentry-sdk[fastapi]>=2.0",
+    "prometheus-client>=0.21",
 ]
 
 [project.optional-dependencies]
