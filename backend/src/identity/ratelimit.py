@@ -1,11 +1,24 @@
-"""Rate-limit de login (fuerza bruta) sobre Redis (S1.3, criterios C17 y C22).
+"""Rate-limit de endpoints de identidad sobre Redis: login (S1.3, C17/C22), registro (S1.4, C14) y,
+desde S5.1, confirmación de activación (C3, fuerza bruta del TOTP) y refresh (C7, abuso de
+rotación).
 
-Dos contadores con ventana deslizante (TTL) por intento fallido:
-- por **(IP + email)**: 5 fallos en 15 min bloquean el 6º intento (aunque la contraseña sea buena),
-  sin revelar si era correcta. Un login correcto **resetea** este contador.
-- un tope más grueso por **IP** (20 en 15 min): defensa en profundidad frente al barrido de muchos
-  emails distintos desde una misma IP (credential spraying), donde el contador por (IP+email) nunca
-  llega a 5.
+Todos comparten el mismo patrón de ventana deslizante (TTL) por intento fallido, sobre dos
+primitivas genéricas (`_at_or_above`/`_record_hit`) montadas sobre el script atómico
+`_RECORD_FAILURE_LUA` (INCR+EXPIRE en una sola llamada, sin ventana en la que una clave quede sin
+TTL y bloquee para siempre):
+- login por **(IP + email)**: 5 fallos en 15 min bloquean el 6º intento (aunque la contraseña sea
+  buena), sin revelar si era correcta. Un login correcto **resetea** este contador.
+- login, tope más grueso por **IP** (20 en 15 min): defensa en profundidad frente al barrido de
+  muchos emails distintos desde una misma IP (credential spraying), donde el contador por
+  (IP+email) nunca llega a 5.
+- confirmación de activación por **token**: cada token de activación tiene su propio contador
+  (S5.1 C5), y CUALQUIER intento fallido cuenta, incluido un token desconocido/caducado — si solo
+  contaran los códigos incorrectos contra un token real, el propio `429` revelaría que el token
+  existe (oráculo de enumeración, invariante §4 de la spec).
+- refresh por **IP** (S5.1 C7): no hay una identidad conocida de antemano (el token podría ser
+  cualquier cosa), así que el único cubo posible es la IP, igual que el registro; se resetea tras
+  una rotación exitosa (igual que login resetea el suyo), para que usuarios legítimos detrás de una
+  IP compartida no arrastren fallos ajenos indefinidamente dentro de la ventana.
 """
 
 from __future__ import annotations
@@ -39,27 +52,40 @@ def _register_ip_key(ip: str) -> str:
     return f"register:ip:{ip}"
 
 
+def _activation_confirm_key(token: str) -> str:
+    return f"activation:confirm:fail:{token}"
+
+
+def _refresh_key(ip: str) -> str:
+    return f"refresh:fail:{ip}"
+
+
+async def _at_or_above(redis: aioredis.Redis, key: str, threshold: int) -> bool:
+    """True si el contador de `key` ya alcanzó o superó `threshold` dentro de su ventana vigente."""
+    count = await redis.get(key)
+    return int(count) >= threshold if count is not None else False
+
+
+async def _record_hit(redis: aioredis.Redis, key: str, window_seconds: int) -> int:
+    """Suma un intento a `key` (INCR+EXPIRE atómico) y devuelve el contador resultante."""
+    return int(await redis.eval(_RECORD_FAILURE_LUA, 1, key, str(window_seconds)))
+
+
 async def is_blocked(
     redis: aioredis.Redis, ip: str, email: str, *, max_per_email: int, max_per_ip: int
 ) -> bool:
     """True si el par (IP+email) o la IP han superado su tope dentro de la ventana."""
-    per_email = await redis.get(_ip_email_key(ip, email))
-    per_ip = await redis.get(_ip_key(ip))
-    email_count = int(per_email) if per_email is not None else 0
-    ip_count = int(per_ip) if per_ip is not None else 0
-    return email_count >= max_per_email or ip_count >= max_per_ip
+    return await _at_or_above(redis, _ip_email_key(ip, email), max_per_email) or await _at_or_above(
+        redis, _ip_key(ip), max_per_ip
+    )
 
 
 async def record_failure(
     redis: aioredis.Redis, ip: str, email: str, *, window_seconds: int
 ) -> None:
-    """Suma un fallo a ambos contadores; fija atómicamente el TTL de la ventana al crearlos.
-
-    `INCR` + `EXPIRE` van en un único script Lua para que la clave nunca quede sin TTL (que la
-    bloquearía indefinidamente): C17/C22 exige que, pasada la ventana, se vuelva a permitir.
-    """
+    """Suma un fallo a ambos contadores; fija atómicamente el TTL de la ventana al crearlos."""
     for key in (_ip_email_key(ip, email), _ip_key(ip)):
-        await redis.eval(_RECORD_FAILURE_LUA, 1, key, str(window_seconds))
+        await _record_hit(redis, key, window_seconds)
 
 
 async def reset(redis: aioredis.Redis, ip: str, email: str) -> None:
@@ -72,9 +98,39 @@ async def register_attempt_exceeds_ip(
 ) -> bool:
     """Cuenta un intento de registro por IP (anti-spam, S1.4 C14) y dice si supera el tope.
 
-    Reutiliza el script atómico `INCR`+`EXPIRE` de S1.3 (la clave nunca queda sin TTL, así que
-    pasada la ventana se vuelve a permitir). Devuelve True cuando el contador de la ventana
-    **supera** `max_per_ip`: el intento que lo rebasa recibe 429; los primeros se permiten.
+    Devuelve True cuando el contador de la ventana **supera** `max_per_ip`: el intento que lo
+    rebasa recibe 429; los primeros se permiten.
     """
-    count = await redis.eval(_RECORD_FAILURE_LUA, 1, _register_ip_key(ip), str(window_seconds))
-    return int(count) > max_per_ip
+    count = await _record_hit(redis, _register_ip_key(ip), window_seconds)
+    return count > max_per_ip
+
+
+async def activation_confirm_blocked(
+    redis: aioredis.Redis, token: str, *, max_attempts: int
+) -> bool:
+    """True si este token de activación ya agotó su tope de intentos fallidos (S5.1 C3)."""
+    return await _at_or_above(redis, _activation_confirm_key(token), max_attempts)
+
+
+async def record_activation_confirm_failure(
+    redis: aioredis.Redis, token: str, *, window_seconds: int
+) -> None:
+    """Suma un intento fallido (código incorrecto o token inválido) al contador de este token."""
+    await _record_hit(redis, _activation_confirm_key(token), window_seconds)
+
+
+async def refresh_blocked(redis: aioredis.Redis, ip: str, *, max_attempts: int) -> bool:
+    """True si esta IP ya agotó su tope de intentos de refresh fallidos (S5.1 C7)."""
+    return await _at_or_above(redis, _refresh_key(ip), max_attempts)
+
+
+async def record_refresh_failure(redis: aioredis.Redis, ip: str, *, window_seconds: int) -> None:
+    """Suma un intento de refresh fallido al contador de esta IP."""
+    await _record_hit(redis, _refresh_key(ip), window_seconds)
+
+
+async def reset_refresh(redis: aioredis.Redis, ip: str) -> None:
+    """Borra el contador de refresh de esta IP tras una rotación exitosa (auditoría S5.1): evita
+    que fallos benignos ajenos (cookies caducadas de otros usuarios en una IP compartida) se
+    acumulen indefinidamente contra quien sí consigue refrescar con normalidad."""
+    await redis.delete(_refresh_key(ip))

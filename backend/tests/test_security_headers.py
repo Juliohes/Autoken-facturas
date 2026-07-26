@@ -32,6 +32,16 @@ async def test_cabeceras_de_seguridad_en_todas_las_respuestas(
     assert "strict-transport-security" not in resp.headers
 
 
+async def test_c2_cabeceras_de_aislamiento_de_origen_en_todas_las_respuestas(
+    client: httpx.AsyncClient,
+) -> None:
+    """S5.1 C2: toda respuesta incluye COOP/CORP `same-origin` (API JSON, no embebible)."""
+    resp = await client.get(_HEALTH)
+    assert resp.status_code == 200
+    assert resp.headers["cross-origin-opener-policy"] == "same-origin"
+    assert resp.headers["cross-origin-resource-policy"] == "same-origin"
+
+
 async def test_cabeceras_de_seguridad_tambien_en_respuestas_de_error(
     client: httpx.AsyncClient,
 ) -> None:
@@ -41,6 +51,8 @@ async def test_cabeceras_de_seguridad_tambien_en_respuestas_de_error(
     assert resp.headers["x-content-type-options"] == "nosniff"
     assert resp.headers["x-frame-options"] == "DENY"
     assert "default-src 'none'" in resp.headers["content-security-policy"]
+    assert resp.headers["cross-origin-opener-policy"] == "same-origin"
+    assert resp.headers["cross-origin-resource-policy"] == "same-origin"
 
 
 @pytest.fixture

@@ -30,6 +30,7 @@ import redis.asyncio as aioredis
 _TOK_PREFIX = "refresh:tok:"
 _FAM_PREFIX = "refresh:fam:"
 
+
 # Rotación atómica. Devuelve un array cuyo primer elemento es el resultado:
 #   {'ok', <registro json>}  -> rotado; el registro (con family/user_id/tenant_id/role) va detrás.
 #   {'invalid'}              -> token desconocido, caducado o familia ya revocada.
@@ -105,10 +106,16 @@ async def rotate_refresh_token(
 ) -> RotatedSession | None:
     """Rota un refresh válido a un `RotatedSession`, o `None` si no vale (el llamante -> 401).
 
-    Devuelve `None` cuando el token es desconocido, su familia está revocada, es un token ya rotado
-    (reuso: además revoca la familia entera) o el `expected_tenant_id` no casa con el tenant de la
-    familia (F2: defensa en profundidad; en ese caso NO se rota ni se revoca, para no bloquear al
-    dueño legítimo). Toda la comprobación es atómica (un único script Lua).
+    Devuelve `None` cuando el token es desconocido (incluida una cookie ausente: se pasa como
+    cadena vacía, que nunca casa con ninguna clave), su familia está revocada, es un token ya
+    rotado (reuso: además revoca la familia entera) o el `expected_tenant_id` no casa con el tenant
+    de la familia (F2: defensa en profundidad; en ese caso NO se rota ni se revoca, para no
+    bloquear al dueño legítimo). Toda la comprobación es atómica (un único script Lua).
+
+    Función PURA sobre el mecanismo de rotación: el rate-limit (S5.1 C7) es una política transversal
+    ajena a "qué es rotar un refresh", así que vive en la capa de caso de uso
+    (`identity.service.refresh_session`), igual que el login orquesta su propio rate-limit por
+    encima de `issue_refresh_token` en vez de dentro (auditoría de arquitectura S5.1).
     """
     new_token = secrets.token_urlsafe(32)
     expected = expected_tenant_id if expected_tenant_id is not None else ""
