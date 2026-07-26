@@ -415,8 +415,30 @@ en un teléfono real y queda pendiente hasta disponer de uno.
 
 **Con S4.8 cerrado, el lote de cierre de backlog previo al Sprint 5 queda COMPLETO**: S4.9
 (app-shell), S2.2 (captura guiada), S4.10 (interruptor admin-tech), S2.9/S2.10 (realce + comparativa)
-y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas. Toca planificar el Sprint 5 con
-Julio antes de seguir.
+y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
+
+- **S5.1 — Candados extra y freno a los abusos** (25/07/2026, primera tarea del Sprint 5, el sprint
+  de "blindar antes de salir a producción"): dos mejoras de seguridad que no cambian nada de lo que
+  ve el usuario normal, pero cierran huecos reales. Primero, dos cabeceras HTTP nuevas que le dicen
+  al navegador "esta página no debe poder ser abierta como ventana emergente desde otra web ni
+  usada como recurso incrustado desde otra web" — protección de bajo coste contra una familia de
+  ataques de robo de información entre pestañas (parecido a poner un candado extra en una puerta
+  que ya tenía cerradura, por si acaso). Segundo, y más importante: se descubrieron dos puertas de
+  la aplicación que hasta ahora no tenían ningún freno frente a quien las golpea sin parar. Una es
+  la confirmación del código de seis dígitos al activar una cuenta nueva (nadie limitaba cuántas
+  veces se podía intentar adivinarlo); la otra es la renovación automática de la sesión (nadie
+  limitaba cuántas veces se podía intentar con una cookie inventada). Ahora las dos tienen el mismo
+  tipo de freno que ya protegía el login desde el principio del proyecto: pasados unos intentos
+  fallidos, toca esperar. La revisión final, antes de cerrar la tarea, encontró y corrigió dos
+  fallos de diseño reales y sutiles: el freno de activación, tal y como se construyó al principio,
+  dejaba adivinar sin límite si el código de seis dígitos que se probaba pertenecía a un usuario que
+  NO existe (solo contaba los intentos contra cuentas reales) — un atacante podría haber usado esa
+  diferencia para averiguar qué códigos de activación son de verdad, aunque en la práctica sea casi
+  imposible de explotar por lo largos que son. Y el freno de la renovación de sesión, copiado tal
+  cual del de login, se olvidaba de "aflojar" cuando alguien renovaba con éxito — así que, en una
+  oficina donde muchas personas comparten la misma conexión a internet, los fallos normales de unos
+  (una sesión caducada, por ejemplo) podían acabar bloqueando también a los demás. Los dos quedaron
+  corregidos antes de cerrar. 631 pruebas automáticas del motor, todas en verde.
 
 ## 5. Qué queda por delante
 
@@ -433,14 +455,16 @@ Julio antes de seguir.
 - **Lote de cierre de backlog previo al Sprint 5 — COMPLETO** (decidido con Julio el 24/07/2026):
   las 5 tareas (S4.9 app-shell, S2.2 captura guiada, S4.10 interruptor admin-tech, S2.9/S2.10
   realce+comparativa, S4.8 ranking multi-modelo) cerradas y mergeadas el 25/07/2026.
-- **Sprint 5**: refuerzo de seguridad y pruebas de carga antes de dar el paso final. Toca planificarlo
-  con Julio.
+- **Sprint 5 (hardening+QA) en marcha** (arrancado 25/07/2026, orden acordado con Julio): S5.1
+  (cabeceras y límites) cerrada; quedan S5.6 (monitorización), S5.2 (cifrado por tenant), S5.4
+  (pentest propio), S5.5 (pruebas de carga) y S5.3 (backups + restore drill, la más dependiente de
+  infraestructura/accesos reales) antes de dar el paso final.
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
 
-**Avance estimado hacia producción a día de hoy: ≈73%** (38 de 52 tareas del plan "core" completas
+**Avance estimado hacia producción a día de hoy: ≈74%** (39 de 53 tareas del plan "core" completas
 del todo — S4.9 es una tarea nueva, no estaba en el recuento original de 51, añadida para cerrar el
 hueco de integración detectado el 23/07/2026 — sin contar el módulo de Verifactu ni la limpieza
 final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2, Sprint 3 y
-Sprint 4 completos. Lote de cierre de backlog previo al Sprint 5 COMPLETO (S4.9, S2.2, S4.10,
-S2.9/S2.10, S4.8). Siguiente: planificar el Sprint 5 con Julio.**
+Sprint 4 completos. Lote de cierre de backlog previo al Sprint 5 COMPLETO. Sprint 5 en marcha: S5.1
+cerrada. Siguiente: S5.6 (monitorización y alertas).**
