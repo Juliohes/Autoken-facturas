@@ -31,7 +31,7 @@ import secrets
 
 import redis.asyncio as aioredis
 
-from identity import repository, totp
+from identity import ratelimit, repository, totp
 from identity.passwords import hash_password
 from shared.config import get_settings
 from shared.redis import get_redis
@@ -43,6 +43,10 @@ class InvalidActivationToken(Exception):
 
 class AccountNotActivatable(Exception):
     """La cuenta no es activable: no existe, no está activa o ya tiene contraseña."""
+
+
+class ActivationConfirmRateLimited(Exception):
+    """Este token superó su tope de códigos TOTP incorrectos en la ventana vigente (S5.1 C3)."""
 
 
 def _key(token: str) -> str:
@@ -99,18 +103,45 @@ async def activate_account(
     return totp.provisioning_uri(secret, identity.email)
 
 
-async def confirm_activation(redis: aioredis.Redis, token: str, totp_code: str) -> None:
+async def confirm_activation(
+    redis: aioredis.Redis,
+    token: str,
+    totp_code: str,
+    *,
+    max_attempts: int,
+    window_seconds: int,
+) -> None:
     """Valida el código TOTP, enrola el secreto en la cuenta y consume el token (un solo uso).
 
     Lanza `InvalidActivationToken` si el token no vale, si aún no se activó la contraseña, o si el
-    código TOTP no es válido (mismo trato: no distingue el motivo).
+    código TOTP no es válido (mismo trato: no distingue el motivo). Lanza
+    `ActivationConfirmRateLimited` (S5.1 C3) si este token ya agotó su tope de intentos fallidos en
+    la ventana vigente — en ese caso ni siquiera se llega a mirar el código, aunque fuera el
+    correcto (C3). El contador es por token (C5): agotar el de uno no bloquea a otro usuario.
+
+    Un token desconocido/caducado/consumido TAMBIÉN cuenta como fallo (auditoría, invariante §4):
+    si solo contaran los códigos incorrectos contra un token real, un `429` revelaría por sí mismo
+    que el token existe (un token falso nunca llegaría a agotar su tope) — el mismo oráculo de
+    enumeración que la spec prohíbe explícitamente. Con el token de 256 bits (`secrets.
+    token_urlsafe(32)`) enumerarlo es inviable en la práctica, pero contar también este caso lo
+    cierra sin coste real (la clave de un token falso expira igual que cualquier otra, TTL
+    garantizado por el script atómico).
     """
+    if await ratelimit.activation_confirm_blocked(redis, token, max_attempts=max_attempts):
+        raise ActivationConfirmRateLimited
+
     raw = await redis.get(_key(token))
     if raw is None:
+        await ratelimit.record_activation_confirm_failure(
+            redis, token, window_seconds=window_seconds
+        )
         raise InvalidActivationToken
     data = json.loads(raw)
     secret = data.get("secret")
     if secret is None or not totp.verify_code(secret, totp_code):
+        await ratelimit.record_activation_confirm_failure(
+            redis, token, window_seconds=window_seconds
+        )
         raise InvalidActivationToken
 
     await repository.enroll_totp(data["user_id"], secret)

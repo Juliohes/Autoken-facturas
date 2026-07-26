@@ -5,6 +5,12 @@ decisión de segundo factor y emisión del refresh— y devuelve un **resultado 
 router HTTP solo traduce ese resultado a una respuesta (200 / 401 neutro / 401 `totp_required` /
 429). Ni SQL ni cabeceras HTTP aquí.
 
+`refresh_session` (S5.1 C7) hace lo mismo para `/auth/refresh`: orquesta el rate-limit por IP por
+ENCIMA del mecanismo puro de rotación (`sessions.rotate_refresh_token`), en vez de dentro de él —
+mismo patrón que `authenticate` sobre `sessions.issue_refresh_token` (auditoría de arquitectura:
+meter el rate-limit dentro de `rotate_refresh_token` mezclaba la invariante de rotación con una
+política transversal de abuso).
+
 Cualquier `RedisError` se deja propagar: el mapeo a 503 (fallo cerrado, §5) es responsabilidad de la
 capa HTTP (`redis_guard` en el router), en un solo sitio.
 """
@@ -49,6 +55,29 @@ class RateLimited:
 
 
 LoginResult = LoginSucceeded | TotpRequired | NeutralFailure | RateLimited
+
+
+@dataclass(frozen=True)
+class RefreshSucceeded:
+    """Refresh rotado con éxito: la identidad de la familia + el nuevo token opaco."""
+
+    user_id: str
+    tenant_id: str | None
+    role: str
+    refresh_token: str
+
+
+@dataclass(frozen=True)
+class RefreshInvalid:
+    """El refresh no vale: ausente, desconocido, reusado o de otro tenant (401)."""
+
+
+@dataclass(frozen=True)
+class RefreshRateLimited:
+    """Esta IP ha superado su tope de intentos de refresh fallidos: bloqueo temporal (429)."""
+
+
+RefreshResult = RefreshSucceeded | RefreshInvalid | RefreshRateLimited
 
 
 def _requires_totp(user: AuthUser) -> bool:
@@ -117,4 +146,44 @@ async def authenticate(
         tenant_id=user.tenant_id,
         role=user.role,
         refresh_token=refresh_token,
+    )
+
+
+async def refresh_session(
+    redis: aioredis.Redis,
+    *,
+    token: str,
+    expected_tenant_id: str | None,
+    ip: str,
+    settings: Settings,
+) -> RefreshResult:
+    """Rota un refresh de `/auth/refresh` y devuelve un resultado de dominio tipado.
+
+    `token` vacío (cookie ausente) se trata igual que cualquier otro token inválido (S5.1 C7): la
+    IP paga el mismo coste de rate-limit por machacar el endpoint sin cookie que por probar tokens
+    al azar. Un refresh válido resetea el contador de la IP (igual que login resetea el suyo): los
+    fallos ajenos de una IP compartida (NAT, proxy) no se acumulan indefinidamente contra quien sí
+    consigue refrescar con normalidad.
+    """
+    if await ratelimit.refresh_blocked(redis, ip, max_attempts=settings.refresh_max_attempts):
+        return RefreshRateLimited()
+
+    rotated = await sessions.rotate_refresh_token(
+        redis,
+        token,
+        expected_tenant_id=expected_tenant_id,
+        ttl_seconds=settings.jwt_refresh_ttl,
+    )
+    if rotated is None:
+        await ratelimit.record_refresh_failure(
+            redis, ip, window_seconds=settings.refresh_window_seconds
+        )
+        return RefreshInvalid()
+
+    await ratelimit.reset_refresh(redis, ip)
+    return RefreshSucceeded(
+        user_id=rotated.user_id,
+        tenant_id=rotated.tenant_id,
+        role=rotated.role,
+        refresh_token=rotated.new_token,
     )

@@ -37,6 +37,11 @@ async def test_c66_content_length_excesivo_devuelve_413_sin_llamar_a_la_app() ->
     assert called == []  # el cuerpo gigante no llega a la app (ni a auth ni al volcado a disco)
     start = next(m for m in messages if m["type"] == "http.response.start")
     assert start["status"] == 413
+    # S5.1 C2 ("toda respuesta"): este middleware responde sin pasar por
+    # `SecurityHeadersMiddleware`, así que debe llevar las mismas cabeceras él mismo.
+    headers = dict(start["headers"])
+    assert headers[b"cross-origin-opener-policy"] == b"same-origin"
+    assert headers[b"x-content-type-options"] == b"nosniff"
 
 
 async def test_c66_content_length_dentro_del_limite_pasa_a_la_app() -> None:

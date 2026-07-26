@@ -10,6 +10,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from shared.security_headers import apply_static_security_headers
 from tenancy.resolution import (
     ResolvedTenant,
     extract_subdomain,
@@ -46,6 +47,10 @@ class RequestSizeLimitMiddleware:
                     f"El cuerpo de la petición supera el máximo ({self._max_body_bytes} bytes)",
                     status_code=413,
                 )
+                # Este middleware es el más externo (a propósito, ver docstring): responde SIN
+                # llamar a `self._app`, así que `SecurityHeadersMiddleware` nunca se ejecuta para
+                # este camino. Se aplican las mismas cabeceras aquí (S5.1 C2, "toda respuesta").
+                apply_static_security_headers(response)
                 await response(scope, receive, send)
                 return
         await self._app(scope, receive, send)

@@ -139,6 +139,14 @@ class Settings(BaseSettings):
 
     activation_ttl: int = 72 * 60 * 60  # token de activación de un solo uso (72 h), en segundos
 
+    # Rate-limit de endpoints sensibles sin protección previa (S5.1 C3-C8): mismo patrón de ventana
+    # deslizante en Redis que el login. `activation_confirm_*` es por TOKEN (fuerza bruta del TOTP
+    # de 6 dígitos al confirmar la activación); `refresh_*` es por IP (abuso de rotación).
+    activation_confirm_max_attempts: int = 5
+    activation_confirm_window_seconds: int = 15 * 60
+    refresh_max_attempts: int = 20
+    refresh_window_seconds: int = 15 * 60
+
     # --- Registro con aprobación S1.4 (identity + notifications) --------------------------------
     # Anti-spam del registro público (`POST /register`): tope de altas por IP en una ventana
     # (reutiliza la infra de rate-limit en Redis de S1.3). Al superarlo, los siguientes reciben 429.

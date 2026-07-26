@@ -144,31 +144,41 @@ async def login(request: Request, body: LoginRequest) -> JSONResponse:
 
 @router.post("/refresh")
 async def refresh(request: Request) -> JSONResponse:
-    """Rota el refresh de la cookie: nuevo access + nueva cookie; el anterior queda invalidado."""
+    """Rota el refresh de la cookie: nuevo access + nueva cookie; el anterior queda invalidado.
+
+    Sin cookie se trata igual que una cookie inválida (S5.1 C7): cuenta para el rate-limit por IP
+    en vez de responder 401 sin más, para que machacar el endpoint sin cookie tampoco sea gratis.
+    """
     settings = get_settings()
-    token = request.cookies.get(_REFRESH_COOKIE)
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+    token = request.cookies.get(_REFRESH_COOKIE) or ""
+    ip = client_ip(request, settings)
     # Defensa en profundidad (F2): el subdominio por el que llega debe casar con el tenant de la
     # familia del refresh; si no, no se rota (coherente con "el subdominio aísla").
     resolved: ResolvedTenant | None = getattr(request.state, "tenant", None)
     expected_tenant = str(resolved.id) if resolved is not None else None
     with _redis_guard():
-        rotated = await sessions.rotate_refresh_token(
+        result = await service.refresh_session(
             get_redis(),
-            token,
+            token=token,
             expected_tenant_id=expected_tenant,
-            ttl_seconds=settings.jwt_refresh_ttl,
+            ip=ip,
+            settings=settings,
         )
-    if rotated is None:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
-    return _session_response(
-        user_id=rotated.user_id,
-        tenant_id=rotated.tenant_id,
-        role=rotated.role,
-        refresh_token=rotated.new_token,
-        settings=settings,
-    )
+    match result:
+        case service.RefreshSucceeded() as ok:
+            return _session_response(
+                user_id=ok.user_id,
+                tenant_id=ok.tenant_id,
+                role=ok.role,
+                refresh_token=ok.refresh_token,
+                settings=settings,
+            )
+        case service.RefreshRateLimited():
+            raise HTTPException(status_code=429, detail="Too many attempts")
+        case service.RefreshInvalid():
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+        case _:
+            assert_never(result)
 
 
 @router.post("/logout")
@@ -202,10 +212,23 @@ async def activate(body: ActivateRequest) -> dict[str, str]:
 
 @router.post("/activate/confirm")
 async def activate_confirm(body: ActivateConfirmRequest) -> dict[str, str]:
-    """Confirma el TOTP: enrola el segundo factor y consume el token de activación (un solo uso)."""
+    """Confirma el TOTP: enrola el segundo factor y consume el token de activación (un solo uso).
+
+    Rate-limit por token (S5.1 C3/C5): un código incorrecto repetido contra el MISMO token da 429
+    tras agotar el tope, sin afectar a la activación de otro usuario en curso.
+    """
+    settings = get_settings()
     with _redis_guard():
         try:
-            await activation.confirm_activation(get_redis(), body.token, body.totp_code)
+            await activation.confirm_activation(
+                get_redis(),
+                body.token,
+                body.totp_code,
+                max_attempts=settings.activation_confirm_max_attempts,
+                window_seconds=settings.activation_confirm_window_seconds,
+            )
+        except activation.ActivationConfirmRateLimited as exc:
+            raise HTTPException(status_code=429, detail="Too many attempts") from exc
         except activation.InvalidActivationToken as exc:
             raise HTTPException(status_code=401, detail="Invalid activation token") from exc
     return {"status": "active"}
