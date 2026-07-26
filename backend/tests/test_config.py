@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from shared.config import AppEnv, LogLevel, Settings
+from shared.config import AppEnv, LogLevel, Settings, require_strong_backup_encryption_key
 
 
 def test_env_file_se_resuelve_a_la_raiz_del_monorepo() -> None:
@@ -102,6 +102,41 @@ def test_encryption_master_key_default_es_aceptable_fuera_de_produccion(entorno:
     """En development/staging el default de dev no rompe (los tests y el arranque local lo usan)."""
     settings = Settings(app_env=entorno)
     assert settings.app_env is entorno
+
+
+def test_backup_encryption_key_no_es_un_validador_global_de_settings() -> None:
+    """S5.3, hallazgo de auditoría: `backup_encryption_key` NO se valida al construir `Settings`
+    (a diferencia de `jwt_secret`/`db_encryption_master_key`) — solo lo usan los scripts de
+    backup, nunca la API/worker; validarlo aquí obligaría a inyectarlo también en su entorno
+    compartido (`docker-compose.yml`), deshaciendo el aislamiento de secretos de ADR-0019."""
+    settings = Settings(
+        app_env=AppEnv.PRODUCTION, jwt_secret="x" * 48, db_encryption_master_key="y" * 48
+    )
+    assert settings.is_production  # no lanza, aunque `backup_encryption_key` siga siendo el default
+
+
+@pytest.mark.parametrize(
+    "secreto_inseguro",
+    [
+        "dev-insecure-backup-encryption-key-change-me",  # el default de dev: prohibido en prod
+        "corto",  # menos de 32 bytes
+        "x" * 31,  # justo por debajo del mínimo de 32 bytes
+    ],
+)
+def test_require_strong_backup_encryption_key_rechaza_clave_insegura(
+    secreto_inseguro: str,
+) -> None:
+    """S5.3 spec §4: la función que llaman los scripts de backup rechaza una clave débil, mismo
+    criterio que `jwt_secret`/`db_encryption_master_key`."""
+    settings = Settings(backup_encryption_key=secreto_inseguro)
+    with pytest.raises(ValueError, match="BACKUP_ENCRYPTION_KEY"):
+        require_strong_backup_encryption_key(settings)
+
+
+def test_require_strong_backup_encryption_key_acepta_clave_fuerte() -> None:
+    """Con una clave fuerte (>= 32 bytes y distinta del default), no lanza."""
+    settings = Settings(backup_encryption_key="z" * 48)
+    require_strong_backup_encryption_key(settings)  # no debe lanzar
 
 
 @pytest.mark.parametrize("entorno", [AppEnv.DEVELOPMENT, AppEnv.STAGING])

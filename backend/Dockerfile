@@ -28,6 +28,30 @@ RUN useradd --create-home --uid 10001 appuser
 COPY alembic.ini ./
 COPY migrations ./migrations
 RUN chown -R appuser:appuser /app
+
+# --- Imagen "ops": herramientas de mantenimiento (backup/restore, S5.3) -------------------------
+# Estadio SEPARADO de la imagen "api" de más abajo (la que sirve tráfico HTTP público/worker OCR):
+# nunca lleva `postgresql-client` ni corre con `BACKUP_DATABASE_ADMIN_DSN`/`BACKUP_ENCRYPTION_KEY`
+# en su entorno — un RCE contra el contenedor expuesto a internet no debe heredar de regalo la
+# herramienta ni la superficie extra de `pg_dump`/`pg_restore` (hallazgo de auditoría: instalarlo en
+# la imagen de la API amplía su superficie sin necesidad). NO es el target por defecto de
+# `docker build .` (que resuelve al último `FROM`, `api`): se construye explícitamente con
+# `docker build --target ops`, ejecutado desde cron/un contenedor puntual, nunca desde `api`/`worker`.
+FROM base AS ops
+# El repositorio Debian de la imagen base solo ofrece una versión mayor de `postgresql-client` (no
+# variantes "-16"/"-17" en paralelo, a diferencia de un repo APT de PGDG): la que resuelva en cada
+# build, sea cual sea, es compatible con el formato `--format=custom` de `pg_dump`/`pg_restore`
+# contra el Postgres 16 real del proyecto (formato portable entre versiones de cliente/servidor
+# próximas). Fijar aquí una versión exacta rompería el build en cuanto la imagen base la retire.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+COPY scripts/backup_database.py scripts/restore_drill.py ./scripts/
+USER appuser
+ENTRYPOINT ["python"]
+
+# --- Imagen "api": la que sirve tráfico HTTP y el worker OCR (target por defecto) ---------------
+FROM base AS api
 USER appuser
 
 EXPOSE 8000

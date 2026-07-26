@@ -24,6 +24,11 @@ _MIN_JWT_SECRET_BYTES = 32
 _DEV_ENCRYPTION_MASTER_KEY = "dev-insecure-encryption-master-key-change-me"  # noqa: S105
 _MIN_ENCRYPTION_MASTER_KEY_BYTES = 32
 
+# Mismo criterio, para la clave de cifrado de los backups completos (S5.3). Secreto DISTINTO del de
+# arriba a propósito (ver `shared/backup_encryption.py`): protegen modelos de amenaza distintos.
+_DEV_BACKUP_ENCRYPTION_KEY = "dev-insecure-backup-encryption-key-change-me"  # noqa: S105
+_MIN_BACKUP_ENCRYPTION_KEY_BYTES = 32
+
 
 def _find_project_root() -> Path:
     """Raíz del monorepo: la carpeta que contiene `.env.example` (marcador estable del repo).
@@ -172,6 +177,13 @@ class Settings(BaseSettings):
     # Mismo criterio que `jwt_secret`: SECRETO, por env var `DB_ENCRYPTION_MASTER_KEY` en
     # staging/producción, nunca en el repo.
     db_encryption_master_key: str = _DEV_ENCRYPTION_MASTER_KEY
+
+    # Cifrado de los backups completos de la base de datos (S5.3, `jobs/backup.py`). Secreto
+    # DISTINTO de `db_encryption_master_key` a propósito (ver `shared/backup_encryption.py`): mismo
+    # criterio de secreto por env var (`BACKUP_ENCRYPTION_KEY`), nunca en el repo. Su fortaleza NO
+    # se valida aquí (a diferencia de `jwt_secret`/`db_encryption_master_key`): solo lo usan los
+    # scripts de backup, nunca la API/worker — ver `require_strong_backup_encryption_key`.
+    backup_encryption_key: str = _DEV_BACKUP_ENCRYPTION_KEY
 
     # Política de contraseñas y límite de fuerza bruta (por (IP+email) y un tope más grueso por IP).
     password_min_length: int = 12
@@ -338,6 +350,30 @@ class Settings(BaseSettings):
     def trusted_proxy_set(self) -> frozenset[str]:
         """`trusted_proxies` como conjunto de IPs (o `{'*'}`); vacío si no hay ninguno."""
         return frozenset(item.strip() for item in self.trusted_proxies.split(",") if item.strip())
+
+
+def require_strong_backup_encryption_key(settings: Settings) -> None:
+    """Comprueba que `backup_encryption_key` es apta para cifrar un backup real (S5.3 spec §4).
+
+    A propósito, NO es un `model_validator` de `Settings` (a diferencia de `jwt_secret`/
+    `db_encryption_master_key`, que SÍ lo son): esos dos los usa la API/worker en cada petición, así
+    que validarlos al construir `Settings` tiene sentido. `backup_encryption_key` en cambio solo lo
+    usan `scripts/backup_database.py`/`scripts/restore_drill.py` — si fuera un `model_validator`
+    global, la API y el worker en producción se negarían a arrancar sin ese secreto, aunque nunca lo
+    usan, obligando a inyectarlo también en su entorno (compartido, `env_file` de
+    `docker-compose.yml`) y deshaciendo el aislamiento de secretos que es la razón de ser de
+    ADR-0019 (hallazgo de auditoría). Se llama explícitamente solo desde los dos scripts de backup.
+    """
+    if settings.backup_encryption_key == _DEV_BACKUP_ENCRYPTION_KEY:
+        raise ValueError(
+            "BACKUP_ENCRYPTION_KEY no puede ser el valor por defecto de desarrollo: inyecta una "
+            "clave real por la variable de entorno BACKUP_ENCRYPTION_KEY."
+        )
+    if len(settings.backup_encryption_key.encode("utf-8")) < _MIN_BACKUP_ENCRYPTION_KEY_BYTES:
+        raise ValueError(
+            f"BACKUP_ENCRYPTION_KEY debe tener al menos {_MIN_BACKUP_ENCRYPTION_KEY_BYTES} bytes "
+            "para cifrar los backups completos con suficiente entropía."
+        )
 
 
 @lru_cache

@@ -56,6 +56,7 @@
 | `MISTRAL_API_KEY` (solo POC) | GitHub Secrets + `.env` del VPS |
 | `SMTP_HOST/USER/PASSWORD` (soporte@autoken.es) | GitHub Secrets + `.env` del VPS |
 | `POSTGRES_PASSWORD`, `MINIO_KEYS`, `JWT_SECRET`, `DB_ENCRYPTION_MASTER_KEY` (S5.2, ADR-0018: clave por tenant derivada de esta, nunca guardada aparte) | Generados en el VPS, solo en `.env`/volúmenes cifrados |
+| `BACKUP_ENCRYPTION_KEY`, `BACKUP_DATABASE_ADMIN_DSN`, `RESTORE_DRILL_TARGET_DSN` (S5.3, ADR-0019) | **NUNCA en el `.env` de `api`/`worker`** (ese fichero se monta entero en ambos contenedores, sin lista blanca) — fichero de entorno aparte, leído solo al invocar `scripts/backup_database.py`/`restore_drill.py` |
 | Contraseñas de login Julio/Alberto | En ningún sitio: se crean en el primer login con 2FA |
 
 ## Infra (recordatorio crítico de seguridad)
