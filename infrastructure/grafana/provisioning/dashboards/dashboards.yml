@@ -1,0 +1,11 @@
+# Provisioning de dashboards de Grafana (S5.6): carga cualquier JSON de ../../dashboards al
+# arrancar, sin tocar la UI a mano.
+apiVersion: 1
+
+providers:
+  - name: autoken
+    folder: Autoken Facturas
+    type: file
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

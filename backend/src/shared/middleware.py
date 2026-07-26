@@ -10,6 +10,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from shared.metrics import http_requests_total, normalize_http_method
 from shared.security_headers import apply_static_security_headers
 from tenancy.resolution import (
     ResolvedTenant,
@@ -92,6 +93,27 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
         response.headers[CORRELATION_ID_HEADER] = correlation_id
+        return response
+
+
+class MetricsMiddleware(BaseHTTPMiddleware):
+    """Cuenta cada petición HTTP por método y código de estado (S5.6,
+    `autoken_http_requests_total`).
+
+    Solo esas dos dimensiones, a propósito: NUNCA la ruta. Etiquetar por `request.url.path` crearía
+    una serie de Prometheus distinta por cada URL con un identificador variable (facturas, tenants,
+    IDs de fichero...) — cardinalidad sin límite y, más grave, el nombre de la métrica podría acabar
+    filtrando identificadores de negocio de un tenant. El método se normaliza contra una lista
+    conocida (`normalize_http_method`) por el mismo motivo de cardinalidad: un cliente puede mandar
+    cualquier token como método HTTP.
+    """
+
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        response = await call_next(request)
+        method = normalize_http_method(request.method)
+        http_requests_total.labels(method=method, status=str(response.status_code)).inc()
         return response
 
 

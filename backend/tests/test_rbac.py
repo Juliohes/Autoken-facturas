@@ -258,6 +258,7 @@ def test_scope_for_role_deniega_roles_no_contemplados() -> None:
 _PUBLIC_ROUTES = frozenset(
     {
         ("GET", "/api/v1/health"),
+        ("GET", "/api/v1/metrics"),  # agregados operativos, nunca datos de tenant (S5.6)
         ("GET", "/api/v1/tenants/current"),
         ("GET", "/api/v1/manifest.webmanifest"),
         ("POST", "/api/v1/auth/login"),

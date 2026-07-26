@@ -1,6 +1,12 @@
 # Docker Compose — Autoken Facturas v2
-# api + worker + postgres + redis + minio + clamav. El resto de servicios (caddy) se añaden en
-# sprints posteriores. Los secretos se inyectan vía .env (no versionado). Ver ../.env.example.
+# api + worker + postgres + redis + minio + clamav + prometheus + grafana + alertmanager +
+# node-exporter (S5.6, observabilidad). El resto de servicios (caddy) se añaden en sprints
+# posteriores. Los secretos se inyectan vía .env (no versionado). Ver ../.env.example.
+#
+# El stack de observabilidad (prometheus/grafana/alertmanager/node-exporter) está completo y
+# versionado, pero desplegarlo de verdad contra la VPS B y verificar que las alertas disparan con
+# tráfico real queda pendiente de una sesión futura con acceso a esa infraestructura (spec S5.6 §6,
+# mismo patrón que el Caddy/TLS real de S4.6).
 
 services:
   api:
@@ -29,6 +35,9 @@ services:
       # usa uvicorn con `--proxy-headers`). Vacío por defecto = no se confía en XFF (IP = peer).
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      # Captura de errores (S5.6): sin DSN, `init_sentry` no hace nada (coste cero hasta que Julio
+      # cree la cuenta y lo rellene en el .env real).
+      SENTRY_DSN: ${SENTRY_DSN:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -136,6 +145,72 @@ services:
       start_period: 120s
     restart: unless-stopped
 
+  # Observabilidad (S5.6). Scrapea la API (GET /api/v1/metrics) y node-exporter; evalúa las reglas
+  # de alerts.yml y las dispara a Alertmanager. Puerto solo en loopback (127.0.0.1): ni Prometheus
+  # ni Alertmanager tienen autenticación propia, así que no se publican a todas las interfaces
+  # (auditoría de seguridad) — el acceso remoto real debe ir por el proxy inverso con auth, nunca
+  # por el puerto crudo.
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  # Recibe las alertas de Prometheus y decide a quién avisar (S5.6). Receptor "null" por defecto
+  # (sin canal real configurado, ver alertmanager.yml) hasta que Julio decida email/Slack. Puerto en
+  # loopback por el mismo motivo que Prometheus (sin autenticación propia).
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "127.0.0.1:9093:9093"
+    restart: unless-stopped
+
+  # Métricas del host (disco, CPU, memoria) para la alerta de disco bajo mínimo (S5.6). Necesita
+  # acceso de solo lectura al filesystem/proc/sys REAL de la VPS: en local (dev) mide el propio
+  # contenedor/host de desarrollo, sin significado operativo real hasta desplegarlo en la VPS B. Sin
+  # puerto de host: solo accesible por la red interna de compose (lo scrapea Prometheus).
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    restart: unless-stopped
+
+  # Visualiza las métricas de Prometheus (S5.6): datasource y dashboard provisionados por código
+  # (infrastructure/grafana/), sin configuración manual en la UI. Contraseña admin OBLIGATORIA por
+  # .env (sin valor por defecto, auditoría de seguridad): un despliegue que copie .env.example sin
+  # rellenarla se niega a arrancar Grafana, en vez de levantar en silencio con `admin/admin`. Puerto
+  # en loopback, mismo motivo que Prometheus/Alertmanager.
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?define GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   minio-data:
+  prometheus-data:
+  grafana-data:

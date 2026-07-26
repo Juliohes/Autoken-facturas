@@ -34,6 +34,7 @@ API = "/api/v1"
 # Rutas públicas (no exigen identidad): quedan fuera del anti-cruce. (metodo, plantilla OpenAPI)
 _PUBLIC_ROUTES = {
     ("GET", f"{API}/health"),
+    ("GET", f"{API}/metrics"),  # agregados operativos transversales, nunca datos de tenant (S5.6)
     ("GET", f"{API}/tenants/current"),
     ("GET", f"{API}/manifest.webmanifest"),
     ("POST", f"{API}/auth/login"),

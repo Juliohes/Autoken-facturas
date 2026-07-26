@@ -17,6 +17,7 @@ from invoice_intake.router import router as intake_router
 from invoice_intake.service import DuplicateUpload
 from invoicing.router import invoices_router as invoicing_invoices_router
 from invoicing.router import router as invoicing_router
+from jobs.metrics_router import router as metrics_router
 from platform_admin.health import router as health_router
 from platform_admin.ranking_router import router as platform_ranking_router
 from platform_admin.settings_router import router as platform_settings_router
@@ -25,9 +26,11 @@ from reporting.router import router as reporting_router
 from shared.config import Settings, get_settings
 from shared.db import dispose_engine, get_engine
 from shared.db_security import assert_runtime_role_cannot_bypass_rls
+from shared.error_tracking import init_sentry
 from shared.logging import configure_logging, get_logger
 from shared.middleware import (
     CorrelationIdMiddleware,
+    MetricsMiddleware,
     RequestSizeLimitMiddleware,
     TenantResolutionMiddleware,
 )
@@ -40,6 +43,7 @@ def create_app() -> FastAPI:
     """Construye y configura la aplicación FastAPI (application factory)."""
     settings: Settings = get_settings()
     configure_logging(settings.log_level)
+    init_sentry(settings)  # no-op sin SENTRY_DSN (S5.6 C1/C2)
     log = get_logger("app")
 
     @asynccontextmanager
@@ -71,12 +75,14 @@ def create_app() -> FastAPI:
         cache_max_size=settings.subdomain_cache_max_size,
     )
     app.add_middleware(CorrelationIdMiddleware)
+    app.add_middleware(MetricsMiddleware)  # cuenta cada petición por método+status (S5.6)
     # Cabeceras de seguridad en todas las respuestas (defensa en profundidad); HSTS solo en prod.
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.is_production)
     # Cota del cuerpo de la petición (issue #66): el más externo, para rechazar (413) un cuerpo
     # gigante por `Content-Length` antes de auth, enrutado o volcado a disco del multipart.
     app.add_middleware(RequestSizeLimitMiddleware, max_body_bytes=settings.max_request_body_bytes)
     app.include_router(health_router, prefix=settings.api_prefix)
+    app.include_router(metrics_router, prefix=settings.api_prefix)
     app.include_router(tenancy_router, prefix=settings.api_prefix)
     app.include_router(auth_router, prefix=settings.api_prefix)
     app.include_router(registration_router, prefix=settings.api_prefix)

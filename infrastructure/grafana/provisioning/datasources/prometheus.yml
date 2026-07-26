@@ -1,0 +1,12 @@
+# Datasource de Grafana (S5.6): Prometheus como única fuente, provisionada por código (no a mano
+# en la UI) para que el stack se levante ya configurado.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: Prometheus # el dashboard (../../dashboards/autoken-overview.json) referencia este uid tal cual
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
