@@ -461,6 +461,54 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   poco a poco — corregido para que solo cuenten los métodos reales que la aplicación usa, y todo lo
   demás se agrupe junto. 638 pruebas automáticas del motor, todas en verde.
 
+- **S5.2 — Cerrar con llave los datos sensibles dentro de la propia base de datos** (26/07/2026,
+  tercera tarea del Sprint 5, la más delicada del proyecto hasta ahora): hasta ahora, el CIF y el
+  nombre de cada empresa y de cada proveedor/cliente vivían "en abierto" dentro de la base de
+  datos — cualquiera con acceso directo a esa base (una copia de seguridad mal guardada, un acceso
+  indebido al servidor) los vería sin esfuerzo. Esta tarea los cifra de verdad: cada asesoría tiene
+  su propia "llave" para leerlos, calculada al vuelo a partir de un único secreto maestro guardado
+  fuera de la base de datos — no existe una tabla de llaves que alguien pudiera robar. Como un CIF
+  cifrado ya no se puede comparar directamente (cada vez que se cifra el mismo valor sale distinto,
+  a propósito, para que sea más seguro), se guarda además una "huella" del CIF, calculada con la
+  misma llave secreta, que sirve para buscar "¿existe ya este CIF?" sin necesidad de descifrar nada
+  — el nombre no lleva huella, así que ya no se puede buscar por un trozo de nombre en el panel de
+  facturas (antes sí se podía); a cambio, se puede filtrar por un CIF exacto, decisión que tomó
+  Julio en persona tras planteársela: prefirió mantener el nombre cifrado de verdad antes que
+  sacrificar esa protección por conservar una búsqueda menos importante. El histórico de facturas
+  ya guardadas se migró automáticamente a este nuevo formato sin perder ni un dato. También se
+  construyó (aunque no hace falta usarlo salvo sospecha) un script para "cambiar la llave maestra"
+  de golpe en toda la aplicación, con su propio manual de uso paso a paso.
+
+  **Un hallazgo real de transparencia, contado tal cual ocurrió**: durante el desarrollo, un error
+  de programación (no relacionado con la seguridad en sí) hizo que, al validar un fichero de
+  configuración de infraestructura, apareciesen en la propia conversación de trabajo dos claves
+  reales de proveedores externos (Azure y Mistral) que ya estaban en el servidor de desarrollo —
+  sin que se hiciera ninguna llamada externa con ellas, solo se "leyeron por pantalla" sin querer.
+  Se avisó a Julio en el momento y se le recomendó rotarlas por precaución.
+
+  **La revisión final, la más exhaustiva del proyecto hasta ahora dado lo delicado del tema,
+  encontró y corrigió varios fallos reales, dos de ellos serios**: primero, el "plano" interno de
+  cómo debía verse la base de datos (usado por una herramienta de comprobación automática) se había
+  quedado desactualizado tras el cambio — nadie lo habría notado hasta que, mucho más adelante,
+  alguien pidiera a esa herramienta que generara un cambio nuevo, momento en el que habría
+  propuesto **deshacer el cifrado sin darse cuenta**. Corregido y vuelto a comprobar. Segundo, si
+  alguna consulta a la base de datos fallaba por cualquier motivo normal (una desconexión, un
+  bloqueo pasajero), el mensaje de error interno incluía sin querer la llave secreta usada en esa
+  consulta — cerrado para que esa información nunca aparezca en ningún registro. Tercero, se
+  encontró y corrigió una manera concreta (poco probable, pero real) en la que dos operaciones
+  escribiendo a la vez durante un cambio de llave maestra podrían dejar un dato ilegible para
+  siempre; ahora el manual de esa operación exige detener la aplicación un momento mientras dura el
+  cambio, precisamente para que eso no pueda pasar — y, comprobando esa misma pieza a fondo, salió
+  a la luz un cuarto fallo, independiente: el historial de "quién cambió qué en una factura ya
+  confirmada" está diseñado para que NADIE pueda alterarlo después de escrito (ni siquiera la propia
+  aplicación) — al intentar cambiarle la llave de cifrado a esos registros antiguos, el sistema
+  correctamente se negó, y hubo que abrirle un permiso muy concreto y limitado (solo para esas dos
+  columnas cifradas, nunca para el resto del historial, que sigue siendo intocable). Se detectó
+  además que dos paneles de experimentos de comparación de motores de IA (S2.9/S2.10 y S4.8, ambos
+  apagados por defecto) guardan el CIF/nombre sin cifrar dentro de un dato más grande — queda
+  anotado como pendiente de decidir con Julio antes de encenderlos alguna vez en producción, no
+  como un descuido. 655 pruebas automáticas del motor + 191 de las pantallas, todas en verde.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
@@ -477,17 +525,19 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   las 5 tareas (S4.9 app-shell, S2.2 captura guiada, S4.10 interruptor admin-tech, S2.9/S2.10
   realce+comparativa, S4.8 ranking multi-modelo) cerradas y mergeadas el 25/07/2026.
 - **Sprint 5 (hardening+QA) en marcha** (arrancado 25/07/2026, orden acordado con Julio): S5.1
-  (cabeceras y límites) y S5.6 (monitorización y alertas) cerradas; quedan S5.2 (cifrado por
-  tenant), S5.4 (pentest propio), S5.5 (pruebas de carga) y S5.3 (backups + restore drill, la más
+  (cabeceras y límites), S5.6 (monitorización y alertas) y S5.2 (cifrado por tenant) cerradas;
+  quedan S5.4 (pentest propio), S5.5 (pruebas de carga) y S5.3 (backups + restore drill, la más
   dependiente de infraestructura/accesos reales) antes de dar el paso final. El propio stack de
   monitorización de S5.6 (Prometheus/Grafana/Alertmanager) está construido pero no desplegado de
-  verdad todavía — pendiente de una sesión futura con acceso a la VPS B.
+  verdad todavía — pendiente de una sesión futura con acceso a la VPS B. El script de rotación de
+  clave de S5.2 tampoco se ha ejecutado nunca contra datos reales (no hace falta salvo sospecha de
+  filtración); está probado a fondo contra bases de datos de prueba.
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
 
-**Avance estimado hacia producción a día de hoy: ≈75%** (40 de 53 tareas del plan "core" completas
+**Avance estimado hacia producción a día de hoy: ≈77%** (41 de 53 tareas del plan "core" completas
 del todo — S4.9 es una tarea nueva, no estaba en el recuento original de 51, añadida para cerrar el
 hueco de integración detectado el 23/07/2026 — sin contar el módulo de Verifactu ni la limpieza
 final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2, Sprint 3 y
-Sprint 4 completos. Lote de cierre de backlog previo al Sprint 5 COMPLETO. Sprint 5 en marcha: S5.1
-y S5.6 cerradas. Siguiente: S5.2 (cifrado por tenant).**
+Sprint 4 completos. Lote de cierre de backlog previo al Sprint 5 COMPLETO. Sprint 5 en marcha: S5.1,
+S5.6 y S5.2 cerradas. Siguiente: S5.4 (pentest básico propio).**

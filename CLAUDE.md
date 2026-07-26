@@ -55,7 +55,7 @@
 | `AZURE_OPENAI_KEY` / `AZURE_OPENAI_ENDPOINT` | GitHub Secrets + `.env` del VPS |
 | `MISTRAL_API_KEY` (solo POC) | GitHub Secrets + `.env` del VPS |
 | `SMTP_HOST/USER/PASSWORD` (soporte@autoken.es) | GitHub Secrets + `.env` del VPS |
-| `POSTGRES_PASSWORD`, `MINIO_KEYS`, `JWT_SECRET`, claves Fernet por tenant | Generados en el VPS, solo en `.env`/volúmenes cifrados |
+| `POSTGRES_PASSWORD`, `MINIO_KEYS`, `JWT_SECRET`, `DB_ENCRYPTION_MASTER_KEY` (S5.2, ADR-0018: clave por tenant derivada de esta, nunca guardada aparte) | Generados en el VPS, solo en `.env`/volúmenes cifrados |
 | Contraseñas de login Julio/Alberto | En ningún sitio: se crean en el primer login con 2FA |
 
 ## Infra (recordatorio crítico de seguridad)
@@ -306,6 +306,51 @@
   obligatoria + puertos en loopback); `uid` del datasource de Grafana ausente (el dashboard habría
   quedado en blanco en el primer despliegue real); docstring engañoso sobre una dimensión de "ruta" nunca
   implementada; imágenes `:latest` fijadas a versión. 638 tests de backend en verde.
+- **S5.2 (cifrado por tenant) cerrada (PR #104) — tercera tarea del Sprint 5**: cifrado en reposo
+  (pgcrypto `pgp_sym_encrypt`/`pgp_sym_decrypt`, ADR-0018) del CIF/NIF y nombre de empresas y
+  contrapartes: `companies.cif/name`, `counterparties.cif/name`,
+  `invoices.counterparty_tax_id/counterparty_name` (+ índice ciego, spec C5) y
+  `ocr_extractions.counterparty_tax_id/counterparty_name`. Clave por tenant derivada con HKDF a
+  partir de una única clave maestra (`DB_ENCRYPTION_MASTER_KEY`, nunca guardada en Postgres); clave
+  de índice ciego DISTINTA de la de cifrado (HMAC-SHA256 determinista del CIF normalizado, único
+  campo con índice — spec §0, decisión de Julio). Migración 0020 con backfill del histórico,
+  validada empíricamente contra Postgres real. **Decisión de Julio tras preguntarle**: alcance
+  "ampliado" (CIF + nombre, no solo CIF) con mecanismo pgcrypto (no Fernet); y, al descubrirse que
+  cifrar el nombre rompía la búsqueda de texto libre del panel de facturas (S3.1), mantener el
+  cifrado real y retirarla, sustituida por un filtro exacto de CIF vía índice ciego. El export de
+  tenant (S4.7) sigue siendo legible (descifra antes de volcar a JSON); `invoice_edits` cifra
+  condicionalmente `old_value`/`new_value` cuando el campo editado es sensible (C7). Script de
+  rotación de la clave maestra (`jobs/key_rotation.py` + `scripts/rotate_encryption_key.py`) y su
+  runbook (`docs/runbooks/rotacion-clave-cifrado.md`); no ejecutado contra datos reales (solo hace
+  falta ante sospecha de filtración).
+
+  **Auditoría de 3 lentes, la más exhaustiva del proyecto hasta ahora dado el riesgo (crítico real,
+  no solo teórico, en 4 de los hallazgos)**: (1) los 4 modelos ORM (`Company`, `Counterparty`,
+  `Invoice`, `OcrExtraction`) no se habían actualizado tras la migración 0020 — `alembic check`
+  **fallaba de verdad** (verificado ejecutándolo), arriesgando que un futuro `--autogenerate`
+  revirtiera el cifrado; corregido y reverificado en verde. (2) el engine no ocultaba los
+  parámetros de las sentencias SQL (`hide_parameters=True`, ahora en `shared/db.py`): cualquier
+  excepción sobre una consulta cifrada filtraba la clave del tenant en claro en logs/Sentry. (3)
+  faltaba `normalize_tax_id` antes del índice ciego en el backfill y en la rotación para
+  `invoices` (única tabla no pre-canonicalizada): rompía en silencio el filtro exacto de CIF tras
+  migrar o rotar. (4) condición de carrera real en la rotación de clave (una fila insertada durante
+  la ventana de rotación podía quedar indescifrable para siempre) — mitigada con `SELECT ... FOR
+  UPDATE` por tabla + el runbook ahora exige parar la app durante la rotación; al implementarlo
+  salió a la luz un quinto bug real independiente: `invoice_edits` es append-only (solo `SELECT,
+  INSERT` concedidos desde S3.3) y la rotación de sus valores sensibles fallaba con `permission
+  denied` — migración 0021 concede `UPDATE` acotado a las dos columnas de ciphertext, sin tocar el
+  resto de la fila (sigue siendo inmutable de verdad), cubierto con un test de regresión dedicado.
+  Además: routers derivando la clave directamente en vez de vía servicio (incluido el propio módulo
+  de referencia, `companies/router.py`); lógica de derivación de clave/índice reimplementada en 5
+  sitios, extraída a `shared/encryption.py`; `--new-master-key` por CLI (visible en `ps`) retirado,
+  solo env var. **Hallazgo fuera de alcance, documentado no corregido**: `ocr_comparison_runs`/
+  `ocr_ranking_entries` (S2.9/S2.10/S4.8, experimento apagado por defecto) guardan el CIF/nombre de
+  contraparte en claro dentro de una columna JSONB — decisión pendiente de Julio antes de activar
+  el experimento en producción. 655 tests de backend + 191 de frontend, todos en verde.
+
+  **Incidente de transparencia divulgado a Julio en su momento**: validar `docker compose config`
+  (tarea de S5.6, no de esta) había impreso claves reales de Azure/Mistral del `.env` real en la
+  conversación de trabajo; sin llamada externa alguna, pero se recomendó rotarlas por precaución.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:
