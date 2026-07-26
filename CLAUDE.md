@@ -385,6 +385,44 @@
   con una regresión. Sin auditoría de 3 lentes propia (cambio de configuración acotado, sin lógica de
   dominio nueva). 663 tests de backend en verde. Herramientas del load test (k6, guion `upload_test.js`,
   ficheros JPEG generados) no versionadas en el repo (fuera de alcance de la spec, herramienta puntual).
+- **S5.3 (backups + restore drill) cerrada (PR #110) — sexta y última tarea del Sprint 5, SPRINT 5
+  COMPLETO**. Decisión de alcance confirmada por Julio antes de codificar (spec §0, preguntado
+  explícitamente al no haber credenciales de Hetzner en este entorno): construir el mecanismo completo
+  y verificarlo empíricamente contra Postgres real, dejando el cron nocturno real en la VPS y la subida
+  a un destino externo real pendientes de una sesión futura con esas credenciales (mismo patrón que
+  S4.6/S5.6). Backup completo (`pg_dump --format=custom`) cifrado en memoria con AES-256-GCM
+  (`BACKUP_ENCRYPTION_KEY`, ADR-0019 — secreto DISTINTO de `DB_ENCRYPTION_MASTER_KEY` de S5.2: protegen
+  modelos de amenaza distintos, rotar uno no afecta al otro) y escrito de forma atómica; restore drill
+  que exige una base de datos destino completamente vacía y verifica recuento de filas + columnas
+  cifradas byte a byte. **Verificado empíricamente, no solo en teoría** (mismo criterio que S5.5): 0.35s/
+  86KB de backup y 1.10s de restore con 20 tenants sembrados (`docs/runbooks/backups-restore.md`).
+
+  **Auditoría de 3 lentes con 2 hallazgos altos, uno coincidente en las 3**: (1) el DSN admin (con
+  contraseña de superusuario bypass-RLS) se pasaba como argumento posicional a `pg_dump`/`pg_restore`,
+  visible en `ps`/`/proc/<pid>/cmdline` mientras el proceso vive — exactamente el riesgo que la propia
+  spec exigía evitar para `BACKUP_ENCRYPTION_KEY` pero no se había aplicado al DSN; corregido pasando la
+  contraseña vía `PGPASSWORD` en el entorno del subproceso (`shared/pg_dsn.py`, nuevo). (2) la lente de
+  seguridad encontró, de forma independiente, algo que las otras dos no vieron: `backup_encryption_key`
+  era un `model_validator` global de `Settings` (mismo patrón que `jwt_secret`/`db_encryption_master_key`)
+  — pero a diferencia de esos dos, ningún endpoint de la API ni el worker usan nunca ese secreto; al ser
+  global, obligaba a inyectarlo también en su entorno compartido (`docker-compose.yml` monta el `.env`
+  entero, sin lista blanca, en `api` y `worker`), deshaciendo el aislamiento de secretos que es la razón
+  de ser de la propia ADR-0019 que esta tarea acababa de escribir. Corregido: `require_strong_
+  backup_encryption_key()` es una función normal, llamada solo desde los dos scripts CLI que de verdad
+  la usan. Resto de hallazgos corregidos: `postgresql-client` horneado en la misma imagen Docker que
+  sirve tráfico HTTP público (corregido con un target `ops` separado en el `Dockerfile`, verificado con
+  builds reales de ambos targets — `api` sin `pg_dump`, `ops` con él); el chequeo de "base de datos
+  vacía" del restore drill solo miraba el schema `public` (corregido, todos los schemas de usuario);
+  escritura atómica del backup con nombre de fichero temporal determinista, no único (dos ejecuciones
+  solapadas del cron podían pisarse — corregido con sufijo `uuid4`, mismo patrón que `export_key_for` de
+  S4.7); patrón subprocess duplicado sin timeout ni logging estructurado entre `jobs/backup.py` y
+  `jobs/restore_drill.py` (extraído a `shared/subprocess_utils.py`, `structlog` añadido a ambos,
+  consistente con el resto de jobs del proyecto). 683 tests de backend en verde (676 previos + 7 nuevos).
+- **SPRINT 5 (hardening+QA) COMPLETO (2026-07-26)**: las 6 tareas (S5.1 cabeceras y límites, S5.6
+  monitorización, S5.2 cifrado por tenant, S5.4 pentest propio, S5.5 pruebas de carga, S5.3 backups)
+  cerradas y mergeadas, en el orden acordado con Julio. Quedan pendientes de infraestructura real (no
+  bloquean el roadmap, documentadas cada una en su tarea): TLS real de dominios propios (S4.6), despliegue
+  real del stack de observabilidad (S5.6), y el cron+destino externo real de backups (S5.3).
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:

@@ -557,6 +557,40 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   cada fallo antes de dar la tarea por buena, para no confundir "la app protegiéndose bien" con
   "la app rota". 663 pruebas automáticas del motor, todas en verde.
 
+- **S5.3 — Copias de seguridad de la base de datos, probadas de verdad** (26/07/2026, sexta y
+  última tarea del Sprint 5, SPRINT 5 COMPLETO): antes de esta tarea no había ningún mecanismo real
+  de copia de seguridad. El plan pedía "backup nocturno cifrado a Hetzner" (un servicio externo de
+  almacenamiento), pero en este entorno de trabajo no hay ninguna cuenta de Hetzner real todavía —
+  se le preguntó a Julio antes de construir nada, y decidió: construir la máquina completa (copiar +
+  cifrar + comprobar que la copia sirve de verdad) y dejar el "enviarla a Hetzner cada noche" para
+  cuando exista esa cuenta real, exactamente igual que se hizo antes con los dominios propios (S4.6)
+  o el panel de monitorización (S5.6). Se construyó: un volcado completo de la base de datos, cifrado
+  con una contraseña (para que, si alguien roba el fichero de la copia, no pueda leer nada sin esa
+  contraseña) DISTINTA de la que ya protege el CIF/nombre de las empresas (S5.2) — dos candados
+  separados, para que perder la llave de uno no abra el otro. Y lo más importante: no basta con
+  "hacer la copia", hay que demostrar que **se puede recuperar de verdad**. Se hizo un "simulacro de
+  restauración" real: coger la copia cifrada, descifrarla, reconstruirla en una base de datos nueva y
+  vacía, y comprobar que todos los datos vuelven exactamente igual (incluidas las columnas cifradas).
+  Medido de verdad: la copia de 20 asesorías de prueba tardó **0.35 segundos**, y reconstruirla desde
+  cero tardó **1.1 segundos**.
+
+  **En cristiano sobre lo que encontró la revisión de tres perspectivas**: dos fallos seguidos que
+  merece la pena explicar porque son sutiles. El primero: la contraseña de acceso a la base de datos
+  (la que usa la copia de seguridad para poder leer TODA la información de TODAS las asesorías, no
+  solo la tuya) se pasaba de una forma que cualquiera con acceso al mismo ordenador podría haber
+  visto de refilón mientras la copia se estaba haciendo — como escribir tu contraseña en un post-it
+  pegado al monitor en vez de guardarla en la cabeza. Se corrigió pasándola por un canal que solo el
+  propio proceso puede leer. El segundo, más interesante: la comprobación de "¿esta contraseña de
+  backup es lo bastante fuerte?" se había puesto en el sitio donde arranca TODA la aplicación (no
+  solo la herramienta de backup) — lo que significaba que, sin querer, habría que ponerle esa
+  contraseña también a la parte de la aplicación que atiende a los usuarios normales por internet,
+  aunque esa parte nunca la necesita. Es como exigir que el portero de un edificio lleve también la
+  llave de la caja fuerte del banco de al lado, solo porque ambos edificios comparten la misma
+  entrada de suministros: si alguien engaña al portero, ahora también tiene la llave de la caja
+  fuerte, sin necesidad. Se corrigió para que solo la propia herramienta de backup (nunca la parte
+  pública de la aplicación) tenga esa comprobación. 683 pruebas automáticas del motor, todas en
+  verde.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
@@ -572,20 +606,22 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
 - **Lote de cierre de backlog previo al Sprint 5 — COMPLETO** (decidido con Julio el 24/07/2026):
   las 5 tareas (S4.9 app-shell, S2.2 captura guiada, S4.10 interruptor admin-tech, S2.9/S2.10
   realce+comparativa, S4.8 ranking multi-modelo) cerradas y mergeadas el 25/07/2026.
-- **Sprint 5 (hardening+QA) en marcha** (arrancado 25/07/2026, orden acordado con Julio): S5.1
-  (cabeceras y límites), S5.6 (monitorización y alertas), S5.2 (cifrado por tenant), S5.4 (pentest
-  propio) y S5.5 (pruebas de carga) cerradas; queda S5.3 (backups + restore drill, la más
-  dependiente de infraestructura/accesos reales) antes de dar el paso final. El propio stack de
-  monitorización de S5.6 (Prometheus/Grafana/Alertmanager) está construido pero no desplegado de
-  verdad todavía — pendiente de una sesión futura con acceso a la VPS B. El script de rotación de
-  clave de S5.2 tampoco se ha ejecutado nunca contra datos reales (no hace falta salvo sospecha de
-  filtración); está probado a fondo contra bases de datos de prueba.
+- **Sprint 5 (hardening+QA) COMPLETO** (25-26/07/2026, orden acordado con Julio): las 6 tareas —
+  S5.1 (cabeceras y límites), S5.6 (monitorización y alertas), S5.2 (cifrado por tenant), S5.4
+  (pentest propio), S5.5 (pruebas de carga) y S5.3 (backups + restore drill) — cerradas y mergeadas.
+  Tres piezas de infraestructura real quedan explícitamente pendientes de sesiones futuras con acceso
+  a esa infraestructura (mismo patrón en las tres, decisión de alcance ya confirmada por Julio en cada
+  una, no bloquean el roadmap): el stack de monitorización de S5.6 (Prometheus/Grafana/Alertmanager)
+  está construido pero no desplegado de verdad contra la VPS B; el cron nocturno real + la subida a un
+  destino externo (Hetzner) de S5.3 está construido y probado pero no conectado a un destino real; el
+  script de rotación de clave de S5.2 no se ha ejecutado nunca contra datos reales (no hace falta
+  salvo sospecha de filtración).
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
 
-**Avance estimado hacia producción a día de hoy: ≈79%** (42 de 53 tareas del plan "core" completas
+**Avance estimado hacia producción a día de hoy: ≈83%** (43 de 53 tareas del plan "core" completas
 del todo — S4.9 es una tarea nueva, no estaba en el recuento original de 51, añadida para cerrar el
 hueco de integración detectado el 23/07/2026 — sin contar el módulo de Verifactu ni la limpieza
-final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2, Sprint 3 y
-Sprint 4 completos. Lote de cierre de backlog previo al Sprint 5 COMPLETO. Sprint 5 en marcha: S5.1,
-S5.6, S5.2, S5.4 y S5.5 cerradas. Siguiente: S5.3 (backups + restore drill).**
+final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2, Sprint 3,
+Sprint 4 y Sprint 5 completos. Lote de cierre de backlog previo al Sprint 5 COMPLETO. Siguiente: la
+Fase de Despliegue (go-live y migración de Setex) — ver PLAN MAESTRO.**
