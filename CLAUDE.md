@@ -351,6 +351,24 @@
   **Incidente de transparencia divulgado a Julio en su momento**: validar `docker compose config`
   (tarea de S5.6, no de esta) había impreso claves reales de Azure/Mistral del `.env` real en la
   conversación de trabajo; sin llamada externa alguna, pero se recomendó rotarlas por precaución.
+- **S5.4 (pentest básico propio) cerrada (PR #106) — cuarta tarea del Sprint 5**: checklist OWASP Top 10
+  del plan maestro (IDOR, inyección, auth, uploads) ejecutada como pentest ADVERSARIAL de caja negra
+  contra la app real (Postgres/Redis/MinIO reales, nunca mocks), no como revisión de código. Antes de
+  escribir un test se hizo reconocimiento completo de la superficie de ataque y de la suite ya
+  existente: inyección SQL (sin vector real, todo parametrizado, revisado sistemáticamente), uploads
+  (`test_intake_upload.py` ya exhaustivo: bytes reales no cabecera, tamaño, ClamAV real, fail-closed) e
+  IDOR (`test_tenant_isolation.py`, barrido sistemático con guardarraíl de cobertura) ya tenían
+  cobertura de sobra — documentado en la spec §0, no repetido. Huecos reales identificados y cubiertos
+  con tests nuevos (`tests/test_pentest_s5_4.py`, C1-C7b): tokens JWT construidos a mano contra
+  `/auth/me` (`alg: none` sin firma, confusión de tipo `refresh`/`access`, firma con secreto distinto,
+  expirado); condición de carrera REAL (`asyncio.gather`, no secuencial) en la rotación de refresh,
+  confirmando que exactamente una de dos rotaciones simultáneas con la misma cookie triunfa; dos
+  tenants importando el mismo CIF sin colisión en el índice ciego por tenant (S5.2) ni cruce de datos;
+  confirmación ligera de que metacaracteres SQL clásicos se tratan como texto literal. **Resultado real
+  del pentest: las 8 pruebas pasan sin necesitar ningún cambio de código de producción** — cada defensa
+  ya construida en tareas anteriores (gracias a las auditorías de 3 lentes de cada tarea previa)
+  resistió el ataque tal cual estaba. Sin auditoría de 3 lentes propia (no hay código de producción
+  nuevo que auditar, solo tests). 663 tests de backend en verde (655 previos + 8 nuevos).
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:
