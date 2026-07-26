@@ -259,7 +259,28 @@
   frontend, todos en verde.
 - **LOTE DE CIERRE DE BACKLOG PREVIO AL SPRINT 5 — COMPLETO (2026-07-25)**: las 5 tareas (S4.9 app-shell,
   S2.2 captura guiada, S4.10 interruptor admin-tech, S2.9/S2.10 realce+comparativa, S4.8 ranking
-  multi-modelo) cerradas y mergeadas. Toca planificar el Sprint 5 con Julio antes de seguir.
+  multi-modelo) cerradas y mergeadas.
+- **SPRINT 5 (hardening+QA) arrancado 2026-07-25**: orden acordado con Julio por dependencias — S5.1 → S5.6
+  → S5.2 → S5.4 → S5.5 → S5.3. Julio autorizó continuar el sprint completo sin aprobar cada spec, avisando
+  solo al final o si hace falta su decisión/acceso real (mismo patrón que el lote de backlog anterior).
+- **S5.1 (cabeceras y límites) cerrada (PR #100) — primera tarea del Sprint 5**: añade `Cross-Origin-Opener-
+  Policy`/`Cross-Origin-Resource-Policy` (`same-origin`) a la base de cabeceras ya existente desde S1.6. El
+  escaneo real con Mozilla Observatory queda **pendiente de un despliegue público** (no hay ninguno
+  accesible desde este entorno de trabajo, mismo patrón que Caddy real de S4.6). Rate-limit por primera vez
+  en dos endpoints sin protección: `POST /auth/activate/confirm` (fuerza bruta del TOTP de 6 dígitos al
+  confirmar la activación, límite por token) y `POST /auth/refresh` (abuso de rotación, límite por IP) —
+  reutiliza el patrón atómico ya existente de `identity/ratelimit.py` (script Lua INCR+EXPIRE, S1.3/S1.4).
+  **Auditoría de 3 lentes: 0 críticos/altos, 6 medios/bajos, todos corregidos**: DRY (4 funciones nuevas de
+  `ratelimit.py` extraídas a dos primitivas genéricas); arquitectura (el rate-limit de refresh vivía dentro
+  de `sessions.rotate_refresh_token`, mezclando la invariante de rotación con una política transversal —
+  extraído a un nuevo caso de uso `service.refresh_session`, simétrico a `authenticate`); un oráculo de
+  enumeración real (un token de activación desconocido no contaba como fallo, así que un `429` solo ocurría
+  contra un token válido, revelando su existencia — corregido, cualquier intento fallido cuenta ahora); un
+  riesgo de DoS a usuarios legítimos (el contador de refresh por IP no se reseteaba en éxito, así que
+  usuarios detrás de una IP compartida podían arrastrar fallos ajenos hasta el bloqueo — corregido, se
+  resetea tras una rotación exitosa); cabeceras ausentes en la respuesta `413` del middleware de tamaño de
+  petición (es el más externo a propósito, nunca pasaba por `SecurityHeadersMiddleware` — corregido,
+  aplica el mismo conjunto directamente). 631 tests de backend en verde.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:
