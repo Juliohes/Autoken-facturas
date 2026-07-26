@@ -261,9 +261,10 @@
 - **LOTE DE CIERRE DE BACKLOG PREVIO AL SPRINT 5 — COMPLETO (2026-07-25)**: las 5 tareas (S4.9 app-shell,
   S2.2 captura guiada, S4.10 interruptor admin-tech, S2.9/S2.10 realce+comparativa, S4.8 ranking
   multi-modelo) cerradas y mergeadas.
-- **SPRINT 5 (hardening+QA) arrancado 2026-07-25**: orden acordado con Julio por dependencias — S5.1 → S5.6
-  → S5.2 → S5.4 → S5.5 → S5.3. Julio autorizó continuar el sprint completo sin aprobar cada spec, avisando
-  solo al final o si hace falta su decisión/acceso real (mismo patrón que el lote de backlog anterior).
+- **SPRINT 5 (hardening+QA) COMPLETO (25-26/07/2026)**: orden acordado con Julio por dependencias — S5.1 →
+  S5.6 → S5.2 → S5.4 → S5.5 → S5.3. Julio autorizó continuar el sprint completo sin aprobar cada spec,
+  avisando solo al final o si hacía falta su decisión/acceso real (mismo patrón que el lote de backlog
+  anterior); ese fue el único caso real, S5.3 (ver detalle más abajo).
 - **S5.1 (cabeceras y límites) cerrada (PR #100) — primera tarea del Sprint 5**: añade `Cross-Origin-Opener-
   Policy`/`Cross-Origin-Resource-Policy` (`same-origin`) a la base de cabeceras ya existente desde S1.6. El
   escaneo real con Mozilla Observatory queda **pendiente de un despliegue público** (no hay ninguno
