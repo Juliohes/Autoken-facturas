@@ -47,8 +47,16 @@ def _get_sessionmaker() -> async_sessionmaker[AsyncSession]:
         # mensaje de la excepción, que acaba en logs (`logger.exception`) y en Sentry si se activa
         # (S5.6). Se oculta siempre, no solo en producción: un `.env` de desarrollo también deriva
         # claves reales si `DB_ENCRYPTION_MASTER_KEY` está puesta.
+        settings = get_settings()
+        # `pool_size`/`max_overflow` (S5.5, hallazgo real de la prueba de carga): sin fijarlos,
+        # el default de SQLAlchemy (5 + 10 = 15 conexiones simultáneas) se agota bajo una carga de
+        # subida de facturas moderadamente concurrente — ver `shared.config.Settings.db_pool_size`.
         _engine = create_async_engine(
-            get_settings().database_url, pool_pre_ping=True, hide_parameters=True
+            settings.database_url,
+            pool_pre_ping=True,
+            hide_parameters=True,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
         )
         _sessionmaker = async_sessionmaker(_engine, expire_on_commit=False)
     return _sessionmaker
