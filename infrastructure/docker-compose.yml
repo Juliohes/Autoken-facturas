@@ -19,7 +19,7 @@ services:
         required: false
     environment:
       APP_ENV: ${APP_ENV:-development}
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-autoken_app}:${POSTGRES_PASSWORD:-autoken}@postgres:5432/${POSTGRES_DB:-autoken}
+      DATABASE_URL: postgresql+asyncpg://autoken_app:${POSTGRES_APP_PASSWORD:-autoken}@postgres:5432/${POSTGRES_DB:-autoken}
       REDIS_URL: redis://redis:6379/0
       # Object storage MinIO (intake S2.1): bucket por tenant. Credenciales por .env en staging/prod.
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
@@ -38,8 +38,12 @@ services:
       # Captura de errores (S5.6): sin DSN, `init_sentry` no hace nada (coste cero hasta que Julio
       # cree la cuenta y lo rellene en el .env real).
       SENTRY_DSN: ${SENTRY_DSN:-}
+    # Solo loopback: el acceso real pasa por el proxy inverso (Traefik, docker-compose.prod.yml en
+    # despliegues reales); publicar 8000 en todas las interfaces lo dejaría alcanzable saltándose
+    # las cabeceras/TLS/rate-limit del borde (defensa en profundidad, aunque el firewall del VPS ya
+    # solo permite 22/80/443).
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,7 +70,7 @@ services:
         required: false
     environment:
       APP_ENV: ${APP_ENV:-development}
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-autoken_app}:${POSTGRES_PASSWORD:-autoken}@postgres:5432/${POSTGRES_DB:-autoken}
+      DATABASE_URL: postgresql+asyncpg://autoken_app:${POSTGRES_APP_PASSWORD:-autoken}@postgres:5432/${POSTGRES_DB:-autoken}
       REDIS_URL: redis://redis:6379/0
       OCR_QUEUE_NAME: ${OCR_QUEUE_NAME:-autoken:queue:ocr}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
@@ -92,16 +96,23 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # `POSTGRES_USER` es el SUPERUSUARIO de arranque del clúster (`postgres` por defecto), nunca
+  # `autoken_app`: si coincidieran de nombre, la migración 0001 (`CREATE ROLE autoken_app ... IF NOT
+  # EXISTS`) se saltaría por completo (el rol "ya existiría", como superusuario) y el guard de
+  # arranque de la app (`assert_runtime_role_cannot_bypass_rls`, ADR-0014) abortaría siempre — fallo
+  # real encontrado al desplegar de verdad (S5.3/S5.6). El rol runtime `autoken_app` (restringido,
+  # NOLOGIN de fábrica) lo crea la propia migración 0001; ver el servicio `provision-app-role` más
+  # abajo para concederle LOGIN + contraseña tras aplicar migraciones.
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-autoken_app}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autoken}
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-autoken}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-autoken_app} -d ${POSTGRES_DB:-autoken}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER:-postgres} -d ${POSTGRES_DB:-autoken}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -144,6 +155,44 @@ services:
       retries: 5
       start_period: 120s
     restart: unless-stopped
+
+  # Herramientas de despliegue (perfil `tools`, NUNCA arrancan con `docker compose up`; se invocan
+  # explícitamente con `docker compose run --profile tools <servicio>`). Conectan como el
+  # SUPERUSUARIO admin, nunca como `autoken_app` — la app en sí no tiene privilegios de DDL.
+  #
+  # `migrate`: aplica las migraciones de Alembic (crea/actualiza el esquema, incluida la propia
+  # `CREATE ROLE autoken_app` de la migración 0001).
+  migrate:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: autoken/api:dev
+    profiles: ["tools"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_ADMIN_USER:-postgres}:${POSTGRES_ADMIN_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-autoken}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # `provision-app-role`: concede LOGIN + contraseña al rol runtime `autoken_app` (la migración 0001
+  # lo crea a propósito SIN contraseña real embebida en el histórico de migraciones — ver su
+  # docstring). Idempotente: relanzarlo tras rotar `POSTGRES_APP_PASSWORD` actualiza la contraseña.
+  provision-app-role:
+    image: postgres:16-alpine
+    profiles: ["tools"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_ADMIN_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_ADMIN_PASSWORD:-postgres}
+      PGDATABASE: ${POSTGRES_DB:-autoken}
+      APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?define POSTGRES_APP_PASSWORD in .env}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "psql -v ON_ERROR_STOP=1 -c \"ALTER ROLE autoken_app WITH LOGIN PASSWORD '$$APP_PASSWORD'\""
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   # Observabilidad (S5.6). Scrapea la API (GET /api/v1/metrics) y node-exporter; evalúa las reglas
   # de alerts.yml y las dispara a Alertmanager. Puerto solo en loopback (127.0.0.1): ni Prometheus
@@ -199,9 +248,13 @@ services:
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?define GRAFANA_ADMIN_PASSWORD in .env}
       GF_USERS_ALLOW_SIGN_UP: "false"
+    # El JSON del dashboard vive DENTRO de `./grafana/provisioning/dashboards/json/` (no en un
+    # volumen separado montado anidado dentro de otro de solo lectura): Docker no puede crear el
+    # punto de montaje de un segundo bind mount dentro de uno ya montado `:ro` si esa ruta no existe
+    # ya en el contenido de origen — falla real encontrada al desplegar de verdad en la VPS
+    # (S5.6/S5.3, "read-only file system" al arrancar).
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
       - grafana-data:/var/lib/grafana
     ports:
       - "127.0.0.1:3001:3000"

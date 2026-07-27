@@ -1,0 +1,30 @@
+# Overlay de despliegue REAL sobre VPS B (2.24.8.109), reutilizando el Traefik ya existente en
+# `/opt/traefik` (red `proxy`, resolutor `letsencrypt` ya funcionando para autoken.es). No sustituye
+# a `docker-compose.yml` (que sigue sirviendo para dev/CI local, sin Traefik): se usa AÑADIDO,
+# `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`.
+#
+# Dominio de este despliegue: variable `PUBLIC_HOST` (por defecto `panel-staging.autoken.es`, el
+# subdominio de staging ya creado en el DNS desde la tarea 0.2) — cambiar vía `.env`/`--env-file`
+# si se despliega otro entorno (p. ej. producción real, D.1) sin tocar este fichero.
+
+services:
+  api:
+    networks:
+      - default
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      # Con `api` en dos redes (`default` para hablar con postgres/redis/minio, `proxy` para
+      # Traefik), hay que decirle a Traefik cuál usar — sin esto, elige una red arbitraria (aquí,
+      # `default`, donde Traefik no tiene ninguna pata) y da 504 aunque la conexión directa a la IP
+      # de `proxy` funcione (fallo real encontrado al desplegar, verificado con `docker exec traefik
+      # wget` contra la IP de cada red).
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}.rule=Host(`${PUBLIC_HOST:-panel-staging.autoken.es}`)"
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}.entrypoints=websecure"
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${PUBLIC_HOST_SLUG:-panel-staging}.loadbalancer.server.port=8000"
+
+networks:
+  proxy:
+    external: true
