@@ -462,6 +462,17 @@
   HTML de la SPA, `/api/v1/health` sigue respondiendo. El 404 de `/api/v1/manifest.webmanifest` en
   este host es esperado (el manifest es por tenant vía subdominio; `panel-staging` es el host de
   plataforma, no un tenant — para verlo de verdad hace falta un subdominio de tenant real).
+- **Fondo oscuro que faltaba + marca real de Autoken (2026-07-27), PR #119** — hallazgo real de
+  Julio al entrar por primera vez en la app desplegada: las pantallas autenticadas (texto claro
+  pensado para fondo oscuro) nunca tenían ese fondo puesto en ningún contenedor común —solo
+  `LoginScreen` lo tenía aparte—, así que se veían casi ilegibles (gris clarito sobre blanco).
+  Corregido en `AppRoutes.tsx`. Aprovechado para sustituir los colores por los reales de la marca
+  Autoken (verificados contra los ficheros reales de `autoken.es`, que vive en esta misma VPS):
+  redefinir las paletas `slate`/`emerald` de Tailwind en `tailwind.config.js` cambia el aspecto de
+  las ~17 pantallas ya construidas sin tocarlas una por una (todas usan esas dos paletas de forma
+  consistente). Logo real de Autoken como valor por defecto (antes ninguno). Verificado con
+  capturas de pantalla reales (Playwright headless contra `panel-staging.autoken.es`, login
+  incluido). 191 tests de frontend en verde.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:
