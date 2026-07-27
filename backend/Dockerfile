@@ -38,13 +38,21 @@ RUN chown -R appuser:appuser /app
 # `docker build .` (que resuelve al último `FROM`, `api`): se construye explícitamente con
 # `docker build --target ops`, ejecutado desde cron/un contenedor puntual, nunca desde `api`/`worker`.
 FROM base AS ops
-# El repositorio Debian de la imagen base solo ofrece una versión mayor de `postgresql-client` (no
-# variantes "-16"/"-17" en paralelo, a diferencia de un repo APT de PGDG): la que resuelva en cada
-# build, sea cual sea, es compatible con el formato `--format=custom` de `pg_dump`/`pg_restore`
-# contra el Postgres 16 real del proyecto (formato portable entre versiones de cliente/servidor
-# próximas). Fijar aquí una versión exacta rompería el build en cuanto la imagen base la retire.
+# `postgresql-client` SIN versión (el paquete Debian de la imagen base) resuelve a la versión mayor
+# más reciente (17 hoy) — probado en real contra el Postgres 16 del proyecto y falla: `pg_dump`/
+# `pg_restore` v17 emiten `SET transaction_timeout = 0` en el volcado, un parámetro que NO existe en
+# el servidor v16 ("unrecognized configuration parameter"), tumbando cualquier restore real.
+# Se instala la v16 exacta desde el repositorio oficial de PostgreSQL (PGDG), no el de Debian.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends postgresql-client \
+    && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -sSf -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    && . /etc/os-release \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-16 \
     && rm -rf /var/lib/apt/lists/*
 COPY scripts/backup_database.py scripts/restore_drill.py ./scripts/
 USER appuser
