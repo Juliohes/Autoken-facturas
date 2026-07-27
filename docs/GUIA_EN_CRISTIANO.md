@@ -641,6 +641,25 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   instalando la herramienta en la versión exacta que corresponde (v16), descargada directamente de
   la fuente oficial de PostgreSQL en vez de la que trae el sistema operativo por defecto.
 
+- **"Se ve fatal" — arreglado, con la marca real de Autoken** (27/07/2026): Julio entró por
+  primera vez en la app de verdad y avisó de algo importante: los nombres y textos se veían casi
+  invisibles, letras gris clarito sobre un fondo blanco. La causa: quien construyó cada pantalla
+  (en tareas de hace semanas) daba por hecho que habría un fondo oscuro detrás — como escribir con
+  tiza blanca pensando que la pizarra es negra — pero nadie había puesto ese fondo oscuro de verdad
+  en el "marco" que envuelve a todas las pantallas ya dentro de la app (solo la pantalla de
+  "iniciar sesión" tenía el suyo propio, aparte). Se corrigió poniendo ese fondo en el sitio común
+  correcto, para que todas las pantallas lo hereden a la vez.
+
+  Aprovechando que había que tocar los colores, se metieron también los colores REALES del logo de
+  Autoken (azul marino oscuro + naranja, mirando directamente los ficheros de la web
+  `autoken.es` — que resulta que vive en esta misma máquina) en vez de los verdes/grises genéricos
+  que había puesto quien construyó cada pantalla al principio, sin pensar en una marca concreta
+  todavía. Como casi todas las pantallas ya usaban los mismos dos "botes de pintura" de siempre,
+  bastó con cambiar el contenido de esos dos botes para que toda la aplicación cambiara de aspecto
+  de golpe, sin tener que repintar pantalla por pantalla. También se puso el logo real de Autoken
+  por defecto (antes no había ninguno). Comprobado con capturas de pantalla reales de la propia
+  aplicación funcionando, antes y después.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
