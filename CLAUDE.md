@@ -442,8 +442,16 @@
   herramientas nuevos, `migrate`/`provision-app-role`); montaje anidado de Grafana dentro de otro
   `:ro` (fallaba "read-only file system" al arrancar); `traefik.docker.network` ausente con `api` en
   dos redes (Traefik elegía la red equivocada, 504 real). **Backups reales (S5.3) siguen
-  pendientes**: Julio decidió NO usar Hetzner (la VPS ya está en Hostinger); destino elegido: otro
-  VPS/Storage de Hostinger, aún por contratar.
+  pendientes**: Julio decidió NO usar Hetzner (la VPS ya está en Hostinger); destino elegido: otra
+  VPS de Hostinger (`72.62.189.27`), ya contratada — pendiente de conectar el acceso SSH.
+- **Frontend real añadido al despliegue (2026-07-27), PR #115**: `frontend/Dockerfile` (build Node
+  20 + `nginx` sirviendo solo el estático, mismo patrón que `/opt/autoken/`) enganchado en el mismo
+  host que la API (`panel-staging.autoken.es`) — el router de `api` pasa a exigir `PathPrefix(/api)`
+  con prioridad 100, el resto del host lo sirve `frontend` (patrón ya probado en producción por
+  `/opt/autoken/docker-compose.yml`, autoken-api vs autoken-web). Verificado en real: `/` sirve el
+  HTML de la SPA, `/api/v1/health` sigue respondiendo. El 404 de `/api/v1/manifest.webmanifest` en
+  este host es esperado (el manifest es por tenant vía subdominio; `panel-staging` es el host de
+  plataforma, no un tenant — para verlo de verdad hace falta un subdominio de tenant real).
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:
