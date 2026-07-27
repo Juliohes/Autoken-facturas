@@ -4,10 +4,16 @@
 import type { CurrentTenant } from './types'
 
 export const DEFAULT_APP_NAME = 'Autoken Facturas'
-// Verde ya usado hoy en los botones principales (`bg-emerald-600`).
-export const DEFAULT_COLOR_PRIMARY = '#059669'
-// Fondo ya usado hoy (`bg-slate-900`), mismo valor que `theme_color`/`background_color` del manifest.
-export const DEFAULT_COLOR_SECONDARY = '#0f172a'
+// Logo real de Autoken (variante clara, pensada para fondo oscuro — la misma que ya usa la web
+// corporativa `autoken.es` en su cabecera). Sirve de tenant estático (`frontend/public/`, mismo
+// origen), no una URL de terceros: no aplica el motivo de `referrerPolicy` de un logo de tenant.
+export const DEFAULT_LOGO_URL = '/autoken-logo.png'
+// Naranja real de la marca Autoken (logo + web corporativa) — mismo valor que `emerald-600` en
+// `tailwind.config.js`, que es lo que de verdad pintan los botones principales de cada pantalla.
+export const DEFAULT_COLOR_PRIMARY = '#F26522'
+// Navy real de la marca Autoken (fondo del logo) — mismo valor que `slate-900`, mismo valor que
+// `theme_color`/`background_color` del manifest.
+export const DEFAULT_COLOR_SECONDARY = '#0B1322'
 
 export interface AppliedTheme {
   appName: string
@@ -25,7 +31,7 @@ export function resolveTheme(tenant: CurrentTenant | undefined): AppliedTheme {
     appName: tenant?.app_name ?? DEFAULT_APP_NAME,
     colorPrimary: tenant?.color_primary ?? DEFAULT_COLOR_PRIMARY,
     colorSecondary: tenant?.color_secondary ?? DEFAULT_COLOR_SECONDARY,
-    logoUrl: tenant?.logo_url ?? null,
+    logoUrl: tenant?.logo_url ?? DEFAULT_LOGO_URL,
     faviconUrl: tenant?.favicon ?? null,
   }
 }

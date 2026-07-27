@@ -5,6 +5,7 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_COLOR_PRIMARY,
   DEFAULT_COLOR_SECONDARY,
+  DEFAULT_LOGO_URL,
   applyTenantTheme,
   resolveTheme,
 } from './theme'
@@ -62,8 +63,8 @@ describe('resolveTheme (S4.2)', () => {
     expect(theme.appName).toBe(DEFAULT_APP_NAME)
   })
 
-  it('C7: logoUrl es null cuando el tenant no tiene logo', () => {
-    expect(resolveTheme(makeTenant()).logoUrl).toBeNull()
+  it('C7 (revisado): logoUrl cae al logo real de Autoken cuando el tenant no tiene el suyo propio', () => {
+    expect(resolveTheme(makeTenant()).logoUrl).toBe(DEFAULT_LOGO_URL)
   })
 
   it('C7: logoUrl se propaga tal cual cuando existe', () => {

@@ -8,7 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 
 import App from './App'
 import { api } from './api/client'
-import { DEFAULT_APP_NAME, DEFAULT_COLOR_PRIMARY, DEFAULT_COLOR_SECONDARY } from './features/tenancy/theme'
+import {
+  DEFAULT_APP_NAME,
+  DEFAULT_COLOR_PRIMARY,
+  DEFAULT_COLOR_SECONDARY,
+  DEFAULT_LOGO_URL,
+} from './features/tenancy/theme'
 import type { CurrentTenant } from './features/tenancy/types'
 
 vi.mock('./api/client', () => ({
@@ -106,12 +111,12 @@ describe('App (S4.2/S4.3 theming runtime + S4.9 C14)', () => {
     expect(screen.getByLabelText('Email')).toBeInTheDocument()
   })
 
-  it('C7 (caso límite): sin logo_url, no se renderiza ninguna imagen', async () => {
+  it('C7 (revisado): sin logo_url propio, cae al logo real de Autoken (no queda sin imagen)', async () => {
     mockRoutes(makeTenant())
     renderApp()
 
     await waitFor(() => expect(document.title).toBe(DEFAULT_APP_NAME))
-    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.getByRole('img')).toHaveAttribute('src', DEFAULT_LOGO_URL)
   })
 
   it('S4.3 C5: con favicon (aunque sea el único campo de branding), inyecta el link', async () => {
