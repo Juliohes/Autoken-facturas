@@ -26,7 +26,21 @@ services:
       - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-api.priority=100"
       - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-api.entrypoints=websecure"
       - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-api.service=${PUBLIC_HOST_SLUG:-panel-staging}-api"
       - "traefik.http.services.${PUBLIC_HOST_SLUG:-panel-staging}-api.loadbalancer.server.port=8000"
+      # `ilex.autoken.es`: subdominio de tenant demo ya reservado en el DNS desde la tarea 0.2,
+      # apuntado a la MISMA api/frontend de este despliegue (un tenant real con ese slug resuelve
+      # normal — solo es un Host más de Traefik, no un despliegue aparte). Dominios propios de
+      # CLIENTE arbitrarios (uno que no se conozca de antemano) siguen siendo un problema aparte,
+      # ver docs/runbooks/despliegue-vps-b.md. `.service=` explícito en las 4 rutas nuevas: con dos
+      # routers en el mismo contenedor, Traefik no puede enlazar el servicio automáticamente
+      # ("cannot be linked automatically with multiple Services", fallo real visto al desplegar).
+      - "traefik.http.routers.ilex-api.rule=Host(`ilex.autoken.es`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.ilex-api.priority=100"
+      - "traefik.http.routers.ilex-api.entrypoints=websecure"
+      - "traefik.http.routers.ilex-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ilex-api.service=ilex-api"
+      - "traefik.http.services.ilex-api.loadbalancer.server.port=8000"
 
   # Frontend estático (SPA React/Vite, build de producción servido por nginx) — mismo dominio que
   # la API (`baseUrl` del cliente OpenAPI ya es relativo, sin CORS de por medio), el router de
@@ -44,6 +58,7 @@ services:
       - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-web.rule=Host(`${PUBLIC_HOST:-panel-staging.autoken.es}`)"
       - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-web.entrypoints=websecure"
       - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-web.service=${PUBLIC_HOST_SLUG:-panel-staging}-web"
       - "traefik.http.services.${PUBLIC_HOST_SLUG:-panel-staging}-web.loadbalancer.server.port=80"
       - "traefik.http.middlewares.${PUBLIC_HOST_SLUG:-panel-staging}-sec.headers.stsSeconds=31536000"
       - "traefik.http.middlewares.${PUBLIC_HOST_SLUG:-panel-staging}-sec.headers.stsIncludeSubdomains=true"
@@ -51,6 +66,13 @@ services:
       - "traefik.http.middlewares.${PUBLIC_HOST_SLUG:-panel-staging}-sec.headers.frameDeny=true"
       - "traefik.http.middlewares.${PUBLIC_HOST_SLUG:-panel-staging}-sec.headers.referrerPolicy=strict-origin-when-cross-origin"
       - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-web.middlewares=${PUBLIC_HOST_SLUG:-panel-staging}-sec"
+      # `ilex.autoken.es` (mismo motivo que el router `ilex-api` de arriba: `.service=` explícito).
+      - "traefik.http.routers.ilex-web.rule=Host(`ilex.autoken.es`)"
+      - "traefik.http.routers.ilex-web.entrypoints=websecure"
+      - "traefik.http.routers.ilex-web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ilex-web.service=ilex-web"
+      - "traefik.http.services.ilex-web.loadbalancer.server.port=80"
+      - "traefik.http.routers.ilex-web.middlewares=${PUBLIC_HOST_SLUG:-panel-staging}-sec"
     restart: unless-stopped
 
 networks:
