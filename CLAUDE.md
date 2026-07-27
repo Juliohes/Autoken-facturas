@@ -492,8 +492,10 @@
   > Las *required status checks* de CI se enlazarán en 0.6 cuando exista el pipeline.
 - **Tarea cerrada**: **0.2 DNS de `autoken.es`** ✅ — DNS gestionado en **Hostinger** durante el desarrollo
   (no Cloudflare; ADR-0008, enmienda a ADR-004). Caddy hará el HTTPS. 5 registros A creados y **verificados**
-  resolviendo a `2.24.8.109` (TTL 300): `setex`, `panel`, **`tuti`** (tenant demo, renombrado por Julio desde
-  el provisional `joseramon`), `setex-staging`, `panel-staging`. Cloudflare: issue #2 (revisar antes del go-live).
+  resolviendo a `2.24.8.109` (TTL 300): `setex`, `panel`, **`ilex`** (tenant demo, renombrado por Julio desde
+  el provisional `joseramon` — corrección 2026-07-27: este registro decía `tuti` aquí, pero al desplegar de
+  verdad se comprobó que `tuti.autoken.es` no resuelve; `ilex.autoken.es` sí, confirmado por Julio como el
+  nombre definitivo), `setex-staging`, `panel-staging`. Cloudflare: issue #2 (revisar antes del go-live).
 - **Tarea cerrada**: **0.3 Hardening VPS** ✅ — acceso por clave SSH dedicada `autoken_deploy`.
   **VPS B `2.24.8.109` completo**: usuario `deploy` (sudo+clave), SSH solo clave (`AllowUsers deploy`),
   UFW 22/80/443, fail2ban, unattended-upgrades, root rotada (solo en VPS), Docker 29 + Compose.
@@ -518,7 +520,7 @@
 
 ### Pendientes de Julio (sección 9 del plan)
 - [x] Autenticación GitHub para Claude Code (hecha vía `gh auth login`).
-- [x] **0.2**: 5 registros A en hPanel de Hostinger creados y verificados (tenant demo = `tuti`).
+- [x] **0.2**: 5 registros A en hPanel de Hostinger creados y verificados (tenant demo = `ilex`, corrección 2026-07-27).
 - [x] **0.3**: acceso SSH entregado; VPS B endurecido completo, VPS A mínimo.
 - **Fase 1 — candidatos OCR (rev. 2026-06-16, ver plan §11.7 + ADR-0007/0010)**: bench de Azure DocIntel (✅) +
   **Gemini 3 Flash/Pro** + **Claude** (Opus 4.8/Sonnet 4.6 vía Vertex UE, misma cuenta Google) + familia GPT en
