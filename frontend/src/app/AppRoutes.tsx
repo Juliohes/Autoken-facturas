@@ -114,7 +114,13 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
   const { status, user } = useSession()
 
   return (
-    <>
+    // `min-h-screen bg-slate-900 text-slate-100`: cada pantalla ya autenticada (Plataforma,
+    // facturas, historial...) da por hecho un fondo oscuro (usa `text-slate-300`/`text-slate-400`
+    // etc, pensados para leerse sobre oscuro) pero nadie lo había puesto en un contenedor común —
+    // sin esto, el fondo por defecto es blanco y ese texto queda casi invisible (hallazgo real,
+    // reportado por Julio al entrar de verdad). El login ya tenía su propio fondo aparte
+    // (`LoginScreen`); este envoltorio cubre el resto del árbol autenticado.
+    <div className="min-h-screen bg-slate-900 text-slate-100">
       {status === 'authenticated' && user && (
         <Menu role={user.role} isAdminTech={user.is_admin_tech} theme={theme} />
       )}
@@ -187,6 +193,6 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </>
+    </div>
   )
 }
