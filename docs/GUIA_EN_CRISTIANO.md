@@ -623,6 +623,24 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   hasta ahora, en esta misma máquina). Verificado con la propia página cargando de verdad en el
   navegador.
 
+- **La copia de seguridad, funcionando de verdad, con un descubrimiento curioso** (27/07/2026):
+  Julio contrató una VPS de Hostinger para guardar ahí las copias (no Hetzner, para tener todo con
+  el mismo proveedor). Al conectarse a ella se descubrió que no era una máquina nueva y vacía, sino
+  una que Julio ya usaba para otras cosas suyas (una herramienta de transcripción, un proyecto
+  llamado "brand-brain", entre otros) — con espacio de sobra igualmente para lo que necesitamos
+  (las copias de la base de datos pesan poco). Se hizo la prueba completa de verdad: generar la
+  copia cifrada, subirla a esa otra máquina, bajarla de vuelta, y reconstruir con ella una base de
+  datos nueva desde cero — comprobando que los datos vuelven exactamente igual. Se dejó también
+  programado que esto se repita solo, cada noche a las 3 de la madrugada.
+
+  Al hacer esta prueba de verdad (no solo en teoría) salió un fallo real curioso: la herramienta que
+  usa el ordenador para hablar con la base de datos venía en una versión más nueva (v17) que la
+  propia base de datos (v16) — como intentar leer un documento con una versión de Word demasiado
+  moderna para el ordenador que lo abre. Al reconstruir la copia con esa herramienta demasiado
+  nueva, fallaba con un mensaje sobre un ajuste que la versión vieja no reconocía. Se corrigió
+  instalando la herramienta en la versión exacta que corresponde (v16), descargada directamente de
+  la fuente oficial de PostgreSQL en vez de la que trae el sistema operativo por defecto.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
@@ -639,14 +657,15 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
 - **Lote de cierre de backlog previo al Sprint 5 — COMPLETO** (decidido con Julio el 24/07/2026):
   las 5 tareas (S4.9 app-shell, S2.2 captura guiada, S4.10 interruptor admin-tech, S2.9/S2.10
   realce+comparativa, S4.8 ranking multi-modelo) cerradas y mergeadas el 25/07/2026.
-- **Sprint 5 (hardening+QA) COMPLETO** (25-26/07/2026, orden acordado con Julio): las 6 tareas —
-  S5.1 (cabeceras y límites), S5.6 (monitorización y alertas), S5.2 (cifrado por tenant), S5.4
-  (pentest propio), S5.5 (pruebas de carga) y S5.3 (backups + restore drill) — cerradas y mergeadas.
-  El stack de monitorización de S5.6 ya está desplegado y funcionando de verdad contra la VPS B
-  desde el 27/07/2026 (ver entrada de arriba). Quedan pendientes: el cron nocturno real + la subida
-  a un destino externo de S5.3 (decisión ya tomada: otro VPS/Storage de Hostinger, no Hetzner —
-  falta contratarlo); el script de rotación de clave de S5.2 no se ha ejecutado nunca contra datos
-  reales (no hace falta salvo sospecha de filtración).
+- **Sprint 5 (hardening+QA) COMPLETO DEL TODO, incluida la infraestructura real** (25-27/07/2026,
+  orden acordado con Julio): las 6 tareas — S5.1 (cabeceras y límites), S5.6 (monitorización y
+  alertas), S5.2 (cifrado por tenant), S5.4 (pentest propio), S5.5 (pruebas de carga) y S5.3
+  (backups + restore drill) — cerradas y mergeadas. El stack de monitorización de S5.6 y los
+  backups nocturnos reales de S5.3 ya están funcionando de verdad, no solo construidos (ver
+  entradas de arriba) — la copia de seguridad ya se sube cada noche a una VPS distinta, y se
+  comprobó de verdad que un backup real se puede restaurar. Solo queda una cosa menor sin usar
+  nunca en producción (no hace falta salvo sospecha de filtración): el script de rotación de la
+  clave de cifrado de S5.2.
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
 
