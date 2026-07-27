@@ -20,10 +20,38 @@ services:
       # de `proxy` funcione (fallo real encontrado al desplegar, verificado con `docker exec traefik
       # wget` contra la IP de cada red).
       - "traefik.docker.network=proxy"
-      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}.rule=Host(`${PUBLIC_HOST:-panel-staging.autoken.es}`)"
-      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}.entrypoints=websecure"
-      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}.tls.certresolver=letsencrypt"
-      - "traefik.http.services.${PUBLIC_HOST_SLUG:-panel-staging}.loadbalancer.server.port=8000"
+      # `/api` tiene prioridad sobre el frontend estático (mismo host) — mismo patrón que
+      # `/opt/autoken/docker-compose.yml` (autoken-api vs autoken-web), ya probado en producción.
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-api.rule=Host(`${PUBLIC_HOST:-panel-staging.autoken.es}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-api.priority=100"
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-api.entrypoints=websecure"
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${PUBLIC_HOST_SLUG:-panel-staging}-api.loadbalancer.server.port=8000"
+
+  # Frontend estático (SPA React/Vite, build de producción servido por nginx) — mismo dominio que
+  # la API (`baseUrl` del cliente OpenAPI ya es relativo, sin CORS de por medio), el router de
+  # arriba (`-api`, prioridad 100) intercepta `/api` antes de llegar aquí.
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    image: autoken/frontend:dev
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-web.rule=Host(`${PUBLIC_HOST:-panel-staging.autoken.es}`)"
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-web.entrypoints=websecure"
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${PUBLIC_HOST_SLUG:-panel-staging}-web.loadbalancer.server.port=80"
+      - "traefik.http.middlewares.${PUBLIC_HOST_SLUG:-panel-staging}-sec.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.${PUBLIC_HOST_SLUG:-panel-staging}-sec.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.${PUBLIC_HOST_SLUG:-panel-staging}-sec.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.${PUBLIC_HOST_SLUG:-panel-staging}-sec.headers.frameDeny=true"
+      - "traefik.http.middlewares.${PUBLIC_HOST_SLUG:-panel-staging}-sec.headers.referrerPolicy=strict-origin-when-cross-origin"
+      - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-web.middlewares=${PUBLIC_HOST_SLUG:-panel-staging}-sec"
+    restart: unless-stopped
 
 networks:
   proxy:
