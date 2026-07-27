@@ -424,6 +424,26 @@
   cerradas y mergeadas, en el orden acordado con Julio. Quedan pendientes de infraestructura real (no
   bloquean el roadmap, documentadas cada una en su tarea): TLS real de dominios propios (S4.6), despliegue
   real del stack de observabilidad (S5.6), y el cron+destino externo real de backups (S5.3).
+- **Despliegue real en VPS B (2026-07-27), PR #113 — RESUELVE dos de los tres pendientes de arriba**:
+  primer despliegue real (no solo teórico) del stack completo en `2.24.8.109`, descubierto ser la
+  misma máquina en la que corría esta sesión de trabajo (no un entorno aislado, como se asumía).
+  Ya había un Traefik real funcionando (Let's Encrypt genuino) sirviendo `autoken.es` (la web
+  corporativa, proyecto Docker Compose aparte en `/opt/autoken/`, `/opt/traefik/` — no tocar); se
+  reutiliza para `panel-staging.autoken.es` (el subdominio de staging ya reservado en DNS desde la
+  tarea 0.2), resolviendo la pieza de **TLS real de S4.6 para el caso de subdominios** (dominios
+  propios de CLIENTE arbitrarios, el caso más difícil de S4.6, sigue pendiente — ver
+  `docs/runbooks/despliegue-vps-b.md`). El **stack de observabilidad de S5.6 queda desplegado y
+  verificado de verdad**: Prometheus scrapeando la API real (4/4 reglas de alerta en `ok`), Grafana
+  con datasource+dashboard provisionados, todo solo accesible por túnel SSH (nunca público). Se
+  encontraron y corrigieron 3 fallos reales en `infrastructure/docker-compose.yml` que ningún test
+  podía detectar sin desplegar de verdad (detalle en PR #113 y en el runbook): `autoken_app` como
+  superusuario de arranque (colisión de nombre con el rol runtime que crea la migración 0001,
+  bloqueado correctamente por el guard ADR-0014 — se separan admin/runtime con dos servicios de
+  herramientas nuevos, `migrate`/`provision-app-role`); montaje anidado de Grafana dentro de otro
+  `:ro` (fallaba "read-only file system" al arrancar); `traefik.docker.network` ausente con `api` en
+  dos redes (Traefik elegía la red equivocada, 504 real). **Backups reales (S5.3) siguen
+  pendientes**: Julio decidió NO usar Hetzner (la VPS ya está en Hostinger); destino elegido: otro
+  VPS/Storage de Hostinger, aún por contratar.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:
