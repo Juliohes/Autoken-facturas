@@ -28,19 +28,30 @@ services:
       - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-api.tls.certresolver=letsencrypt"
       - "traefik.http.routers.${PUBLIC_HOST_SLUG:-panel-staging}-api.service=${PUBLIC_HOST_SLUG:-panel-staging}-api"
       - "traefik.http.services.${PUBLIC_HOST_SLUG:-panel-staging}-api.loadbalancer.server.port=8000"
-      # `ilex.autoken.es`: subdominio de tenant demo ya reservado en el DNS desde la tarea 0.2,
-      # apuntado a la MISMA api/frontend de este despliegue (un tenant real con ese slug resuelve
-      # normal — solo es un Host más de Traefik, no un despliegue aparte). Dominios propios de
-      # CLIENTE arbitrarios (uno que no se conozca de antemano) siguen siendo un problema aparte,
-      # ver docs/runbooks/despliegue-vps-b.md. `.service=` explícito en las 4 rutas nuevas: con dos
-      # routers en el mismo contenedor, Traefik no puede enlazar el servicio automáticamente
-      # ("cannot be linked automatically with multiple Services", fallo real visto al desplegar).
+      # `ilex.autoken.es`: subdominio de tenant DEMO (vacío a propósito, sin datos reales), y
+      # `setex.autoken.es`: tenant REAL (Setex, empresas/facturas reales) — corrección 2026-07-27,
+      # antes se habían cargado los datos reales de Setex en `ilex` por error. Ambos ya reservados
+      # en el DNS desde la tarea 0.2, apuntados a la MISMA api/frontend de este despliegue (un
+      # tenant real con ese slug resuelve normal — solo es un Host más de Traefik, no un despliegue
+      # aparte). Dominios propios de CLIENTE arbitrarios (uno que no se conozca de antemano) siguen
+      # siendo un problema aparte, ver docs/runbooks/despliegue-vps-b.md. `.service=` explícito en
+      # todas las rutas nuevas: con dos routers en el mismo contenedor, Traefik no puede enlazar el
+      # servicio automáticamente ("cannot be linked automatically with multiple Services", fallo
+      # real visto al desplegar).
       - "traefik.http.routers.ilex-api.rule=Host(`ilex.autoken.es`) && PathPrefix(`/api`)"
       - "traefik.http.routers.ilex-api.priority=100"
       - "traefik.http.routers.ilex-api.entrypoints=websecure"
       - "traefik.http.routers.ilex-api.tls.certresolver=letsencrypt"
       - "traefik.http.routers.ilex-api.service=ilex-api"
       - "traefik.http.services.ilex-api.loadbalancer.server.port=8000"
+      # `setex.autoken.es`: tenant real (Setex), datos reales de empresas/facturas — mismo patrón
+      # que `ilex-api` de arriba.
+      - "traefik.http.routers.setex-api.rule=Host(`setex.autoken.es`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.setex-api.priority=100"
+      - "traefik.http.routers.setex-api.entrypoints=websecure"
+      - "traefik.http.routers.setex-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.setex-api.service=setex-api"
+      - "traefik.http.services.setex-api.loadbalancer.server.port=8000"
 
   # Frontend estático (SPA React/Vite, build de producción servido por nginx) — mismo dominio que
   # la API (`baseUrl` del cliente OpenAPI ya es relativo, sin CORS de por medio), el router de
@@ -73,6 +84,13 @@ services:
       - "traefik.http.routers.ilex-web.service=ilex-web"
       - "traefik.http.services.ilex-web.loadbalancer.server.port=80"
       - "traefik.http.routers.ilex-web.middlewares=${PUBLIC_HOST_SLUG:-panel-staging}-sec"
+      # `setex.autoken.es` (mismo motivo que `ilex-web`: `.service=` explícito).
+      - "traefik.http.routers.setex-web.rule=Host(`setex.autoken.es`)"
+      - "traefik.http.routers.setex-web.entrypoints=websecure"
+      - "traefik.http.routers.setex-web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.setex-web.service=setex-web"
+      - "traefik.http.services.setex-web.loadbalancer.server.port=80"
+      - "traefik.http.routers.setex-web.middlewares=${PUBLIC_HOST_SLUG:-panel-staging}-sec"
     restart: unless-stopped
 
 networks:
