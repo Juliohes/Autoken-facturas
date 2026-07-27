@@ -614,6 +614,15 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   y una señal despistada que hacía que el "portero" (Traefik, quien dirige el tráfico a la puerta
   correcta) mirara por la ventana equivocada.
 
+- **El "comedor" (la pantalla visual), añadido el mismo día**: tras dejar la cocina funcionando
+  (entrada anterior), Julio pidió también la parte que se ve — la pantalla con la que un usuario
+  real entraría a subir facturas o ver el panel. Se metió en la misma dirección web
+  (`panel-staging.autoken.es`): quien pida algo que empiece por `/api/` sigue yendo a la cocina
+  (el motor), y todo lo demás va a la pantalla visual, siguiendo exactamente el mismo reparto que ya
+  usaba de antes la web corporativa de Autoken (que resultó estar viviendo, sin que nadie lo supiera
+  hasta ahora, en esta misma máquina). Verificado con la propia página cargando de verdad en el
+  navegador.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
