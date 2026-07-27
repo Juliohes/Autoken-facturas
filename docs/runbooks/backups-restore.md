@@ -1,10 +1,9 @@
 # Runbook — Backups de la base de datos y restore drill (S5.3)
 
 > Ver spec `docs/specs/S5.3-backups-restore-drill.md` y `docs/adr/0019-cifrado-y-alcance-backup-base-de-datos.md`.
-> Estado a 2026-07-26: el **mecanismo** (backup cifrado + restore drill) está construido y verificado
-> empíricamente contra Postgres real de este entorno de trabajo. El **cron nocturno real en la VPS de
-> producción** y la **subida a un destino externo real (Hetzner u otro)** están pendientes de una
-> sesión futura con esas credenciales — decisión de alcance explícita de Julio, ver spec §0.
+> **Estado a 2026-07-27: COMPLETO Y REAL.** El mecanismo, el cron nocturno y el destino externo real
+> están los tres funcionando contra infraestructura real (ver §"Backup real en producción" más
+> abajo) — no queda ninguna pieza pendiente de esta tarea.
 
 ## Qué hace cada pieza
 
@@ -87,20 +86,37 @@ facturas y OCR acumulado, backup y restore tardarán más — repetir esta medic
 representativo real cuando exista (recomendación para la sesión de despliegue futuro, no bloquea esta
 tarea).
 
-## Pendiente de una sesión futura con acceso a infraestructura real
+## Backup real en producción (2026-07-27)
 
-1. **Cron nocturno real en la VPS de producción**: un temporizador systemd o cron del sistema que
-   invoque `backup_database.py` cada noche. Elegir la hora de menor carga (madrugada, hora española).
-2. **Subida real a un destino externo (Hetzner Storage Box u otro)**: hoy el script escribe a una
-   ruta de fichero local; conectar esa ruta a una subida real (rclone/rsync/SFTP) es responsabilidad
-   de esa sesión futura, con las credenciales de Hetzner que Julio proporcione entonces.
-3. **Política de retención**: cuántos backups diarios/semanales/mensuales conservar antes de borrar
-   los más antiguos — decisión de negocio pendiente, no implementada.
-4. **Verificar `max_connections`/espacio en disco de Hetzner** frente al tamaño real de los backups en
-   producción, una vez exista ese volumen — mismo espíritu que la recomendación de `db_pool_size` de
-   S5.5 frente a `max_connections` de Postgres.
-5. **Rol de Postgres dedicado a backups** (en vez de reutilizar el DSN admin de las migraciones): mejora
+- **Destino**: NO Hetzner (decisión de Julio) — otra VPS de Hostinger, `72.62.189.27`, físicamente
+  distinta de la que sirve la app (`2.24.8.109`). Ya tenía otros proyectos de Julio corriendo
+  (no era una máquina vacía dedicada); con 14 GB libres de margen es más que suficiente para
+  backups cifrados de la base de datos (decenas/cientos de KB cada uno, crecerá despacio) —
+  ampliable pagando más espacio en Hostinger si hiciera falta más adelante.
+- **Script real**: `infrastructure/backup_cron.sh` — genera el backup con la imagen `ops`, sube el
+  fichero por `scp` a `/opt/autoken-backups/panel-staging/` en esa VPS con la clave SSH dedicada
+  `~/.ssh/autoken_deploy_backups`. El DSN admin + `BACKUP_ENCRYPTION_KEY` se vuelcan en un fichero
+  de entorno temporal solo para el `docker run` puntual (nunca en argumentos ni en el `.env`
+  compartido).
+- **Cron**: `0 3 * * *` (03:00) en la VPS B, vía `crontab` del usuario `deploy` — log en
+  `/home/deploy/logs/autoken-backup.log` (`/var/log` no es escribible por `deploy`).
+- **Verificado de extremo a extremo, no solo la subida**: backup real generado (78 911 bytes) →
+  subido a la VPS de backups → descargado de vuelta → restaurado con `restore_drill.py` contra una
+  base de datos nueva y vacía → recuento de filas coincide con el origen.
+- **Hallazgo real durante esta verificación**: el `postgresql-client` sin versión de la imagen `ops`
+  resolvía a v17 (paquete Debian actual) contra un servidor v16 real — el volcado/restauración v17
+  incluye `SET transaction_timeout = 0`, un parámetro que no existe en v16 ("unrecognized
+  configuration parameter"), y el restore fallaba de verdad. Corregido instalando
+  `postgresql-client-16` desde el repositorio oficial de PostgreSQL (PGDG) en vez del de Debian.
+
+## Pendiente (no bloquea, mejoras futuras)
+
+1. **Política de retención**: cuántos backups diarios/semanales/mensuales conservar antes de borrar
+   los más antiguos — decisión de negocio pendiente, no implementada (hoy se acumulan sin límite).
+2. **Rol de Postgres dedicado a backups** (en vez de reutilizar el DSN admin de las migraciones): mejora
    legítima de menor privilegio, decisión de infraestructura de producción (ver ADR-0019).
+3. **Verificar espacio en disco de la VPS de backups** periódicamente (hoy 14 GB libres, compartidos
+   con otros proyectos de Julio en esa misma máquina) frente al volumen real acumulado.
 
 ## Si se sospecha filtración de `BACKUP_ENCRYPTION_KEY`
 

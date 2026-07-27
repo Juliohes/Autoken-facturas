@@ -441,9 +441,19 @@
   bloqueado correctamente por el guard ADR-0014 — se separan admin/runtime con dos servicios de
   herramientas nuevos, `migrate`/`provision-app-role`); montaje anidado de Grafana dentro de otro
   `:ro` (fallaba "read-only file system" al arrancar); `traefik.docker.network` ausente con `api` en
-  dos redes (Traefik elegía la red equivocada, 504 real). **Backups reales (S5.3) siguen
-  pendientes**: Julio decidió NO usar Hetzner (la VPS ya está en Hostinger); destino elegido: otra
-  VPS de Hostinger (`72.62.189.27`), ya contratada — pendiente de conectar el acceso SSH.
+  dos redes (Traefik elegía la red equivocada, 504 real). **Backups reales (S5.3) COMPLETOS
+  (2026-07-27), PR #117 — última pieza pendiente de todo el Sprint 5, ya cerrada**: destino real
+  NO Hetzner (decisión de Julio, ya está todo en Hostinger) — otra VPS de Hostinger
+  (`72.62.189.27`), físicamente distinta de la que sirve la app. Nuevo `infrastructure/
+  backup_cron.sh` + cron real (03:00) ya configurado en la VPS. **Verificado de extremo a extremo,
+  no solo la subida**: backup real generado → subido por SSH → descargado → restaurado con
+  `restore_drill.py` contra una base de datos nueva y vacía → recuento de filas coincide con el
+  origen. **Segundo hallazgo real del despliegue**: el `postgresql-client` de la imagen `ops`
+  resolvía a v17 (paquete Debian sin versión fijada) contra el servidor real v16 — el volcado v17
+  incluye `SET transaction_timeout = 0`, inexistente en v16, y el restore fallaba de verdad
+  ("unrecognized configuration parameter"). Corregido instalando `postgresql-client-16` desde el
+  repositorio oficial de PostgreSQL (PGDG), no el de Debian (que no ofrece versiones antiguas en
+  paralelo) — ver `docs/runbooks/backups-restore.md`.
 - **Frontend real añadido al despliegue (2026-07-27), PR #115**: `frontend/Dockerfile` (build Node
   20 + `nginx` sirviendo solo el estático, mismo patrón que `/opt/autoken/`) enganchado en el mismo
   host que la API (`panel-staging.autoken.es`) — el router de `api` pasa a exigir `PathPrefix(/api)`
