@@ -591,16 +591,40 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   pública de la aplicación) tenga esa comprobación. 683 pruebas automáticas del motor, todas en
   verde.
 
+- **Primer despliegue real de verdad, en la máquina de verdad** (27/07/2026): hasta ahora todo lo
+  construido se había probado contra bases de datos y servidores de prueba, nunca puesto a
+  funcionar de verdad en la máquina donde algún día atenderá a usuarios reales. Esta vez sí: se dejó
+  la aplicación completa (con su base de datos, su cola de trabajos, su almacén de ficheros)
+  funcionando de verdad en la VPS B, con una dirección web real y un candado (HTTPS) real y válido
+  emitido por una autoridad de verdad (Let's Encrypt) — no un candado de prueba. También se dejó
+  funcionando de verdad el panel de vigilancia (el "S5.6" de antes): ahora hay un ordenador
+  observando la aplicación real, con las 4 alarmas configuradas todas en estado saludable.
+  Descubrimiento curioso por el camino: la propia sesión de trabajo donde se ha construido casi todo
+  este proyecto ha resultado ser, sin saberlo hasta ahora, la propia máquina de destino — no un
+  simulacro aparte, como se pensaba.
+
+  Al intentar encenderlo de verdad aparecieron 3 averías reales que ninguna prueba automática podía
+  haber visto antes (solo se ven encendiendo el motor real, no con el motor de pruebas): la más
+  importante, un lío de nombres que hacía que la "llave maestra" de la base de datos y la "llave del
+  día a día" de la aplicación fueran sin querer la misma persona — como si el guardia de seguridad
+  del banco y el cajero fueran la misma persona con la misma llave, cuando deberían ser distintos.
+  El propio sistema de seguridad ya construido en una tarea anterior (S5.2) lo detectó solo y se
+  negó a arrancar, exactamente para eso está — se corrigió separando de verdad ambas llaves. Las
+  otras dos eran más pequeñas: una carpeta mal colocada que impedía arrancar el panel de vigilancia,
+  y una señal despistada que hacía que el "portero" (Traefik, quien dirige el tráfico a la puerta
+  correcta) mirara por la ventana equivocada.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
   facturas (S3.3 solo trajo la capacidad de corregir con seguridad, no la pantalla para hacerlo cómodo),
   si hace falta más adelante.
 - **Sprint 4 COMPLETO** (S4.1-S4.7 cerrados 24/07/2026 — panel de plataforma + white-label + PWA
-  multi-tenant). S4.6 se cerró con alcance acotado (ver entrada de arriba): la mitad de
-  infraestructura real (el servidor emitiendo certificados de un dominio de verdad) queda
-  pendiente de una sesión futura con acceso al servidor de producción/staging y a un dominio real
-  — dominio ya reservado para esa prueba: `setex-facturas.autoken.es`.
+  multi-tenant). S4.6 se cerró con alcance acotado (ver entrada de arriba): el caso de subdominios
+  nuestros (`panel-staging.autoken.es`) ya tiene certificado real de verdad desde el 27/07/2026 (ver
+  entrada de arriba); sigue pendiente el caso de un dominio propio de una gestoría cliente
+  (`setex-facturas.autoken.es` sigue reservado para esa prueba concreta), que es un mecanismo más
+  complejo (el dominio no se conoce de antemano).
 - **Sprint 2 COMPLETO** con el cierre de S2.2 (24/07/2026) — verificación en dispositivo real
   pendiente (ver entrada de arriba), igual que la infra de S4.6.
 - **Lote de cierre de backlog previo al Sprint 5 — COMPLETO** (decidido con Julio el 24/07/2026):
@@ -609,13 +633,11 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
 - **Sprint 5 (hardening+QA) COMPLETO** (25-26/07/2026, orden acordado con Julio): las 6 tareas —
   S5.1 (cabeceras y límites), S5.6 (monitorización y alertas), S5.2 (cifrado por tenant), S5.4
   (pentest propio), S5.5 (pruebas de carga) y S5.3 (backups + restore drill) — cerradas y mergeadas.
-  Tres piezas de infraestructura real quedan explícitamente pendientes de sesiones futuras con acceso
-  a esa infraestructura (mismo patrón en las tres, decisión de alcance ya confirmada por Julio en cada
-  una, no bloquean el roadmap): el stack de monitorización de S5.6 (Prometheus/Grafana/Alertmanager)
-  está construido pero no desplegado de verdad contra la VPS B; el cron nocturno real + la subida a un
-  destino externo (Hetzner) de S5.3 está construido y probado pero no conectado a un destino real; el
-  script de rotación de clave de S5.2 no se ha ejecutado nunca contra datos reales (no hace falta
-  salvo sospecha de filtración).
+  El stack de monitorización de S5.6 ya está desplegado y funcionando de verdad contra la VPS B
+  desde el 27/07/2026 (ver entrada de arriba). Quedan pendientes: el cron nocturno real + la subida
+  a un destino externo de S5.3 (decisión ya tomada: otro VPS/Storage de Hostinger, no Hetzner —
+  falta contratarlo); el script de rotación de clave de S5.2 no se ha ejecutado nunca contra datos
+  reales (no hace falta salvo sospecha de filtración).
 - **Fase de despliegue**: el día que Setex (la v1 actual) se apaga y todo el mundo pasa a usar esta versión
   nueva.
 
