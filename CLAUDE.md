@@ -522,6 +522,17 @@
     UE (§11.7). Candidatos alternativos investigados: **dots.ocr** (autoalojable, resuelve RGPD de raíz),
     Qwen2.5-VL 72B, InternVL3 76B.
   - **Formato IVA sin ".0"/",0" superfluo**: implementado (`percentage.ts`, PR #78).
+- **CLI de aprovisionamiento de cuentas + favicon por defecto (28/07/2026), PR #127/#128**:
+  migración 0023 con 3 funciones `SECURITY DEFINER` (`provision_platform_admin`/
+  `provision_tenant_account`/`revoke_platform_admin`, mismo patrón que `create_tenant`) +
+  `scripts/create_account.py` (`platform-admin`/`tenant-account`/`revoke-platform-admin`/
+  `reissue-activation`), cerrando el hueco que ya avisaba `identity/activation.py` de que las
+  cuentas sembradas (sin autoservicio) se creaban con un INSERT SQL suelto a mano. Resuelve la
+  decisión de las 3 cuentas `tech`: soporte deja de ser `platform_admin`; Alberto y Julio pasan a
+  tener además `tenant_admin` propio en `setex` e `ilex`, sin tocar las cuentas reales de Carlos
+  Bernáldez/Javier Novillo. Pendiente: ejecutar las altas contra la VPS real (migración + script
+  aún no desplegados). De paso, `faviconUrl` cae al logo real de Autoken por defecto (antes ningún
+  favicon, decisión S4.3 revertida). 711 tests backend + 191 frontend en verde.
 
 ---
 
