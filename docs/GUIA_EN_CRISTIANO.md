@@ -691,6 +691,23 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   descifrados y bajando una de las fotos de verdad del almacén. Quedan 3 cuentas del equipo interno
   de Autoken por decidir con Julio (si deben tener acceso a todo el sistema o no).
 
+- **Las 3 cuentas tech, resueltas, y un "cartero" para dar de alta cuentas nuevas** (28/07/2026):
+  Julio decidió cómo repartir las 3 cuentas del equipo interno: Alberto y Julio tienen acceso
+  completo a la plataforma (`platform_admin`, ya lo tenían); soporte deja de tenerlo y pasa a ser
+  una cuenta normal de prueba, tanto en `setex` como en `ilex`. Para montar esto (y las cuentas de
+  administrador de asesoría de Julio/Alberto en cada tenant, sin tocar las de Carlos/Javier, que son
+  reales de un cliente) hacía falta algo que no existía: un "cartero" que diera de alta cuentas
+  nuevas sin necesidad de tocar la base de datos a mano. Se construyó `scripts/create_account.py`:
+  crea la cuenta y entrega un enlace de un solo uso para que cada persona active la suya y elija su
+  propia contraseña — nadie, ni el propio Claude Code, puede fijarle la contraseña a otra persona,
+  a propósito (así funciona desde el principio del proyecto). Pendiente: ejecutar estos altas contra
+  los datos reales de la VPS (el mecanismo ya está construido y con tests, falta desplegarlo).
+
+- **La pestaña del navegador ya lleva el logo de Autoken** (28/07/2026): antes, al abrir la app en
+  cualquier tenant sin un logo propio configurado, la pestaña se quedaba con el icono genérico del
+  navegador (una decisión tomada a propósito en su momento). Julio pidió tener un logo real ahí;
+  ahora usa el mismo logo de Autoken que ya se ve dentro de la app.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
