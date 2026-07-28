@@ -65,8 +65,14 @@ esta VPS (HTTP-01: Let's Encrypt valida por HTTP antes de emitir).
   Traefik con HTTP-01 funciona bien para dominios conocidos de antemano (como este), pero un dominio
   arbitrario que un tenant añada en caliente necesita un mecanismo dinámico de routers/certificados
   (fuera de alcance de esta sesión) — tarea aparte.
-- Procesar de verdad las 20 facturas reales de `entregas/facturas/` contra el tenant `setex` (subida
-  + cola OCR) — la credencial ya está conectada (ver más abajo), falta hacer la subida.
+- Las 20 facturas reales de `entregas/facturas/` (recogidas en su día para el bench de OCR de Fase 1,
+  README de `entregas/`) NO corresponden a ninguna de las 61 empresas reales de Setex ya cargadas en
+  `setex` — comprobado abriendo varias: el "Cliente" de la factura (p. ej. "Estudio Inghervi, S.L.U.",
+  "Ingenieros Consultores Global Energy S.L.") no aparece en el Excel de las 61. Decisión de Julio
+  (2026-07-27): dejarlas fuera por ahora, no forzar una asignación de empresa que no sea real.
+  Retomar solo si Julio decide crear esas empresas de verdad en `setex` (una por factura) o traer
+  facturas ya vinculadas a las 61 existentes. La credencial real de Vertex/Gemini ya está conectada
+  (ver más abajo) para cuando se retome.
 
 ## Tenants reales servidos por este despliegue (actualizado 2026-07-27)
 
