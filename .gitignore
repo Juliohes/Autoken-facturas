@@ -81,6 +81,9 @@ docs/ocr-eval/**/*.png
 docs/ocr-eval/**/*.jpg
 docs/ocr-eval/**/*.jpeg
 entregas/
+# Exportación real de migración de Setex (usuarios, empresas, facturas + imágenes reales, hashes
+# bcrypt heredados): igual que `entregas/`, nunca sale del entorno ni se sube al repo.
+docs/export-migracion/
 
 # === Claude Code (config local) ==========================================
 .claude/settings.local.json

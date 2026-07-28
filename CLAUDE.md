@@ -483,7 +483,29 @@
   escritas aquí). De paso, `secrets/vertex-sa.json` (antes placeholder `{}`) se sustituyó por la credencial
   real ya existente en el VPS (`secrets/autoken-ocr-91836920aea8.json`, proyecto `autoken-ocr`, mismo que usó
   el bench de Fase 1) para que el worker pueda procesar OCR real — pendiente: subir y procesar las 20 facturas
-  reales de `entregas/facturas/` contra `setex`.
+  reales de `entregas/facturas/` contra `setex`. Nota: esas 20 no casan con ninguna de las 61 (ver más abajo).
+- **Migración real de Setex — datos de producción (2026-07-28)** — Julio entregó en
+  `docs/export-migracion/2026-07-28/` (gitignored, nunca se sube) la exportación REAL de la BD de
+  producción de Setex (`/opt/setex/prod`): 52 empresas del catálogo (sustituyen a las 61 del Excel
+  antiguo, que resultaron ser un dataset distinto/desactualizado), 9 usuarios reales y 29 facturas ya
+  confirmadas con sus imágenes originales (17 MB). Contraseñas: SETEX usa bcrypt, la app Argon2id —
+  inconvertible sin la contraseña en claro. Solución implementada (migración perezosa, PR pendiente
+  de mergear): `users.legacy_bcrypt_hash` (migración `0022_legacy_bcrypt_migration`) +
+  `identity.service.authenticate` verifica contra el bcrypt heredado en el primer login y migra sola
+  a Argon2id en ese instante (patrón estándar Dropbox/Slack/WordPress). Nueva función SQL
+  `migrate_platform_admin_password` (SECURITY DEFINER, mismo motivo que `find_platform_admin`: la
+  RLS de `users` no deja pasar un `platform_admin` desde una sesión sin tenant). 6 tests nuevos
+  (`test_auth_legacy_bcrypt_migration.py`), 0 regresiones en el resto de la suite (ruff/mypy limpios).
+  Importado en el VPS real: 52 empresas, 6 cuentas reales de cara al cliente (2 `admin`→`tenant_admin`
+  — Carlos Bernáldez, Javier Novillo — y 4 `user` con su membership ya vinculada por CIF — Lumapa2
+  Brokers, Sandra González, Ruta del Corcho, Churrería Leitón), 29 facturas reales + sus imágenes
+  (subidas a MinIO, ya en estado `confirmed`, verificadas por SQL descifrado + descarga real del
+  objeto). Verificado: `counterparty_cif_status='unverified'` a propósito (no se re-verifica ahora
+  algo que ya se confirmó en su día en Setex). **Pendiente de Julio**: qué hacer con las 3 cuentas
+  `tech` (soporte interno de Autoken — él mismo ya tiene su platform_admin real; faltan
+  `albertomurimarti@gmail.com` y `soporte@autoken.es` por decidir si se crean como `platform_admin`
+  — acceso a TODOS los tenants, no solo Setex). Las 20 facturas de `entregas/facturas/` (bench OCR de
+  Fase 1) siguen sin relación con estas 52/61 empresas, dataset totalmente aparte.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:

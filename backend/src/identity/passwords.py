@@ -8,6 +8,7 @@ hash señuelo cuando recibe `None`, de modo que el coste temporal es comparable 
 
 from __future__ import annotations
 
+import bcrypt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
@@ -47,3 +48,16 @@ def verify_password(password: str, password_hash: str | None) -> bool:
     except (VerifyMismatchError, VerificationError, InvalidHashError):
         return False
     return password_hash is not None
+
+
+def verify_legacy_bcrypt(password: str, legacy_bcrypt_hash: str) -> bool:
+    """Verifica `password` contra un hash bcrypt heredado (migración perezosa, migración 0022).
+
+    Solo se llama cuando `password_hash` (Argon2id) todavía es `None` — cuentas reales importadas
+    de Setex que aún no han hecho su primer login en la app nueva. Un hash inválido/corrupto se
+    trata como "no coincide", nunca como error 500 (mismo criterio defensivo que `verify_password`).
+    """
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), legacy_bcrypt_hash.encode("utf-8"))
+    except ValueError:
+        return False

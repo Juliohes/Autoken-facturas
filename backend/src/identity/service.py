@@ -22,7 +22,7 @@ from dataclasses import dataclass
 import redis.asyncio as aioredis
 
 from identity import passwords, ratelimit, sessions
-from identity.repository import AuthUser, load_for_login
+from identity.repository import AuthUser, load_for_login, migrate_legacy_password
 from identity.totp import verify_code
 from shared.config import Settings
 from tenancy.constants import Role, UserStatus
@@ -116,9 +116,30 @@ async def authenticate(
 
     # La política de contraseña acota la longitud ANTES de hashear (defensa DoS). Si pasa, se hashea
     # siempre (con hash señuelo si no hay usuario) para no filtrar por latencia si el email existe.
-    password_ok = passwords.validate_password_policy(
-        password, settings
-    ) and passwords.verify_password(password, user.password_hash if user is not None else None)
+    policy_ok = passwords.validate_password_policy(password, settings)
+    password_ok = policy_ok and passwords.verify_password(
+        password, user.password_hash if user is not None else None
+    )
+
+    # Migración perezosa bcrypt -> Argon2id (migración 0022, cuentas reales importadas de Setex):
+    # solo se intenta cuando el Argon2id normal falló (o no existe todavía) Y queda un bcrypt
+    # heredado que probar. Introduce una diferencia de tiempo frente al camino normal (un
+    # `bcrypt.checkpw` de más) — trade-off aceptado del propio patrón estándar de migración
+    # perezosa (Dropbox/Slack/WordPress), asumible con las 9 cuentas reales de esta migración.
+    if (
+        not password_ok
+        and policy_ok
+        and user is not None
+        and user.password_hash is None
+        and user.legacy_bcrypt_hash is not None
+        and passwords.verify_legacy_bcrypt(password, user.legacy_bcrypt_hash)
+    ):
+        new_hash = passwords.hash_password(password)
+        await migrate_legacy_password(
+            resolved, platform_login=platform_login, user_id=user.id, new_password_hash=new_hash
+        )
+        password_ok = True
+
     if user is None or user.status != UserStatus.ACTIVE or not password_ok:
         await record_failure()
         return NeutralFailure()
