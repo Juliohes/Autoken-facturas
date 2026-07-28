@@ -130,12 +130,13 @@ describe('App (S4.2/S4.3 theming runtime + S4.9 C14)', () => {
     })
   })
 
-  it('S4.3 C6: sin favicon, no hay ningún <link rel="icon">', async () => {
+  it('S4.3 C6 (revisado): sin favicon propio, cae al logo real de Autoken en la pestaña', async () => {
     mockRoutes(makeTenant())
     renderApp()
 
     await waitFor(() => expect(document.title).toBe(DEFAULT_APP_NAME))
-    expect(document.querySelector('link[rel="icon"]')).toBeNull()
+    const link = document.querySelector('link[rel="icon"]')
+    expect(link).toHaveAttribute('href', DEFAULT_LOGO_URL)
   })
 
   it('C8: un fallo al cargar el tenant no bloquea el arranque ni muestra error', async () => {
