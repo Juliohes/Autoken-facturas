@@ -20,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from companies.service import tenant_encryption_key as company_encryption_key
 from shared.config import get_settings
+from shared.db import platform_session, tenant_session
 from shared.db import session as db_session
-from shared.db import tenant_session
 from tenancy.resolution import ResolvedTenant
 
 # Columnas del usuario necesarias para autenticar. Una sola definición (sin duplicar entre login y
@@ -217,6 +217,26 @@ async def resolve_user_company(tenant_id: UUID, user_id: str) -> CompanyRef:
     return CompanyRef(id=row.id, name=row.name)
 
 
+async def find_platform_admin_for_reissue(email: str) -> tuple[str, bool] | None:
+    """(user_id, ya_activada) de un `platform_admin` por email, o `None` si no existe.
+
+    Reutiliza `find_platform_admin` (SECURITY DEFINER, S1.3, el mismo camino del login) para que
+    `scripts/create_account.py reissue-activation` pueda reemitir un token de activación perdido sin
+    tocar la contraseña: si `password_hash` ya está fijado, la cuenta completó su activación y esto
+    ya no es un token perdido sino una contraseña olvidada (flujo distinto, no construido aquí).
+    """
+    async with db_session() as sess:
+        row = (
+            await sess.execute(
+                text("SELECT id, password_hash FROM find_platform_admin(:email)"),
+                {"email": email},
+            )
+        ).first()
+    if row is None:
+        return None
+    return str(row.id), row.password_hash is not None
+
+
 async def set_activation_password(user_id: str, password_hash: str) -> IdentityRow | None:
     """Fija la contraseña SOLO si la cuenta es activable (activa y sin contraseña); `None` si no.
 
@@ -244,3 +264,56 @@ async def enroll_totp(user_id: str, secret: str) -> None:
             {"uid": user_id, "secret": secret},
         )
         await sess.commit()
+
+
+async def create_platform_admin_account(email: str, *, is_admin_tech: bool = False) -> IdentityRow:
+    """Da de alta un `platform_admin` sembrado (migración 0023), pendiente de activación.
+
+    Vía `provision_platform_admin` (SECURITY DEFINER): único camino legítimo, nunca una conexión de
+    superusuario embebida en código de aplicación. Email duplicado -> `IntegrityError` (índice único
+    parcial de 0003), sin capturar aquí: la decide el llamante (CLI de `scripts/create_account.py`).
+    """
+    async with platform_session() as sess:
+        row = (
+            await sess.execute(
+                text(
+                    "SELECT id, email, role, is_admin_tech "
+                    "FROM provision_platform_admin(:email, :is_admin_tech)"
+                ),
+                {"email": email, "is_admin_tech": is_admin_tech},
+            )
+        ).one()
+    return IdentityRow(
+        id=str(row.id), email=row.email, role=row.role, is_admin_tech=row.is_admin_tech
+    )
+
+
+async def create_tenant_account(tenant_id: str, email: str, role: str) -> IdentityRow:
+    """Da de alta un `tenant_admin`/`user` sembrado directamente (sin el registro+aprobación de
+    S1.4), pendiente de activación. Vía `provision_tenant_account` (SECURITY DEFINER, migración
+    0023); `role='platform_admin'` lo rechaza la propia función SQL."""
+    async with platform_session() as sess:
+        row = (
+            await sess.execute(
+                text("SELECT id, email, role FROM provision_tenant_account(:tid, :email, :role)"),
+                {"tid": tenant_id, "email": email, "role": role},
+            )
+        ).one()
+    return IdentityRow(id=str(row.id), email=row.email, role=row.role)
+
+
+async def revoke_platform_admin_account(email: str) -> str | None:
+    """Da de baja (DELETE) un `platform_admin` existente; `None` si no había ninguno con ese email.
+
+    Vía `revoke_platform_admin` (SECURITY DEFINER, migración 0023). Deliberadamente NO reasigna la
+    fila a un tenant (evitaría arrastrar `password_hash`/`totp_secret` ya fijados de la cuenta de
+    plataforma) — dar de alta la cuenta de tenant nueva es un paso aparte, `create_tenant_account`.
+    """
+    async with platform_session() as sess:
+        row = (
+            await sess.execute(
+                text("SELECT id FROM revoke_platform_admin(:email)"),
+                {"email": email},
+            )
+        ).first()
+    return str(row.id) if row is not None else None
