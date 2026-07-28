@@ -73,8 +73,8 @@ describe('resolveTheme (S4.2)', () => {
     )
   })
 
-  it('S4.3: faviconUrl es null cuando el tenant no tiene favicon', () => {
-    expect(resolveTheme(makeTenant()).faviconUrl).toBeNull()
+  it('faviconUrl cae al logo real de Autoken cuando el tenant no tiene el suyo propio', () => {
+    expect(resolveTheme(makeTenant()).faviconUrl).toBe(DEFAULT_LOGO_URL)
   })
 
   it('S4.3: faviconUrl se propaga tal cual cuando existe', () => {

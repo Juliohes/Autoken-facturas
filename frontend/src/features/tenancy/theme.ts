@@ -20,19 +20,21 @@ export interface AppliedTheme {
   colorPrimary: string
   colorSecondary: string
   logoUrl: string | null
-  // Sin default (S4.3 decisión 4): hoy no hay favicon propio, "Setex tal cual hoy" es no tener
-  // ninguno, no inventar uno por defecto.
   faviconUrl: string | null
 }
 
-/** Branding del tenant (o su ausencia) -> tema a aplicar. Cada campo cae a su propio default. */
+/** Branding del tenant (o su ausencia) -> tema a aplicar. Cada campo cae a su propio default.
+ *
+ * `faviconUrl` reutiliza `DEFAULT_LOGO_URL` (mismo fichero estático): revierte la decisión S4.3 de
+ * no tener favicon por defecto (Julio, 2026-07-28) para que la pestaña del navegador muestre el
+ * logo real de Autoken en vez del icono genérico, incluso sin branding propio configurado. */
 export function resolveTheme(tenant: CurrentTenant | undefined): AppliedTheme {
   return {
     appName: tenant?.app_name ?? DEFAULT_APP_NAME,
     colorPrimary: tenant?.color_primary ?? DEFAULT_COLOR_PRIMARY,
     colorSecondary: tenant?.color_secondary ?? DEFAULT_COLOR_SECONDARY,
     logoUrl: tenant?.logo_url ?? DEFAULT_LOGO_URL,
-    faviconUrl: tenant?.favicon ?? null,
+    faviconUrl: tenant?.favicon ?? DEFAULT_LOGO_URL,
   }
 }
 
