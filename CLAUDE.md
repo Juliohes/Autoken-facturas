@@ -501,11 +501,20 @@
   Brokers, Sandra González, Ruta del Corcho, Churrería Leitón), 29 facturas reales + sus imágenes
   (subidas a MinIO, ya en estado `confirmed`, verificadas por SQL descifrado + descarga real del
   objeto). Verificado: `counterparty_cif_status='unverified'` a propósito (no se re-verifica ahora
-  algo que ya se confirmó en su día en Setex). **Pendiente de Julio**: qué hacer con las 3 cuentas
-  `tech` (soporte interno de Autoken — él mismo ya tiene su platform_admin real; faltan
-  `albertomurimarti@gmail.com` y `soporte@autoken.es` por decidir si se crean como `platform_admin`
-  — acceso a TODOS los tenants, no solo Setex). Las 20 facturas de `entregas/facturas/` (bench OCR de
-  Fase 1) siguen sin relación con estas 52/61 empresas, dataset totalmente aparte.
+  algo que ya se confirmó en su día en Setex). Las 3 cuentas `tech` ya resueltas: Julio confirmó
+  crear `albertomurimarti@gmail.com` y `soporte@autoken.es` como `platform_admin` (él mismo ya tenía
+  la suya); TOTP generado y entregado a Julio para repartir. Las 20 facturas de `entregas/facturas/`
+  (bench OCR de Fase 1) siguen sin relación con estas 52/61 empresas, dataset totalmente aparte.
+- **Hallazgo real: el `.env` real filtraba en los tests locales (2026-07-28)** — en esta VPS (dev/test
+  Y despliegue real en el mismo checkout), `pytest` local recogía sin pedirlo las credenciales reales
+  de MinIO del `.env` del despliegue (`shared.config.Settings` carga ese `.env` automáticamente),
+  haciendo fallar ~130 tests con `StorageUnavailable` (primero no resolvía el host `minio`, luego con
+  `localhost:9000` a mano daba `InvalidAccessKeyId`). No era el contenedor `autoken-minio-test`
+  (se llegó a recrear sin cambiar el síntoma). Arreglado en la raíz: el fixture `authapi`
+  (`tests/conftest.py`) ahora fija `MINIO_ENDPOINT`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` de test con
+  `setdefault` ANTES de que `Settings()` los resuelva (mismo patrón ya usado para `REDIS_URL`) — una
+  variable de entorno real siempre gana al `.env`. Verificado sin fijar nada a mano: 37/37 tests
+  antes en rojo, ahora en verde. Detalle completo en `docs/runbooks/tests-locales-vps-b.md`.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:
