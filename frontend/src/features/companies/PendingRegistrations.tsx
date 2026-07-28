@@ -33,46 +33,48 @@ export function PendingRegistrations() {
       )}
 
       {rows.length > 0 && (
-        <table className="w-full text-left text-sm" data-testid="registrations-table">
-          <thead className="text-slate-400">
-            <tr>
-              <th className="p-2">Email</th>
-              <th className="p-2">Empresa</th>
-              <th className="p-2" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-700">
-            {rows.map((r) => (
-              <tr key={r.id} data-testid="registration-row">
-                <td className="p-2">{r.email}</td>
-                <td className="p-2">
-                  {r.company ?? '—'}
-                  {r.joins_existing_company && (
-                    <span className="ml-1 text-xs text-amber-400">(se une a empresa existente)</span>
-                  )}
-                </td>
-                <td className="p-2 space-x-2">
-                  <button
-                    type="button"
-                    disabled={decide.isPending}
-                    onClick={() => decide.mutate({ userId: r.id, decision: 'approve' })}
-                    className="text-emerald-400 underline disabled:opacity-40"
-                  >
-                    Aprobar
-                  </button>
-                  <button
-                    type="button"
-                    disabled={decide.isPending}
-                    onClick={() => decide.mutate({ userId: r.id, decision: 'reject' })}
-                    className="text-red-400 underline disabled:opacity-40"
-                  >
-                    Rechazar
-                  </button>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm" data-testid="registrations-table">
+            <thead className="text-slate-400">
+              <tr>
+                <th className="p-2">Email</th>
+                <th className="p-2">Empresa</th>
+                <th className="p-2" />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-700">
+              {rows.map((r) => (
+                <tr key={r.id} data-testid="registration-row">
+                  <td className="p-2">{r.email}</td>
+                  <td className="p-2">
+                    {r.company ?? '—'}
+                    {r.joins_existing_company && (
+                      <span className="ml-1 text-xs text-amber-400">(se une a empresa existente)</span>
+                    )}
+                  </td>
+                  <td className="p-2 space-x-2">
+                    <button
+                      type="button"
+                      disabled={decide.isPending}
+                      onClick={() => decide.mutate({ userId: r.id, decision: 'approve' })}
+                      className="text-emerald-400 underline disabled:opacity-40"
+                    >
+                      Aprobar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={decide.isPending}
+                      onClick={() => decide.mutate({ userId: r.id, decision: 'reject' })}
+                      className="text-red-400 underline disabled:opacity-40"
+                    >
+                      Rechazar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   )

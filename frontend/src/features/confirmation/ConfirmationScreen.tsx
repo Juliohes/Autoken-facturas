@@ -174,7 +174,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
             onChange={(v) => set({ irpf_amount: v })}
           />
           {form.tax_lines.map((line, i) => (
-            <div key={i} className="grid grid-cols-3 gap-2" data-testid={`tax-line-${i}`}>
+            <div key={i} className="grid grid-cols-3 gap-2 sm:gap-3" data-testid={`tax-line-${i}`}>
               <FieldRow
                 name={`tax_lines.${i}.iva_pct`}
                 label="% IVA"
