@@ -26,7 +26,7 @@ from tenancy.resolution import ResolvedTenant
 
 # Columnas del usuario necesarias para autenticar. Una sola definición (sin duplicar entre login y
 # `find_platform_admin`), para que el esquema quede en un único sitio.
-_AUTH_COLUMNS = "id, role, status, password_hash, totp_secret"
+_AUTH_COLUMNS = "id, role, status, password_hash, totp_secret, legacy_bcrypt_hash"
 
 
 @dataclass(frozen=True)
@@ -39,6 +39,9 @@ class AuthUser:
     status: str
     password_hash: str | None
     totp_secret: str | None
+    # Migración perezosa bcrypt -> Argon2id (migración 0022, cuentas reales importadas de Setex):
+    # `None` en cuanto el usuario complete su primer login (ver `identity.service.authenticate`).
+    legacy_bcrypt_hash: str | None
 
 
 @dataclass(frozen=True)
@@ -101,7 +104,40 @@ async def load_for_login(
         status=row.status,
         password_hash=row.password_hash,
         totp_secret=row.totp_secret,
+        legacy_bcrypt_hash=row.legacy_bcrypt_hash,
     )
+
+
+async def migrate_legacy_password(
+    resolved: ResolvedTenant | None, *, platform_login: bool, user_id: str, new_password_hash: str
+) -> None:
+    """Persiste el Argon2id recién generado y borra el bcrypt heredado (migración perezosa, 0022).
+
+    Se abre una sesión nueva y acotada (mismo criterio que el resto de escrituras de este módulo):
+    la de `load_for_login` ya se cerró antes de que el servicio decida si migrar. El mismo camino de
+    contexto que la lectura (`tenant_session`/`db_session`, según `platform_login`) para respetar la
+    RLS: un `platform_admin` vive fuera de cualquier tenant.
+    """
+    if resolved is not None:
+        async with tenant_session(resolved.id) as sess:
+            await sess.execute(
+                text(
+                    "UPDATE users SET password_hash = :hash, legacy_bcrypt_hash = NULL "
+                    "WHERE id = :uid"
+                ),
+                {"hash": new_password_hash, "uid": user_id},
+            )
+            await sess.commit()
+    elif platform_login:
+        # La RLS de `users` nunca deja pasar una fila con `tenant_id IS NULL` desde una sesión sin
+        # tenant (ni siquiera para UPDATE) — mismo motivo por el que `load_for_login` lee un
+        # `platform_admin` vía `find_platform_admin` (SECURITY DEFINER) en vez de un SELECT directo.
+        async with db_session() as sess:
+            await sess.execute(
+                text("SELECT migrate_platform_admin_password(:uid, :hash)"),
+                {"uid": user_id, "hash": new_password_hash},
+            )
+            await sess.commit()
 
 
 def _identity_row(row: object | None) -> IdentityRow | None:

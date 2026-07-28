@@ -674,6 +674,23 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   (la que ya se usó meses atrás para comparar motores de OCR) al proceso que lee facturas, para
   poder procesar de verdad las 20 facturas reales que aún faltan por subir.
 
+- **La migración de verdad: los datos reales de Setex, dentro** (28/07/2026): Julio entregó la
+  exportación real de la aplicación antigua de Setex (la que se usa hoy en el día a día, y que este
+  proyecto sustituirá cuando llegue el momento): 52 empresas de verdad (más afinadas que el Excel de
+  61 de la entrada anterior), 9 personas reales con cuenta, y 29 facturas ya revisadas y confirmadas
+  por ellos mismos, con sus fotos originales. Había un problema con las contraseñas: la aplicación
+  antigua las guarda cifradas con una "receta" (bcrypt) y la nueva usa otra distinta (Argon2)
+  — y es imposible, a propósito, convertir una en otra sin conocer la contraseña real de la persona
+  (si se pudiera, cifrar contraseñas no serviría de nada). La solución, que usan empresas grandes
+  como Dropbox o Slack cuando cambian de sistema: cada persona sigue entrando con su contraseña de
+  siempre, sin enterarse de nada raro, y en ese mismo instante, por dentro, la aplicación nueva
+  "traduce" su contraseña a la receta nueva y olvida la vieja para siempre. Así nadie tiene que
+  aprenderse una contraseña distinta ni se le pide que la escriba en ningún sitio raro. Se
+  importaron ya las 52 empresas, las 6 cuentas reales de empleados/clientes (2 personas de la
+  gestoría, 4 clientes) y las 29 facturas con sus fotos — comprobado leyendo los datos reales
+  descifrados y bajando una de las fotos de verdad del almacén. Quedan 3 cuentas del equipo interno
+  de Autoken por decidir con Julio (si deben tener acceso a todo el sistema o no).
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

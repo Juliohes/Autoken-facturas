@@ -28,6 +28,10 @@ dependencies = [
     "pyjwt>=2.9",
     "pyotp>=2.9",
     "redis>=5.0",
+    # Migración perezosa bcrypt -> Argon2id (migración 0022): dependencia TRANSITORIA, solo hace
+    # falta mientras queden cuentas reales importadas de Setex con `legacy_bcrypt_hash IS NOT NULL`
+    # (ver docstring de la migración y `identity/passwords.verify_legacy_bcrypt`).
+    "bcrypt>=4.0",
     # Derivación de claves por tenant (S5.2, `shared/encryption.py`, HKDF sobre la clave maestra).
     # Ya llegaba transitivamente (pyjwt/anthropic), se declara explícita al depender de ella directo.
     "cryptography>=43",

@@ -112,6 +112,10 @@ class User(Base):
     )
     email: Mapped[str] = mapped_column(Text, nullable=False)
     password_hash: Mapped[str | None] = mapped_column(Text)
+    # Migración perezosa bcrypt -> Argon2id (migración 0022) de las cuentas reales importadas de
+    # Setex: solo relleno mientras el usuario no haya hecho su primer login desde la migración; ver
+    # `identity/service.authenticate` y el docstring de la migración 0022.
+    legacy_bcrypt_hash: Mapped[str | None] = mapped_column(Text)
     role: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
     totp_secret: Mapped[str | None] = mapped_column(Text)
