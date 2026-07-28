@@ -11,6 +11,22 @@ from main import app
 
 _LOCAL_REDIS_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "redis"})
 
+# Credenciales de test de MinIO (mismas que `docker-compose.yml` deja por defecto para dev/CI: ver
+# `docs/runbooks/tests-locales-vps-b.md` para el hallazgo real que motivó esto, 2026-07-28). Se
+# aplican con `setdefault` (mismo criterio que `REDIS_URL` más abajo): `pydantic-settings` lee
+# `MINIO_ENDPOINT`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` tanto de variables de entorno reales como
+# del `.env` del proyecto (`shared.config.Settings`, `env_file=...`) — y una variable de entorno YA
+# presente en el proceso gana siempre a lo que diga ese fichero. En esta VPS concreta (dev/test Y
+# despliegue real en el mismo checkout) el `.env` real trae sus propias credenciales de MinIO de
+# producción; sin fijar aquí un valor de test ANTES de que `Settings` lo resuelva, los tests
+# intentaban escribir contra ese MinIO real (y fallaban, al no ser alcanzable desde fuera de la red
+# de Docker del despliegue) en vez de usar el MinIO de test local.
+_TEST_MINIO_DEFAULTS = {
+    "MINIO_ENDPOINT": "localhost:9000",
+    "MINIO_ACCESS_KEY": "minioadmin",
+    "MINIO_SECRET_KEY": "minioadmin",
+}
+
 
 def _assert_test_redis(url: str) -> None:
     """Aborta si `REDIS_URL` no parece de test, ANTES de vaciarla con `flushdb` (footgun F5).
@@ -54,8 +70,11 @@ async def authapi() -> AsyncIterator[tuple[httpx.AsyncClient, dict[str, str]]]:
     dsns = await provision_test_db()
     prev_db = os.environ.get("DATABASE_URL")
     prev_redis = os.environ.get("REDIS_URL")
+    prev_minio = {var: os.environ.get(var) for var in _TEST_MINIO_DEFAULTS}
     os.environ["DATABASE_URL"] = dsns["app_async"]
     os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
+    for var, default in _TEST_MINIO_DEFAULTS.items():
+        os.environ.setdefault(var, default)
     config.get_settings.cache_clear()
     await db_module.dispose_engine()
 
@@ -76,7 +95,8 @@ async def authapi() -> AsyncIterator[tuple[httpx.AsyncClient, dict[str, str]]]:
     finally:
         await db_module.dispose_engine()
         await redis_module.dispose_redis()
-        for var, prev in (("DATABASE_URL", prev_db), ("REDIS_URL", prev_redis)):
+        restores = [("DATABASE_URL", prev_db), ("REDIS_URL", prev_redis), *prev_minio.items()]
+        for var, prev in restores:
             if prev is None:
                 os.environ.pop(var, None)
             else:
