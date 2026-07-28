@@ -45,14 +45,14 @@ export function InvoiceHistory() {
 
 function HistoryRow({ entry }: { entry: HistoryEntry }) {
   return (
-    <li data-testid="history-row" className="flex items-center justify-between py-3">
-      <div>
-        <p className="font-medium">{entry.counterparty_name ?? '—'}</p>
+    <li data-testid="history-row" className="flex items-center justify-between gap-3 py-3">
+      <div className="min-w-0">
+        <p className="truncate font-medium">{entry.counterparty_name ?? '—'}</p>
         <p className="text-sm text-slate-400">
           {entry.issue_date ?? '—'} · {DIRECTION_LABEL[entry.direction] ?? entry.direction}
         </p>
       </div>
-      <div className="text-right">
+      <div className="shrink-0 text-right">
         <p className="font-semibold">{entry.total_amount ?? '—'}</p>
         <p className="text-sm text-slate-400">{entry.counterparty_cif_status}</p>
       </div>

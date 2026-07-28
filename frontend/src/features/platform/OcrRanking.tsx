@@ -51,36 +51,38 @@ export function OcrRanking() {
       )}
 
       {ranking.data && ranking.data.length > 0 && (
-        <table className="w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-700 text-slate-400">
-              <th className="py-2 pr-4">Motor</th>
-              <th className="py-2 pr-4">Facturas leídas</th>
-              <th className="py-2 pr-4">Puntuación media</th>
-              <th className="py-2 pr-4">Primer puesto</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ranking.data.map((row) => (
-              <tr key={row.engine} className="border-b border-slate-800">
-                <td className="py-2 pr-4 font-medium">
-                  {row.engine}
-                  {ENGINES_SIN_CAMPOS_PROMPTABLES.has(row.engine) && (
-                    <span
-                      className="ml-2 text-xs font-normal text-slate-500"
-                      title="Este motor no es un modelo de lenguaje promptable: sus campos vienen de su propio esquema (Azure DocIntel) o siempre están vacíos por diseño de su API (Mistral OCR4), no por un fallo de lectura."
-                    >
-                      (sin campos estructurados por diseño de su API)
-                    </span>
-                  )}
-                </td>
-                <td className="py-2 pr-4">{row.invoices_read}</td>
-                <td className="py-2 pr-4">{row.average_score.toFixed(2)}</td>
-                <td className="py-2 pr-4">{row.first_place_count}</td>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-700 text-slate-400">
+                <th className="py-2 pr-4">Motor</th>
+                <th className="py-2 pr-4">Facturas leídas</th>
+                <th className="py-2 pr-4">Puntuación media</th>
+                <th className="py-2 pr-4">Primer puesto</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {ranking.data.map((row) => (
+                <tr key={row.engine} className="border-b border-slate-800">
+                  <td className="py-2 pr-4 font-medium">
+                    {row.engine}
+                    {ENGINES_SIN_CAMPOS_PROMPTABLES.has(row.engine) && (
+                      <span
+                        className="ml-2 text-xs font-normal text-slate-500"
+                        title="Este motor no es un modelo de lenguaje promptable: sus campos vienen de su propio esquema (Azure DocIntel) o siempre están vacíos por diseño de su API (Mistral OCR4), no por un fallo de lectura."
+                      >
+                        (sin campos estructurados por diseño de su API)
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4">{row.invoices_read}</td>
+                  <td className="py-2 pr-4">{row.average_score.toFixed(2)}</td>
+                  <td className="py-2 pr-4">{row.first_place_count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   )
