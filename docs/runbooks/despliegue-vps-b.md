@@ -61,14 +61,27 @@ esta VPS (HTTP-01: Let's Encrypt valida por HTTP antes de emitir).
 
 ## Pendiente (fuera de alcance de este despliegue)
 
-- Backups reales (S5.3): el mecanismo ya está construido y probado (`docs/runbooks/backups-restore.md`)
-  pero el cron + destino externo siguen sin conectar — pendiente de que Julio contrate el
-  VPS/Storage de Hostinger para backups.
 - Dominios propios de CLIENTE (que una gestoría use su propio dominio, no un subdominio nuestro):
   Traefik con HTTP-01 funciona bien para dominios conocidos de antemano (como este), pero un dominio
   arbitrario que un tenant añada en caliente necesita un mecanismo dinámico de routers/certificados
   (fuera de alcance de esta sesión) — tarea aparte.
-- Credenciales reales de IA (Azure/Vertex/Mistral) para este staging: no se ha verificado si el
-  `.env` ya las trae completas para el worker (`secrets/vertex-sa.json` es un placeholder `{}` por
-  ahora) — no hacía falta para validar TLS/monitorización/backups, pero el worker no procesará OCR
-  real hasta que se rellene de verdad.
+- Las 20 facturas reales de `entregas/facturas/` (recogidas en su día para el bench de OCR de Fase 1,
+  README de `entregas/`) NO corresponden a ninguna de las 61 empresas reales de Setex ya cargadas en
+  `setex` — comprobado abriendo varias: el "Cliente" de la factura (p. ej. "Estudio Inghervi, S.L.U.",
+  "Ingenieros Consultores Global Energy S.L.") no aparece en el Excel de las 61. Decisión de Julio
+  (2026-07-27): dejarlas fuera por ahora, no forzar una asignación de empresa que no sea real.
+  Retomar solo si Julio decide crear esas empresas de verdad en `setex` (una por factura) o traer
+  facturas ya vinculadas a las 61 existentes. La credencial real de Vertex/Gemini ya está conectada
+  (ver más abajo) para cuando se retome.
+
+## Tenants reales servidos por este despliegue (actualizado 2026-07-27)
+
+- `panel-staging.autoken.es`: host de plataforma (login `platform_admin`), no un tenant.
+- `ilex.autoken.es`: tenant **demo**, deliberadamente vacío (solo para probar el panel sin datos reales).
+- `setex.autoken.es`: tenant **real** — empresas y facturas reales de Setex (la app v1 que este
+  proyecto sustituye). Router Traefik `setex-api`/`setex-web` añadido con el mismo patrón
+  `.service=` explícito que `ilex-api`/`ilex-web` (ver comentarios en `docker-compose.prod.yml`).
+- Credenciales reales de IA para el worker: `secrets/vertex-sa.json` ya NO es el placeholder `{}` —
+  se sustituyó por la credencial real del proyecto `autoken-ocr` (la misma que usó el bench de Fase
+  1, `secrets/autoken-ocr-91836920aea8.json`), montada tal cual por el mismo volumen. `worker`
+  recreado para recogerla.

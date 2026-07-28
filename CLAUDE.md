@@ -473,6 +473,17 @@
   consistente). Logo real de Autoken como valor por defecto (antes ninguno). Verificado con
   capturas de pantalla reales (Playwright headless contra `panel-staging.autoken.es`, login
   incluido). 191 tests de frontend en verde.
+- **Corrección de tenant real (2026-07-27)** — las 61 empresas reales de Setex (`entregas/Empresas_CIF_NIF.xlsx`)
+  se habían cargado por error en el tenant demo `ilex`. Julio corrigió: `ilex.autoken.es` se queda vacío
+  (solo demo/pruebas), los datos reales van al tenant **`setex`** (`setex.autoken.es`, registro DNS ya
+  reservado desde la tarea 0.2). Hecho: tenant `setex` creado en BD; routers Traefik `setex-api`/`setex-web`
+  añadidos en `docker-compose.prod.yml` (mismo patrón `.service=` explícito que `ilex-api`/`ilex-web`); las 61
+  empresas migradas (descifradas con la clave derivada de `ilex`, re-cifradas con la de `setex`, borradas de
+  `ilex`); cuentas reales `tenant_admin`/`user` creadas en `setex` (credenciales entregadas a Julio, nunca
+  escritas aquí). De paso, `secrets/vertex-sa.json` (antes placeholder `{}`) se sustituyó por la credencial
+  real ya existente en el VPS (`secrets/autoken-ocr-91836920aea8.json`, proyecto `autoken-ocr`, mismo que usó
+  el bench de Fase 1) para que el worker pueda procesar OCR real — pendiente: subir y procesar las 20 facturas
+  reales de `entregas/facturas/` contra `setex`.
 - **Guía en cristiano viva**: `docs/GUIA_EN_CRISTIANO.md` (regla 13-bis) ya mergeada; se actualiza al cerrar
   cada tarea.
 - **Nuevas tareas decididas por Julio 2026-07-22 (detalle en plan §11.11)**:

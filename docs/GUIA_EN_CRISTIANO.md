@@ -660,6 +660,20 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   por defecto (antes no había ninguno). Comprobado con capturas de pantalla reales de la propia
   aplicación funcionando, antes y después.
 
+- **Las empresas reales, en el sitio correcto: `setex`, no `ilex`** (27/07/2026): se habían cargado
+  las 61 empresas reales (nombre y CIF) del Excel que entregó Julio en el tenant equivocado —
+  `ilex`, pensado como demo/pruebas vacías, no como el sitio de datos reales. Julio lo pilló al
+  vuelo: los datos reales de la gestoría **Setex** (la aplicación "de toda la vida" que este
+  proyecto está construido para sustituir) tienen que vivir en su propio tenant, `setex`, con su
+  propia dirección `setex.autoken.es` (que ya estaba reservada desde el principio del proyecto,
+  justo para esto). Se corrigió: se creó el tenant `setex` de verdad, se le abrió su propia puerta
+  de entrada (el mismo mecanismo de siempre, un "cartel" más en el portero automático que ya
+  reparte el tráfico entre inquilinos), se movieron las 61 empresas de `ilex` a `setex` (descifradas
+  y vueltas a cifrar con la clave que le corresponde a cada tenant, nunca mezclando claves), y se
+  dejó `ilex` vacío de nuevo, como debía estar. De paso, se conectó la credencial real de Google
+  (la que ya se usó meses atrás para comparar motores de OCR) al proceso que lee facturas, para
+  poder procesar de verdad las 20 facturas reales que aún faltan por subir.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
