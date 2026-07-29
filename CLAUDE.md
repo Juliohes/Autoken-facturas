@@ -530,9 +530,25 @@
   cuentas sembradas (sin autoservicio) se creaban con un INSERT SQL suelto a mano. Resuelve la
   decisión de las 3 cuentas `tech`: soporte deja de ser `platform_admin`; Alberto y Julio pasan a
   tener además `tenant_admin` propio en `setex` e `ilex`, sin tocar las cuentas reales de Carlos
-  Bernáldez/Javier Novillo. Pendiente: ejecutar las altas contra la VPS real (migración + script
-  aún no desplegados). De paso, `faviconUrl` cae al logo real de Autoken por defecto (antes ningún
-  favicon, decisión S4.3 revertida). 711 tests backend + 191 frontend en verde.
+  Bernáldez/Javier Novillo. De paso, `faviconUrl` cae al logo real de Autoken por defecto (antes
+  ningún favicon, decisión S4.3 revertida, luego afinada el 29/07 — ver más abajo). 711 tests
+  backend + 191 frontend en verde.
+- **Altas reales desplegadas + 2 huecos cerrados + logo definitivo (29/07/2026), PR #130-#134**:
+  desplegadas en la VPS real las 8 cuentas del equipo (migración 0023 + `create_account.py`; PR
+  #130/#131 arreglan el Dockerfile que no copiaba el script y el host `panel.autoken.es` mal escrito).
+  Al usarlas salieron dos huecos reales: (1) ninguna cuenta ya activada podía resetear su
+  contraseña — migración 0024 + subcomando `reset-password` (PR #132), mismo principio de siempre
+  (nadie fija la contraseña de otro, ni siquiera para resetearla: solo se borra la vieja y se
+  reemite un token). (2) un rol `user` (a diferencia de `tenant_admin`) exige estar vinculado a
+  EXACTAMENTE una empresa (regla 1-A) para poder entrar; `create_account.py` no lo hacía, así que
+  la cuenta de soporte (rol `user`) entraba pero fallaba al cargar su identidad — se creó una
+  empresa "fantasma" (sin datos reales) en `setex` e `ilex` y se vinculó soporte a cada una, vía
+  `companies.service.create_company` (mismo camino legítimo que usa un `tenant_admin`, no un INSERT
+  suelto). Logo: PR #133 quitó el texto "AUTOKEN/Automatización e IA" de TODA la app por error (más
+  de lo pedido); PR #134 lo corrigió: el logo completo con texto se queda dentro de la app
+  (login/menú), y el icono solo (sin texto) queda para el favicon de la pestaña y el icono de
+  instalación PWA (`icons/icon-192.png`/`icon-512.png`, que además era un cuadrado azul liso sin
+  marca desde siempre — ahora lleva el icono real).
 
 ---
 

@@ -708,6 +708,40 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   navegador (una decisión tomada a propósito en su momento). Julio pidió tener un logo real ahí;
   ahora usa el mismo logo de Autoken que ya se ve dentro de la app.
 
+- **Las 8 cuentas del equipo, ya activadas de verdad; y dos fallos que solo se ven al probarlo**
+  (29/07/2026): se llevó a la VPS real el "cartero" de cuentas (`create_account.py`) que había
+  quedado construido pero sin desplegar, y se usó para crear/activar las 8 cuentas decididas ayer:
+  Julio y Alberto como administradores de cada asesoría en `setex` e `ilex`, la cuenta de plataforma
+  de Alberto reactivada, y soporte como usuario normal de prueba en los dos tenants. Al ir
+  activándolas de verdad, con Julio y Alberto probando cada paso, salieron dos cosas que faltaban y
+  que ningún test había cazado porque nadie las había necesitado hasta ahora:
+  - **No existía forma de cambiar una contraseña ya puesta.** El "cartero" solo sabía dar de alta
+    cuentas nuevas; si alguien ya había fijado su contraseña (por error, o porque quería cambiarla),
+    no había ningún camino para repetirlo. Se construyó un comando nuevo, `reset-password`, con el
+    mismo principio de siempre: borra la contraseña vieja (y el segundo factor, si lo tenía) y deja
+    preparado un enlace nuevo de un solo uso para que la persona elija otra ella misma. Ni Claude
+    Code ni Julio llegan nunca a ver ni elegir esa contraseña.
+  - **Un "usuario normal" necesita tener una empresa asignada para poder entrar** (a diferencia de
+    un administrador de asesoría, que ve todas las empresas de su tenant). La cuenta de soporte se
+    había creado sin ninguna empresa vinculada: el login funcionaba, pero justo después fallaba con
+    "no se pudo cargar la identidad del usuario", porque el sistema no sabía qué datos enseñarle. Se
+    creó una empresa "fantasma" (sin ningún dato real, solo para poder probar el panel) en `setex` y
+    en `ilex`, y se vinculó soporte a cada una.
+  - De paso se descubrió (probando el login por el camino largo, con el navegador) que el
+    "Invalid credentials" que le salía a Julio dos veces no era un fallo del sistema: era que la
+    contraseña escrita en el comando de activación y la tecleada luego en el navegador no eran
+    exactamente la misma cadena de texto (un espacio, una letra, el propio navegador sugiriendo otra
+    distinta). Se comprobó el ciclo completo (activar + entrar) de un tirón, sin manos de por medio,
+    y funcionó a la primera: la aplicación estaba bien desde el principio.
+
+- **El logo, ida y vuelta** (29/07/2026): Julio pidió quitar el texto "AUTOMATIZACIÓN E IA" del
+  logo. El primer intento lo quitó de TODA la app (login, menú, pestaña del navegador), pero el
+  texto ahí dentro va bien: solo sobraba en los sitios pequeños, donde no cabe legible. Se corrigió:
+  dentro de la app (login, menú) se sigue viendo el logo completo con su texto; solo la pestaña del
+  navegador y el icono para "instalar" la app en el móvil llevan el dibujo solo, sin letras. De
+  paso se descubrió que ese icono de instalación llevaba años siendo un cuadrado azul liso, sin
+  ningún dibujo — ahora lleva el icono real de Autoken.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
