@@ -12,6 +12,7 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_COLOR_PRIMARY,
   DEFAULT_COLOR_SECONDARY,
+  DEFAULT_FAVICON_URL,
   DEFAULT_LOGO_URL,
 } from './features/tenancy/theme'
 import type { CurrentTenant } from './features/tenancy/types'
@@ -130,13 +131,13 @@ describe('App (S4.2/S4.3 theming runtime + S4.9 C14)', () => {
     })
   })
 
-  it('S4.3 C6 (revisado): sin favicon propio, cae al logo real de Autoken en la pestaña', async () => {
+  it('S4.3 C6 (revisado): sin favicon propio, cae al icono (sin texto) en la pestaña', async () => {
     mockRoutes(makeTenant())
     renderApp()
 
     await waitFor(() => expect(document.title).toBe(DEFAULT_APP_NAME))
     const link = document.querySelector('link[rel="icon"]')
-    expect(link).toHaveAttribute('href', DEFAULT_LOGO_URL)
+    expect(link).toHaveAttribute('href', DEFAULT_FAVICON_URL)
   })
 
   it('C8: un fallo al cargar el tenant no bloquea el arranque ni muestra error', async () => {

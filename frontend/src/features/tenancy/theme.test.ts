@@ -5,6 +5,7 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_COLOR_PRIMARY,
   DEFAULT_COLOR_SECONDARY,
+  DEFAULT_FAVICON_URL,
   DEFAULT_LOGO_URL,
   applyTenantTheme,
   resolveTheme,
@@ -73,8 +74,8 @@ describe('resolveTheme (S4.2)', () => {
     )
   })
 
-  it('faviconUrl cae al logo real de Autoken cuando el tenant no tiene el suyo propio', () => {
-    expect(resolveTheme(makeTenant()).faviconUrl).toBe(DEFAULT_LOGO_URL)
+  it('faviconUrl cae al icono (sin texto) cuando el tenant no tiene el suyo propio', () => {
+    expect(resolveTheme(makeTenant()).faviconUrl).toBe(DEFAULT_FAVICON_URL)
   })
 
   it('S4.3: faviconUrl se propaga tal cual cuando existe', () => {
