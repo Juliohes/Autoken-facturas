@@ -27,6 +27,7 @@ RUN pip install --no-deps "arq>=0.26"
 RUN useradd --create-home --uid 10001 appuser
 COPY alembic.ini ./
 COPY migrations ./migrations
+COPY scripts/create_account.py ./scripts/
 RUN chown -R appuser:appuser /app
 
 # --- Imagen "ops": herramientas de mantenimiento (backup/restore, S5.3) -------------------------
