@@ -18,6 +18,7 @@ Uso (desde `backend/`, con el venv activado y `DATABASE_URL`/`REDIS_URL` reales 
     python scripts/create_account.py tenant-account --tenant-slug setex --email x@... \
         --role tenant_admin
     python scripts/create_account.py revoke-platform-admin --email soporte@autoken.es
+    python scripts/create_account.py reset-password --email x@... [--tenant-slug setex]
     python scripts/create_account.py reissue-activation --email alberto@...  # token perdido
 """
 
@@ -70,6 +71,29 @@ async def _revoke_platform_admin(email: str) -> None:
     print(f"Revocado: '{email}' (id {revoked_id}) ya no es platform_admin.")
 
 
+async def _reset_password(email: str, tenant_slug: str | None) -> None:
+    tenant_id: str | None = None
+    host = "panel-staging.autoken.es"
+    if tenant_slug is not None:
+        resolved = await resolve_tenant(tenant_slug)
+        if resolved is None:
+            print(f"No existe ningún tenant activo con slug '{tenant_slug}'.", file=sys.stderr)
+            raise SystemExit(2)
+        tenant_id = str(resolved.id)
+        host = f"{tenant_slug}.autoken.es"
+
+    reset_id = await repository.reset_account_password(email, tenant_id)
+    if reset_id is None:
+        print(
+            f"No había ninguna cuenta activada con email '{email}' en ese ámbito "
+            "(o aún no tiene contraseña fijada: eso es reissue-activation, no reset-password).",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    token = await issue_activation_token(reset_id)
+    _print_next_steps(email, "reseteada", token, host=host)
+
+
 async def _reissue_activation(email: str) -> None:
     found = await repository.find_platform_admin_for_reissue(email)
     if found is None:
@@ -79,8 +103,7 @@ async def _reissue_activation(email: str) -> None:
     if already_activated:
         print(
             f"'{email}' ya completó su activación (tiene contraseña propia): esto no es un token "
-            "perdido, es una contraseña olvidada. No hay flujo de reseteo de contraseña construido "
-            "todavía; hace falta uno nuevo si de verdad la perdió.",
+            "perdido, es una contraseña olvidada. Usa 'reset-password' en su lugar.",
             file=sys.stderr,
         )
         raise SystemExit(1)
@@ -106,6 +129,14 @@ def main() -> None:
     p_revoke = sub.add_parser("revoke-platform-admin", help="Baja de un platform_admin existente")
     p_revoke.add_argument("--email", required=True)
 
+    p_reset = sub.add_parser(
+        "reset-password", help="Resetea la contraseña de una cuenta ya activada (migración 0024)"
+    )
+    p_reset.add_argument("--email", required=True)
+    p_reset.add_argument(
+        "--tenant-slug", help="Omitir para una cuenta platform_admin (sin tenant)"
+    )
+
     p_reissue = sub.add_parser(
         "reissue-activation", help="Reemite el token de un platform_admin que aún no se activó"
     )
@@ -119,6 +150,8 @@ def main() -> None:
             asyncio.run(_tenant_account(args.tenant_slug, args.email, args.role))
         elif args.command == "revoke-platform-admin":
             asyncio.run(_revoke_platform_admin(args.email))
+        elif args.command == "reset-password":
+            asyncio.run(_reset_password(args.email, args.tenant_slug))
         elif args.command == "reissue-activation":
             asyncio.run(_reissue_activation(args.email))
     except Exception as exc:

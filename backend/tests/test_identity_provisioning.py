@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from identity import repository
-from tests._dbtest import seed_tenant
+from tests._dbtest import fetch_credential_state, seed_tenant, seed_user
 
 Api = tuple[httpx.AsyncClient, dict[str, str]]
 
@@ -108,8 +108,6 @@ async def test_find_platform_admin_for_reissue_pendiente_de_activar(authapi: Api
 async def test_find_platform_admin_for_reissue_ya_activada(authapi: Api) -> None:
     """Una cuenta que ya fijó su contraseña no es un token perdido: es contraseña olvidada."""
     _client, dsns = authapi
-    from tests._dbtest import seed_user
-
     uid = await seed_user(
         dsns["admin"],
         tenant_id=None,
@@ -128,3 +126,81 @@ async def test_revocar_no_toca_cuentas_de_tenant_con_el_mismo_email(authapi: Api
     tenant_id = await seed_tenant(dsns["admin"], "setex", "Setex")
     await repository.create_tenant_account(tenant_id, "compartido@setex.test", "user")
     assert await repository.revoke_platform_admin_account("compartido@setex.test") is None
+
+
+async def test_resetear_contraseña_borra_hash_totp_y_legado_de_una_cuenta_de_tenant(
+    authapi: Api,
+) -> None:
+    """Reseteo de una cuenta ya activada: vuelve al estado "recién sembrada" (S1.3), de modo que
+    reemitir un token de activación permite fijar una contraseña nueva desde cero."""
+    _client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "setex", "Setex")
+    user_id = await seed_user(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        email="julio@setex.test",
+        role="tenant_admin",
+        password_hash="argon2-hash-de-mentira",
+        totp_secret="SECRETDEMENTIRA",
+        legacy_bcrypt_hash="bcrypt-hash-de-mentira",
+    )
+    reset_id = await repository.reset_account_password("julio@setex.test", tenant_id)
+    assert reset_id == user_id
+    state = await fetch_credential_state(dsns["admin"], user_id)
+    assert state == {"password_hash": None, "totp_secret": None, "legacy_bcrypt_hash": None}
+
+
+async def test_resetear_contraseña_de_un_platform_admin(authapi: Api) -> None:
+    _client, dsns = authapi
+    user_id = await seed_user(
+        dsns["admin"],
+        tenant_id=None,
+        email="alberto@autoken.es",
+        role="platform_admin",
+        password_hash="argon2-hash-de-mentira",
+    )
+    reset_id = await repository.reset_account_password("alberto@autoken.es", None)
+    assert reset_id == user_id
+    state = await fetch_credential_state(dsns["admin"], user_id)
+    assert state["password_hash"] is None
+
+
+async def test_resetear_contraseña_de_cuenta_aun_no_activada_no_hace_nada(authapi: Api) -> None:
+    """Sin contraseña previa no hay nada que resetear: no es un "token perdido" (ese es
+    `reissue-activation`), la función devuelve `None` sin tocar la fila."""
+    _client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "ilex", "I-Lex")
+    await seed_user(dsns["admin"], tenant_id=tenant_id, email="pendiente@ilex.test", role="user")
+    assert await repository.reset_account_password("pendiente@ilex.test", tenant_id) is None
+
+
+async def test_resetear_contraseña_no_confunde_el_mismo_email_en_distinto_ambito(
+    authapi: Api,
+) -> None:
+    """Mismo email como `platform_admin` y como cuenta de tenant (0003): resetear uno no toca el
+    otro, el ámbito (`tenant_id`) distingue cuál fila es."""
+    _client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "setex", "Setex")
+    platform_id = await seed_user(
+        dsns["admin"],
+        tenant_id=None,
+        email="compartido@autoken.es",
+        role="platform_admin",
+        password_hash="hash-plataforma",
+    )
+    await seed_user(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        email="compartido@autoken.es",
+        role="tenant_admin",
+        password_hash="hash-tenant",
+    )
+    reset_id = await repository.reset_account_password("compartido@autoken.es", tenant_id)
+    platform_state = await fetch_credential_state(dsns["admin"], platform_id)
+    assert platform_state["password_hash"] == "hash-plataforma"
+    assert reset_id is not None
+
+
+async def test_resetear_contraseña_de_email_inexistente_devuelve_none(authapi: Api) -> None:
+    _client, _dsns = authapi
+    assert await repository.reset_account_password("no-existe@autoken.es", None) is None

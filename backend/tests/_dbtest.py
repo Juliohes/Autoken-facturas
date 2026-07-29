@@ -186,6 +186,23 @@ async def seed_user(
         await conn.close()
 
 
+async def fetch_credential_state(admin_dsn: str, user_id: str) -> dict[str, str | None]:
+    """Lee `password_hash`/`totp_secret`/`legacy_bcrypt_hash` de un usuario (superusuario, sin RLS).
+
+    Seam de solo lectura para verificar en tests que un reseteo de contraseña realmente borró estos
+    tres campos (nunca a través del rol runtime, que no expone estas columnas por RLS de fila)."""
+    conn = await asyncpg.connect(admin_dsn)
+    try:
+        row = await conn.fetchrow(
+            "SELECT password_hash, totp_secret, legacy_bcrypt_hash FROM users WHERE id = $1",
+            user_id,
+        )
+        assert row is not None
+        return dict(row)
+    finally:
+        await conn.close()
+
+
 async def suspend_tenant(admin_dsn: str, tenant_id: str) -> None:
     """Marca un tenant como suspendido (superusuario). Su subdominio deja de resolver (S1.2)."""
     conn = await asyncpg.connect(admin_dsn)
