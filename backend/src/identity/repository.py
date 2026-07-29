@@ -317,3 +317,21 @@ async def revoke_platform_admin_account(email: str) -> str | None:
             )
         ).first()
     return str(row.id) if row is not None else None
+
+
+async def reset_account_password(email: str, tenant_id: str | None) -> str | None:
+    """Borra `password_hash`/`totp_secret`/`legacy_bcrypt_hash` de una cuenta ya activada; `None`
+    si no había ninguna cuenta activada con ese email en ese ámbito (`tenant_id=None` = plataforma).
+
+    Vía `reset_account_password` (SECURITY DEFINER, migración 0024): deja la cuenta en el estado
+    "recién sembrada" para que un nuevo `issue_activation_token` + `POST /auth/activate` permita
+    fijar una contraseña nueva desde cero, sin que esta pase nunca por el operador.
+    """
+    async with platform_session() as sess:
+        row = (
+            await sess.execute(
+                text("SELECT id FROM reset_account_password(:email, :tenant_id)"),
+                {"email": email, "tenant_id": tenant_id},
+            )
+        ).first()
+    return str(row.id) if row is not None else None
