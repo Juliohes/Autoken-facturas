@@ -4,10 +4,11 @@
 import type { CurrentTenant } from './types'
 
 export const DEFAULT_APP_NAME = 'Autoken Facturas'
-// Logo real de Autoken (variante clara, pensada para fondo oscuro — la misma que ya usa la web
-// corporativa `autoken.es` en su cabecera). Sirve de tenant estático (`frontend/public/`, mismo
-// origen), no una URL de terceros: no aplica el motivo de `referrerPolicy` de un logo de tenant.
-export const DEFAULT_LOGO_URL = '/autoken-logo.png'
+// Solo el icono (cerebro/circuito) de la marca Autoken, sin el lockup "AUTOKEN / Automatización e
+// IA": a este tamaño (login, cabecera del menú, favicon) el texto queda ilegible y sobra (Julio,
+// 2026-07-29). Sirve de tenant estático (`frontend/public/`, mismo origen), no una URL de
+// terceros: no aplica el motivo de `referrerPolicy` de un logo de tenant.
+export const DEFAULT_LOGO_URL = '/autoken-icon.png'
 // Naranja real de la marca Autoken (logo + web corporativa) — mismo valor que `emerald-600` en
 // `tailwind.config.js`, que es lo que de verdad pintan los botones principales de cada pantalla.
 export const DEFAULT_COLOR_PRIMARY = '#F26522'
