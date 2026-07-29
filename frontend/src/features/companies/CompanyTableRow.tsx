@@ -16,6 +16,7 @@ interface Props {
   onDelete: () => void
   onViewInvoices: () => void
   saving: boolean
+  deleting: boolean
   deleteError: string | null
 }
 
@@ -25,6 +26,7 @@ export function CompanyTableRow({
   onDelete,
   onViewInvoices,
   saving,
+  deleting,
   deleteError,
 }: Props) {
   const [editing, setEditing] = useState(false)
@@ -138,8 +140,13 @@ export function CompanyTableRow({
         <button type="button" onClick={onViewInvoices} className="text-emerald-400 underline">
           Ver facturas
         </button>
-        <button type="button" onClick={onDelete} className="text-red-400 underline">
-          Borrar
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting}
+          className="text-red-400 underline disabled:opacity-40"
+        >
+          {deleting ? 'Borrando…' : 'Borrar'}
         </button>
         {deleteError && (
           <p role="alert" className="text-xs text-red-400">

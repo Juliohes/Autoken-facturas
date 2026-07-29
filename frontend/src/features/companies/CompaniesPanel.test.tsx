@@ -146,6 +146,7 @@ describe('CompaniesPanel (S3.4)', () => {
       data: undefined,
       error: { detail: 'La empresa tiene usuarios asignados: reasígnalos o quítalos antes de borrarla' },
     })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const user = userEvent.setup()
     renderPanel()
     await screen.findAllByTestId('company-row')
@@ -156,6 +157,61 @@ describe('CompaniesPanel (S3.4)', () => {
     expect(deleteMock).toHaveBeenCalledWith('/api/v1/companies/{company_id}', {
       params: { path: { company_id: 'c1' } },
     })
+    confirmSpy.mockRestore()
+  })
+
+  it('C12: borrar pide confirmación nativa, con el nombre de la empresa, antes de llamar al endpoint', async () => {
+    mockRoutes({ companies: [makeCompany({ id: 'c1', name: 'Empresa Uno' })] })
+    deleteMock.mockResolvedValue({ data: undefined, error: undefined })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    await user.click(screen.getByRole('button', { name: 'Borrar' }))
+
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Empresa Uno'))
+    await waitFor(() => expect(deleteMock).toHaveBeenCalled())
+    confirmSpy.mockRestore()
+  })
+
+  it('C13: cancelar el diálogo de confirmación no llama al borrado', async () => {
+    mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    await user.click(screen.getByRole('button', { name: 'Borrar' }))
+
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(deleteMock).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('C14: al confirmar y borrar con éxito, la fila desaparece de verdad de la tabla', async () => {
+    let companies = [makeCompany({ id: 'c1', name: 'Empresa Uno' })]
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/reporting/companies')) {
+        return Promise.resolve({ data: companies, error: undefined })
+      }
+      if (path.includes('/registrations')) return Promise.resolve({ data: [], error: undefined })
+      throw new Error(`ruta GET no mockeada: ${path}`)
+    })
+    deleteMock.mockImplementation(async () => {
+      companies = []
+      return { data: undefined, error: undefined }
+    })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    await user.click(screen.getByRole('button', { name: 'Borrar' }))
+
+    await waitFor(() => expect(screen.queryByTestId('company-row')).not.toBeInTheDocument())
+    expect(await screen.findByText('Todavía no hay empresas.')).toBeInTheDocument()
+    confirmSpy.mockRestore()
   })
 
   it('C5: "Ver facturas" llama al callback con el id de la empresa', async () => {

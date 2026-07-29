@@ -20,6 +20,10 @@ interface Props {
 
 const EMPTY_FORM = { name: '', cif: '', notes: '' }
 
+const confirmDeleteMessage = (companyName: string) =>
+  `Esto borra la empresa "${companyName}" de forma permanente, junto con su histórico. ` +
+  'No se puede deshacer. ¿Continuar?'
+
 export function CompaniesPanel({ onViewInvoices }: Props) {
   const companies = useCompaniesPanel()
   const createCompany = useCreateCompany()
@@ -38,7 +42,11 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
     )
   }
 
-  const handleDelete = (companyId: string) => {
+  const handleDelete = (companyId: string, companyName: string) => {
+    // Confirmación nativa (mismo patrón que "Purgar facturas de prueba", S3.5): el borrado es
+    // físico e irreversible (sin papelera), así que antes de tocar nada se le pide al usuario que
+    // confirme, con el nombre de la empresa de por medio para que no haya duda de cuál es.
+    if (!window.confirm(confirmDeleteMessage(companyName))) return
     setDeletingId(companyId)
     // No se limpia `deletingId` en error: la fila debe seguir mostrando su mensaje (p. ej.
     // `CompanyHasMembers`, 409) hasta el siguiente intento. Al borrar con éxito la fila desaparece
@@ -133,9 +141,10 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
                   key={company.id}
                   company={company}
                   onSave={(body) => handleSave(company.id, body)}
-                  onDelete={() => handleDelete(company.id)}
+                  onDelete={() => handleDelete(company.id, company.name)}
                   onViewInvoices={() => onViewInvoices?.(company.id)}
                   saving={updateCompany.isPending && updateCompany.variables?.companyId === company.id}
+                  deleting={deleteCompany.isPending && deletingId === company.id}
                   deleteError={
                     deleteCompany.isError && deletingId === company.id
                       ? deleteCompany.error instanceof Error
