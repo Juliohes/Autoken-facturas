@@ -49,7 +49,7 @@ def _print_next_steps(email: str, role: str, token: str, *, host: str) -> None:
 async def _platform_admin(email: str, admin_tech: bool) -> None:
     identity = await repository.create_platform_admin_account(email, is_admin_tech=admin_tech)
     token = await issue_activation_token(identity.id)
-    _print_next_steps(identity.email, identity.role, token, host="panel.autoken.es")
+    _print_next_steps(identity.email, identity.role, token, host="panel-staging.autoken.es")
 
 
 async def _tenant_account(tenant_slug: str, email: str, role: str) -> None:
@@ -85,7 +85,7 @@ async def _reissue_activation(email: str) -> None:
         )
         raise SystemExit(1)
     token = await issue_activation_token(user_id)
-    _print_next_steps(email, "platform_admin", token, host="panel.autoken.es")
+    _print_next_steps(email, "platform_admin", token, host="panel-staging.autoken.es")
 
 
 def main() -> None:
