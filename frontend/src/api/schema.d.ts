@@ -356,6 +356,26 @@ export interface paths {
         patch: operations["update_company_api_v1_companies__company_id__patch"];
         trace?: never;
     };
+    "/api/v1/companies/{company_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Company History
+         * @description Historial de ediciones de una empresa, más reciente primero. De otro tenant -> 404.
+         */
+        get: operations["company_history_api_v1_companies__company_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/companies/import": {
         parameters: {
             query?: never;
@@ -906,6 +926,33 @@ export interface components {
             cif: string;
             /** Notes */
             notes?: string | null;
+        };
+        /**
+         * CompanyEditOut
+         * @description Una fila del historial de ediciones de una empresa (2026-08-01).
+         */
+        CompanyEditOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Field */
+            field: string;
+            /** Old Value */
+            old_value: string | null;
+            /** New Value */
+            new_value: string | null;
+            /**
+             * Edited By
+             * Format: uuid
+             */
+            edited_by: string;
+            /**
+             * Edited At
+             * Format: date-time
+             */
+            edited_at: string;
         };
         /**
          * CompanyOut
@@ -2010,6 +2057,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CompanyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    company_history_api_v1_companies__company_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyEditOut"][];
                 };
             };
             /** @description Validation Error */

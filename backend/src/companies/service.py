@@ -21,9 +21,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from companies import repository
-from companies.repository import CompanyRecord
+from companies.repository import CompanyEditEntry, CompanyRecord
 from shared.audit import write_audit
 from shared.config import Settings
+from shared.diffing import Correction
 from shared.encryption import tenant_encryption_key as tenant_encryption_key
 from shared.encryption import tenant_tax_id_blind_index
 from shared.integrity import violates_unique_constraint
@@ -189,6 +190,24 @@ async def create_company(
         raise
 
 
+def _company_diff(
+    current: CompanyRecord, *, name: str, cif: str, status: str, notes: str | None
+) -> list[Correction]:
+    """Un `Correction` por campo cuyo valor nuevo difiere del actual (2026-08-01, historial de
+    ediciones). Comparación simple por igualdad de texto: a diferencia de las facturas (fechas,
+    decimales, tramos de IVA), los 4 campos de una empresa ya son texto plano."""
+    diffs: list[Correction] = []
+    if current.name != name:
+        diffs.append(Correction(field="name", ai_value=current.name, human_value=name))
+    if current.cif != cif:
+        diffs.append(Correction(field="cif", ai_value=current.cif, human_value=cif))
+    if current.status != status:
+        diffs.append(Correction(field="status", ai_value=current.status, human_value=status))
+    if current.notes != notes:
+        diffs.append(Correction(field="notes", ai_value=current.notes, human_value=notes))
+    return diffs
+
+
 async def update_company(
     session: AsyncSession,
     *,
@@ -203,6 +222,10 @@ async def update_company(
     `changes` contiene solo los campos enviados (patch parcial). Si incluye `cif`, se revalida
     (422 si es inválido) y se comprueba que no choque con otra empresa de la asesoría (409). Una
     empresa fuera del contexto (otro tenant) no existe aquí: `CompanyNotFound` (404).
+
+    Deja una fila en `company_edits` por cada campo que cambió DE VERDAD (2026-08-01, historial
+    permanente + revertir, decisión de Julio) — si `changes` no introduce ningún cambio real
+    (p. ej. reenviar los mismos valores), no se escribe nada nuevo en el historial.
     """
     encryption_key = tenant_encryption_key(settings, tenant_id)
     current = await repository.get_company(session, company_id, encryption_key=encryption_key)
@@ -222,6 +245,8 @@ async def update_company(
     status = changes.get("status", current.status)
     notes = changes.get("notes", current.notes)
 
+    diffs = _company_diff(current, name=name, cif=cif, status=status, notes=notes)
+
     record = await repository.update_company(
         session,
         company_id,
@@ -232,6 +257,14 @@ async def update_company(
         notes=notes,
         encryption_key=encryption_key,
     )
+    if diffs:
+        await repository.insert_company_edits(
+            session,
+            company_id=company_id,
+            edited_by=actor_id,
+            edits=diffs,
+            encryption_key=encryption_key,
+        )
     await write_audit(
         session,
         actor_id=actor_id,
@@ -240,6 +273,20 @@ async def update_company(
         entity_id=record.id,
     )
     return record
+
+
+async def company_history(
+    session: AsyncSession, *, tenant_id: UUID, settings: Settings, company_id: UUID
+) -> list[CompanyEditEntry]:
+    """Historial de ediciones de una empresa del contexto, más reciente primero (2026-08-01).
+
+    Empresa fuera del contexto (otro tenant, o inexistente) -> `CompanyNotFound` (404), igual que
+    `update_company`.
+    """
+    if not await repository.company_exists(session, company_id):
+        raise CompanyNotFound()
+    encryption_key = tenant_encryption_key(settings, tenant_id)
+    return await repository.list_company_edits(session, company_id, encryption_key=encryption_key)
 
 
 async def delete_company(session: AsyncSession, *, actor_id: UUID, company_id: UUID) -> None:

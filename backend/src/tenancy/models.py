@@ -158,6 +158,36 @@ class Company(Base):
     )
 
 
+class CompanyEdit(Base):
+    """Edición humana de un campo de una empresa (`company_edits`, 2026-08-01, migración 0026).
+
+    Mismo patrón que `invoicing.models.InvoiceEdit` (S3.3): una fila por campo que cambió, no una
+    fila por edición. `old_value`/`new_value` de `name`/`cif` viven cifrados (mismo motivo que
+    `Company.name`/`Company.cif` arriba: todo el acceso pasa por SQL crudo en
+    `companies.repository`, este esquema solo debe coincidir con la migración real).
+    """
+
+    __tablename__ = "company_edits"
+    __table_args__ = (Index("ix_company_edits_company", "company_id", "edited_at"),)
+
+    id: Mapped[UUID] = _pk()
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    field: Mapped[str] = mapped_column(Text, nullable=False)
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    edited_by: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    edited_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class Membership(Base):
     """Pertenencia de un usuario a una empresa (un user puede estar en N empresas)."""
 

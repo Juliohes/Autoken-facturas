@@ -9,6 +9,7 @@ ni reglas de negocio. Toda la gestión está restringida a `tenant_admin` por el
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -112,6 +113,44 @@ async def update_company(
     except service.DuplicateCif as exc:
         raise HTTPException(status_code=409, detail="La empresa ya existe en la asesoría") from exc
     return _to_out(record)
+
+
+class CompanyEditOut(BaseModel):
+    """Una fila del historial de ediciones de una empresa (2026-08-01)."""
+
+    id: UUID
+    field: str
+    old_value: str | None
+    new_value: str | None
+    edited_by: UUID
+    edited_at: datetime
+
+
+@router.get("/{company_id}/history")
+async def company_history(
+    identity: TenantAdmin, settings: SettingsDep, company_id: UUID
+) -> list[CompanyEditOut]:
+    """Historial de ediciones de una empresa, más reciente primero. De otro tenant -> 404."""
+    try:
+        entries = await service.company_history(
+            identity.session,
+            tenant_id=identity.tenant_id,
+            settings=settings,
+            company_id=company_id,
+        )
+    except service.CompanyNotFound as exc:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada") from exc
+    return [
+        CompanyEditOut(
+            id=e.id,
+            field=e.field,
+            old_value=e.old_value,
+            new_value=e.new_value,
+            edited_by=e.edited_by,
+            edited_at=e.edited_at,
+        )
+        for e in entries
+    ]
 
 
 @router.delete("/{company_id}", status_code=204)

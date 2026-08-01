@@ -18,16 +18,13 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from shared.diffing import Correction as Correction
 from shared.tax_id import normalize_tax_id
 
-
-@dataclass(frozen=True)
-class Correction:
-    """Un campo cuyo valor confirmado difiere del que leyó el OCR (fila de `ocr_corrections`)."""
-
-    field: str
-    ai_value: str | None
-    human_value: str | None
+# `Correction` vivía aquí; movida a `shared.diffing` (2026-08-01) para que `companies` pueda
+# reutilizarla sin invertir la dirección de dependencias (`invoicing -> companies`). Re-exportada
+# tal cual: los imports existentes (`from invoicing.corrections import Correction`) siguen
+# funcionando sin cambios.
 
 
 @dataclass(frozen=True)
