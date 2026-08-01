@@ -109,7 +109,7 @@ describe('CaptureScreen (S2.2)', () => {
   it('C2: con cámara activa, muestra la vista previa en vivo y el botón de captura manual', () => {
     renderScreen()
 
-    expect(screen.getByRole('button', { name: 'Tomar foto' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '📷 Capturar' })).toBeInTheDocument()
     expect(screen.queryByText(/no se pudo acceder a la cámara/i)).not.toBeInTheDocument()
   })
 
@@ -117,7 +117,7 @@ describe('CaptureScreen (S2.2)', () => {
     useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null })
     renderScreen()
 
-    expect(screen.queryByRole('button', { name: 'Tomar foto' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '📷 Capturar' })).not.toBeInTheDocument()
     expect(screen.getByText(/no se pudo acceder a la cámara/i)).toBeInTheDocument()
   })
 
@@ -156,7 +156,7 @@ describe('CaptureScreen (S2.2)', () => {
     renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+    await user.click(screen.getByRole('button', { name: '📷 Capturar' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/todavía se está preparando/i)
     expect(screen.queryByRole('heading', { name: 'Revisar foto' })).not.toBeInTheDocument()
@@ -171,7 +171,7 @@ describe('CaptureScreen (S2.2)', () => {
     renderScreen()
 
     expect(screen.getByRole('alert')).toHaveTextContent(/no se pudo cargar tu empresa/i)
-    expect(screen.queryByRole('button', { name: 'Tomar foto' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '📷 Capturar' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/elige o toma una foto/i)).not.toBeInTheDocument()
   })
 
@@ -192,7 +192,7 @@ describe('CaptureScreen (S2.2)', () => {
     renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+    await user.click(screen.getByRole('button', { name: '📷 Capturar' }))
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Revisar foto' })).toBeInTheDocument())
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -205,7 +205,7 @@ describe('CaptureScreen (S2.2)', () => {
     renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+    await user.click(screen.getByRole('button', { name: '📷 Capturar' }))
 
     await waitFor(() => expect(processCapturedFrameMock).toHaveBeenCalledWith(FAKE_FRAME, null))
     expect(await screen.findByAltText('Foto capturada')).toBeInTheDocument()
@@ -216,7 +216,7 @@ describe('CaptureScreen (S2.2)', () => {
     renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+    await user.click(screen.getByRole('button', { name: '📷 Capturar' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/puede salir borrosa/i)
     await user.selectOptions(screen.getByLabelText('Empresa'), 'c1')
@@ -227,11 +227,11 @@ describe('CaptureScreen (S2.2)', () => {
     renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+    await user.click(screen.getByRole('button', { name: '📷 Capturar' }))
     await screen.findByRole('heading', { name: 'Revisar foto' })
     await user.click(screen.getByRole('button', { name: 'Repetir' }))
 
-    expect(screen.getByRole('button', { name: 'Tomar foto' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '📷 Capturar' })).toBeInTheDocument()
     expect(postMock).not.toHaveBeenCalled()
   })
 
@@ -239,7 +239,7 @@ describe('CaptureScreen (S2.2)', () => {
     renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+    await user.click(screen.getByRole('button', { name: '📷 Capturar' }))
     await screen.findByRole('heading', { name: 'Revisar foto' })
 
     const uploadButton = screen.getByRole('button', { name: 'Usar esta foto' })
@@ -254,7 +254,7 @@ describe('CaptureScreen (S2.2)', () => {
     renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+    await user.click(screen.getByRole('button', { name: '📷 Capturar' }))
     await screen.findByRole('heading', { name: 'Revisar foto' })
 
     expect(screen.queryByLabelText('Empresa')).not.toBeInTheDocument()
@@ -279,8 +279,8 @@ describe('CaptureScreen (S2.2)', () => {
     const { onUploaded } = renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('radio', { name: 'Emitida' }))
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+    await user.click(screen.getByRole('radio', { name: '📤 Factura Emitida' }))
+    await user.click(screen.getByRole('button', { name: '📷 Capturar' }))
     await screen.findByRole('heading', { name: 'Revisar foto' })
     await user.selectOptions(screen.getByLabelText('Empresa'), 'c1')
     await user.click(screen.getByRole('button', { name: 'Usar esta foto' }))
@@ -297,7 +297,7 @@ describe('CaptureScreen (S2.2)', () => {
     renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+    await user.click(screen.getByRole('button', { name: '📷 Capturar' }))
     await screen.findByRole('heading', { name: 'Revisar foto' })
     await user.selectOptions(screen.getByLabelText('Empresa'), 'c1')
     await user.click(screen.getByRole('button', { name: 'Usar esta foto' }))
@@ -317,7 +317,7 @@ describe('CaptureScreen (S2.2)', () => {
     renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+    await user.click(screen.getByRole('button', { name: '📷 Capturar' }))
     await screen.findByRole('heading', { name: 'Revisar foto' })
     await user.selectOptions(screen.getByLabelText('Empresa'), 'c1')
     await user.click(screen.getByRole('button', { name: 'Usar esta foto' }))

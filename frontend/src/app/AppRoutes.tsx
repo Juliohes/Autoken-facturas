@@ -112,6 +112,12 @@ function ConfirmationRoute() {
 
 export function AppRoutes({ theme }: { theme: AppliedTheme }) {
   const { status, user } = useSession()
+  // Experimento 2026-08-01 (rama experiment/setex-user-ui-v1, HIPERDOC-FRONTEND-USUARIO-v1-setex1.md):
+  // el rol `user` prueba el sistema de diseño de SETEX v1 (fondo claro, tarjeta propia con su
+  // propia cabecera por pantalla, sin el menú de navegación genérico — en la app original no hay
+  // una barra de navegación persistente, cada pantalla lleva su propio logotipo+«Salir»). El resto
+  // de roles (tenant_admin, platform_admin) no cambian: siguen viendo el app-shell de siempre.
+  const isSetexUserPreview = user?.role === 'user'
 
   return (
     // `min-h-screen bg-slate-900 text-slate-100`: cada pantalla ya autenticada (Plataforma,
@@ -120,8 +126,14 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
     // sin esto, el fondo por defecto es blanco y ese texto queda casi invisible (hallazgo real,
     // reportado por Julio al entrar de verdad). El login ya tenía su propio fondo aparte
     // (`LoginScreen`); este envoltorio cubre el resto del árbol autenticado.
-    <div className="min-h-screen bg-slate-900 text-slate-100">
-      {status === 'authenticated' && user && (
+    <div
+      className={
+        isSetexUserPreview
+          ? 'min-h-screen bg-gradient-to-br from-sx-brand to-sx-brand2'
+          : 'min-h-screen bg-slate-900 text-slate-100'
+      }
+    >
+      {status === 'authenticated' && user && !isSetexUserPreview && (
         <Menu role={user.role} isAdminTech={user.is_admin_tech} theme={theme} />
       )}
       <Routes>

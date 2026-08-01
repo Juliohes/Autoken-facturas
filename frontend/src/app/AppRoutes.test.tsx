@@ -199,17 +199,16 @@ describe('AppRoutes (S4.9)', () => {
     expect(within(nav).queryByText('Plataforma')).not.toBeInTheDocument()
   })
 
-  it('C11: user ve Subir factura en el menú, nada más (Historial vive dentro, no en el menú)', async () => {
+  it('2026-08-01 (experimento SETEX): el rol user no ve el menú genérico, ve su propia cabecera', async () => {
     mockAuthenticatedAs('user')
     renderApp('/historial')
 
-    await waitFor(() => expect(screen.getByRole('navigation')).toBeInTheDocument())
-    const nav = screen.getByRole('navigation')
-    expect(within(nav).getByText('Subir factura')).toBeInTheDocument()
-    expect(within(nav).queryByText('Historial')).not.toBeInTheDocument()
-    expect(within(nav).queryByText('Facturas')).not.toBeInTheDocument()
-    expect(within(nav).queryByText('Empresas')).not.toBeInTheDocument()
-    expect(within(nav).queryByText('Plataforma')).not.toBeInTheDocument()
+    // Sin `<nav>` de app-shell para este rol en el experimento: cada pantalla lleva su propia
+    // cabecera (logotipo + «Facturas» + «Salir»), igual que en SETEX v1 original (sin barra de
+    // navegación persistente).
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Facturas' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Salir' })).toBeInTheDocument()
   })
 
   it('2026-08-01: "Ver historial" vive dentro de "Subir factura" (Julio), no en el menú principal', async () => {
@@ -217,19 +216,19 @@ describe('AppRoutes (S4.9)', () => {
     renderApp('/capturar')
     const user = userEvent.setup()
 
-    expect(await screen.findByRole('heading', { name: 'Capturar factura' })).toBeInTheDocument()
-    await user.click(screen.getByRole('link', { name: 'Ver historial' }))
+    expect(await screen.findByRole('heading', { name: 'Facturas' })).toBeInTheDocument()
+    await user.click(screen.getByRole('link', { name: '📋 Historial de facturas' }))
 
-    // Sin facturas mockeadas, `InvoiceHistory` muestra su estado vacío (sin encabezado propio):
-    // basta para confirmar que la navegación llegó de verdad a `/historial`.
-    expect(await screen.findByText('No hay facturas en los últimos 7 días.')).toBeInTheDocument()
+    // Sin facturas mockeadas, el estado vacío del experimento SETEX (§13 microcopy literal)
+    // confirma que la navegación llegó de verdad a `/historial`.
+    expect(await screen.findByText('Sin facturas en los últimos 7 días.')).toBeInTheDocument()
   })
 
   it('S2.2 decisión 1: la ruta de inicio de user es /capturar, no /historial', async () => {
     mockAuthenticatedAs('user')
     renderApp('/')
 
-    expect(await screen.findByRole('heading', { name: 'Capturar factura' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Facturas' })).toBeInTheDocument()
   })
 
   it('un tenant_admin no puede entrar a /plataforma: vuelve a su ruta de inicio', async () => {

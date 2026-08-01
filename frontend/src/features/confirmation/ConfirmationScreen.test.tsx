@@ -369,11 +369,13 @@ describe('ConfirmationScreen (S2.4)', () => {
     })
     const user = userEvent.setup()
     renderScreen()
-    await screen.findByLabelText('Importe total')
+    // Experimento 2026-08-01: el rol `user` ve la variante SETEX (HIPERDOC §09), con "Total" en
+    // vez de "Importe total" y el botón con el microcopy literal del documento (§16).
+    await screen.findByLabelText('Total')
     expect(screen.queryByText('Factura de prueba (no aparecerá en informes)')).not.toBeInTheDocument()
     await acceptResponsibility(user)
 
-    await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
+    await user.click(screen.getByRole('button', { name: '✓ Confirmar y guardar' }))
 
     await waitFor(() => {
       expect(postMock).toHaveBeenCalledWith(
@@ -381,5 +383,76 @@ describe('ConfirmationScreen (S2.4)', () => {
         expect.objectContaining({ body: expect.objectContaining({ is_test: false }) }),
       )
     })
+  })
+})
+
+function mockAsUser() {
+  getMock.mockImplementation((path: string) => {
+    if (path.includes('/auth/me')) {
+      return Promise.resolve({
+        data: {
+          id: 'u1',
+          email: 'ana@ilex.es',
+          role: 'user',
+          tenant: 'ilex',
+          company: { id: 'c1', name: 'Empresa' },
+        },
+        error: undefined,
+      })
+    }
+    return Promise.resolve({ data: makeReview(), error: undefined })
+  })
+}
+
+describe('ConfirmationScreen — experimento SETEX (rol user, HIPERDOC §09)', () => {
+  it('encabezado adaptativo: verde "Confirma los datos" con los 3 campos clave leídos con confianza alta', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/auth/me')) {
+        return Promise.resolve({
+          data: { id: 'u1', email: 'ana@ilex.es', role: 'user', tenant: 'ilex', company: { id: 'c1', name: 'Empresa' } },
+          error: undefined,
+        })
+      }
+      return Promise.resolve({
+        data: makeReview({
+          confidences: { total_amount: 'alta', counterparty_tax_id: 'alta', issue_date: 'alta' },
+        }),
+        error: undefined,
+      })
+    })
+    renderScreen()
+
+    expect(await screen.findByRole('heading', { name: 'Confirma los datos' })).toBeInTheDocument()
+  })
+
+  it('encabezado adaptativo: rojo "Completa los datos que faltan" con motivos de bloqueo', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/auth/me')) {
+        return Promise.resolve({
+          data: { id: 'u1', email: 'ana@ilex.es', role: 'user', tenant: 'ilex', company: { id: 'c1', name: 'Empresa' } },
+          error: undefined,
+        })
+      }
+      return Promise.resolve({
+        data: makeReview({ blocking_reasons: ['counterparty_cif_not_found'] }),
+        error: undefined,
+      })
+    })
+    renderScreen()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Completa los datos que faltan' }),
+    ).toBeInTheDocument()
+  })
+
+  it('el botón "✗ Repetir foto" llama a onRetry, igual que en la pantalla original', async () => {
+    mockAsUser()
+    const user = userEvent.setup()
+    const { onRetry } = renderScreen()
+    await screen.findByLabelText('Total')
+
+    await user.click(screen.getByRole('button', { name: '✗ Repetir foto' }))
+
+    expect(onRetry).toHaveBeenCalledTimes(1)
   })
 })
