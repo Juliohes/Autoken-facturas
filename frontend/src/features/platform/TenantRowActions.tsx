@@ -107,26 +107,35 @@ export function TenantRowActions({ tenant }: { tenant: Tenant }) {
           {exportTenant.isPending ? 'Exportando…' : 'Exportar'}
         </button>
         {confirmingDelete ? (
-          <div className="flex items-center gap-1">
-            <input
-              type="text"
-              value={confirmSlugInput}
-              onChange={(e) => setConfirmSlugInput(e.target.value)}
-              placeholder={tenant.slug}
-              aria-label={`Escribe "${tenant.slug}" para confirmar el borrado`}
-              className="w-24 rounded border border-slate-600 bg-slate-800 px-1 py-1 text-xs"
-            />
-            <button
-              type="button"
-              onClick={handleConfirmDelete}
-              disabled={confirmSlugInput !== tenant.slug || deleteTenant.isPending}
-              className={dangerButtonClass}
-            >
-              Confirmar borrado
-            </button>
-            <button type="button" onClick={cancelDeleteConfirm} className={buttonClass}>
-              Cancelar
-            </button>
+          <div className="flex flex-col gap-1">
+            {/* Texto visible aparte del placeholder: el placeholder es del mismo color casi que el
+                texto ya escrito, así que a simple vista parece "ya relleno" aunque el campo esté
+                vacío (confusión real de Julio, 2026-08-01) y el botón se vea bloqueado sin motivo
+                aparente. */}
+            <span className="text-xs text-slate-400">
+              Escribe &quot;{tenant.slug}&quot; para confirmar:
+            </span>
+            <div className="flex flex-wrap items-center gap-1">
+              <input
+                type="text"
+                value={confirmSlugInput}
+                onChange={(e) => setConfirmSlugInput(e.target.value)}
+                placeholder={tenant.slug}
+                aria-label={`Escribe "${tenant.slug}" para confirmar el borrado`}
+                className="w-24 rounded border border-slate-600 bg-slate-800 px-1 py-1 text-xs placeholder:text-slate-600"
+              />
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={confirmSlugInput !== tenant.slug || deleteTenant.isPending}
+                className={dangerButtonClass}
+              >
+                Confirmar borrado
+              </button>
+              <button type="button" onClick={cancelDeleteConfirm} className={buttonClass}>
+                Cancelar
+              </button>
+            </div>
           </div>
         ) : (
           <button

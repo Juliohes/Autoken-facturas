@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* El texto de un botón nunca debe partirse en 2 líneas, en ninguna pantalla (plataforma o
+     tenant). Regla global en vez de tocar cada botón uno a uno, mismo patrón que las paletas
+     slate/emerald de tailwind.config.js. Los contenedores que agrupan varios botones deben usar
+     `flex-wrap` para que, si no caben, sea la FILA la que salte de línea (cada botón entero), no
+     el texto dentro de uno. */
+  button {
+    white-space: nowrap;
+  }
+}
