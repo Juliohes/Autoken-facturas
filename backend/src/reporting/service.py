@@ -68,6 +68,8 @@ class InvoiceItem:
     """
 
     id: UUID
+    company_name: str
+    company_cif: str
     issue_date: date | None
     direction: str
     counterparty_tax_id: str | None
@@ -181,6 +183,8 @@ def _repo_filters(tenant_id: UUID, filters: PanelFilters) -> repository.Filters:
 def _to_item(row: repository.InvoiceRow) -> InvoiceItem:
     return InvoiceItem(
         id=row.id,
+        company_name=row.company_name,
+        company_cif=row.company_cif,
         issue_date=row.issue_date,
         direction=row.direction,
         counterparty_tax_id=row.counterparty_tax_id,

@@ -446,6 +446,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/uploads/{file_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Image
+         * @description Bytes reales del fichero de intake (2026-08-01), vía la API — no una redirección a MinIO.
+         *
+         *     Reemplaza a `download-url` como camino real del botón "Ver" del panel: MinIO nunca se expone
+         *     públicamente en este proyecto, así que una URL firmada de MinIO es inalcanzable desde el
+         *     navegador del usuario en el despliegue real (ver docstring de `service.get_download_bytes`).
+         *     Misma autorización que `download-url` (403/404).
+         */
+        get: operations["download_image_api_v1_uploads__file_id__image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/uploads/{file_id}/review": {
         parameters: {
             query?: never;
@@ -1298,6 +1323,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Company Name */
+            company_name: string;
+            /** Company Cif */
+            company_cif: string;
             /** Issue Date */
             issue_date: string | null;
             /** Direction */
@@ -2232,6 +2261,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DownloadUrlOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_image_api_v1_uploads__file_id__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

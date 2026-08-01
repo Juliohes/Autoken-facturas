@@ -45,6 +45,8 @@ class InvoiceRowOut(BaseModel):
     """Una fila del panel de facturas (spec §2/§3 C8)."""
 
     id: UUID
+    company_name: str
+    company_cif: str
     issue_date: date | None
     direction: str
     counterparty_tax_id: str | None
@@ -159,6 +161,8 @@ async def list_invoices(
         items=[
             InvoiceRowOut(
                 id=row.id,
+                company_name=row.company_name,
+                company_cif=row.company_cif,
                 issue_date=row.issue_date,
                 direction=row.direction,
                 counterparty_tax_id=row.counterparty_tax_id,

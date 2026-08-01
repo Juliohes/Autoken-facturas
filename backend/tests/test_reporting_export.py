@@ -125,6 +125,13 @@ async def test_c4_las_columnas_y_su_contenido_son_correctos(authapi: Api) -> Non
     assert row[0] == "Empresa"  # nombre de la empresa sembrada por _admin en test_reporting_panel
     assert str(row[2]) == "Proveedor SA"
     assert str(row[3]) == "A39031620"
+    # Importes con coma decimal (2026-08-01, pregunta de Julio): texto, no numérico, precisamente
+    # para que se vea igual sin importar el idioma del Excel que lo abra.
+    assert row[4] == "100,00"
+    assert row[5] == "21,00"
+    assert row[6] == "121,00"
+    assert row[7] == "15,00"
+    assert row[8] == "21% (100,00 → 21,00)"
     assert row[9] == "admin@ilex.es"
 
 

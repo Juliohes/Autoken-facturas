@@ -41,6 +41,23 @@ async def test_c1_panel_lista_facturas_de_toda_la_asesoria(authapi: Api) -> None
     assert confirmed_ats == sorted(confirmed_ats, reverse=True)
 
 
+async def test_c1b_cada_fila_trae_la_empresa_cliente_no_solo_el_proveedor(
+    authapi: Api,
+) -> None:
+    """C1b (2026-08-01, hallazgo de Julio): el panel mostraba Proveedor/CIF (la contraparte) pero
+    nunca la empresa CLIENTE del tenant (quién sube la factura) — cada fila debe traer las dos."""
+    client, dsns = authapi
+    tenant_id, _admin_id, company_id, token = await _admin(dsns, client)
+    await seed_invoice(dsns, tenant_id=tenant_id, company_id=company_id)
+
+    resp = await client.get(PANEL_URL, headers=auth(token, "ilex.localhost"))
+
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["items"][0]
+    assert row["company_name"] == "Empresa"
+    assert row["company_cif"] == "A39031620"
+
+
 async def test_c2_filtro_por_rango_de_fechas(authapi: Api) -> None:
     """C2: solo aparecen facturas cuyo issue_date cae dentro del rango (bordes inclusivos)."""
     client, dsns = authapi

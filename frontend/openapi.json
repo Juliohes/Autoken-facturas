@@ -763,6 +763,48 @@
         }
       }
     },
+    "/api/v1/uploads/{file_id}/image": {
+      "get": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Download Image",
+        "description": "Bytes reales del fichero de intake (2026-08-01), v\u00eda la API \u2014 no una redirecci\u00f3n a MinIO.\n\nReemplaza a `download-url` como camino real del bot\u00f3n \"Ver\" del panel: MinIO nunca se expone\np\u00fablicamente en este proyecto, as\u00ed que una URL firmada de MinIO es inalcanzable desde el\nnavegador del usuario en el despliegue real (ver docstring de `service.get_download_bytes`).\nMisma autorizaci\u00f3n que `download-url` (403/404).",
+        "operationId": "download_image_api_v1_uploads__file_id__image_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/uploads/{file_id}/review": {
       "get": {
         "tags": [
@@ -2932,6 +2974,14 @@
             "format": "uuid",
             "title": "Id"
           },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "company_cif": {
+            "type": "string",
+            "title": "Company Cif"
+          },
           "issue_date": {
             "anyOf": [
               {
@@ -3053,6 +3103,8 @@
         "type": "object",
         "required": [
           "id",
+          "company_name",
+          "company_cif",
           "issue_date",
           "direction",
           "counterparty_tax_id",
