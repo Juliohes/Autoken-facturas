@@ -596,6 +596,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/tenants/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Logo
+         * @description Sube una imagen de logo (jpeg/png, máx. 2 MiB) y devuelve su URL pública.
+         *
+         *     Antes de esto, `logo_url` solo admitía pegar una URL ya alojada en otro sitio. Mismo orden de
+         *     validación que el intake de facturas (S2.1): vacío -> tamaño -> tipo real -> antivirus ->
+         *     almacenar (spec, ver `logo_upload.upload_logo`).
+         */
+        post: operations["upload_logo_api_v1_platform_tenants_logo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform/tenants": {
         parameters: {
             query?: never;
@@ -865,6 +889,11 @@ export interface components {
              * Format: uuid
              */
             company_id: string;
+        };
+        /** Body_upload_logo_api_v1_platform_tenants_logo_post */
+        Body_upload_logo_api_v1_platform_tenants_logo_post: {
+            /** File */
+            file: string;
         };
         /**
          * CompanyCreate
@@ -1227,6 +1256,15 @@ export interface components {
             password: string;
             /** Totp Code */
             totp_code?: string | null;
+        };
+        /**
+         * LogoUploadOut
+         * @description Respuesta de `POST /platform/tenants/logo`: la URL pública lista para usar como `logo_url`
+         *     en el alta/edición de un tenant (2026-08-01, decisión de Julio).
+         */
+        LogoUploadOut: {
+            /** Logo Url */
+            logo_url: string;
         };
         /**
          * MeCompanyOut
@@ -2307,6 +2345,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_logo_api_v1_platform_tenants_logo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_logo_api_v1_platform_tenants_logo_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogoUploadOut"];
                 };
             };
             /** @description Validation Error */

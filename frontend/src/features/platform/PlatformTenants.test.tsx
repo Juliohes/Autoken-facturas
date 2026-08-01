@@ -115,6 +115,61 @@ describe('PlatformTenants (S4.1)', () => {
     })
   })
 
+  it('2026-08-01: subir una imagen de logo rellena el campo URL con la respuesta del servidor', async () => {
+    mockRoutes([])
+    postMock.mockImplementation((path: string) => {
+      if (path === '/api/v1/platform/tenants/logo') {
+        return Promise.resolve({
+          data: { logo_url: 'http://localhost:9000/platform-assets/logos/abc.jpg' },
+          error: undefined,
+        })
+      }
+      return Promise.resolve({ data: makeTenant(), error: undefined })
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findByText('Todavía no hay tenants.')
+
+    const file = new File(['contenido'], 'logo.jpg', { type: 'image/jpeg' })
+    await user.upload(screen.getByLabelText('Subir imagen'), file)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Logo (URL)')).toHaveValue(
+        'http://localhost:9000/platform-assets/logos/abc.jpg',
+      )
+    })
+    expect(postMock).toHaveBeenCalledWith(
+      '/api/v1/platform/tenants/logo',
+      expect.objectContaining({ body: expect.any(FormData) }),
+    )
+  })
+
+  it('2026-08-01: un error al subir el logo se muestra legible, sin tocar el campo URL', async () => {
+    mockRoutes([])
+    postMock.mockImplementation((path: string) => {
+      if (path === '/api/v1/platform/tenants/logo') {
+        return Promise.resolve({
+          data: undefined,
+          error: { detail: 'Solo se admiten imágenes JPEG o PNG' },
+        })
+      }
+      return Promise.resolve({ data: makeTenant(), error: undefined })
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findByText('Todavía no hay tenants.')
+
+    // Content-Type declarado "image/jpeg" para que el `accept` del input no lo filtre en el
+    // navegador; el servidor decide por los bytes reales (S2.1) y aquí se mockea su rechazo.
+    const file = new File(['no-es-una-imagen-de-verdad'], 'logo.jpg', { type: 'image/jpeg' })
+    await user.upload(screen.getByLabelText('Subir imagen'), file)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Solo se admiten imágenes JPEG o PNG',
+    )
+    expect(screen.getByLabelText('Logo (URL)')).toHaveValue('')
+  })
+
   it('C3: un error del servidor (slug duplicado) se muestra legible', async () => {
     mockRoutes([])
     postMock.mockResolvedValue({

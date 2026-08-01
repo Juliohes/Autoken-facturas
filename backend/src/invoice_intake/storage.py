@@ -12,6 +12,7 @@ Aislamiento: cada asesoría tiene su **propio bucket** `tenant-{tenant_id}`; la 
 from __future__ import annotations
 
 import io
+import json
 from datetime import timedelta
 from functools import lru_cache
 
@@ -52,6 +53,54 @@ PLATFORM_EXPORTS_BUCKET = "platform-exports"
 def export_key_for(tenant_id: object, timestamp: str) -> str:
     """Clave del ZIP de export de un tenant dentro de `PLATFORM_EXPORTS_BUCKET`."""
     return f"{tenant_id}/{timestamp}.zip"
+
+
+# Bucket del logo de un tenant subido como imagen (2026-08-01, decisión de Julio). A diferencia de
+# CUALQUIER OTRO bucket de este módulo, este es de lectura PÚBLICA anónima a propósito: un logo lo
+# tiene que poder cargar cualquier navegador sin sesión (login, favicon, manifest PWA), y hasta
+# ahora `logo_url` solo admitía pegar una URL ya alojada en otro sitio. Es el único bucket del
+# proyecto sin aislamiento por tenant — no reutilizar para nada que no sea esto.
+PLATFORM_ASSETS_BUCKET = "platform-assets"
+
+
+def asset_key_for(sha256: str, extension: str) -> str:
+    """Clave de un logo dentro de `PLATFORM_ASSETS_BUCKET`, por contenido (dedup natural)."""
+    return f"logos/{sha256}{extension}"
+
+
+def ensure_public_asset_bucket() -> None:
+    """Crea `PLATFORM_ASSETS_BUCKET` si falta y fija su política de lectura anónima (idempotente).
+
+    Aparte de `_ensure_bucket` (que NUNCA toca políticas: los buckets por tenant deben seguir
+    siendo privados) para que sea imposible que este código se cuele por error en el camino de un
+    bucket de tenant.
+    """
+    client = _client()
+    try:
+        _ensure_bucket(client, PLATFORM_ASSETS_BUCKET)
+        policy = json.dumps(
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {"AWS": ["*"]},
+                        "Action": ["s3:GetObject"],
+                        "Resource": [f"arn:aws:s3:::{PLATFORM_ASSETS_BUCKET}/*"],
+                    }
+                ],
+            }
+        )
+        client.set_bucket_policy(PLATFORM_ASSETS_BUCKET, policy)
+    except (Urllib3HTTPError, S3Error, ConnectionError, OSError) as exc:
+        raise StorageUnavailable(f"No se pudo preparar el bucket de logos: {exc}") from exc
+
+
+def public_url_for(bucket: str, key: str) -> str:
+    """URL pública (sin firmar) de un objeto de un bucket de lectura anónima."""
+    settings = get_settings()
+    scheme = "https" if settings.minio_secure else "http"
+    return f"{scheme}://{settings.minio_endpoint}/{bucket}/{key}"
 
 
 class StorageError(Exception):

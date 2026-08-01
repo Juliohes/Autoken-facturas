@@ -1223,6 +1223,48 @@
         }
       }
     },
+    "/api/v1/platform/tenants/logo": {
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Upload Logo",
+        "description": "Sube una imagen de logo (jpeg/png, m\u00e1x. 2 MiB) y devuelve su URL p\u00fablica.\n\nAntes de esto, `logo_url` solo admit\u00eda pegar una URL ya alojada en otro sitio. Mismo orden de\nvalidaci\u00f3n que el intake de facturas (S2.1): vac\u00edo -> tama\u00f1o -> tipo real -> antivirus ->\nalmacenar (spec, ver `logo_upload.upload_logo`).",
+        "operationId": "upload_logo_api_v1_platform_tenants_logo_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_logo_api_v1_platform_tenants_logo_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoUploadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/tenants": {
       "get": {
         "tags": [
@@ -1802,6 +1844,20 @@
           "company_id"
         ],
         "title": "Body_upload_file_api_v1_uploads_post"
+      },
+      "Body_upload_logo_api_v1_platform_tenants_logo_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_logo_api_v1_platform_tenants_logo_post"
       },
       "CompanyCreate": {
         "properties": {
@@ -2836,6 +2892,20 @@
         ],
         "title": "LoginRequest",
         "description": "Cuerpo de `POST /auth/login`."
+      },
+      "LogoUploadOut": {
+        "properties": {
+          "logo_url": {
+            "type": "string",
+            "title": "Logo Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "logo_url"
+        ],
+        "title": "LogoUploadOut",
+        "description": "Respuesta de `POST /platform/tenants/logo`: la URL p\u00fablica lista para usar como `logo_url`\nen el alta/edici\u00f3n de un tenant (2026-08-01, decisi\u00f3n de Julio)."
       },
       "MeCompanyOut": {
         "properties": {

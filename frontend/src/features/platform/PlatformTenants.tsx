@@ -6,7 +6,7 @@
 // todavía) + ciclo de vida (S4.7: suspender/reactivar/exportar/borrar). Las acciones por fila viven
 // en `TenantRowActions` (extraído tras la auditoría de S4.7: la celda había crecido demasiado
 // mezclando 4 flujos de mutación distintos).
-import { useState, type FormEvent } from 'react'
+import { useState, type ChangeEvent, type FormEvent } from 'react'
 
 import { formatDate, formatDateTime } from '../../shared/format'
 import { ScrollableTable } from '../../shared/ScrollableTable'
@@ -15,6 +15,7 @@ import { TenantRowActions } from './TenantRowActions'
 import { useCreateTenant } from './useCreateTenant'
 import { useTenantMetrics } from './useTenantMetrics'
 import { useTenants } from './useTenants'
+import { useUploadLogo } from './useUploadLogo'
 
 const EMPTY_FORM = {
   name: '',
@@ -29,9 +30,19 @@ export function PlatformTenants() {
   const tenants = useTenants()
   const metrics = useTenantMetrics()
   const createTenant = useCreateTenant()
+  const uploadLogo = useUploadLogo()
   const [form, setForm] = useState(EMPTY_FORM)
 
   const rows = tenants.data ?? []
+
+  const handleLogoFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // permite volver a elegir el mismo fichero si la subida falla
+    if (!file) return
+    uploadLogo.mutate(file, {
+      onSuccess: (data) => setForm((f) => ({ ...f, logo_url: data.logo_url })),
+    })
+  }
 
   const handleCreate = (e: FormEvent) => {
     e.preventDefault()
@@ -72,14 +83,37 @@ export function PlatformTenants() {
               className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
             />
           </label>
-          <label className="flex flex-col text-sm text-slate-300">
-            Logo (URL)
-            <input
-              value={form.logo_url}
-              onChange={(e) => setForm((f) => ({ ...f, logo_url: e.target.value }))}
-              className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
-            />
-          </label>
+          <div className="flex flex-col gap-1 text-sm text-slate-300">
+            <div className="flex items-end gap-2">
+              <label className="flex flex-col">
+                Logo (URL)
+                <input
+                  value={form.logo_url}
+                  onChange={(e) => setForm((f) => ({ ...f, logo_url: e.target.value }))}
+                  className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
+                />
+              </label>
+              {/* Alternativa a pegar una URL ya alojada en otro sitio (2026-08-01, decisión de
+                  Julio): sube la imagen y rellena el campo de arriba con la URL pública real.
+                  Hermano del `label` de arriba, nunca anidado dentro (un `<label>` dentro de otro
+                  `<label>` es HTML inválido y rompe la asociación accesible del primero). */}
+              <label className="cursor-pointer rounded border border-slate-600 px-2 py-1 text-xs text-slate-100">
+                {uploadLogo.isPending ? 'Subiendo…' : 'Subir imagen'}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  onChange={handleLogoFileChange}
+                  disabled={uploadLogo.isPending}
+                  className="sr-only"
+                />
+              </label>
+            </div>
+            {uploadLogo.isError && (
+              <p role="alert" className="text-xs text-red-400">
+                {uploadLogo.error instanceof Error ? uploadLogo.error.message : 'No se pudo subir el logo.'}
+              </p>
+            )}
+          </div>
           <label className="flex flex-col text-sm text-slate-300">
             Color primario
             <input

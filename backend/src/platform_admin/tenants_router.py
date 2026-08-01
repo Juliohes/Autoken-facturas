@@ -7,16 +7,18 @@ o la excepción de dominio de `platform_admin.service` a la respuesta. Sin SQL n
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from identity.authz import require_platform_admin
 from identity.dependencies import PlatformAuthContext
-from platform_admin import service
+from invoice_intake.storage import StorageUnavailable
+from platform_admin import logo_upload, service
 from platform_admin.repository import TenantMetrics, TenantRecord
 
 router = APIRouter(prefix="/platform/tenants", tags=["platform"])
@@ -109,6 +111,43 @@ def _metrics_to_out(record: TenantMetrics) -> TenantMetricsOut:
         ocr_extractions_count=record.ocr_extractions_count,
         last_activity_at=record.last_activity_at,
     )
+
+
+class LogoUploadOut(BaseModel):
+    """Respuesta de `POST /platform/tenants/logo`: la URL pública lista para usar como `logo_url`
+    en el alta/edición de un tenant (2026-08-01, decisión de Julio)."""
+
+    logo_url: str
+
+
+@router.post("/logo", status_code=201)
+async def upload_logo(identity: Platform, file: UploadFile) -> LogoUploadOut:
+    """Sube una imagen de logo (jpeg/png, máx. 2 MiB) y devuelve su URL pública.
+
+    Antes de esto, `logo_url` solo admitía pegar una URL ya alojada en otro sitio. Mismo orden de
+    validación que el intake de facturas (S2.1): vacío -> tamaño -> tipo real -> antivirus ->
+    almacenar (spec, ver `logo_upload.upload_logo`)."""
+    content = await file.read(logo_upload.MAX_LOGO_BYTES + 1)
+    try:
+        logo_url = await asyncio.to_thread(logo_upload.upload_logo, content)
+    except logo_upload.LogoEmpty as exc:
+        raise HTTPException(status_code=422, detail="El fichero está vacío") from exc
+    except logo_upload.LogoTooLarge as exc:
+        raise HTTPException(
+            status_code=413,
+            detail=f"El logo supera el tamaño máximo ({logo_upload.MAX_LOGO_BYTES} bytes)",
+        ) from exc
+    except logo_upload.LogoTypeNotAllowed as exc:
+        raise HTTPException(
+            status_code=415, detail="Solo se admiten imágenes JPEG o PNG"
+        ) from exc
+    except logo_upload.ScanInfected as exc:
+        raise HTTPException(status_code=422, detail="El fichero no pasó el antivirus") from exc
+    except logo_upload.ScannerUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Antivirus no disponible") from exc
+    except StorageUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Almacén de ficheros no disponible") from exc
+    return LogoUploadOut(logo_url=logo_url)
 
 
 @router.post("", status_code=201)
