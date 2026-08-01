@@ -3,6 +3,7 @@
 // con el estado local de edición de una fila.
 import { useState } from 'react'
 
+import { formatDate } from '../../shared/format'
 import type { CompanyRow, CompanyUpdate } from './types'
 
 const STATUS_OPTIONS = [
@@ -100,24 +101,26 @@ export function CompanyTableRow({
         </td>
         <td className="p-2">{company.user_count}</td>
         <td className="p-2">{company.invoice_count}</td>
-        <td className="p-2">{company.last_invoice_at ?? '—'}</td>
-        <td className="p-2">{company.created_at}</td>
-        <td className="p-2 space-x-2">
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving}
-            className="text-emerald-400 underline disabled:opacity-40"
-          >
-            Guardar
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditing(false)}
-            className="text-slate-400 underline"
-          >
-            Cancelar
-          </button>
+        <td className="p-2">{formatDate(company.last_invoice_at)}</td>
+        <td className="p-2">{formatDate(company.created_at)}</td>
+        <td className="p-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="text-emerald-400 underline disabled:opacity-40"
+            >
+              Guardar
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="text-slate-400 underline"
+            >
+              Cancelar
+            </button>
+          </div>
         </td>
       </tr>
     )
@@ -131,28 +134,35 @@ export function CompanyTableRow({
       <td className="p-2">{company.notes ?? '—'}</td>
       <td className="p-2">{company.user_count}</td>
       <td className="p-2">{company.invoice_count}</td>
-      <td className="p-2">{company.last_invoice_at ?? '—'}</td>
-      <td className="p-2">{company.created_at}</td>
-      <td className="p-2 space-x-2">
-        <button type="button" onClick={startEditing} className="text-emerald-400 underline">
-          Editar
-        </button>
-        <button type="button" onClick={onViewInvoices} className="text-emerald-400 underline">
-          Ver facturas
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={deleting}
-          className="text-red-400 underline disabled:opacity-40"
-        >
-          {deleting ? 'Borrando…' : 'Borrar'}
-        </button>
-        {deleteError && (
-          <p role="alert" className="text-xs text-red-400">
-            {deleteError}
-          </p>
-        )}
+      <td className="p-2">{formatDate(company.last_invoice_at)}</td>
+      <td className="p-2">{formatDate(company.created_at)}</td>
+      <td className="p-2">
+        {/* `flex-col`: los botones en su propia fila alineada, el error de borrado (si lo hay)
+            debajo, en vez de que ambos se apilen sin control dentro de la misma celda (2026-08-01,
+            hallazgo de Julio: "los enlaces... están visualmente descolocados"). */}
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={startEditing} className="text-emerald-400 underline">
+              Editar
+            </button>
+            <button type="button" onClick={onViewInvoices} className="text-emerald-400 underline">
+              Ver facturas
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={deleting}
+              className="text-red-400 underline disabled:opacity-40"
+            >
+              {deleting ? 'Borrando…' : 'Borrar'}
+            </button>
+          </div>
+          {deleteError && (
+            <p role="alert" className="text-xs text-red-400">
+              {deleteError}
+            </p>
+          )}
+        </div>
       </td>
     </tr>
   )

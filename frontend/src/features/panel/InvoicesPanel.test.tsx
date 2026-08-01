@@ -85,7 +85,7 @@ beforeEach(() => {
 })
 
 describe('InvoicesPanel (S3.1)', () => {
-  it('C13: muestra una fila por factura con proveedor, CIF, estado, fecha, importes, tramos e IRPF', async () => {
+  it('C13: muestra una fila por factura con proveedor, CIF, fecha, importes, tramos e IRPF', async () => {
     mockRoutes({
       panel: makePage([
         makeRow({
@@ -107,11 +107,12 @@ describe('InvoicesPanel (S3.1)', () => {
     const first = rows[0]
     expect(within(first).getByText('Proveedor Uno')).toBeInTheDocument()
     // Importes (base, IVA, total) y tramos de IVA, no solo el total (hallazgo de auditoría S3.1).
-    expect(within(first).getByText('100.00')).toBeInTheDocument()
-    expect(within(first).getByText('21.00')).toBeInTheDocument()
-    expect(within(first).getByText('121.00')).toBeInTheDocument()
-    expect(within(first).getByText('15.00')).toBeInTheDocument()
-    expect(within(first).getByTestId('tax-lines')).toHaveTextContent('21% (100.00 → 21.00)')
+    // Formateados con coma decimal (2026-08-01, a petición de Julio), nunca con punto.
+    expect(within(first).getByText('100,00')).toBeInTheDocument()
+    expect(within(first).getByText('21,00')).toBeInTheDocument()
+    expect(within(first).getByText('121,00')).toBeInTheDocument()
+    expect(within(first).getByText('15,00')).toBeInTheDocument()
+    expect(within(first).getByTestId('tax-lines')).toHaveTextContent('21% (100,00 → 21,00)')
 
     expect(screen.getByText('Desde')).toBeInTheDocument()
     expect(screen.getByText('Hasta')).toBeInTheDocument()

@@ -3,6 +3,7 @@
 // `tenant_admin` la ve (portero de roles en el backend; aquí no se repite esa comprobación).
 import { useState, type FormEvent } from 'react'
 
+import { ScrollableTable } from '../../shared/ScrollableTable'
 import { CompanyTableRow } from './CompanyTableRow'
 import { PendingRegistrations } from './PendingRegistrations'
 import { PurgeTestInvoices } from './PurgeTestInvoices'
@@ -120,8 +121,8 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
       )}
 
       {!companies.isLoading && !companies.isError && rows.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm" data-testid="companies-table">
+        <ScrollableTable>
+          <table className="w-full whitespace-nowrap text-left text-sm" data-testid="companies-table">
             <thead className="text-slate-400">
               <tr>
                 <th className="p-2">Nombre</th>
@@ -156,7 +157,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
       )}
 
       <PendingRegistrations />

@@ -4,6 +4,8 @@
 // Comportamientos C13-C16 de la spec.
 import { useState } from 'react'
 
+import { formatCurrency, formatDateTime } from '../../shared/format'
+import { ScrollableTable } from '../../shared/ScrollableTable'
 import { useCompanyOptions } from '../companies/useCompanyOptions'
 import { useDownloadUrl } from './useDownloadUrl'
 import { useExportInvoices } from './useExportInvoices'
@@ -147,13 +149,15 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
               No se pudo generar el enlace de la imagen. Inténtalo de nuevo.
             </p>
           )}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm" data-testid="invoices-table">
+          <ScrollableTable>
+            <table
+              className="w-full whitespace-nowrap text-left text-sm"
+              data-testid="invoices-table"
+            >
               <thead className="text-slate-400">
                 <tr>
                   <th className="p-2">Proveedor</th>
                   <th className="p-2">CIF</th>
-                  <th className="p-2">Estado CIF</th>
                   <th className="p-2">Fecha</th>
                   <th className="p-2">Base</th>
                   <th className="p-2">IVA</th>
@@ -170,7 +174,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollableTable>
 
           {panel.hasNextPage && (
             <button
@@ -198,20 +202,22 @@ function InvoiceTableRow({ row, onView }: RowProps) {
     <tr data-testid="invoice-row">
       <td className="p-2">{row.counterparty_name ?? '—'}</td>
       <td className="p-2">{row.counterparty_tax_id ?? '—'}</td>
-      <td className="p-2">{row.counterparty_cif_status}</td>
       <td className="p-2">{row.issue_date ?? '—'}</td>
-      <td className="p-2">{row.net_amount ?? '—'}</td>
-      <td className="p-2">{row.tax_amount ?? '—'}</td>
-      <td className="p-2">{row.total_amount ?? '—'}</td>
-      <td className="p-2">{row.irpf_amount ?? '—'}</td>
+      <td className="p-2">{formatCurrency(row.net_amount)}</td>
+      <td className="p-2">{formatCurrency(row.tax_amount)}</td>
+      <td className="p-2">{formatCurrency(row.total_amount)}</td>
+      <td className="p-2">{formatCurrency(row.irpf_amount)}</td>
       <td className="p-2" data-testid="tax-lines">
         {row.tax_lines.length === 0
           ? '—'
           : row.tax_lines
-              .map((line) => `${line.iva_pct ?? '—'}% (${line.base ?? '—'} → ${line.cuota ?? '—'})`)
+              .map(
+                (line) =>
+                  `${line.iva_pct ?? '—'}% (${formatCurrency(line.base)} → ${formatCurrency(line.cuota)})`,
+              )
               .join(', ')}
       </td>
-      <td className="p-2">{row.uploaded_at}</td>
+      <td className="p-2">{formatDateTime(row.uploaded_at)}</td>
       <td className="p-2">
         <button
           type="button"

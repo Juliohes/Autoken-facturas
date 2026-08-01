@@ -9,6 +9,7 @@
 import { useState, type FormEvent } from 'react'
 
 import { formatDate, formatDateTime } from '../../shared/format'
+import { ScrollableTable } from '../../shared/ScrollableTable'
 import { MutationErrorBanner } from './MutationErrorBanner'
 import { TenantRowActions } from './TenantRowActions'
 import { useCreateTenant } from './useCreateTenant'
@@ -131,8 +132,8 @@ export function PlatformTenants() {
       )}
 
       {!tenants.isLoading && !tenants.isError && rows.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm" data-testid="tenants-table">
+        <ScrollableTable>
+          <table className="w-full whitespace-nowrap text-left text-sm" data-testid="tenants-table">
             <thead className="text-slate-400">
               <tr>
                 <th className="p-2">Subdominio</th>
@@ -158,7 +159,7 @@ export function PlatformTenants() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
       )}
 
       <div>
@@ -173,8 +174,11 @@ export function PlatformTenants() {
         )}
 
         {!metrics.isLoading && !metrics.isError && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm" data-testid="tenant-metrics-table">
+          <ScrollableTable>
+            <table
+              className="w-full whitespace-nowrap text-left text-sm"
+              data-testid="tenant-metrics-table"
+            >
               <thead className="text-slate-400">
                 <tr>
                   <th className="p-2">Subdominio</th>
@@ -202,7 +206,7 @@ export function PlatformTenants() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollableTable>
         )}
       </div>
     </section>

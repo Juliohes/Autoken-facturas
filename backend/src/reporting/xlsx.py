@@ -8,7 +8,6 @@ ASGI y del servicio para no mezclar "qué facturas" con "cómo se ven en una hoj
 from __future__ import annotations
 
 import io
-from datetime import datetime
 
 from openpyxl import Workbook
 
@@ -19,13 +18,11 @@ _HEADERS = [
     "Fecha",
     "Proveedor",
     "CIF proveedor",
-    "Estado CIF",
     "Base",
     "IVA",
     "Total",
     "IRPF",
     "Tramos IVA",
-    "Fecha de subida",
     "Confirmado por",
 ]
 
@@ -55,15 +52,6 @@ def _text_cell(value: str | None) -> str:
     return value
 
 
-def _naive_datetime(value: datetime) -> datetime:
-    """Quita la zona horaria: Excel no admite `datetime` con `tzinfo` (openpyxl lo rechaza).
-
-    `uploaded_at` llega como `timestamptz` de Postgres (aware, en UTC); se escribe tal cual la hora
-    UTC, sin convertir a ninguna zona local (evita inventar una zona que no se ha pedido).
-    """
-    return value.replace(tzinfo=None)
-
-
 def _tax_lines_cell(item: ExportItem) -> str:
     """Resumen de los tramos de IVA en una sola celda (spec §2), p. ej. "21% (100,00 → 21,00)"."""
     if not item.tax_lines:
@@ -87,13 +75,11 @@ def build_export_workbook(items: list[ExportItem]) -> bytes:
                 _cell(item.issue_date),
                 _text_cell(item.counterparty_name),
                 _text_cell(item.counterparty_tax_id),
-                _text_cell(item.counterparty_cif_status),
                 _cell(item.net_amount),
                 _cell(item.tax_amount),
                 _cell(item.total_amount),
                 _cell(item.irpf_amount),
                 _text_cell(_tax_lines_cell(item)),
-                _naive_datetime(item.uploaded_at),
                 _text_cell(item.confirmed_by_email),
             ]
         )

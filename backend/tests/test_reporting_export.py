@@ -82,8 +82,9 @@ async def test_c3_el_export_no_pagina_trae_mas_de_una_pagina_del_panel(authapi: 
 
 
 async def test_c4_las_columnas_y_su_contenido_son_correctos(authapi: Api) -> None:
-    """C4: la fila trae Empresa, Fecha, Proveedor, CIF, Estado CIF, Base, IVA, Total, IRPF,
-    Tramos IVA, Fecha de subida, Confirmado por (email), en ese orden."""
+    """C4: la fila trae Empresa, Fecha, Proveedor, CIF, Base, IVA, Total, IRPF, Tramos IVA,
+    Confirmado por (email), en ese orden. "Estado CIF"/"Fecha de subida" se quitaron del export a
+    petición de Julio (2026-08-01) — el dato sigue existiendo en BD, solo deja de mostrarse aquí."""
     client, dsns = authapi
     tenant_id, admin_id, company_id, token = await _admin(dsns, client)
     await seed_invoice(
@@ -113,22 +114,18 @@ async def test_c4_las_columnas_y_su_contenido_son_correctos(authapi: Api) -> Non
         "Fecha",
         "Proveedor",
         "CIF proveedor",
-        "Estado CIF",
         "Base",
         "IVA",
         "Total",
         "IRPF",
         "Tramos IVA",
-        "Fecha de subida",
         "Confirmado por",
     )
     row = _read_rows(resp.content)[0]
     assert row[0] == "Empresa"  # nombre de la empresa sembrada por _admin en test_reporting_panel
     assert str(row[2]) == "Proveedor SA"
     assert str(row[3]) == "A39031620"
-    assert row[4] == "valid"
-    assert row[10] is not None  # fecha de subida presente
-    assert row[11] == "admin@ilex.es"
+    assert row[9] == "admin@ilex.es"
 
 
 async def test_c4b_nombre_de_proveedor_con_formula_no_se_ejecuta_como_formula(
