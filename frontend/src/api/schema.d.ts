@@ -1418,10 +1418,14 @@ export interface components {
             name: string;
             /** Companies Count */
             companies_count: number;
-            /** Active Users Count */
-            active_users_count: number;
+            /** Admins Count */
+            admins_count: number;
+            /** Users Count */
+            users_count: number;
             /** Invoices This Month */
             invoices_this_month: number;
+            /** Invoices Total Count */
+            invoices_total_count: number;
             /** Ocr Extractions Count */
             ocr_extractions_count: number;
             /** Last Activity At */

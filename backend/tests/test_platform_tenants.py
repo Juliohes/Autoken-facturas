@@ -537,12 +537,16 @@ def _metric_for(rows: list[dict], tenant_id: str) -> dict:
 
 
 async def test_s45_c1_metricas_completas_de_un_tenant_con_datos(authapi: Api) -> None:
-    """C1: empresas/usuarios activos/facturas del mes/extracciones OCR/última actividad reales.
+    """C1: empresas/usuarios+admins activos/facturas del mes/facturas totales/extracciones OCR/
+    última actividad reales.
 
     `companies_count` cuenta CUALQUIER estado (una empresa `pending` incluida) y
     `ocr_extractions_count` cuenta CUALQUIER `status` de extracción (spec §0 decisión 5): se siembra
     una empresa `pending` y una extracción `status="failed"` para blindar ambos contra un futuro
     `WHERE status = ...` añadido "por consistencia" con el filtro de usuarios activos.
+    `users_count`/`admins_count` (2026-08-01, a petición de Julio) separan `role='user'` de
+    `role='tenant_admin'` en vez de sumarlos en una sola cifra: se siembra un `tenant_admin`
+    dedicado para que el test falle si algún día vuelven a mezclarse.
     """
     client, dsns = authapi
     tenant_id = await seed_tenant(dsns["admin"], "conmetricas", "Con Métricas SL")
@@ -556,6 +560,13 @@ async def test_s45_c1_metricas_completas_de_un_tenant_con_datos(authapi: Api) ->
     )
     await seed_user(dsns["admin"], tenant_id=tenant_id, email="activo2@x.es", status="active")
     await seed_user(dsns["admin"], tenant_id=tenant_id, email="pendiente@x.es", status="pending")
+    await seed_user(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        email="admin1@x.es",
+        role="tenant_admin",
+        status="active",
+    )
     await seed_invoice(
         dsns,
         tenant_id=tenant_id,
@@ -595,8 +606,10 @@ async def test_s45_c1_metricas_completas_de_un_tenant_con_datos(authapi: Api) ->
     assert resp.status_code == 200, resp.text
     row = _metric_for(resp.json(), tenant_id)
     assert row["companies_count"] == 3
-    assert row["active_users_count"] == 2
+    assert row["users_count"] == 2
+    assert row["admins_count"] == 1
     assert row["invoices_this_month"] == 1
+    assert row["invoices_total_count"] == 1
     assert row["ocr_extractions_count"] == 6
     assert row["last_activity_at"] is not None
     assert abs(datetime.fromisoformat(row["last_activity_at"]) - latest_activity) < timedelta(
@@ -616,14 +629,18 @@ async def test_s45_c2_tenant_recien_creado_sin_datos(authapi: Api) -> None:
     assert resp.status_code == 200, resp.text
     row = _metric_for(resp.json(), tenant_id)
     assert row["companies_count"] == 0
-    assert row["active_users_count"] == 0
+    assert row["users_count"] == 0
+    assert row["admins_count"] == 0
     assert row["invoices_this_month"] == 0
+    assert row["invoices_total_count"] == 0
     assert row["ocr_extractions_count"] == 0
     assert row["last_activity_at"] is None
 
 
 async def test_s45_c3_facturas_este_mes_excluye_otros_meses_y_pruebas(authapi: Api) -> None:
-    """C3: solo cuenta facturas reales confirmadas dentro del mes en curso."""
+    """C3: `invoices_this_month` solo cuenta facturas reales confirmadas dentro del mes en curso;
+    `invoices_total_count` (2026-08-01) cuenta TODAS las reales confirmadas, sin importar el mes —
+    por eso la de hace 45 días entra en el total pero no en la del mes."""
     client, dsns = authapi
     tenant_id = await seed_tenant(dsns["admin"], "filtromes", "Filtro Mes SL")
     company_id = await seed_company(dsns["admin"], tenant_id=tenant_id, name="A", cif="A39031620")
@@ -636,14 +653,17 @@ async def test_s45_c3_facturas_este_mes_excluye_otros_meses_y_pruebas(authapi: A
     resp = await client.get(METRICS_URL, headers=_auth(token))
 
     assert resp.status_code == 200, resp.text
-    assert _metric_for(resp.json(), tenant_id)["invoices_this_month"] == 1
+    row = _metric_for(resp.json(), tenant_id)
+    assert row["invoices_this_month"] == 1
+    assert row["invoices_total_count"] == 2
 
 
 async def test_s45_c4_anticruce_las_metricas_de_un_tenant_no_contaminan_otro(
     authapi: Api,
 ) -> None:
-    """C4: dos tenants con datos propios -> cada fila trae solo los números de su tenant (los 5
-    campos, incluidos `active_users_count`/`last_activity_at`, no solo los 3 más fáciles de ver)."""
+    """C4: dos tenants con datos propios -> cada fila trae solo los números de su tenant (todos los
+    campos, incluidos `users_count`/`admins_count`/`invoices_total_count`/`last_activity_at`, no
+    solo los más fáciles de ver)."""
     client, dsns = authapi
     tenant_a = await seed_tenant(dsns["admin"], "tenanta", "Tenant A")
     tenant_b = await seed_tenant(dsns["admin"], "tenantb", "Tenant B")
@@ -668,13 +688,17 @@ async def test_s45_c4_anticruce_las_metricas_de_un_tenant_no_contaminan_otro(
     row_a = _metric_for(rows, tenant_a)
     row_b = _metric_for(rows, tenant_b)
     assert row_a["companies_count"] == 2
-    assert row_a["active_users_count"] == 1
+    assert row_a["users_count"] == 1
+    assert row_a["admins_count"] == 0
     assert row_a["invoices_this_month"] == 1
+    assert row_a["invoices_total_count"] == 1
     assert row_a["ocr_extractions_count"] == 0
     assert row_a["last_activity_at"] is not None
     assert row_b["companies_count"] == 1
-    assert row_b["active_users_count"] == 1  # el uploader que crea seed_ocr_extraction por defecto
+    assert row_b["users_count"] == 1  # el uploader que crea seed_ocr_extraction por defecto
+    assert row_b["admins_count"] == 0
     assert row_b["invoices_this_month"] == 0
+    assert row_b["invoices_total_count"] == 0
     assert row_b["ocr_extractions_count"] == 1
     assert row_b["last_activity_at"] is None
 

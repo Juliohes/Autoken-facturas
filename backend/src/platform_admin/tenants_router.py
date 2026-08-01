@@ -88,8 +88,10 @@ class TenantMetricsOut(BaseModel):
     slug: str
     name: str
     companies_count: int
-    active_users_count: int
+    admins_count: int
+    users_count: int
     invoices_this_month: int
+    invoices_total_count: int
     ocr_extractions_count: int
     last_activity_at: datetime | None
 
@@ -100,8 +102,10 @@ def _metrics_to_out(record: TenantMetrics) -> TenantMetricsOut:
         slug=record.slug,
         name=record.name,
         companies_count=record.companies_count,
-        active_users_count=record.active_users_count,
+        admins_count=record.admins_count,
+        users_count=record.users_count,
         invoices_this_month=record.invoices_this_month,
+        invoices_total_count=record.invoices_total_count,
         ocr_extractions_count=record.ocr_extractions_count,
         last_activity_at=record.last_activity_at,
     )

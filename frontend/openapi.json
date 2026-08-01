@@ -3317,13 +3317,21 @@
             "type": "integer",
             "title": "Companies Count"
           },
-          "active_users_count": {
+          "admins_count": {
             "type": "integer",
-            "title": "Active Users Count"
+            "title": "Admins Count"
+          },
+          "users_count": {
+            "type": "integer",
+            "title": "Users Count"
           },
           "invoices_this_month": {
             "type": "integer",
             "title": "Invoices This Month"
+          },
+          "invoices_total_count": {
+            "type": "integer",
+            "title": "Invoices Total Count"
           },
           "ocr_extractions_count": {
             "type": "integer",
@@ -3348,8 +3356,10 @@
           "slug",
           "name",
           "companies_count",
-          "active_users_count",
+          "admins_count",
+          "users_count",
           "invoices_this_month",
+          "invoices_total_count",
           "ocr_extractions_count",
           "last_activity_at"
         ],

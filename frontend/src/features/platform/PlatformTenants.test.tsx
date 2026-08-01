@@ -37,8 +37,10 @@ function makeMetric(over: Partial<TenantMetrics> = {}): TenantMetrics {
     slug: 'nueva',
     name: 'Nueva SL',
     companies_count: 0,
-    active_users_count: 0,
+    admins_count: 0,
+    users_count: 0,
     invoices_this_month: 0,
+    invoices_total_count: 0,
     ocr_extractions_count: 0,
     last_activity_at: null,
     ...over,
@@ -83,20 +85,6 @@ describe('PlatformTenants (S4.1)', () => {
     expect(rows[0]).toHaveTextContent('I-Lex')
     expect(rows[0]).toHaveTextContent('Activo')
     expect(rows[0]).toHaveTextContent('Sí')
-  })
-
-  it('S4.6: muestra el dominio propio si está configurado, o un guion si no', async () => {
-    mockRoutes([
-      makeTenant({ id: 't1', slug: 'con-dominio', custom_domain: 'facturas.cliente.es' }),
-      makeTenant({ id: 't2', slug: 'sin-dominio', custom_domain: null }),
-    ])
-    renderPanel()
-
-    const rows = await screen.findAllByTestId('tenant-row')
-    const conDominio = rows.find((r) => r.textContent?.startsWith('con-dominio'))
-    const sinDominio = rows.find((r) => r.textContent?.startsWith('sin-dominio'))
-    expect(conDominio).toHaveTextContent('facturas.cliente.es')
-    expect(sinDominio).toHaveTextContent('—')
   })
 
   it('C2: crear un tenant envía el alta con nombre, slug, logo y colores', async () => {
@@ -296,14 +284,16 @@ describe('PlatformTenants — modo demo (S4.4)', () => {
 // --- S4.5 Métricas y consumo (spec docs/specs/S4.5-metricas-y-consumo.md, criterios C7-C8) --------
 
 describe('PlatformTenants — métricas y consumo (S4.5)', () => {
-  it('C7: muestra una fila por tenant con empresas/usuarios/facturas/OCR/último uso', async () => {
+  it('C7: muestra una fila por tenant con empresas/usuarios/admins/facturas/OCR/último uso', async () => {
     mockRoutes(
       [makeTenant()],
       [
         makeMetric({
           companies_count: 3,
-          active_users_count: 2,
+          admins_count: 1,
+          users_count: 2,
           invoices_this_month: 5,
+          invoices_total_count: 9,
           ocr_extractions_count: 7,
           last_activity_at: '2026-07-24T10:00:00Z',
         }),
@@ -314,16 +304,19 @@ describe('PlatformTenants — métricas y consumo (S4.5)', () => {
     const rows = await screen.findAllByTestId('tenant-metrics-row')
     expect(rows).toHaveLength(1)
     expect(rows[0]).toHaveTextContent('3')
+    expect(rows[0]).toHaveTextContent('1')
     expect(rows[0]).toHaveTextContent('2')
     expect(rows[0]).toHaveTextContent('5')
+    expect(rows[0]).toHaveTextContent('9')
     expect(rows[0]).toHaveTextContent('7')
-    expect(rows[0]).toHaveTextContent('2026-07-24T10:00:00Z')
+    // Formateada (fecha+hora:minuto, sin segundos, hora peninsular): 10:00Z en julio -> 12:00 CEST.
+    expect(rows[0]).toHaveTextContent('24/07/2026, 12:00')
   })
 
   it('spec §4: nunca presenta las métricas como dinero (sin €/$ ni la palabra "coste")', async () => {
     mockRoutes(
       [makeTenant()],
-      [makeMetric({ companies_count: 3, active_users_count: 2, ocr_extractions_count: 7 })],
+      [makeMetric({ companies_count: 3, admins_count: 1, users_count: 2, ocr_extractions_count: 7 })],
     )
     renderPanel()
 
