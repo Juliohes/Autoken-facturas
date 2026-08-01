@@ -2,7 +2,9 @@
 // subida; la lógica de decisión vive en módulos puros aparte (`captureLoop.ts`, `uploadErrors.ts`,
 // `captureSelectors.ts`, `processCapture.ts`), sin monolito. Comportamientos C1-C14 de la spec.
 import { useEffect, useReducer, useRef, useState, type ChangeEvent } from 'react'
+import { Link } from 'react-router-dom'
 
+import { ROUTES } from '../../app/routes'
 import { useCompanyOptions } from '../companies/useCompanyOptions'
 import { useSession } from '../session/SessionProvider'
 import { analyzeFrame } from './analyzeFrame'
@@ -257,7 +259,14 @@ export function CaptureScreen({ onUploaded }: Props) {
 
   return (
     <section className="mx-auto max-w-xl space-y-4 p-6 text-slate-100">
-      <h1 className="text-xl font-semibold">Capturar factura</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold">Capturar factura</h1>
+        {/* "Historial" deja de ser una entrada propia del menú (2026-08-01, a petición de Julio):
+            vive aquí dentro, junto a la tarea principal del día a día de este rol (S2.2). */}
+        <Link to={ROUTES.history} className="text-sm text-emerald-400 underline">
+          Ver historial
+        </Link>
+      </div>
       {DirectionSelector}
 
       {captureError && (

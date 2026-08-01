@@ -66,7 +66,10 @@ const ROUTE_DEFS: RouteDef[] = [
   },
   { path: ROUTES.invoices, roles: ['tenant_admin'], label: 'Facturas' },
   { path: ROUTES.companies, roles: ['tenant_admin'], label: 'Empresas' },
-  { path: ROUTES.history, roles: ['tenant_admin', 'user'], label: 'Historial' },
+  // Sin `label` (2026-08-01, a petición de Julio): ya no es una entrada propia del menú, sigue
+  // siendo una ruta protegida igual, pero se llega a ella desde el enlace "Ver historial" dentro
+  // de `CaptureScreen` ("Subir factura"), no desde el menú principal.
+  { path: ROUTES.history, roles: ['tenant_admin', 'user'] },
   { path: ROUTES.capture, roles: ['tenant_admin', 'user'], label: 'Subir factura' },
   { path: ROUTES.confirmationPattern, roles: ['tenant_admin', 'user'] },
 ]
