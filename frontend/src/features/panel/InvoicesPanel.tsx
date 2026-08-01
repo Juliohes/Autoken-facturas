@@ -7,10 +7,12 @@ import { useState } from 'react'
 import { formatCurrency, formatDateTime } from '../../shared/format'
 import { ScrollableTable } from '../../shared/ScrollableTable'
 import { useCompanyOptions } from '../companies/useCompanyOptions'
+import { InvoiceHistoryPanel } from './InvoiceHistoryPanel'
 import { useDownloadUrl } from './useDownloadUrl'
+import { useEditInvoice } from './useEditInvoice'
 import { useExportInvoices } from './useExportInvoices'
 import { useInvoicesPanel } from './useInvoicesPanel'
-import type { InvoiceRow, PanelFilters } from './types'
+import type { InvoiceEditIn, InvoiceRow, PanelFilters } from './types'
 
 const CIF_STATUS_OPTIONS = [
   { value: '', label: 'Todos' },
@@ -165,7 +167,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
                   <th className="p-2">IRPF</th>
                   <th className="p-2">Tramos IVA</th>
                   <th className="p-2">Subida</th>
-                  <th className="p-2" />
+                  <th className="p-2">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700">
@@ -197,36 +199,199 @@ interface RowProps {
   onView: (uploadedFileId: string) => void
 }
 
+const EDIT_COLUMN_COUNT = 10
+
+function draftFrom(row: InvoiceRow) {
+  return {
+    counterparty_name: row.counterparty_name ?? '',
+    counterparty_tax_id: row.counterparty_tax_id ?? '',
+    issue_date: row.issue_date ?? '',
+    net_amount: row.net_amount ?? '',
+    tax_amount: row.tax_amount ?? '',
+    total_amount: row.total_amount ?? '',
+    irpf_amount: row.irpf_amount ?? '',
+  }
+}
+
 function InvoiceTableRow({ row, onView }: RowProps) {
+  const [editing, setEditing] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [draft, setDraft] = useState(draftFrom(row))
+  const editInvoice = useEditInvoice()
+
+  const startEditing = () => {
+    setDraft(draftFrom(row))
+    setEditing(true)
+  }
+
+  const save = () => {
+    const body: InvoiceEditIn = {
+      counterparty_name: draft.counterparty_name === '' ? null : draft.counterparty_name,
+      counterparty_tax_id: draft.counterparty_tax_id === '' ? null : draft.counterparty_tax_id,
+      issue_date: draft.issue_date === '' ? null : draft.issue_date,
+      net_amount: draft.net_amount === '' ? null : draft.net_amount,
+      tax_amount: draft.tax_amount === '' ? null : draft.tax_amount,
+      total_amount: draft.total_amount === '' ? null : draft.total_amount,
+      irpf_amount: draft.irpf_amount === '' ? null : draft.irpf_amount,
+    }
+    editInvoice.mutate({ invoiceId: row.id, body }, { onSuccess: () => setEditing(false) })
+  }
+
+  // El "Revertir a este valor" del historial es una edición más, independiente de si esta fila
+  // está en modo edición ahora mismo (no toca `editing`).
+  const revert = (body: InvoiceEditIn) => editInvoice.mutate({ invoiceId: row.id, body })
+
+  const taxLinesText =
+    row.tax_lines.length === 0
+      ? '—'
+      : row.tax_lines
+          .map(
+            (line) =>
+              `${line.iva_pct ?? '—'}% (${formatCurrency(line.base)} → ${formatCurrency(line.cuota)})`,
+          )
+          .join(', ')
+
+  if (editing) {
+    return (
+      <tr data-testid="invoice-row" data-editing="true">
+        <td className="p-2">
+          <input
+            aria-label="Proveedor"
+            value={draft.counterparty_name}
+            onChange={(e) => setDraft((d) => ({ ...d, counterparty_name: e.target.value }))}
+            className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1"
+          />
+        </td>
+        <td className="p-2">
+          <input
+            aria-label="CIF"
+            value={draft.counterparty_tax_id}
+            onChange={(e) => setDraft((d) => ({ ...d, counterparty_tax_id: e.target.value }))}
+            className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1"
+          />
+        </td>
+        <td className="p-2">
+          <input
+            type="date"
+            aria-label="Fecha"
+            value={draft.issue_date}
+            onChange={(e) => setDraft((d) => ({ ...d, issue_date: e.target.value }))}
+            className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
+          />
+        </td>
+        <td className="p-2">
+          <input
+            aria-label="Base"
+            value={draft.net_amount}
+            onChange={(e) => setDraft((d) => ({ ...d, net_amount: e.target.value }))}
+            className="w-20 rounded border border-slate-600 bg-slate-800 px-2 py-1"
+          />
+        </td>
+        <td className="p-2">
+          <input
+            aria-label="IVA"
+            value={draft.tax_amount}
+            onChange={(e) => setDraft((d) => ({ ...d, tax_amount: e.target.value }))}
+            className="w-20 rounded border border-slate-600 bg-slate-800 px-2 py-1"
+          />
+        </td>
+        <td className="p-2">
+          <input
+            aria-label="Total"
+            value={draft.total_amount}
+            onChange={(e) => setDraft((d) => ({ ...d, total_amount: e.target.value }))}
+            className="w-20 rounded border border-slate-600 bg-slate-800 px-2 py-1"
+          />
+        </td>
+        <td className="p-2">
+          <input
+            aria-label="IRPF"
+            value={draft.irpf_amount}
+            onChange={(e) => setDraft((d) => ({ ...d, irpf_amount: e.target.value }))}
+            className="w-20 rounded border border-slate-600 bg-slate-800 px-2 py-1"
+          />
+        </td>
+        {/* Tramos de IVA: fuera de alcance de la edición inline (una lista de tramos, no un
+            valor suelto); se sigue mostrando, solo de lectura. */}
+        <td className="p-2" data-testid="tax-lines">
+          {taxLinesText}
+        </td>
+        <td className="p-2">{formatDateTime(row.uploaded_at)}</td>
+        <td className="p-2">
+          <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={save}
+                disabled={editInvoice.isPending}
+                className="text-emerald-400 underline disabled:opacity-40"
+              >
+                Guardar
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="text-slate-400 underline"
+              >
+                Cancelar
+              </button>
+            </div>
+            {editInvoice.isError && (
+              <p role="alert" className="text-xs text-red-400">
+                {editInvoice.error instanceof Error
+                  ? editInvoice.error.message
+                  : 'No se pudo guardar la factura.'}
+              </p>
+            )}
+          </div>
+        </td>
+      </tr>
+    )
+  }
+
   return (
-    <tr data-testid="invoice-row">
-      <td className="p-2">{row.counterparty_name ?? '—'}</td>
-      <td className="p-2">{row.counterparty_tax_id ?? '—'}</td>
-      <td className="p-2">{row.issue_date ?? '—'}</td>
-      <td className="p-2">{formatCurrency(row.net_amount)}</td>
-      <td className="p-2">{formatCurrency(row.tax_amount)}</td>
-      <td className="p-2">{formatCurrency(row.total_amount)}</td>
-      <td className="p-2">{formatCurrency(row.irpf_amount)}</td>
-      <td className="p-2" data-testid="tax-lines">
-        {row.tax_lines.length === 0
-          ? '—'
-          : row.tax_lines
-              .map(
-                (line) =>
-                  `${line.iva_pct ?? '—'}% (${formatCurrency(line.base)} → ${formatCurrency(line.cuota)})`,
-              )
-              .join(', ')}
-      </td>
-      <td className="p-2">{formatDateTime(row.uploaded_at)}</td>
-      <td className="p-2">
-        <button
-          type="button"
-          onClick={() => onView(row.uploaded_file_id)}
-          className="text-emerald-400 underline"
-        >
-          Ver
-        </button>
-      </td>
-    </tr>
+    <>
+      <tr data-testid="invoice-row">
+        <td className="p-2">{row.counterparty_name ?? '—'}</td>
+        <td className="p-2">{row.counterparty_tax_id ?? '—'}</td>
+        <td className="p-2">{row.issue_date ?? '—'}</td>
+        <td className="p-2">{formatCurrency(row.net_amount)}</td>
+        <td className="p-2">{formatCurrency(row.tax_amount)}</td>
+        <td className="p-2">{formatCurrency(row.total_amount)}</td>
+        <td className="p-2">{formatCurrency(row.irpf_amount)}</td>
+        <td className="p-2" data-testid="tax-lines">
+          {taxLinesText}
+        </td>
+        <td className="p-2">{formatDateTime(row.uploaded_at)}</td>
+        <td className="p-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={startEditing} className="text-emerald-400 underline">
+              Editar
+            </button>
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((open) => !open)}
+              className="text-emerald-400 underline"
+            >
+              {historyOpen ? 'Ocultar historial' : 'Historial'}
+            </button>
+            <button
+              type="button"
+              onClick={() => onView(row.uploaded_file_id)}
+              className="text-emerald-400 underline"
+            >
+              Ver
+            </button>
+          </div>
+        </td>
+      </tr>
+      {historyOpen && (
+        <tr data-testid="invoice-history-panel">
+          <td colSpan={EDIT_COLUMN_COUNT} className="bg-slate-800/50 p-0">
+            <InvoiceHistoryPanel invoiceId={row.id} onRevert={revert} saving={editInvoice.isPending} />
+          </td>
+        </tr>
+      )}
+    </>
   )
 }

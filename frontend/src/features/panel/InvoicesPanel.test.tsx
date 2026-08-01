@@ -8,14 +8,27 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { api } from '../../api/client'
 import { InvoicesPanel } from './InvoicesPanel'
-import type { InvoiceRow, PanelPage } from './types'
+import type { InvoiceEdit, InvoiceRow, PanelPage } from './types'
 
 vi.mock('../../api/client', () => ({
-  api: { GET: vi.fn() },
+  api: { GET: vi.fn(), PATCH: vi.fn() },
 }))
 
 type AsyncMock = Mock<(...args: never[]) => Promise<unknown>>
 const getMock = api.GET as unknown as AsyncMock
+const patchMock = api.PATCH as unknown as AsyncMock
+
+function makeEdit(over: Partial<InvoiceEdit> = {}): InvoiceEdit {
+  return {
+    id: 'e1',
+    field: 'total_amount',
+    old_value: '121.00',
+    new_value: '150.00',
+    edited_by: 'user-1',
+    edited_at: '2026-08-01T10:00:00Z',
+    ...over,
+  }
+}
 
 function makeRow(over: Partial<InvoiceRow> = {}): InvoiceRow {
   return {
@@ -47,11 +60,13 @@ function mockRoutes({
   companies = [{ id: 'c1', name: 'Empresa Uno', cif: 'A11111111', status: 'active' }],
   downloadUrl = { url: 'https://minio.local/signed', expires_in: 300 },
   exportBlob = new Blob(['xlsx'], { type: 'application/vnd.ms-excel' }),
+  history = [],
 }: {
   panel?: PanelPage
   companies?: unknown[]
   downloadUrl?: { url: string; expires_in: number }
   exportBlob?: Blob
+  history?: InvoiceEdit[]
 } = {}) {
   getMock.mockImplementation((path: string) => {
     // El export vive bajo el mismo prefijo que el panel: se comprueba primero (más específico).
@@ -60,6 +75,9 @@ function mockRoutes({
     }
     if (path.includes('/reporting/invoices')) {
       return Promise.resolve({ data: panel, error: undefined })
+    }
+    if (path.includes('/history')) {
+      return Promise.resolve({ data: history, error: undefined })
     }
     if (path.includes('/companies')) {
       return Promise.resolve({ data: companies, error: undefined })
@@ -82,6 +100,7 @@ function renderPanel() {
 
 beforeEach(() => {
   getMock.mockReset()
+  patchMock.mockReset()
 })
 
 describe('InvoicesPanel (S3.1)', () => {
@@ -119,6 +138,75 @@ describe('InvoicesPanel (S3.1)', () => {
     expect(screen.getByText('CIF de contraparte')).toBeInTheDocument()
     expect(screen.getByText('Estado del CIF')).toBeInTheDocument()
     expect(screen.getByText('Empresa')).toBeInTheDocument()
+  })
+
+  it('2026-08-01: editar una factura envía el patch con los campos del formulario', async () => {
+    mockRoutes({
+      panel: makePage([makeRow({ id: 'inv-1', counterparty_name: 'Proveedor SL' })]),
+    })
+    patchMock.mockResolvedValue({ data: { id: 'inv-1' }, error: undefined })
+    const user = userEvent.setup()
+    renderPanel()
+    const [row] = await screen.findAllByTestId('invoice-row')
+
+    await user.click(within(row).getByRole('button', { name: 'Editar' }))
+    const nameInput = within(row).getByLabelText('Proveedor')
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Proveedor Editado SL')
+    await user.click(within(row).getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith('/api/v1/invoices/{invoice_id}', {
+        params: { path: { invoice_id: 'inv-1' } },
+        body: {
+          counterparty_name: 'Proveedor Editado SL',
+          counterparty_tax_id: 'B12345678',
+          issue_date: '2026-07-01',
+          net_amount: '100.00',
+          tax_amount: '21.00',
+          total_amount: '121.00',
+          irpf_amount: null,
+        },
+      })
+    })
+  })
+
+  it('2026-08-01: "Historial" muestra las ediciones de la factura (antes → después)', async () => {
+    mockRoutes({
+      panel: makePage([makeRow({ id: 'inv-1' })]),
+      history: [makeEdit({ field: 'total_amount', old_value: '121.00', new_value: '150.00' })],
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+
+    await user.click(screen.getByRole('button', { name: 'Historial' }))
+
+    const rows = await screen.findAllByTestId('invoice-history-row')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveTextContent('121,00')
+    expect(rows[0]).toHaveTextContent('150,00')
+  })
+
+  it('2026-08-01: "Revertir a este valor" envía un PATCH con el valor anterior de ese campo', async () => {
+    mockRoutes({
+      panel: makePage([makeRow({ id: 'inv-1', total_amount: '150.00' })]),
+      history: [makeEdit({ field: 'total_amount', old_value: '121.00', new_value: '150.00' })],
+    })
+    patchMock.mockResolvedValue({ data: { id: 'inv-1' }, error: undefined })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+
+    await user.click(screen.getByRole('button', { name: 'Historial' }))
+    await user.click(await screen.findByRole('button', { name: 'Revertir a este valor' }))
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith('/api/v1/invoices/{invoice_id}', {
+        params: { path: { invoice_id: 'inv-1' } },
+        body: { total_amount: '121.00' },
+      })
+    })
   })
 
   it('C14: el botón "Ver" pide la URL firmada y la abre en una pestaña nueva', async () => {

@@ -689,6 +689,24 @@ async def edit_invoice(
     return _edit_result(invoice_id, merged, cif_status=cif_status, balance_ok=balance_ok)
 
 
+async def invoice_history(
+    identity: AuthContext, invoice_id: UUID
+) -> list[repository.InvoiceEditEntry]:
+    """Historial de ediciones de una factura del contexto, más reciente primero (2026-08-01).
+
+    Factura fuera del contexto (otro tenant/empresa, o inexistente) -> `InvoiceNotVisible` (404),
+    igual que `edit_invoice`.
+    """
+    settings = get_settings()
+    encryption_key = tenant_encryption_key(settings, identity.tenant_id)
+    current = await repository.get_invoice(
+        identity.session, invoice_id, encryption_key=encryption_key
+    )
+    if current is None:
+        raise InvoiceNotVisible
+    return await repository.list_edits(identity.session, invoice_id, encryption_key=encryption_key)
+
+
 AUDIT_ACTION_PURGE_TEST = "invoice.purge_test"
 
 

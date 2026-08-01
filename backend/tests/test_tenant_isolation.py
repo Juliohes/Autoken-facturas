@@ -52,6 +52,7 @@ _PROTECTED_ROUTES = {
     ("POST", f"{API}/companies"),
     ("PATCH", f"{API}/companies/{{company_id}}"),
     ("DELETE", f"{API}/companies/{{company_id}}"),
+    ("GET", f"{API}/companies/{{company_id}}/history"),
     ("POST", f"{API}/companies/import"),
     ("POST", f"{API}/uploads"),
     ("GET", f"{API}/uploads/{{file_id}}/download-url"),
@@ -59,6 +60,7 @@ _PROTECTED_ROUTES = {
     ("POST", f"{API}/uploads/{{file_id}}/confirm"),
     ("GET", f"{API}/invoices/history"),
     ("PATCH", f"{API}/invoices/{{invoice_id}}"),
+    ("GET", f"{API}/invoices/{{invoice_id}}/history"),
     ("POST", f"{API}/invoices/test/purge"),
     ("GET", f"{API}/reporting/invoices"),
     ("GET", f"{API}/reporting/invoices/export"),
@@ -67,6 +69,7 @@ _PROTECTED_ROUTES = {
     ("POST", f"{API}/registrations/{{user_id}}/approve"),
     ("POST", f"{API}/registrations/{{user_id}}/reject"),
     ("POST", f"{API}/platform/tenants"),
+    ("POST", f"{API}/platform/tenants/logo"),
     ("GET", f"{API}/platform/tenants"),
     ("GET", f"{API}/platform/tenants/metrics"),
     ("POST", f"{API}/platform/tenants/{{tenant_id}}/convert-to-production"),
@@ -94,6 +97,7 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ("POST", f"{API}/companies", {"json": {"name": "X", "cif": VALID_CIF}}),
         ("PATCH", f"{API}/companies/{dummy_id}", {"json": {"name": "X"}}),
         ("DELETE", f"{API}/companies/{dummy_id}", {}),
+        ("GET", f"{API}/companies/{dummy_id}/history", {}),
         (
             "POST",
             f"{API}/companies/import",
@@ -109,6 +113,7 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ("POST", f"{API}/uploads/{dummy_id}/confirm", {"json": {"direction": "recibida"}}),
         ("GET", f"{API}/invoices/history", {}),
         ("PATCH", f"{API}/invoices/{dummy_id}", {"json": {"total_amount": "1.00"}}),
+        ("GET", f"{API}/invoices/{dummy_id}/history", {}),
         ("POST", f"{API}/invoices/test/purge", {}),
         ("GET", f"{API}/reporting/invoices", {}),
         ("GET", f"{API}/reporting/invoices/export", {}),
@@ -117,6 +122,11 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ("POST", f"{API}/registrations/{dummy_id}/approve", {}),
         ("POST", f"{API}/registrations/{dummy_id}/reject", {}),
         ("POST", f"{API}/platform/tenants", {"json": {"name": "X", "slug": "coladaxyz"}}),
+    (
+        "POST",
+        f"{API}/platform/tenants/logo",
+        {"files": {"file": ("logo.jpg", JPEG, JPEG_CT)}},
+    ),
         ("GET", f"{API}/platform/tenants", {}),
         ("GET", f"{API}/platform/tenants/metrics", {}),
         ("POST", f"{API}/platform/tenants/{dummy_id}/convert-to-production", {}),
@@ -208,9 +218,11 @@ async def test_c2_operar_por_id_ajeno_da_404(authapi: Api) -> None:
     casos = [
         ("PATCH", f"{API}/companies/{company_otra}", {"json": {"name": "hack"}}),
         ("DELETE", f"{API}/companies/{company_otra}", {}),
+        ("GET", f"{API}/companies/{company_otra}/history", {}),
         ("POST", f"{API}/registrations/{user_otra}/approve", {}),
         ("POST", f"{API}/registrations/{user_otra}/reject", {}),
         ("PATCH", f"{API}/invoices/{invoice_otra}", {"json": {"total_amount": "1.00"}}),
+        ("GET", f"{API}/invoices/{invoice_otra}/history", {}),
     ]
     for method, path, kwargs in casos:
         resp = await client.request(method, path, headers=propio(), **kwargs)

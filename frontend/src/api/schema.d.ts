@@ -531,6 +531,26 @@ export interface paths {
         patch: operations["edit_invoice_api_v1_invoices__invoice_id__patch"];
         trace?: never;
     };
+    "/api/v1/invoices/{invoice_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Invoice Edit History
+         * @description Historial de ediciones de una factura, más reciente primero. De otro tenant -> 404.
+         */
+        get: operations["invoice_edit_history_api_v1_invoices__invoice_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoices/test/purge": {
         parameters: {
             query?: never;
@@ -1189,6 +1209,33 @@ export interface components {
             row: number;
             /** Reason */
             reason: string;
+        };
+        /**
+         * InvoiceEditEntryOut
+         * @description Una fila del historial de ediciones de una factura (2026-08-01).
+         */
+        InvoiceEditEntryOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Field */
+            field: string;
+            /** Old Value */
+            old_value: string | null;
+            /** New Value */
+            new_value: string | null;
+            /**
+             * Edited By
+             * Format: uuid
+             */
+            edited_by: string;
+            /**
+             * Edited At
+             * Format: date-time
+             */
+            edited_at: string;
         };
         /**
          * InvoiceEditIn
@@ -2310,6 +2357,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvoiceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invoice_edit_history_api_v1_invoices__invoice_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceEditEntryOut"][];
                 };
             };
             /** @description Validation Error */

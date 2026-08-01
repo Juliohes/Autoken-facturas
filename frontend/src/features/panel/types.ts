@@ -7,6 +7,12 @@ export type InvoiceRow = components['schemas']['InvoiceRowOut']
 /** Respuesta completa de `GET /reporting/invoices`: una página (spec §2). */
 export type PanelPage = components['schemas']['PanelOut']
 
+/** Cuerpo de `PATCH /invoices/{id}` (S3.3, editable desde el panel a partir de 2026-08-01). */
+export type InvoiceEditIn = components['schemas']['InvoiceEditIn']
+
+/** Una fila del historial de ediciones de una factura (2026-08-01). */
+export type InvoiceEdit = components['schemas']['InvoiceEditEntryOut']
+
 /** Filtros del panel, todos opcionales y combinables (spec §2).
  *
  * `counterparty_tax_id`: filtro EXACTO por CIF de contraparte (S5.2 C5). Sustituye al antiguo `q`
