@@ -17,6 +17,11 @@ export function useUpdateCompany() {
       if (error) throw new Error(errorDetail(error) ?? 'No se pudo editar la empresa')
       return data
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['companies-panel'] }),
+    onSuccess: (_data, { companyId }) => {
+      queryClient.invalidateQueries({ queryKey: ['companies-panel'] })
+      // Un `Revertir` del historial es un PATCH más: si el panel de historial de esta fila está
+      // abierto, debe reflejar al instante la nueva entrada (la del propio revertir).
+      queryClient.invalidateQueries({ queryKey: ['company-history', companyId] })
+    },
   })
 }

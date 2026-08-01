@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { api } from '../../api/client'
 import { CompaniesPanel } from './CompaniesPanel'
-import type { CompanyRow, PendingRegistration } from './types'
+import type { CompanyEdit, CompanyRow, PendingRegistration } from './types'
 
 vi.mock('../../api/client', () => ({
   api: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn(), DELETE: vi.fn() },
@@ -35,6 +35,18 @@ function makeCompany(over: Partial<CompanyRow> = {}): CompanyRow {
   }
 }
 
+function makeEdit(over: Partial<CompanyEdit> = {}): CompanyEdit {
+  return {
+    id: 'e1',
+    field: 'name',
+    old_value: 'Antes SL',
+    new_value: 'Después SL',
+    edited_by: 'u1',
+    edited_at: '2026-08-01T10:00:00Z',
+    ...over,
+  }
+}
+
 function makeRegistration(over: Partial<PendingRegistration> = {}): PendingRegistration {
   return {
     id: 'u1',
@@ -48,9 +60,11 @@ function makeRegistration(over: Partial<PendingRegistration> = {}): PendingRegis
 function mockRoutes({
   companies = [makeCompany()],
   registrations = [],
+  history = [],
 }: {
   companies?: CompanyRow[]
   registrations?: PendingRegistration[]
+  history?: CompanyEdit[]
 } = {}) {
   getMock.mockImplementation((path: string) => {
     if (path.includes('/reporting/companies')) {
@@ -58,6 +72,9 @@ function mockRoutes({
     }
     if (path.includes('/registrations')) {
       return Promise.resolve({ data: registrations, error: undefined })
+    }
+    if (path.includes('/history')) {
+      return Promise.resolve({ data: history, error: undefined })
     }
     throw new Error(`ruta GET no mockeada: ${path}`)
   })
@@ -224,6 +241,60 @@ describe('CompaniesPanel (S3.4)', () => {
     await user.click(screen.getByRole('button', { name: 'Ver facturas' }))
 
     expect(onViewInvoices).toHaveBeenCalledWith('c1')
+  })
+
+  it('2026-08-01: "Historial" muestra las ediciones de la empresa (antes → después)', async () => {
+    mockRoutes({
+      companies: [makeCompany({ id: 'c1' })],
+      history: [
+        makeEdit({ field: 'name', old_value: 'Antes SL', new_value: 'Después SL' }),
+        makeEdit({ id: 'e2', field: 'cif', old_value: 'A11111111', new_value: 'B22222222' }),
+      ],
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    await user.click(screen.getByRole('button', { name: 'Historial' }))
+
+    const rows = await screen.findAllByTestId('company-history-row')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toHaveTextContent('Antes SL')
+    expect(rows[0]).toHaveTextContent('Después SL')
+  })
+
+  it('2026-08-01: sin ediciones, el historial dice que no hay nada registrado todavía', async () => {
+    mockRoutes({ companies: [makeCompany({ id: 'c1' })], history: [] })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    await user.click(screen.getByRole('button', { name: 'Historial' }))
+
+    expect(
+      await screen.findByText('Todavía no hay ediciones registradas.'),
+    ).toBeInTheDocument()
+  })
+
+  it('2026-08-01: "Revertir a este valor" envía un PATCH con el valor anterior de ese campo', async () => {
+    mockRoutes({
+      companies: [makeCompany({ id: 'c1', name: 'Después SL' })],
+      history: [makeEdit({ field: 'name', old_value: 'Antes SL', new_value: 'Después SL' })],
+    })
+    patchMock.mockResolvedValue({ data: makeCompany({ name: 'Antes SL' }), error: undefined })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    await user.click(screen.getByRole('button', { name: 'Historial' }))
+    await user.click(await screen.findByRole('button', { name: 'Revertir a este valor' }))
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith('/api/v1/companies/{company_id}', {
+        params: { path: { company_id: 'c1' } },
+        body: { name: 'Antes SL' },
+      })
+    })
   })
 
   it('C6: lista los registros pendientes con su empresa y la señal de empresa existente', async () => {
