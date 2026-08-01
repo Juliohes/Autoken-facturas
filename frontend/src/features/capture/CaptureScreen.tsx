@@ -148,22 +148,33 @@ export function CaptureScreen({ onUploaded }: Props) {
     )
   }
 
+  // Antes: círculo de radio nativo (diminuto, mal objetivo táctil en móvil) + texto plano.
+  // Ahora: el radio sigue existiendo (accesibilidad + `getByRole('radio', ...)` de los tests),
+  // pero oculto (`sr-only`); la propia etiqueta se estiliza como un botón-píldora completo, con
+  // `has-[:checked]` marcando cuál de los dos está activo.
+  const directionButtonClass =
+    'cursor-pointer rounded-full border border-slate-600 px-4 py-2 text-sm font-medium ' +
+    'text-slate-200 has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-600 ' +
+    'has-[:checked]:text-white'
+
   const DirectionSelector = (
-    <fieldset className="flex gap-4 text-sm text-slate-200">
+    <fieldset className="flex gap-3 text-sm text-slate-200">
       <legend className="sr-only">Dirección</legend>
-      <label className="flex items-center gap-2">
+      <label className={directionButtonClass}>
         <input
           type="radio"
           name="direction"
+          className="sr-only"
           checked={direction === 'recibida'}
           onChange={() => setDirection('recibida')}
         />
         Recibida
       </label>
-      <label className="flex items-center gap-2">
+      <label className={directionButtonClass}>
         <input
           type="radio"
           name="direction"
+          className="sr-only"
           checked={direction === 'emitida'}
           onChange={() => setDirection('emitida')}
         />
