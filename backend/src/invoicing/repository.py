@@ -455,13 +455,20 @@ async def list_edits(
     ]
 
 
-async def list_history(session: AsyncSession, *, encryption_key: str) -> list[HistoryEntry]:
+async def list_history(
+    session: AsyncSession, *, encryption_key: str, confirmed_by: UUID | None = None
+) -> list[HistoryEntry]:
     """Facturas confirmadas de los últimos 7 días del contexto (S2.6), la más reciente primero.
 
     Sin filtro de `tenant_id`/`company_id` por parámetro: la RLS de dos niveles de `invoices`
     (migración 0007) ya acota el resultado al contexto de la sesión (spec §4, anti-cruce de
     tenants). Excluye `is_test` (regla 3) y aplica la cota defensiva `HISTORY_LIMIT`; si se alcanza,
     se registra (spec §5: nunca se trunca en silencio como si fuera todo).
+
+    `confirmed_by` (2026-08-02, cumplimiento): tercer nivel, dentro de la propia empresa — un
+    `user` solo debe ver lo que confirmó él mismo, aunque comparta empresa con otro `user` y la RLS
+    los deje pasar a ambos. `None` (uso de `tenant_admin`) mantiene el comportamiento original: toda
+    la empresa/tenant de la sesión.
     """
     rows = (
         await session.execute(
@@ -473,10 +480,15 @@ async def list_history(session: AsyncSession, *, encryption_key: str) -> list[Hi
                 "FROM invoices "
                 "WHERE is_test = false AND confirmed_at >= "
                 f"now() - interval '{HISTORY_WINDOW_DAYS} days' "
+                "AND ((:confirmed_by)::uuid IS NULL OR confirmed_by = (:confirmed_by)::uuid) "
                 "ORDER BY confirmed_at DESC "
                 "LIMIT :limit"
             ),
-            {"limit": HISTORY_LIMIT, "key": encryption_key},
+            {
+                "limit": HISTORY_LIMIT,
+                "key": encryption_key,
+                "confirmed_by": str(confirmed_by) if confirmed_by is not None else None,
+            },
         )
     ).all()
     if len(rows) == HISTORY_LIMIT:

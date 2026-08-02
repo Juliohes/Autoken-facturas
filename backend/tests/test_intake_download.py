@@ -159,6 +159,33 @@ async def test_c6_fichero_inexistente_da_404(authapi: Api) -> None:
     assert resp.status_code == 404, resp.text
 
 
+async def test_c7_un_user_no_descarga_el_fichero_de_un_companero_de_la_misma_empresa(
+    authapi: Api,
+) -> None:
+    """C7 (cumplimiento, 2026-08-02): mismo criterio que `test_intake_image.py` C6, sobre
+    `download-url` en vez de `image` (misma autorización compartida, ambos endpoints la usan)."""
+    client, dsns = authapi
+    tenant_id, _user_id, company_id = await seed_uploader(dsns, slug="ilex")
+    ana_token = await token_for(client, email="ana@ilex.es")
+    file_ana = await _upload_and_get_file_id(client, ana_token, company_id)
+
+    bob = await seed_user(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        email="bob-companero-dl@ilex.es",
+        role="user",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    from tests._dbtest import seed_membership  # noqa: PLC0415
+
+    await seed_membership(dsns["admin"], user_id=bob, company_id=company_id, tenant_id=tenant_id)
+    bob_token = await token_for(client, email="bob-companero-dl@ilex.es")
+
+    resp = await client.get(download_url_path(file_ana), headers=auth(bob_token))
+
+    assert resp.status_code == 403, resp.text
+
+
 async def test_c8_bucket_de_minio_no_es_accesible_sin_firma(authapi: Api) -> None:
     """C8 (anti-cruce v2): un GET directo a MinIO sin la query de firma no descarga nada."""
     from invoice_intake import storage  # noqa: PLC0415
