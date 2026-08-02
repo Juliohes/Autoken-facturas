@@ -153,11 +153,31 @@ export function CaptureScreen({ onUploaded }: Props) {
   // Antes: círculo de radio nativo (diminuto, mal objetivo táctil en móvil) + texto plano.
   // Ahora: el radio sigue existiendo (accesibilidad + `getByRole('radio', ...)` de los tests),
   // pero oculto (`sr-only`); la propia etiqueta se estiliza como un botón-píldora completo, con
-  // `has-[:checked]` marcando cuál de los dos está activo.
+  // `has-[:checked]` marcando cuál de los dos está activo. Más grande (2026-08-02, a petición de
+  // Julio): mejor objetivo táctil en móvil, donde vive este flujo.
   const directionButtonClass =
-    'cursor-pointer rounded-full border border-slate-600 px-4 py-2 text-sm font-medium ' +
+    'cursor-pointer rounded-full border border-slate-600 px-6 py-3 text-base font-medium ' +
     'text-slate-200 has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-600 ' +
     'has-[:checked]:text-white'
+
+  // Selector de fichero del dispositivo (2026-08-02, a petición de Julio): antes solo existía como
+  // alternativa cuando la cámara fallaba (C3); ahora es un botón propio, siempre disponible junto a
+  // "Tomar foto" — subir una foto ya existente del carrete es un camino legítimo, no solo un
+  // fallback. Sin `capture="environment"` a propósito: ese atributo empuja a algunos navegadores
+  // móviles a abrir la cámara directamente, justo lo que este botón NO debe hacer (para eso está
+  // "Tomar foto") — este abre el selector de ficheros del dispositivo (galería/archivos).
+  const FilePickerButton = (
+    <label className="flex cursor-pointer items-center justify-center rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100 hover:bg-slate-800">
+      📁 Subir archivo
+      <input
+        type="file"
+        aria-label="Elige o toma una foto"
+        accept="image/*"
+        onChange={(e) => void handleFileSelected(e)}
+        className="sr-only"
+      />
+    </label>
+  )
 
   const DirectionSelector = (
     <fieldset className="flex gap-3 text-sm text-slate-200">
@@ -262,8 +282,13 @@ export function CaptureScreen({ onUploaded }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">Capturar factura</h1>
         {/* "Historial" deja de ser una entrada propia del menú (2026-08-01, a petición de Julio):
-            vive aquí dentro, junto a la tarea principal del día a día de este rol (S2.2). */}
-        <Link to={ROUTES.history} className="text-sm text-emerald-400 underline">
+            vive aquí dentro, junto a la tarea principal del día a día de este rol (S2.2). Estilo de
+            botón (2026-08-02, a petición de Julio, "vivo y a mano"): más visible que un enlace
+            subrayado suelto, sin dejar de ser el mismo `<Link>` (mismo `role="link"`, mismos tests). */}
+        <Link
+          to={ROUTES.history}
+          className="rounded-md border border-emerald-600 px-3 py-1.5 text-sm font-medium text-emerald-400 hover:bg-emerald-600/10"
+        >
           Ver historial
         </Link>
       </div>
@@ -285,10 +310,11 @@ export function CaptureScreen({ onUploaded }: Props) {
           <button
             type="button"
             onClick={() => void handleManualCapture()}
-            className="w-full rounded-md bg-emerald-600 px-4 py-2 font-medium text-white"
+            className="w-full rounded-md bg-emerald-600 px-4 py-4 text-lg font-semibold text-white"
           >
             Tomar foto
           </button>
+          {FilePickerButton}
         </div>
       )}
 
@@ -297,14 +323,7 @@ export function CaptureScreen({ onUploaded }: Props) {
           <p className="text-slate-400">
             No se pudo acceder a la cámara. Elige o toma una foto con tu dispositivo.
           </p>
-          <input
-            type="file"
-            aria-label="Elige o toma una foto"
-            accept="image/*"
-            capture="environment"
-            onChange={(e) => void handleFileSelected(e)}
-            className="text-sm text-slate-300"
-          />
+          {FilePickerButton}
         </div>
       )}
     </section>
