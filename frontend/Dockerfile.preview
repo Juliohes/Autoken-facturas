@@ -1,0 +1,13 @@
+# Imagen de PREVIEW (experimento 2026-08-01, rama experiment/setex-user-ui-v1) — NUNCA usar para
+# el despliegue real. Idéntica al Dockerfile real salvo el nginx.conf: este proxya /api al
+# contenedor `api` compartido por sí solo (el Dockerfile real delega esa parte en Traefik).
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM nginx:1.27-alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.preview.conf /etc/nginx/conf.d/default.conf

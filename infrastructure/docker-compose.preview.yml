@@ -1,0 +1,42 @@
+# Despliegue de PREVIEW (experimento 2026-08-01, rama experiment/setex-user-ui-v1) — totalmente
+# aparte del despliegue real (`infrastructure/docker-compose*.yml` del checkout principal en
+# /opt/app-facturas, NUNCA tocado por este fichero). Un único contenedor nuevo, imagen propia
+# (`autoken/frontend:setex-preview`), que sirve `setex-staging.autoken.es` y habla con el `api`
+# REAL compartido (misma base de datos de `setex`, sin duplicar nada) por la red interna
+# `infrastructure_default` — nunca a través de Traefik para /api (nginx lo hace él solo, ver
+# `frontend/nginx.preview.conf`).
+#
+# Levantar:   docker compose -p setex-preview -f docker-compose.preview.yml up -d --build
+# Apagar:     docker compose -p setex-preview -f docker-compose.preview.yml down
+# (Apagarlo no afecta EN NADA a setex.autoken.es/panel-staging.autoken.es/ilex.autoken.es: son
+# contenedores, redes y ficheros completamente distintos.)
+
+services:
+  frontend-preview:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.preview
+    image: autoken/frontend:setex-preview
+    networks:
+      - proxy
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.setex-preview-web.rule=Host(`setex-staging.autoken.es`)"
+      - "traefik.http.routers.setex-preview-web.entrypoints=websecure"
+      - "traefik.http.routers.setex-preview-web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.setex-preview-web.service=setex-preview-web"
+      - "traefik.http.services.setex-preview-web.loadbalancer.server.port=80"
+    restart: unless-stopped
+
+networks:
+  proxy:
+    external: true
+  # Red del despliegue REAL (proyecto Compose `infrastructure`), para resolver `api:8000` por DNS
+  # interno de Docker sin pasar por Traefik. Unirse a ella no expone nada nuevo hacia fuera; sí
+  # comparte red L2 con los contenedores reales (postgres/redis/minio), inevitable si se quiere
+  # hablar con `api` por nombre — el aislamiento real está en no tocar sus ficheros/servicios.
+  default:
+    external: true
+    name: infrastructure_default
