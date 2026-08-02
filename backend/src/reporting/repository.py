@@ -54,9 +54,16 @@ class TaxLineRow:
 
 @dataclass(frozen=True)
 class InvoiceRow:
-    """Una fila del panel de facturas (S3.1, spec §2/§3 C8)."""
+    """Una fila del panel de facturas (S3.1, spec §2/§3 C8).
+
+    `company_name`/`company_cif` (2026-08-01, hallazgo de Julio: el panel no mostraba a qué
+    empresa CLIENTE del tenant pertenece la factura, solo el proveedor/contraparte) — mismo `JOIN`
+    a `companies` que ya usaba `ExportRow` para el Excel, ahora también en el panel.
+    """
 
     id: UUID
+    company_name: str
+    company_cif: str
     issue_date: date | None
     direction: str
     counterparty_tax_id: str | None
@@ -182,7 +189,10 @@ async def list_invoices(
     rows = (
         await session.execute(
             text(
-                "SELECT i.id, i.issue_date, i.direction, "
+                "SELECT i.id, "
+                " pgp_sym_decrypt(c.name, :key)::text AS company_name, "
+                " pgp_sym_decrypt(c.cif, :key)::text AS company_cif, "
+                " i.issue_date, i.direction, "
                 " pgp_sym_decrypt(i.counterparty_tax_id, :key)::text AS counterparty_tax_id, "
                 " pgp_sym_decrypt(i.counterparty_name, :key)::text AS counterparty_name, "
                 " i.counterparty_cif_status, i.net_amount, i.tax_amount, "
@@ -190,6 +200,7 @@ async def list_invoices(
                 " i.uploaded_file_id, uf.created_at AS uploaded_at "
                 "FROM invoices i "
                 "JOIN uploaded_files uf ON uf.id = i.uploaded_file_id "
+                "JOIN companies c ON c.id = i.company_id "
                 f"WHERE {where} "
                 f"{_ORDER_BY} "
                 "LIMIT :limit"
@@ -202,6 +213,8 @@ async def list_invoices(
     return [
         InvoiceRow(
             id=row.id,
+            company_name=row.company_name,
+            company_cif=row.company_cif,
             issue_date=row.issue_date,
             direction=row.direction,
             counterparty_tax_id=row.counterparty_tax_id,

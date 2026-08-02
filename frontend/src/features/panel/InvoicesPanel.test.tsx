@@ -1,6 +1,6 @@
-// Tests de comportamiento del panel de facturas (S3.1), C13-C16. El cliente de
-// API está mockeado: se inyectan las respuestas de `reporting/invoices`,
-// `companies` y `download-url` de cada escenario (sin navegador ni backend reales).
+// Tests de comportamiento del panel de facturas (S3.1 + ampliación 2026-08-01). El cliente de API
+// está mockeado: se inyectan las respuestas de `reporting/invoices`, `companies`,
+// `uploads/{id}/image` y `invoices/{id}` de cada escenario (sin navegador ni backend reales).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -11,15 +11,18 @@ import { InvoicesPanel } from './InvoicesPanel'
 import type { InvoiceRow, PanelPage } from './types'
 
 vi.mock('../../api/client', () => ({
-  api: { GET: vi.fn() },
+  api: { GET: vi.fn(), PATCH: vi.fn() },
 }))
 
 type AsyncMock = Mock<(...args: never[]) => Promise<unknown>>
 const getMock = api.GET as unknown as AsyncMock
+const patchMock = api.PATCH as unknown as AsyncMock
 
 function makeRow(over: Partial<InvoiceRow> = {}): InvoiceRow {
   return {
     id: 'inv-1',
+    company_name: 'Empresa Cliente SL',
+    company_cif: 'C99999999',
     issue_date: '2026-07-01',
     direction: 'recibida',
     counterparty_tax_id: 'B12345678',
@@ -45,12 +48,12 @@ function makePage(items: InvoiceRow[], nextCursor: string | null = null): PanelP
 function mockRoutes({
   panel = makePage([makeRow()]),
   companies = [{ id: 'c1', name: 'Empresa Uno', cif: 'A11111111', status: 'active' }],
-  downloadUrl = { url: 'https://minio.local/signed', expires_in: 300 },
+  imageBlob = new Blob(['foto'], { type: 'image/jpeg' }),
   exportBlob = new Blob(['xlsx'], { type: 'application/vnd.ms-excel' }),
 }: {
   panel?: PanelPage
   companies?: unknown[]
-  downloadUrl?: { url: string; expires_in: number }
+  imageBlob?: Blob
   exportBlob?: Blob
 } = {}) {
   getMock.mockImplementation((path: string) => {
@@ -64,8 +67,8 @@ function mockRoutes({
     if (path.includes('/companies')) {
       return Promise.resolve({ data: companies, error: undefined })
     }
-    if (path.includes('download-url')) {
-      return Promise.resolve({ data: downloadUrl, error: undefined })
+    if (path.includes('/image')) {
+      return Promise.resolve({ data: imageBlob, error: undefined })
     }
     throw new Error(`ruta no mockeada: ${path}`)
   })
@@ -82,14 +85,17 @@ function renderPanel() {
 
 beforeEach(() => {
   getMock.mockReset()
+  patchMock.mockReset()
 })
 
 describe('InvoicesPanel (S3.1)', () => {
-  it('C13: muestra una fila por factura con proveedor, CIF, estado, fecha, importes, tramos e IRPF', async () => {
+  it('C13: muestra una fila por factura con empresa cliente, proveedor, CIF, fecha, importes e IRPF', async () => {
     mockRoutes({
       panel: makePage([
         makeRow({
           id: 'inv-1',
+          company_name: 'Mi Empresa SL',
+          company_cif: 'C11111111',
           counterparty_name: 'Proveedor Uno',
           net_amount: '100.00',
           tax_amount: '21.00',
@@ -105,53 +111,153 @@ describe('InvoicesPanel (S3.1)', () => {
     const rows = await screen.findAllByTestId('invoice-row')
     expect(rows).toHaveLength(2)
     const first = rows[0]
+    expect(within(first).getByText('Mi Empresa SL')).toBeInTheDocument()
+    expect(within(first).getByText('C11111111')).toBeInTheDocument()
     expect(within(first).getByText('Proveedor Uno')).toBeInTheDocument()
-    // Importes (base, IVA, total) y tramos de IVA, no solo el total (hallazgo de auditoría S3.1).
-    expect(within(first).getByText('100.00')).toBeInTheDocument()
-    expect(within(first).getByText('21.00')).toBeInTheDocument()
-    expect(within(first).getByText('121.00')).toBeInTheDocument()
-    expect(within(first).getByText('15.00')).toBeInTheDocument()
-    expect(within(first).getByTestId('tax-lines')).toHaveTextContent('21% (100.00 → 21.00)')
+    // Importes (base, IVA, total) e IRPF, no solo el total (hallazgo de auditoría S3.1).
+    // Formateados con coma decimal (2026-08-01, a petición de Julio), nunca con punto.
+    expect(within(first).getByText('100,00')).toBeInTheDocument()
+    expect(within(first).getByText('21,00')).toBeInTheDocument()
+    expect(within(first).getByText('121,00')).toBeInTheDocument()
+    expect(within(first).getByText('15,00')).toBeInTheDocument()
+    // Tramos de IVA: un botón con el número de tramos, no texto (2026-08-01).
+    expect(within(first).getByRole('button', { name: '1 tramo' })).toBeInTheDocument()
 
     expect(screen.getByText('Desde')).toBeInTheDocument()
     expect(screen.getByText('Hasta')).toBeInTheDocument()
     expect(screen.getByText('CIF de contraparte')).toBeInTheDocument()
     expect(screen.getByText('Estado del CIF')).toBeInTheDocument()
-    expect(screen.getByText('Empresa')).toBeInTheDocument()
+    expect(screen.getByLabelText('Empresa')).toBeInTheDocument() // filtro (el <th> también dice "Empresa")
   })
 
-  it('C14: el botón "Ver" pide la URL firmada y la abre en una pestaña nueva', async () => {
-    mockRoutes()
-    const user = userEvent.setup()
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+  it('2026-08-01: sin tramos de IVA, el botón dice "Sin tramos"', async () => {
+    mockRoutes({ panel: makePage([makeRow({ tax_lines: [] })]) })
     renderPanel()
 
-    await user.click(await screen.findByRole('button', { name: 'Ver' }))
+    expect(
+      await screen.findByRole('button', { name: 'Sin tramos' }),
+    ).toBeInTheDocument()
+  })
+
+  it('2026-08-01: "Editar" es un único botón que activa la edición de todas las filas a la vez', async () => {
+    mockRoutes({
+      panel: makePage([
+        makeRow({ id: 'inv-1', counterparty_name: 'Uno' }),
+        makeRow({ id: 'inv-2', counterparty_name: 'Dos' }),
+      ]),
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+
+    // Un único botón "Editar" en toda la pantalla (no uno por fila).
+    expect(screen.getAllByRole('button', { name: 'Editar' })).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Editar' }))
+
+    // Al activarlo, TODAS las filas muestran a la vez el campo "Proveedor" como input editable.
+    expect(screen.getAllByLabelText('Proveedor')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Terminar edición' })).toBeInTheDocument()
+  })
+
+  it('2026-08-01: cada celda se guarda sola al perder el foco, sin un botón Guardar por fila', async () => {
+    mockRoutes({
+      panel: makePage([makeRow({ id: 'inv-1', counterparty_name: 'Proveedor SL' })]),
+    })
+    patchMock.mockResolvedValue({ data: { id: 'inv-1' }, error: undefined })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+    await user.click(screen.getByRole('button', { name: 'Editar' }))
+
+    const nameInput = screen.getByLabelText('Proveedor')
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Proveedor Editado SL')
+    await user.tab() // pierde el foco -> guarda
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith('/api/v1/invoices/{invoice_id}', {
+        params: { path: { invoice_id: 'inv-1' } },
+        body: { counterparty_name: 'Proveedor Editado SL' },
+      })
+    })
+  })
+
+  it('2026-08-01: perder el foco sin cambiar el valor no llama al PATCH', async () => {
+    mockRoutes({
+      panel: makePage([makeRow({ id: 'inv-1', counterparty_name: 'Proveedor SL' })]),
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+    await user.click(screen.getByRole('button', { name: 'Editar' }))
+
+    await user.click(screen.getByLabelText('Proveedor'))
+    await user.tab()
+
+    expect(patchMock).not.toHaveBeenCalled()
+  })
+
+  it('2026-08-01: "Ver" muestra la foto original en una ventana, no abre una URL de MinIO', async () => {
+    mockRoutes({ imageBlob: new Blob(['contenido-foto'], { type: 'image/jpeg' }) })
+    const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:foto-mock')
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+
+    await user.click(screen.getByRole('button', { name: 'Ver' }))
 
     await waitFor(() => {
       expect(getMock).toHaveBeenCalledWith(
-        '/api/v1/uploads/{file_id}/download-url',
-        expect.objectContaining({ params: { path: { file_id: 'file-1' } } }),
+        '/api/v1/uploads/{file_id}/image',
+        expect.objectContaining({ params: { path: { file_id: 'file-1' } }, parseAs: 'blob' }),
       )
     })
-    expect(openSpy).toHaveBeenCalledWith(
-      'https://minio.local/signed',
-      '_blank',
-      'noopener,noreferrer',
+    const dialog = await screen.findByRole('dialog', { name: 'Foto de la factura' })
+    expect(within(dialog).getByRole('img', { name: 'Foto original de la factura' })).toHaveAttribute(
+      'src',
+      'blob:foto-mock',
     )
-    openSpy.mockRestore()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cerrar' }))
+    expect(screen.queryByRole('dialog', { name: 'Foto de la factura' })).not.toBeInTheDocument()
+    createObjectURLSpy.mockRestore()
+  })
+
+  it('2026-08-01: el botón de tramos abre una ventana donde cada tramo es editable', async () => {
+    mockRoutes({
+      panel: makePage([
+        makeRow({ id: 'inv-1', tax_lines: [{ iva_pct: '21', base: '100.00', cuota: '21.00' }] }),
+      ]),
+    })
+    patchMock.mockResolvedValue({ data: { id: 'inv-1' }, error: undefined })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+
+    await user.click(screen.getByRole('button', { name: '1 tramo' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Tramos de IVA' })
+    const baseInput = within(dialog).getByLabelText('Tramo 1: Base')
+    await user.clear(baseInput)
+    await user.type(baseInput, '200.00')
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith('/api/v1/invoices/{invoice_id}', {
+        params: { path: { invoice_id: 'inv-1' } },
+        body: {
+          tax_lines: [{ iva_pct: '21', base: '200.00', cuota: '21.00' }],
+        },
+      })
+    })
+    expect(screen.queryByRole('dialog', { name: 'Tramos de IVA' })).not.toBeInTheDocument()
   })
 
   it('C10: "Descargar Excel" pide el export con los filtros aplicados (sin cursor)', async () => {
     mockRoutes()
     const user = userEvent.setup()
-    const createObjectURLSpy = vi
-      .spyOn(URL, 'createObjectURL')
-      .mockReturnValue('blob:mock-url')
+    const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url')
     const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {})
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     renderPanel()
     await screen.findAllByTestId('invoice-row')
 

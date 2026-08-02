@@ -65,8 +65,10 @@ class TenantMetrics:
     slug: str
     name: str
     companies_count: int
-    active_users_count: int
+    admins_count: int
+    users_count: int
     invoices_this_month: int
+    invoices_total_count: int
     ocr_extractions_count: int
     last_activity_at: datetime | None
 
@@ -194,9 +196,9 @@ async def tenant_metrics(session: AsyncSession) -> list[TenantMetrics]:
     rows = (
         await session.execute(
             text(
-                "SELECT tenant_id, slug, name, companies_count, active_users_count, "
-                "invoices_this_month, ocr_extractions_count, last_activity_at "
-                "FROM platform_tenant_metrics()"
+                "SELECT tenant_id, slug, name, companies_count, admins_count, users_count, "
+                "invoices_this_month, invoices_total_count, ocr_extractions_count, "
+                "last_activity_at FROM platform_tenant_metrics()"
             )
         )
     ).all()
@@ -206,8 +208,10 @@ async def tenant_metrics(session: AsyncSession) -> list[TenantMetrics]:
             slug=row.slug,
             name=row.name,
             companies_count=row.companies_count,
-            active_users_count=row.active_users_count,
+            admins_count=row.admins_count,
+            users_count=row.users_count,
             invoices_this_month=row.invoices_this_month,
+            invoices_total_count=row.invoices_total_count,
             ocr_extractions_count=row.ocr_extractions_count,
             last_activity_at=row.last_activity_at,
         )

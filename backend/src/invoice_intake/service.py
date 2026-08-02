@@ -142,6 +142,11 @@ async def get_download_url(session: AsyncSession, *, tenant_id: UUID, file_id: U
     solo si el fichero es visible se toca MinIO (spec §4: nunca se genera una URL de un fichero que
     el actor no puede ver). Puede lanzar `storage.StorageUnavailable` (-> 503) si MinIO falla al
     firmar.
+
+    Solo funciona si el navegador puede alcanzar `MINIO_ENDPOINT` directamente (spec S2.7 §1): en
+    el despliegue real de esta VPS, MinIO nunca se expone a Internet (solo la API, vía Traefik) —
+    esta URL firmada apunta al hostname interno de Docker (`minio:9000`), inalcanzable desde fuera.
+    `get_download_bytes` (2026-08-01) es el camino real que usa el botón "Ver" del panel.
     """
     ctx = await authorize_file_access(session, tenant_id=tenant_id, file_id=file_id)
     location = await repository.get_file_location(session, ctx.id)
@@ -149,6 +154,24 @@ async def get_download_url(session: AsyncSession, *, tenant_id: UUID, file_id: U
     return await asyncio.to_thread(
         storage.presigned_get_url, location.bucket, location.key, DOWNLOAD_URL_TTL_SECONDS
     )
+
+
+async def get_download_bytes(
+    session: AsyncSession, *, tenant_id: UUID, file_id: UUID
+) -> tuple[bytes, str]:
+    """Bytes + MIME real del fichero (2026-08-01): la API hace de proxy en vez de redirigir al
+    navegador a una URL firmada de MinIO.
+
+    MinIO nunca se expone públicamente en este proyecto (aislamiento por tenant, ADR-0015) — a
+    diferencia de `get_download_url`, esto no depende de que el navegador pueda alcanzar MinIO
+    directamente: los bytes pasan por la API, que sí es pública. Misma autorización que
+    `get_download_url` (403/404).
+    """
+    ctx = await authorize_file_access(session, tenant_id=tenant_id, file_id=file_id)
+    location = await repository.get_file_location(session, ctx.id)
+    assert location is not None  # ctx ya confirmó que la fila existe en esta misma sesión
+    content = await asyncio.to_thread(storage.get_object, location.bucket, location.key)
+    return content, location.content_type
 
 
 async def delete_uploaded_file_row(

@@ -587,6 +587,54 @@
         }
       }
     },
+    "/api/v1/companies/{company_id}/history": {
+      "get": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Company History",
+        "description": "Historial de ediciones de una empresa, m\u00e1s reciente primero. De otro tenant -> 404.",
+        "operationId": "company_history_api_v1_companies__company_id__history_get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CompanyEditOut"
+                  },
+                  "title": "Response Company History Api V1 Companies  Company Id  History Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/companies/import": {
       "post": {
         "tags": [
@@ -699,6 +747,48 @@
                 "schema": {
                   "$ref": "#/components/schemas/DownloadUrlOut"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{file_id}/image": {
+      "get": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Download Image",
+        "description": "Bytes reales del fichero de intake (2026-08-01), v\u00eda la API \u2014 no una redirecci\u00f3n a MinIO.\n\nReemplaza a `download-url` como camino real del bot\u00f3n \"Ver\" del panel: MinIO nunca se expone\np\u00fablicamente en este proyecto, as\u00ed que una URL firmada de MinIO es inalcanzable desde el\nnavegador del usuario en el despliegue real (ver docstring de `service.get_download_bytes`).\nMisma autorizaci\u00f3n que `download-url` (403/404).",
+        "operationId": "download_image_api_v1_uploads__file_id__image_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -876,6 +966,54 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/InvoiceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoices/{invoice_id}/history": {
+      "get": {
+        "tags": [
+          "invoicing"
+        ],
+        "summary": "Invoice Edit History",
+        "description": "Historial de ediciones de una factura, m\u00e1s reciente primero. De otro tenant -> 404.",
+        "operationId": "invoice_edit_history_api_v1_invoices__invoice_id__history_get",
+        "parameters": [
+          {
+            "name": "invoice_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Invoice Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InvoiceEditEntryOut"
+                  },
+                  "title": "Response Invoice Edit History Api V1 Invoices  Invoice Id  History Get"
                 }
               }
             }
@@ -1207,6 +1345,48 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/logo": {
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Upload Logo",
+        "description": "Sube una imagen de logo (jpeg/png, m\u00e1x. 2 MiB) y devuelve su URL p\u00fablica.\n\nAntes de esto, `logo_url` solo admit\u00eda pegar una URL ya alojada en otro sitio. Mismo orden de\nvalidaci\u00f3n que el intake de facturas (S2.1): vac\u00edo -> tama\u00f1o -> tipo real -> antivirus ->\nalmacenar (spec, ver `logo_upload.upload_logo`).",
+        "operationId": "upload_logo_api_v1_platform_tenants_logo_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_logo_api_v1_platform_tenants_logo_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoUploadOut"
+                }
               }
             }
           },
@@ -1803,6 +1983,20 @@
         ],
         "title": "Body_upload_file_api_v1_uploads_post"
       },
+      "Body_upload_logo_api_v1_platform_tenants_logo_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_logo_api_v1_platform_tenants_logo_post"
+      },
       "CompanyCreate": {
         "properties": {
           "name": {
@@ -1832,6 +2026,62 @@
         ],
         "title": "CompanyCreate",
         "description": "Cuerpo de `POST /companies`."
+      },
+      "CompanyEditOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "old_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Value"
+          },
+          "new_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Value"
+          },
+          "edited_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Edited By"
+          },
+          "edited_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Edited At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "field",
+          "old_value",
+          "new_value",
+          "edited_by",
+          "edited_at"
+        ],
+        "title": "CompanyEditOut",
+        "description": "Una fila del historial de ediciones de una empresa (2026-08-01)."
       },
       "CompanyOut": {
         "properties": {
@@ -2425,6 +2675,62 @@
         "title": "InvalidRowOut",
         "description": "Fila rechazada en el informe de importaci\u00f3n: n\u00famero de fila (1-based) y motivo."
       },
+      "InvoiceEditEntryOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "old_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Value"
+          },
+          "new_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Value"
+          },
+          "edited_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Edited By"
+          },
+          "edited_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Edited At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "field",
+          "old_value",
+          "new_value",
+          "edited_by",
+          "edited_at"
+        ],
+        "title": "InvoiceEditEntryOut",
+        "description": "Una fila del historial de ediciones de una factura (2026-08-01)."
+      },
       "InvoiceEditIn": {
         "properties": {
           "issue_date": {
@@ -2668,6 +2974,14 @@
             "format": "uuid",
             "title": "Id"
           },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "company_cif": {
+            "type": "string",
+            "title": "Company Cif"
+          },
           "issue_date": {
             "anyOf": [
               {
@@ -2789,6 +3103,8 @@
         "type": "object",
         "required": [
           "id",
+          "company_name",
+          "company_cif",
           "issue_date",
           "direction",
           "counterparty_tax_id",
@@ -2836,6 +3152,20 @@
         ],
         "title": "LoginRequest",
         "description": "Cuerpo de `POST /auth/login`."
+      },
+      "LogoUploadOut": {
+        "properties": {
+          "logo_url": {
+            "type": "string",
+            "title": "Logo Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "logo_url"
+        ],
+        "title": "LogoUploadOut",
+        "description": "Respuesta de `POST /platform/tenants/logo`: la URL p\u00fablica lista para usar como `logo_url`\nen el alta/edici\u00f3n de un tenant (2026-08-01, decisi\u00f3n de Julio)."
       },
       "MeCompanyOut": {
         "properties": {
@@ -3317,13 +3647,21 @@
             "type": "integer",
             "title": "Companies Count"
           },
-          "active_users_count": {
+          "admins_count": {
             "type": "integer",
-            "title": "Active Users Count"
+            "title": "Admins Count"
+          },
+          "users_count": {
+            "type": "integer",
+            "title": "Users Count"
           },
           "invoices_this_month": {
             "type": "integer",
             "title": "Invoices This Month"
+          },
+          "invoices_total_count": {
+            "type": "integer",
+            "title": "Invoices Total Count"
           },
           "ocr_extractions_count": {
             "type": "integer",
@@ -3348,8 +3686,10 @@
           "slug",
           "name",
           "companies_count",
-          "active_users_count",
+          "admins_count",
+          "users_count",
           "invoices_this_month",
+          "invoices_total_count",
           "ocr_extractions_count",
           "last_activity_at"
         ],

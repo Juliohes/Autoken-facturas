@@ -1,5 +1,6 @@
-"""Endpoints HTTP del intake seguro: `POST /api/v1/uploads` (S2.1) y
-`GET /api/v1/uploads/{file_id}/download-url` (S2.7).
+"""Endpoints HTTP del intake seguro: `POST /api/v1/uploads` (S2.1),
+`GET /api/v1/uploads/{file_id}/download-url` (S2.7) y `GET /api/v1/uploads/{file_id}/image`
+(2026-08-01, el camino real que usa el botón "Ver" del panel — ver su docstring).
 
 Capa HTTP **fina**: autentica y autoriza (portero de roles + pertenencia a la empresa), lee el
 fichero de forma acotada (guardarraíl de tamaño), y traduce el resultado o la excepción de dominio
@@ -12,7 +13,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -154,3 +155,29 @@ async def download_url(identity: Downloader, file_id: UUID) -> DownloadUrlOut:
             status_code=503, detail="Almacenamiento no disponible, reintenta"
         ) from exc
     return DownloadUrlOut(url=url, expires_in=service.DOWNLOAD_URL_TTL_SECONDS)
+
+
+@router.get("/{file_id}/image")
+async def download_image(identity: Downloader, file_id: UUID) -> Response:
+    """Bytes reales del fichero de intake (2026-08-01), vía la API — no una redirección a MinIO.
+
+    Reemplaza a `download-url` como camino real del botón "Ver" del panel: MinIO nunca se expone
+    públicamente en este proyecto, así que una URL firmada de MinIO es inalcanzable desde el
+    navegador del usuario en el despliegue real (ver docstring de `service.get_download_bytes`).
+    Misma autorización que `download-url` (403/404).
+    """
+    try:
+        content, content_type = await service.get_download_bytes(
+            identity.session, tenant_id=identity.tenant_id, file_id=file_id
+        )
+    except service.FileForbidden as exc:
+        raise HTTPException(
+            status_code=403, detail="No perteneces a la empresa del fichero"
+        ) from exc
+    except service.FileNotVisible as exc:
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
+    except storage.StorageUnavailable as exc:
+        raise HTTPException(
+            status_code=503, detail="Almacenamiento no disponible, reintenta"
+        ) from exc
+    return Response(content=content, media_type=content_type)

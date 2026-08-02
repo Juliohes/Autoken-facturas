@@ -356,6 +356,26 @@ export interface paths {
         patch: operations["update_company_api_v1_companies__company_id__patch"];
         trace?: never;
     };
+    "/api/v1/companies/{company_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Company History
+         * @description Historial de ediciones de una empresa, más reciente primero. De otro tenant -> 404.
+         */
+        get: operations["company_history_api_v1_companies__company_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/companies/import": {
         parameters: {
             query?: never;
@@ -418,6 +438,31 @@ export interface paths {
          *     otro tenant/inexistente. La descarga no depende del estado del fichero (spec S2.7 §5).
          */
         get: operations["download_url_api_v1_uploads__file_id__download_url_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/uploads/{file_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Image
+         * @description Bytes reales del fichero de intake (2026-08-01), vía la API — no una redirección a MinIO.
+         *
+         *     Reemplaza a `download-url` como camino real del botón "Ver" del panel: MinIO nunca se expone
+         *     públicamente en este proyecto, así que una URL firmada de MinIO es inalcanzable desde el
+         *     navegador del usuario en el despliegue real (ver docstring de `service.get_download_bytes`).
+         *     Misma autorización que `download-url` (403/404).
+         */
+        get: operations["download_image_api_v1_uploads__file_id__image_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -511,6 +556,26 @@ export interface paths {
         patch: operations["edit_invoice_api_v1_invoices__invoice_id__patch"];
         trace?: never;
     };
+    "/api/v1/invoices/{invoice_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Invoice Edit History
+         * @description Historial de ediciones de una factura, más reciente primero. De otro tenant -> 404.
+         */
+        get: operations["invoice_edit_history_api_v1_invoices__invoice_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoices/test/purge": {
         parameters: {
             query?: never;
@@ -590,6 +655,30 @@ export interface paths {
         get: operations["export_invoices_api_v1_reporting_invoices_export_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Logo
+         * @description Sube una imagen de logo (jpeg/png, máx. 2 MiB) y devuelve su URL pública.
+         *
+         *     Antes de esto, `logo_url` solo admitía pegar una URL ya alojada en otro sitio. Mismo orden de
+         *     validación que el intake de facturas (S2.1): vacío -> tamaño -> tipo real -> antivirus ->
+         *     almacenar (spec, ver `logo_upload.upload_logo`).
+         */
+        post: operations["upload_logo_api_v1_platform_tenants_logo_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -866,6 +955,11 @@ export interface components {
              */
             company_id: string;
         };
+        /** Body_upload_logo_api_v1_platform_tenants_logo_post */
+        Body_upload_logo_api_v1_platform_tenants_logo_post: {
+            /** File */
+            file: string;
+        };
         /**
          * CompanyCreate
          * @description Cuerpo de `POST /companies`.
@@ -877,6 +971,33 @@ export interface components {
             cif: string;
             /** Notes */
             notes?: string | null;
+        };
+        /**
+         * CompanyEditOut
+         * @description Una fila del historial de ediciones de una empresa (2026-08-01).
+         */
+        CompanyEditOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Field */
+            field: string;
+            /** Old Value */
+            old_value: string | null;
+            /** New Value */
+            new_value: string | null;
+            /**
+             * Edited By
+             * Format: uuid
+             */
+            edited_by: string;
+            /**
+             * Edited At
+             * Format: date-time
+             */
+            edited_at: string;
         };
         /**
          * CompanyOut
@@ -1115,6 +1236,33 @@ export interface components {
             reason: string;
         };
         /**
+         * InvoiceEditEntryOut
+         * @description Una fila del historial de ediciones de una factura (2026-08-01).
+         */
+        InvoiceEditEntryOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Field */
+            field: string;
+            /** Old Value */
+            old_value: string | null;
+            /** New Value */
+            new_value: string | null;
+            /**
+             * Edited By
+             * Format: uuid
+             */
+            edited_by: string;
+            /**
+             * Edited At
+             * Format: date-time
+             */
+            edited_at: string;
+        };
+        /**
          * InvoiceEditIn
          * @description Cuerpo de `PATCH /invoices/{id}` (S3.3): patch parcial, solo cambian los campos presentes.
          */
@@ -1175,6 +1323,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Company Name */
+            company_name: string;
+            /** Company Cif */
+            company_cif: string;
             /** Issue Date */
             issue_date: string | null;
             /** Direction */
@@ -1227,6 +1379,15 @@ export interface components {
             password: string;
             /** Totp Code */
             totp_code?: string | null;
+        };
+        /**
+         * LogoUploadOut
+         * @description Respuesta de `POST /platform/tenants/logo`: la URL pública lista para usar como `logo_url`
+         *     en el alta/edición de un tenant (2026-08-01, decisión de Julio).
+         */
+        LogoUploadOut: {
+            /** Logo Url */
+            logo_url: string;
         };
         /**
          * MeCompanyOut
@@ -1418,10 +1579,14 @@ export interface components {
             name: string;
             /** Companies Count */
             companies_count: number;
-            /** Active Users Count */
-            active_users_count: number;
+            /** Admins Count */
+            admins_count: number;
+            /** Users Count */
+            users_count: number;
             /** Invoices This Month */
             invoices_this_month: number;
+            /** Invoices Total Count */
+            invoices_total_count: number;
             /** Ocr Extractions Count */
             ocr_extractions_count: number;
             /** Last Activity At */
@@ -1981,6 +2146,37 @@ export interface operations {
             };
         };
     };
+    company_history_api_v1_companies__company_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyEditOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     import_companies_api_v1_companies_import_post: {
         parameters: {
             query?: never;
@@ -2065,6 +2261,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DownloadUrlOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_image_api_v1_uploads__file_id__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -2203,6 +2430,37 @@ export interface operations {
             };
         };
     };
+    invoice_edit_history_api_v1_invoices__invoice_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceEditEntryOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     purge_test_invoices_api_v1_invoices_test_purge_post: {
         parameters: {
             query?: never;
@@ -2303,6 +2561,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_logo_api_v1_platform_tenants_logo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_logo_api_v1_platform_tenants_logo_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogoUploadOut"];
                 };
             };
             /** @description Validation Error */

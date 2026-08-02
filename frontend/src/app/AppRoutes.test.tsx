@@ -186,7 +186,7 @@ describe('AppRoutes (S4.9)', () => {
     expect(await screen.findByRole('heading', { name: 'Ranking OCR multi-modelo' })).toBeInTheDocument()
   })
 
-  it('C10: tenant_admin ve Facturas/Empresas/Historial/Subir factura, no Plataforma', async () => {
+  it('C10: tenant_admin ve Facturas/Empresas/Subir factura, no Plataforma ni Historial (ya no es entrada de menú)', async () => {
     mockAuthenticatedAs('tenant_admin')
     renderApp('/facturas')
 
@@ -194,22 +194,35 @@ describe('AppRoutes (S4.9)', () => {
     const nav = screen.getByRole('navigation')
     expect(within(nav).getByText('Facturas')).toBeInTheDocument()
     expect(within(nav).getByText('Empresas')).toBeInTheDocument()
-    expect(within(nav).getByText('Historial')).toBeInTheDocument()
     expect(within(nav).getByText('Subir factura')).toBeInTheDocument()
+    expect(within(nav).queryByText('Historial')).not.toBeInTheDocument()
     expect(within(nav).queryByText('Plataforma')).not.toBeInTheDocument()
   })
 
-  it('C11: user ve Historial y Subir factura en el menú, nada más', async () => {
+  it('C11: user ve Subir factura en el menú, nada más (Historial vive dentro, no en el menú)', async () => {
     mockAuthenticatedAs('user')
     renderApp('/historial')
 
     await waitFor(() => expect(screen.getByRole('navigation')).toBeInTheDocument())
     const nav = screen.getByRole('navigation')
-    expect(within(nav).getByText('Historial')).toBeInTheDocument()
     expect(within(nav).getByText('Subir factura')).toBeInTheDocument()
+    expect(within(nav).queryByText('Historial')).not.toBeInTheDocument()
     expect(within(nav).queryByText('Facturas')).not.toBeInTheDocument()
     expect(within(nav).queryByText('Empresas')).not.toBeInTheDocument()
     expect(within(nav).queryByText('Plataforma')).not.toBeInTheDocument()
+  })
+
+  it('2026-08-01: "Ver historial" vive dentro de "Subir factura" (Julio), no en el menú principal', async () => {
+    mockAuthenticatedAs('user')
+    renderApp('/capturar')
+    const user = userEvent.setup()
+
+    expect(await screen.findByRole('heading', { name: 'Capturar factura' })).toBeInTheDocument()
+    await user.click(screen.getByRole('link', { name: 'Ver historial' }))
+
+    // Sin facturas mockeadas, `InvoiceHistory` muestra su estado vacío (sin encabezado propio):
+    // basta para confirmar que la navegación llegó de verdad a `/historial`.
+    expect(await screen.findByText('No hay facturas en los últimos 7 días.')).toBeInTheDocument()
   })
 
   it('S2.2 decisión 1: la ruta de inicio de user es /capturar, no /historial', async () => {

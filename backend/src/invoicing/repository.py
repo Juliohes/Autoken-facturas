@@ -401,6 +401,60 @@ async def insert_edits(
         )
 
 
+@dataclass(frozen=True)
+class InvoiceEditEntry:
+    """Una fila de `invoice_edits`: un campo que cambió en una edición.
+
+    Se expone por primera vez (2026-08-01) vía `GET /invoices/{id}/history` — hasta ahora
+    `invoice_edits` era solo escritura.
+    """
+
+    id: UUID
+    field: str
+    old_value: str | None
+    new_value: str | None
+    edited_by: UUID
+    edited_at: datetime
+
+
+async def list_edits(
+    session: AsyncSession, invoice_id: UUID, *, encryption_key: str
+) -> list[InvoiceEditEntry]:
+    """Historial de ediciones de una factura del contexto, más reciente primero (2026-08-01).
+
+    Mismo patrón que `companies.repository.list_company_edits`: descifra por fila según si `field`
+    está en `SENSITIVE_EDIT_FIELDS` (CIF/nombre de contraparte, S5.2 C7).
+    """
+    sensitive = ", ".join(f"'{field}'" for field in sorted(SENSITIVE_EDIT_FIELDS))
+    rows = (
+        await session.execute(
+            text(
+                "SELECT id, field, "
+                f"CASE WHEN field IN ({sensitive}) "
+                "     THEN pgp_sym_decrypt(decode(old_value, 'base64'), :key)::text "
+                "     ELSE old_value END AS old_value, "
+                f"CASE WHEN field IN ({sensitive}) "
+                "     THEN pgp_sym_decrypt(decode(new_value, 'base64'), :key)::text "
+                "     ELSE new_value END AS new_value, "
+                "edited_by, edited_at "
+                "FROM invoice_edits WHERE invoice_id = :invoice_id ORDER BY edited_at DESC"
+            ),
+            {"invoice_id": str(invoice_id), "key": encryption_key},
+        )
+    ).all()
+    return [
+        InvoiceEditEntry(
+            id=r.id,
+            field=r.field,
+            old_value=r.old_value,
+            new_value=r.new_value,
+            edited_by=r.edited_by,
+            edited_at=r.edited_at,
+        )
+        for r in rows
+    ]
+
+
 async def list_history(session: AsyncSession, *, encryption_key: str) -> list[HistoryEntry]:
     """Facturas confirmadas de los últimos 7 días del contexto (S2.6), la más reciente primero.
 

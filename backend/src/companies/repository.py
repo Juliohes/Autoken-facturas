@@ -16,11 +16,13 @@ derivada (`encryption_key`) como parámetro: el repositorio no sabe de dónde sa
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared.diffing import Correction
 from tenancy.constants import CompanyStatus
 
 # `tenant_id` de las escrituras derivado del contexto de la sesión (coherente con la RLS).
@@ -240,6 +242,101 @@ async def activate_pending_company(session: AsyncSession, company_id: UUID) -> N
 async def delete_company(session: AsyncSession, company_id: UUID) -> None:
     """Borra una empresa del contexto (la RLS impide tocar las de otro tenant)."""
     await session.execute(text("DELETE FROM companies WHERE id = :id"), {"id": str(company_id)})
+
+
+# Campos sensibles cuyo old_value/new_value en `company_edits` se cifran (mismo criterio que
+# `invoicing.repository.SENSITIVE_EDIT_FIELDS`, S5.2 C7): `name`/`cif` ya viven cifrados en
+# `companies`; su historial no puede quedar en claro, o se rompería esa garantía. `notes`/`status`
+# se guardan en claro, como siempre.
+SENSITIVE_EDIT_FIELDS = frozenset({"name", "cif"})
+
+
+@dataclass(frozen=True)
+class CompanyEditEntry:
+    """Una fila de `company_edits`: un campo que cambió en una edición."""
+
+    id: UUID
+    field: str
+    old_value: str | None
+    new_value: str | None
+    edited_by: UUID
+    edited_at: datetime
+
+
+async def insert_company_edits(
+    session: AsyncSession,
+    *,
+    company_id: UUID,
+    edited_by: UUID,
+    edits: list[Correction],
+    encryption_key: str,
+) -> None:
+    """Inserta una fila por campo que cambió en una edición (2026-08-01), mismo patrón que
+    `invoicing.repository.insert_edits` (S3.3): un campo de `SENSITIVE_EDIT_FIELDS` se cifra, el
+    resto se guarda en claro."""
+    for edit in edits:
+        sensitive = edit.field in SENSITIVE_EDIT_FIELDS
+        old_expr = (
+            "encode(pgp_sym_encrypt(:old_value, :key), 'base64')" if sensitive else ":old_value"
+        )
+        new_expr = (
+            "encode(pgp_sym_encrypt(:new_value, :key), 'base64')" if sensitive else ":new_value"
+        )
+        await session.execute(
+            text(
+                f"INSERT INTO company_edits "
+                f"(tenant_id, company_id, field, old_value, new_value, edited_by) "
+                f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :field, {old_expr}, {new_expr}, "
+                f" :edited_by)"
+            ),
+            {
+                "company_id": str(company_id),
+                "field": edit.field,
+                "old_value": edit.ai_value,
+                "new_value": edit.human_value,
+                "edited_by": str(edited_by),
+                "key": encryption_key,
+            },
+        )
+
+
+async def list_company_edits(
+    session: AsyncSession, company_id: UUID, *, encryption_key: str
+) -> list[CompanyEditEntry]:
+    """Historial completo de ediciones de una empresa del contexto, más reciente primero.
+
+    Sin cota (a diferencia del historial de subidas, S2.6 `HISTORY_LIMIT`): es el historial de
+    ediciones de UNA empresa, no de todo el tenant, y las ediciones son un evento poco frecuente
+    (spec: retención permanente, decisión de Julio 2026-08-01).
+    """
+    sensitive = ", ".join(f"'{field}'" for field in sorted(SENSITIVE_EDIT_FIELDS))
+    rows = (
+        await session.execute(
+            text(
+                "SELECT id, field, "
+                f"CASE WHEN field IN ({sensitive}) "
+                "     THEN pgp_sym_decrypt(decode(old_value, 'base64'), :key)::text "
+                "     ELSE old_value END AS old_value, "
+                f"CASE WHEN field IN ({sensitive}) "
+                "     THEN pgp_sym_decrypt(decode(new_value, 'base64'), :key)::text "
+                "     ELSE new_value END AS new_value, "
+                "edited_by, edited_at "
+                "FROM company_edits WHERE company_id = :company_id ORDER BY edited_at DESC"
+            ),
+            {"company_id": str(company_id), "key": encryption_key},
+        )
+    ).all()
+    return [
+        CompanyEditEntry(
+            id=r.id,
+            field=r.field,
+            old_value=r.old_value,
+            new_value=r.new_value,
+            edited_by=r.edited_by,
+            edited_at=r.edited_at,
+        )
+        for r in rows
+    ]
 
 
 async def count_memberships(session: AsyncSession, company_id: UUID) -> int:

@@ -244,6 +244,39 @@ async def edit_invoice(
     )
 
 
+class InvoiceEditEntryOut(BaseModel):
+    """Una fila del historial de ediciones de una factura (2026-08-01)."""
+
+    id: UUID
+    field: str
+    old_value: str | None
+    new_value: str | None
+    edited_by: UUID
+    edited_at: datetime
+
+
+@invoices_router.get("/{invoice_id}/history")
+async def invoice_edit_history(
+    identity: InvoiceEditor, invoice_id: UUID
+) -> list[InvoiceEditEntryOut]:
+    """Historial de ediciones de una factura, más reciente primero. De otro tenant -> 404."""
+    try:
+        entries = await service.invoice_history(identity, invoice_id)
+    except service.InvoicingError as exc:
+        _raise_http(exc)
+    return [
+        InvoiceEditEntryOut(
+            id=e.id,
+            field=e.field,
+            old_value=e.old_value,
+            new_value=e.new_value,
+            edited_by=e.edited_by,
+            edited_at=e.edited_at,
+        )
+        for e in entries
+    ]
+
+
 class PurgeResultOut(BaseModel):
     """Respuesta de `POST /invoices/test/purge` (S3.5): cuántas facturas de prueba se borraron."""
 
