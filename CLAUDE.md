@@ -549,6 +549,39 @@
   (login/menú), y el icono solo (sin texto) queda para el favicon de la pestaña y el icono de
   instalación PWA (`icons/icon-192.png`/`icon-512.png`, que además era un cuadrado azul liso sin
   marca desde siempre — ahora lleva el icono real).
+- **Lote grande de mejoras del panel + segunda ronda de facturas (01/08/2026, PR #137 sincroniza a
+  GitHub 11 commits que se habían quedado solo en local/desplegados)**: bucket público
+  `platform-assets` (primera excepción a "ningún bucket de MinIO es público", ADR-0015, solo para
+  logos de tenant) + subida de logo como imagen; métricas de tenant con admins/usuarios separados y
+  `invoices_total_count`; `company_edits` (migración 0026, mismo patrón que `invoice_edits`) con
+  historial y revertir en el panel de empresas; panel de facturas reescrito: interruptor general de
+  edición (no un botón por fila), `GET /uploads/{file_id}/image` (proxy de bytes vía API — nuevo,
+  MinIO nunca es alcanzable desde el navegador en el despliegue real) para que "Ver" funcione de
+  verdad, tramos de IVA como modal editable, columna de empresa cliente; export a Excel con importes
+  en texto con coma decimal garantizada (`xlsx.py`); `ScrollableTable` (scroll horizontal arriba y
+  abajo); "Historial" pasó de entrada de menú a enlace dentro de "Subir factura".
+- **Experimento de diseño SETEX v1 para el rol `user`, evaluado y descartado (01-02/08/2026)**: a
+  petición de Julio, probado en un entorno totalmente aislado (rama `experiment/setex-user-ui-v1`,
+  contenedor y proyecto Compose propios, subdominio `setex-staging.autoken.es` resuelto al tenant
+  real `setex` vía el mecanismo de `custom_domain` de S4.6, sin tocar `setex.autoken.es`). Julio
+  decidió mantener el diseño anterior. La rama queda preservada en GitHub, etiquetada
+  `setex-config-inicial`, por si se retoma; el preview se apagó y el `custom_domain` del tenant se
+  limpió (vía el endpoint legítimo `PATCH /platform/tenants/{id}/custom-domain`, no SQL a mano).
+- **Rediseño de `CaptureScreen` + cierre de un hueco de aislamiento por-usuario (02/08/2026)**: a
+  petición de Julio, botones Recibida/Emitida/Tomar foto y logo del tenant más grandes; nuevo botón
+  "Subir archivo" (selector de fichero del dispositivo, sin `capture="environment"` a propósito —
+  ese atributo empujaría a algunos móviles a abrir la cámara en vez del selector de ficheros),
+  siempre disponible junto a la cámara en vivo, no solo como fallback. Julio pidió también, de forma
+  explícita, que ningún `user` pueda ver nunca la foto/datos de otro usuario. Auditoría encontró un
+  hueco real (sin explotar hoy: ninguna empresa real tiene más de un `user`, pero nada en el código
+  lo impedía): la autorización de fichero (`invoice_intake.service.authorize_file_access`, punto
+  único usado por review/confirm/download-url/image) y el historial de 7 días
+  (`GET /invoices/history`) solo comprobaban tenant+empresa (RLS de dos niveles), no quién subió
+  cada fichero — dos `user` de la misma empresa se habrían visto el trabajo mutuo. Corregido
+  añadiendo `uploaded_files.uploaded_by` al contexto de autorización (tercer nivel, solo para
+  `user`; un `tenant_admin` conserva la vista completa de su asesoría) y un filtro `confirmed_by`
+  opcional en `list_history`. 8 tests de regresión nuevos (review/confirm/download-url/image/
+  historial, cada uno con su contraparte de que `tenant_admin` sigue viendo todo).
 
 ---
 

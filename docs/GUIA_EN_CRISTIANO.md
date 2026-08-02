@@ -742,6 +742,50 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   paso se descubrió que ese icono de instalación llevaba años siendo un cuadrado azul liso, sin
   ningún dibujo — ahora lleva el icono real de Autoken.
 
+- **Lote grande de mejoras del panel, "como un profesional"** (01/08/2026): Julio pidió de un
+  tirón 14 cambios sobre el panel de plataforma y el de facturas: quitar la columna "Dominio
+  propio"; separar administradores de usuarios en las métricas de cada tenant y añadir "facturas
+  totales" (antes solo se contaban las procesadas por OCR); poder subir el logo de un tenant como
+  imagen de verdad, no solo pegar una URL (para eso se creó el primer bucket público de todo el
+  proyecto, de solo lectura, únicamente para logos — nunca para facturas); tablas anchas con
+  barra de desplazamiento arriba y abajo en el móvil; los importes siempre con coma decimal
+  también al exportar a Excel; quitar la columna "Estado CIF"; y que cada celda de las tablas de
+  empresas y facturas se pueda editar de verdad, con historial permanente de cada cambio y opción
+  de revertir (como ya existía para las facturas desde antes, aplicado ahora también a empresas).
+  Una segunda ronda de ajustes sobre el panel de facturas: quitar el historial y el botón "Editar"
+  de cada fila (un único interruptor general de edición para toda la tabla en su lugar); hacer que
+  el botón "Ver" enseñe de verdad la foto original de la factura (antes no hacía nada — el enlace
+  que generaba apuntaba al almacén interno, inalcanzable desde un navegador real; se cambió para
+  que la propia API sirva la imagen); los tramos de IVA como un botón con el número de tramos que
+  abre una ventanita editable; y que la tabla muestre también la empresa cliente (quién sube la
+  foto), no solo el proveedor de la factura. Verificado en verde y desplegado a producción real.
+
+- **Prueba del diseño de SETEX v1 para el rol "usuario", evaluada y descartada** (01-02/08/2026):
+  Julio pidió probar, sin ningún riesgo para lo que ya funciona, un rediseño visual inspirado en la
+  aplicación anterior (SETEX v1) para las pantallas que usa un empleado normal (capturar, confirmar,
+  historial). Se montó un "probador" totalmente aislado: una rama de código aparte, una web nueva
+  (`setex-staging.autoken.es`) con su propio contenedor, que hablaba con los mismos datos reales de
+  `setex` pero sin tocar ni un byte de la app real (`setex.autoken.es` seguía funcionando exactamente
+  igual todo el tiempo). Julio lo probó y decidió que prefería el diseño anterior. La rama con el
+  diseño de SETEX se ha guardado en GitHub, etiquetada como "configuración inicial de setex", por si
+  algún día se quiere retomar; el probador se ha apagado.
+
+- **Botones más grandes, subir archivo del dispositivo, y un hueco de seguridad cerrado antes de
+  que llegara a pasar** (02/08/2026): sobre la pantalla de captura ya existente (la que Julio
+  prefirió), se agrandaron los botones de Recibida/Emitida, el botón de tomar foto y el logo del
+  tenant en la cabecera; y se añadió un botón nuevo, "Subir archivo", que abre el buscador de
+  ficheros del propio móvil u ordenador (antes esa opción solo aparecía si la cámara fallaba; ahora
+  está siempre disponible como alternativa a hacer la foto en el momento). Julio pidió también, de
+  forma expresa, una garantía: que ningún empleado pueda ver nunca la foto o los datos de otro
+  empleado. Al revisarlo a fondo se encontró que, aunque hoy no pasa con los datos reales (cada
+  empresa cliente tiene un único empleado dado de alta), el sistema no lo impedía de verdad: dos
+  empleados de la MISMA empresa cliente sí habrían podido ver la foto, el historial y los datos del
+  otro, porque el permiso solo comprobaba "misma empresa", no "la misma persona que la subió". Se
+  cerró ese hueco en el propio permiso compartido que usan las cuatro pantallas afectadas (ver foto,
+  descargar, revisar, confirmar e historial), con pruebas nuevas que demuestran que ahora sí está
+  bloqueado, sin tocar en nada lo que ve un administrador de asesoría (que sigue viendo el trabajo de
+  todos los empleados de su cartera, como corresponde a su papel).
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
