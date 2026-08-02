@@ -138,9 +138,7 @@ async def upload_logo(identity: Platform, file: UploadFile) -> LogoUploadOut:
             detail=f"El logo supera el tamaño máximo ({logo_upload.MAX_LOGO_BYTES} bytes)",
         ) from exc
     except logo_upload.LogoTypeNotAllowed as exc:
-        raise HTTPException(
-            status_code=415, detail="Solo se admiten imágenes JPEG o PNG"
-        ) from exc
+        raise HTTPException(status_code=415, detail="Solo se admiten imágenes JPEG o PNG") from exc
     except logo_upload.ScanInfected as exc:
         raise HTTPException(status_code=422, detail="El fichero no pasó el antivirus") from exc
     except logo_upload.ScannerUnavailable as exc:
