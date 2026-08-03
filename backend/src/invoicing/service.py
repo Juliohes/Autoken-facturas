@@ -255,7 +255,11 @@ async def _load_file(identity: AuthContext, file_id: UUID) -> intake_repo.Upload
     """
     try:
         return await intake_service.authorize_file_access(
-            identity.session, tenant_id=identity.tenant_id, file_id=file_id
+            identity.session,
+            tenant_id=identity.tenant_id,
+            file_id=file_id,
+            actor_user_id=identity.user_id,
+            actor_role=identity.role,
         )
     except intake_service.FileForbidden as exc:
         raise CompanyForbidden from exc
@@ -471,12 +475,16 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
 async def history(identity: AuthContext) -> list[HistoryItem]:
     """Historial de facturas confirmadas de los últimos 7 días del contexto (S2.6). Solo lectura.
 
-    Sin autorización adicional por fichero (a diferencia de `review`/`confirm`): la RLS de dos
-    niveles ya acota el resultado al tenant/empresa de la sesión (spec §4).
+    Autorización de fichero por-fila no aplica aquí (a diferencia de `review`/`confirm`, que cargan
+    UN fichero): la RLS de dos niveles ya acota el resultado al tenant/empresa de la sesión (spec
+    §4). Un `user` recibe además el filtro `confirmed_by` (2026-08-02, cumplimiento): dentro de su
+    propia empresa, solo ve lo que confirmó él mismo, nunca lo de un compañero. Un `tenant_admin`
+    conserva la vista completa de su asesoría (spec original, sin cambios).
     """
     entries = await repository.list_history(
         identity.session,
         encryption_key=tenant_encryption_key(get_settings(), identity.tenant_id),
+        confirmed_by=identity.user_id if identity.role == Role.USER else None,
     )
     return [
         HistoryItem(

@@ -44,11 +44,16 @@ class UploadedFileRecord:
 
 @dataclass(frozen=True)
 class UploadedFileContext:
-    """Contexto mínimo de un fichero de intake para autorizar/confirmar (S2.5): empresa + estado."""
+    """Contexto mínimo de un fichero de intake para autorizar/confirmar (S2.5): empresa + estado.
+
+    `uploaded_by` (2026-08-02): quién lo subió, para el segundo nivel de autorización de
+    `authorize_file_access` (un `user` solo ve lo suyo, aunque comparta empresa con otro `user`).
+    """
 
     id: UUID
     company_id: UUID
     status: str
+    uploaded_by: UUID
 
 
 @dataclass(frozen=True)
@@ -93,13 +98,15 @@ async def get_file_context(session: AsyncSession, file_id: UUID) -> UploadedFile
     """
     row = (
         await session.execute(
-            text("SELECT id, company_id, status FROM uploaded_files WHERE id = :id"),
+            text("SELECT id, company_id, status, uploaded_by FROM uploaded_files WHERE id = :id"),
             {"id": str(file_id)},
         )
     ).first()
     if row is None:
         return None
-    return UploadedFileContext(id=row.id, company_id=row.company_id, status=row.status)
+    return UploadedFileContext(
+        id=row.id, company_id=row.company_id, status=row.status, uploaded_by=row.uploaded_by
+    )
 
 
 async def transition_status(session: AsyncSession, file_id: UUID, status: FileStatus) -> None:

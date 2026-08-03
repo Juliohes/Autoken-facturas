@@ -142,7 +142,11 @@ async def download_url(identity: Downloader, file_id: UUID) -> DownloadUrlOut:
     """
     try:
         url = await service.get_download_url(
-            identity.session, tenant_id=identity.tenant_id, file_id=file_id
+            identity.session,
+            tenant_id=identity.tenant_id,
+            file_id=file_id,
+            actor_user_id=identity.user_id,
+            actor_role=identity.role,
         )
     except service.FileForbidden as exc:
         raise HTTPException(
@@ -168,7 +172,11 @@ async def download_image(identity: Downloader, file_id: UUID) -> Response:
     """
     try:
         content, content_type = await service.get_download_bytes(
-            identity.session, tenant_id=identity.tenant_id, file_id=file_id
+            identity.session,
+            tenant_id=identity.tenant_id,
+            file_id=file_id,
+            actor_user_id=identity.user_id,
+            actor_role=identity.role,
         )
     except service.FileForbidden as exc:
         raise HTTPException(

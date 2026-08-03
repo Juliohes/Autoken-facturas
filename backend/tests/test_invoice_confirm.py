@@ -224,6 +224,38 @@ async def test_c10_confirmacion_acotada_al_tenant_y_empresa(authapi: Api) -> Non
     assert r_404.status_code == 404, r_404.text
 
 
+async def test_c10b_confirmar_fichero_de_un_companero_de_la_misma_empresa_da_403(
+    authapi: Api,
+) -> None:
+    """C10b (cumplimiento, 2026-08-02): dos `user` de la MISMA empresa -> uno no puede confirmar
+    (ni por tanto ver los datos de) el fichero que subió el otro, aunque la RLS los deje pasar a
+    ambos por pertenecer a la misma empresa."""
+    client, dsns = authapi
+    s = await seed_confirmable(dsns, client, slug="ilex")
+
+    from tests._auth import USER_PASSWORD, USER_PASSWORD_HASH, login  # noqa: PLC0415
+
+    bob = await seed_user(
+        dsns["admin"],
+        tenant_id=s["tenant_id"],
+        email="bob-companero-confirm@ilex.es",
+        role="user",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    await seed_membership(
+        dsns["admin"], user_id=bob, company_id=s["company_id"], tenant_id=s["tenant_id"]
+    )
+    bob_token = (
+        await login(client, "ilex.localhost", "bob-companero-confirm@ilex.es", USER_PASSWORD)
+    ).json()["access_token"]
+
+    resp = await client.post(
+        confirm_url(s["file_id"]), headers=auth(bob_token), json=confirm_body()
+    )
+
+    assert resp.status_code == 403, resp.text
+
+
 async def test_c11_is_test_solo_admin(authapi: Api) -> None:
     """C11: un admin marca is_test=true; un empleado que lo envía no crea factura de prueba."""
     client, dsns = authapi
@@ -301,6 +333,33 @@ async def test_c13_review_acotado_al_tenant_y_empresa(authapi: Api) -> None:
     )
     r = await client.get(review_url(file_otra), headers=auth(s["token"]))
     assert r.status_code == 404, r.text
+
+
+async def test_c13c_review_de_un_companero_de_la_misma_empresa_da_403(authapi: Api) -> None:
+    """C13c (cumplimiento, 2026-08-02): igual que C10b, sobre `GET review` en vez de `POST
+    confirm` — es el punto más sensible (datos ya leídos por OCR, aún sin confirmar)."""
+    client, dsns = authapi
+    s = await seed_confirmable(dsns, client, slug="ilex")
+
+    from tests._auth import USER_PASSWORD, USER_PASSWORD_HASH, login  # noqa: PLC0415
+
+    bob = await seed_user(
+        dsns["admin"],
+        tenant_id=s["tenant_id"],
+        email="bob-companero-review@ilex.es",
+        role="user",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    await seed_membership(
+        dsns["admin"], user_id=bob, company_id=s["company_id"], tenant_id=s["tenant_id"]
+    )
+    bob_token = (
+        await login(client, "ilex.localhost", "bob-companero-review@ilex.es", USER_PASSWORD)
+    ).json()["access_token"]
+
+    resp = await client.get(review_url(s["file_id"]), headers=auth(bob_token))
+
+    assert resp.status_code == 403, resp.text
 
 
 async def test_c14_review_solo_para_ficheros_ya_leidos(authapi: Api) -> None:

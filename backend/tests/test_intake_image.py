@@ -118,3 +118,55 @@ async def test_c5_fichero_inexistente_da_404(authapi: Api) -> None:
     resp = await client.get(image_path(str(uuid4())), headers=auth(token))
 
     assert resp.status_code == 404, resp.text
+
+
+async def test_c6_un_user_no_ve_la_foto_de_un_companero_de_la_misma_empresa(
+    authapi: Api,
+) -> None:
+    """C6 (cumplimiento, 2026-08-02): dos `user` de la MISMA empresa -> cada uno solo ve lo que
+    subió él mismo, aunque la RLS (tenant+empresa) los deje pasar a ambos. Julio lo pidió de forma
+    explícita: ningún `user` debe poder ver, de ninguna manera, la foto de otro."""
+    client, dsns = authapi
+    tenant_id, _user_id, company_id = await seed_uploader(dsns, slug="ilex")
+    ana_token = await token_for(client, email="ana@ilex.es")
+    file_ana = await _upload_and_get_file_id(client, ana_token, company_id)
+
+    bob = await seed_user(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        email="bob-companero-img@ilex.es",
+        role="user",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    from tests._intake import seed_membership  # noqa: PLC0415
+
+    await seed_membership(dsns["admin"], user_id=bob, company_id=company_id, tenant_id=tenant_id)
+    bob_token = await token_for(client, email="bob-companero-img@ilex.es")
+
+    resp = await client.get(image_path(file_ana), headers=auth(bob_token))
+
+    assert resp.status_code == 403, resp.text
+
+
+async def test_c7_un_tenant_admin_si_ve_cualquier_foto_de_su_asesoria(authapi: Api) -> None:
+    """C7 (regresión): a diferencia de C6, un `tenant_admin` conserva la visión completa de su
+    asesoría (es quien revisa el trabajo de todos los `user`, no un compañero más)."""
+    client, dsns = authapi
+    tenant_id, _user_id, company_id = await seed_uploader(dsns, slug="ilex")
+    ana_token = await token_for(client, email="ana@ilex.es")
+    file_ana = await _upload_and_get_file_id(client, ana_token, company_id)
+
+    admin_email = "admin-ve-todo-img@ilex.es"
+    await seed_user(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        email=admin_email,
+        role="tenant_admin",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    admin_token = await token_for(client, email=admin_email)
+
+    resp = await client.get(image_path(file_ana), headers=auth(admin_token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.content == JPEG

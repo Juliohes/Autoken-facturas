@@ -119,6 +119,25 @@ describe('CaptureScreen (S2.2)', () => {
 
     expect(screen.queryByRole('button', { name: 'Tomar foto' })).not.toBeInTheDocument()
     expect(screen.getByText(/no se pudo acceder a la cámara/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/elige o toma una foto/i)).toBeInTheDocument()
+  })
+
+  it('2026-08-02 (Julio): con cámara activa, "Subir archivo" también está disponible, no solo "Tomar foto"', async () => {
+    renderScreen()
+    const user = userEvent.setup()
+    const file = new File(['contenido'], 'foto.jpg', { type: 'image/jpeg' })
+
+    expect(screen.getByRole('button', { name: 'Tomar foto' })).toBeInTheDocument()
+    await user.upload(screen.getByLabelText(/elige o toma una foto/i), file)
+
+    await waitFor(() => expect(fileToJpegBlobMock).toHaveBeenCalledWith(file))
+    expect(await screen.findByRole('heading', { name: 'Revisar foto' })).toBeInTheDocument()
+  })
+
+  it('2026-08-02 (Julio): "Subir archivo" abre el selector de ficheros del dispositivo, no la cámara del móvil directamente', () => {
+    renderScreen()
+
+    expect(screen.getByLabelText(/elige o toma una foto/i)).not.toHaveAttribute('capture')
   })
 
   it('C3: elegir un fichero del selector nativo normaliza a JPEG y lleva a la revisión', async () => {

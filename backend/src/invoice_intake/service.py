@@ -115,7 +115,12 @@ async def authorize_upload(
 
 
 async def authorize_file_access(
-    session: AsyncSession, *, tenant_id: UUID, file_id: UUID
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    file_id: UUID,
+    actor_user_id: UUID,
+    actor_role: str,
 ) -> repository.UploadedFileContext:
     """Autoriza el acceso a un fichero ya existente por su visibilidad en el contexto (RLS).
 
@@ -124,9 +129,16 @@ async def authorize_file_access(
     sesión de la petición -> autorizado; visible solo en el tenant (empresa hermana) ->
     `FileForbidden` (403); ni eso -> `FileNotVisible` (404, inexistente u otro tenant). Una sola
     implementación, en el módulo dueño de `uploaded_files`.
+
+    Segundo nivel dentro de la propia empresa (2026-08-02, cumplimiento): un `user` (a diferencia
+    de un `tenant_admin`, que revisa el trabajo de toda su asesoría) solo puede ver lo que subió él
+    mismo, aunque comparta empresa con otro `user` y la RLS los deje pasar a ambos -> también
+    `FileForbidden`. Julio lo pidió de forma explícita y expresa (ninguna foto/dato ajeno, nunca).
     """
     ctx = await repository.get_file_context(session, file_id)
     if ctx is not None:
+        if actor_role == Role.USER and ctx.uploaded_by != actor_user_id:
+            raise FileForbidden
         return ctx
     async with tenant_session(tenant_id) as sess:
         in_tenant = await repository.get_file_context(sess, file_id)
@@ -135,7 +147,9 @@ async def authorize_file_access(
     raise FileNotVisible
 
 
-async def get_download_url(session: AsyncSession, *, tenant_id: UUID, file_id: UUID) -> str:
+async def get_download_url(
+    session: AsyncSession, *, tenant_id: UUID, file_id: UUID, actor_user_id: UUID, actor_role: str
+) -> str:
     """URL de descarga firmada del fichero (S2.7): autoriza, localiza y firma en una operación.
 
     Autorización idéntica a `authorize_file_access` (403/404 vía `FileForbidden`/`FileNotVisible`);
@@ -148,7 +162,13 @@ async def get_download_url(session: AsyncSession, *, tenant_id: UUID, file_id: U
     esta URL firmada apunta al hostname interno de Docker (`minio:9000`), inalcanzable desde fuera.
     `get_download_bytes` (2026-08-01) es el camino real que usa el botón "Ver" del panel.
     """
-    ctx = await authorize_file_access(session, tenant_id=tenant_id, file_id=file_id)
+    ctx = await authorize_file_access(
+        session,
+        tenant_id=tenant_id,
+        file_id=file_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+    )
     location = await repository.get_file_location(session, ctx.id)
     assert location is not None  # ctx ya confirmó que la fila existe en esta misma sesión
     return await asyncio.to_thread(
@@ -157,7 +177,7 @@ async def get_download_url(session: AsyncSession, *, tenant_id: UUID, file_id: U
 
 
 async def get_download_bytes(
-    session: AsyncSession, *, tenant_id: UUID, file_id: UUID
+    session: AsyncSession, *, tenant_id: UUID, file_id: UUID, actor_user_id: UUID, actor_role: str
 ) -> tuple[bytes, str]:
     """Bytes + MIME real del fichero (2026-08-01): la API hace de proxy en vez de redirigir al
     navegador a una URL firmada de MinIO.
@@ -167,7 +187,13 @@ async def get_download_bytes(
     directamente: los bytes pasan por la API, que sí es pública. Misma autorización que
     `get_download_url` (403/404).
     """
-    ctx = await authorize_file_access(session, tenant_id=tenant_id, file_id=file_id)
+    ctx = await authorize_file_access(
+        session,
+        tenant_id=tenant_id,
+        file_id=file_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+    )
     location = await repository.get_file_location(session, ctx.id)
     assert location is not None  # ctx ya confirmó que la fila existe en esta misma sesión
     content = await asyncio.to_thread(storage.get_object, location.bucket, location.key)

@@ -30,9 +30,16 @@ async def test_c1_historial_lista_confirmadas_de_7_dias_mas_reciente_primero(
     """C1: tres facturas confirmadas (hoy/ayer/hace 6 días) -> 200, orden confirmed_at desc."""
     client, dsns = authapi
     s = await seed_confirmable(dsns, client)
-    await seed_invoice(dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=0)
-    await seed_invoice(dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=1)
-    await seed_invoice(dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=6)
+    cb = s["user_id"]
+    await seed_invoice(
+        dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=0, confirmed_by=cb
+    )
+    await seed_invoice(
+        dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=1, confirmed_by=cb
+    )
+    await seed_invoice(
+        dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=6, confirmed_by=cb
+    )
 
     resp = await client.get(history_url(), headers=auth(s["token"]))
 
@@ -48,9 +55,19 @@ async def test_c2_facturas_de_mas_de_7_dias_no_aparecen(authapi: Api) -> None:
     client, dsns = authapi
     s = await seed_confirmable(dsns, client)
     reciente = await seed_invoice(
-        dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=1
+        dsns,
+        tenant_id=s["tenant_id"],
+        company_id=s["company_id"],
+        days_ago=1,
+        confirmed_by=s["user_id"],
     )
-    await seed_invoice(dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=8)
+    await seed_invoice(
+        dsns,
+        tenant_id=s["tenant_id"],
+        company_id=s["company_id"],
+        days_ago=8,
+        confirmed_by=s["user_id"],
+    )
 
     resp = await client.get(history_url(), headers=auth(s["token"]))
 
@@ -64,10 +81,20 @@ async def test_c3_facturas_de_prueba_se_excluyen(authapi: Api) -> None:
     client, dsns = authapi
     s = await seed_confirmable(dsns, client)
     normal = await seed_invoice(
-        dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=0, is_test=False
+        dsns,
+        tenant_id=s["tenant_id"],
+        company_id=s["company_id"],
+        days_ago=0,
+        is_test=False,
+        confirmed_by=s["user_id"],
     )
     await seed_invoice(
-        dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=0, is_test=True
+        dsns,
+        tenant_id=s["tenant_id"],
+        company_id=s["company_id"],
+        days_ago=0,
+        is_test=True,
+        confirmed_by=s["user_id"],
     )
 
     resp = await client.get(history_url(), headers=auth(s["token"]))
@@ -81,7 +108,13 @@ async def test_c4_historial_acotado_a_la_empresa_y_tenant_del_usuario(authapi: A
     """C4: solo ve las facturas de su empresa; nunca las de otra empresa/tenant."""
     client, dsns = authapi
     s = await seed_confirmable(dsns, client, slug="ilex")
-    mia = await seed_invoice(dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=0)
+    mia = await seed_invoice(
+        dsns,
+        tenant_id=s["tenant_id"],
+        company_id=s["company_id"],
+        days_ago=0,
+        confirmed_by=s["user_id"],
+    )
 
     from tests._dbtest import seed_company  # noqa: PLC0415
 
@@ -138,6 +171,7 @@ async def test_c1b_borde_7_dias_inclusive(authapi: Api) -> None:
         tenant_id=s["tenant_id"],
         company_id=s["company_id"],
         confirmed_at=borde_confirmed_at,
+        confirmed_by=s["user_id"],
     )
 
     resp = await client.get(history_url(), headers=auth(s["token"]))
@@ -145,6 +179,89 @@ async def test_c1b_borde_7_dias_inclusive(authapi: Api) -> None:
     assert resp.status_code == 200, resp.text
     ids = {e["id"] for e in resp.json()["entries"]}
     assert borde in ids
+
+
+async def test_c7_un_user_solo_ve_lo_confirmado_por_el_mismo(authapi: Api) -> None:
+    """C7 (cumplimiento, 2026-08-02): dos `user` de la MISMA empresa -> cada uno solo ve en su
+    historial lo que confirmó él mismo, nunca lo de un compañero (aunque la RLS los deje pasar a
+    ambos por pertenecer a la misma empresa). Julio lo pidió de forma explícita."""
+    client, dsns = authapi
+    s = await seed_confirmable(dsns, client, slug="ilex")
+    mia = await seed_invoice(
+        dsns,
+        tenant_id=s["tenant_id"],
+        company_id=s["company_id"],
+        days_ago=0,
+        confirmed_by=s["user_id"],
+    )
+
+    from tests._auth import USER_PASSWORD_HASH  # noqa: PLC0415
+    from tests._dbtest import seed_membership, seed_user  # noqa: PLC0415
+
+    bob = await seed_user(
+        dsns["admin"],
+        tenant_id=s["tenant_id"],
+        email="bob-companero-hist@ilex.es",
+        role="user",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    await seed_membership(
+        dsns["admin"], user_id=bob, company_id=s["company_id"], tenant_id=s["tenant_id"]
+    )
+    await seed_invoice(
+        dsns,
+        tenant_id=s["tenant_id"],
+        company_id=s["company_id"],
+        days_ago=0,
+        confirmed_by=bob,
+    )
+
+    resp = await client.get(history_url(), headers=auth(s["token"]))
+
+    assert resp.status_code == 200, resp.text
+    ids = {e["id"] for e in resp.json()["entries"]}
+    assert ids == {mia}
+
+
+async def test_c8_un_tenant_admin_ve_lo_confirmado_por_cualquier_user_de_su_asesoria(
+    authapi: Api,
+) -> None:
+    """C8 (regresión): a diferencia de C7, un `tenant_admin` sigue viendo todo lo confirmado en su
+    empresa/tenant, sea quien sea el `user` que lo confirmó (es quien revisa el trabajo de todos).
+    """
+    client, dsns = authapi
+    s = await seed_confirmable(dsns, client, slug="ilex")
+    propia = await seed_invoice(
+        dsns,
+        tenant_id=s["tenant_id"],
+        company_id=s["company_id"],
+        days_ago=0,
+        confirmed_by=s["user_id"],
+    )
+
+    from tests._auth import USER_PASSWORD, USER_PASSWORD_HASH, login  # noqa: PLC0415
+    from tests._dbtest import seed_user  # noqa: PLC0415
+
+    de_un_user = await seed_invoice(
+        dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=0
+    )
+    admin_email = "admin-ve-todo-hist@ilex.es"
+    await seed_user(
+        dsns["admin"],
+        tenant_id=s["tenant_id"],
+        email=admin_email,
+        role="tenant_admin",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    admin_token = (await login(client, "ilex.localhost", admin_email, USER_PASSWORD)).json()[
+        "access_token"
+    ]
+
+    resp = await client.get(history_url(), headers=auth(admin_token))
+
+    assert resp.status_code == 200, resp.text
+    ids = {e["id"] for e in resp.json()["entries"]}
+    assert ids == {propia, de_un_user}
 
 
 async def test_c5b_al_alcanzar_la_cota_defensiva_se_registra_sin_truncar_en_silencio(
@@ -159,7 +276,13 @@ async def test_c5b_al_alcanzar_la_cota_defensiva_se_registra_sin_truncar_en_sile
     monkeypatch.setattr(repository, "HISTORY_LIMIT", 2)
     s = await seed_confirmable(dsns, client)
     for _ in range(3):
-        await seed_invoice(dsns, tenant_id=s["tenant_id"], company_id=s["company_id"], days_ago=0)
+        await seed_invoice(
+            dsns,
+            tenant_id=s["tenant_id"],
+            company_id=s["company_id"],
+            days_ago=0,
+            confirmed_by=s["user_id"],
+        )
 
     with structlog.testing.capture_logs() as logs:
         resp = await client.get(history_url(), headers=auth(s["token"]))

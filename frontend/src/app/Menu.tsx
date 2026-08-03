@@ -33,11 +33,13 @@ export function Menu({ role, isAdminTech, theme }: Props) {
     <nav className="border-b border-slate-700 bg-slate-800 text-slate-100">
       <div className="flex flex-wrap items-center justify-between gap-y-2 px-4 py-3 sm:px-6">
         {theme.logoUrl && (
+          // Más grande (2026-08-02, a petición de Julio): `max-h-8` (32px) quedaba minúsculo junto
+          // al resto de la cabecera.
           <img
             src={theme.logoUrl}
             alt={theme.appName}
             referrerPolicy="no-referrer"
-            className="max-h-8"
+            className="max-h-14"
           />
         )}
         <button
