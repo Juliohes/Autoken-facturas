@@ -87,6 +87,18 @@ services:
     volumes:
       # Service account de Vertex (secreto, NO versionado): vive en `secrets/vertex-sa.json` del VPS.
       - ../secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro
+    # La imagen `autoken/api:dev` trae un HEALTHCHECK horneado que hace `curl localhost:8000/health`
+    # (pensado para `api`, que sirve HTTP); `worker` arranca `arq` en su lugar, que nunca escucha ese
+    # puerto — ese chequeo llevaba meses marcando el contenedor "unhealthy" de forma permanente
+    # (encontrado el 03/08/2026 investigando un fallo real de subida de fotos, sin relación con esto:
+    # el worker en sí funcionaba bien). Se sustituye por un ping a Redis (la dependencia real del
+    # worker), en vez de desactivarlo sin más.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis; redis.from_url('redis://redis:6379/0').ping()"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
