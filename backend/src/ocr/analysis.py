@@ -90,10 +90,15 @@ def analyze_invoice(invoice: ExtractedInvoice, own_cif: str) -> InvoiceAnalysis:
         check = check_invoice_totals(lines, invoice.total_amount)
         totals = {VALIDATION_FIELD_VALID: check.valid, "reason": check.reason}
 
+    # Mismas claves que `fields` en la respuesta de `review` (`invoicing.service.review`):
+    # el frontend indexa `review.confidences[<nombre del campo>]` con esos nombres exactos
+    # (`total_amount`, `counterparty_tax_id`), no con una forma corta (bug real encontrado
+    # 2026-08-07: con "total"/"counterparty" el frontend nunca encontraba la confianza real y
+    # esos dos campos salían siempre como "no leído" aunque el motor hubiera leído alta confianza).
     confidences = {
         "issue_date": invoice.issue_date_confidence,
-        "total": invoice.total_confidence,
-        "counterparty": counterparty.confidence if counterparty is not None else None,
+        "total_amount": invoice.total_confidence,
+        "counterparty_tax_id": counterparty.confidence if counterparty is not None else None,
     }
     validations = {
         "own_tax_id_present": own_present,
