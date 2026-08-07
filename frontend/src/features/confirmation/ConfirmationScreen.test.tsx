@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { api } from '../../api/client'
 import { ConfirmationScreen, RESPONSIBILITY_NOTICE } from './ConfirmationScreen'
+import { PendingOcrError } from './useReview'
 import type { ReviewResponse } from './types'
 
 vi.mock('../../api/client', () => ({
@@ -381,5 +382,98 @@ describe('ConfirmationScreen (S2.4)', () => {
         expect.objectContaining({ body: expect.objectContaining({ is_test: false }) }),
       )
     })
+  })
+
+  it('muestra la pantalla de procesando con IA si la consulta está pendiente de OCR (409)', async () => {
+    let reviewCallCount = 0
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/auth/me')) {
+        return Promise.resolve({
+          data: { id: 'u1', email: 'user@ilex.es', role: 'user', tenant: 'ilex', company: { id: 'c1' } },
+          error: undefined,
+        })
+      }
+      if (path.includes('/review')) {
+        reviewCallCount++
+        if (reviewCallCount === 1) {
+          return Promise.resolve({
+            data: undefined,
+            error: { detail: 'La factura todavía se está procesando con IA' },
+            response: { status: 409 } as unknown as Response,
+          })
+        }
+        return Promise.resolve({
+          data: makeReview(),
+          error: undefined,
+          response: { status: 200 } as unknown as Response,
+        })
+      }
+      return Promise.resolve({ data: {}, error: undefined })
+    })
+
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: (failureCount, error) => error instanceof PendingOcrError && failureCount < 5,
+          retryDelay: 10,
+        },
+      },
+    })
+
+    render(
+      <QueryClientProvider client={client}>
+        <ConfirmationScreen fileId="file-1" onConfirmed={vi.fn()} onRetry={vi.fn()} />
+      </QueryClientProvider>,
+    )
+
+    // Se muestra el spinner de procesamiento
+    expect(await screen.findByText('Procesando factura con IA…')).toBeInTheDocument()
+    expect(screen.getByText('Esto puede tardar unos segundos.')).toBeInTheDocument()
+
+    // Eventualmente carga el formulario de confirmación con éxito tras el reintento de QueryClient
+    expect(await screen.findByLabelText('Importe total', {}, { timeout: 3000 })).toBeInTheDocument()
+  })
+
+  it('muestra el error genérico sin reintentar si el 409 es permanente (ocr_failed, ya confirmado)', async () => {
+    let reviewCallCount = 0
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/auth/me')) {
+        return Promise.resolve({
+          data: { id: 'u1', email: 'user@ilex.es', role: 'user', tenant: 'ilex', company: { id: 'c1' } },
+          error: undefined,
+        })
+      }
+      if (path.includes('/review')) {
+        reviewCallCount++
+        return Promise.resolve({
+          data: undefined,
+          error: { detail: 'El fichero no tiene datos de revisión que confirmar' },
+          response: { status: 409 } as unknown as Response,
+        })
+      }
+      return Promise.resolve({ data: {}, error: undefined })
+    })
+
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: (failureCount, error) => error instanceof PendingOcrError && failureCount < 5,
+          retryDelay: 10,
+        },
+      },
+    })
+
+    render(
+      <QueryClientProvider client={client}>
+        <ConfirmationScreen fileId="file-1" onConfirmed={vi.fn()} onRetry={vi.fn()} />
+      </QueryClientProvider>,
+    )
+
+    // Error inmediato, no el spinner de "procesando" (no es un caso transitorio: no debe reintentar)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No se pudieron cargar los datos de esta factura.',
+    )
+    expect(screen.queryByText('Procesando factura con IA…')).not.toBeInTheDocument()
+    expect(reviewCallCount).toBe(1)
   })
 })

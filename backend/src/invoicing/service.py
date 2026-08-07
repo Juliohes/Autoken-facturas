@@ -71,6 +71,15 @@ class NotConfirmable(InvoicingError):
     """El fichero no está en un estado con datos de revisión/confirmación (-> 409)."""
 
 
+class PendingOcr(NotConfirmable):
+    """El fichero sigue en `pending_ocr`: el worker aún no ha terminado de leerlo (-> 409).
+
+    Subclase de `NotConfirmable` para distinguir el caso transitorio (el cliente puede reintentar
+    en segundo plano mientras procesa) de uno permanente (`ocr_failed`, ya confirmado): sin esta
+    distinción, el frontend no puede saber si merece la pena esperar o debe mostrar un error ya.
+    """
+
+
 class AlreadyConfirmed(InvoicingError):
     """Ya hay una factura para ese fichero (una factura por fichero) (-> 409)."""
 
@@ -315,6 +324,8 @@ async def review(identity: AuthContext, file_id: UUID) -> ReviewData:
     """
     file_ctx = await _load_file(identity, file_id)
     if file_ctx.status not in _CONFIRMABLE_STATES:
+        if file_ctx.status == FileStatus.PENDING_OCR.value:
+            raise PendingOcr
         raise NotConfirmable
     ocr_key = tenant_encryption_key(get_settings(), identity.tenant_id)
     extraction = await ocr_repo.get_extraction(identity.session, file_id, encryption_key=ocr_key)

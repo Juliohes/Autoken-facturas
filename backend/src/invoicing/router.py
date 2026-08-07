@@ -70,6 +70,8 @@ _ERROR_STATUS: list[tuple[type[Exception], int, str]] = [
     (service.CompanyForbidden, 403, "No perteneces a la empresa del fichero"),
     (service.FileNotVisible, 404, "Fichero no encontrado"),
     (service.AlreadyConfirmed, 409, "El fichero ya tiene una factura confirmada"),
+    # `PendingOcr` antes que `NotConfirmable`: es su subclase, y `_raise_http` usa el primer match.
+    (service.PendingOcr, 409, "La factura todavía se está procesando con IA"),
     (service.NotConfirmable, 409, "El fichero no tiene datos de revisión que confirmar"),
     (service.CounterpartyBlocked, 422, "El CIF de contraparte no es válido o no consta"),
     (service.OwnTaxIdMissing, 422, "El CIF propio no aparece en la factura"),

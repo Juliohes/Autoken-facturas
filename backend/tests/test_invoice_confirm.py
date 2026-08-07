@@ -392,6 +392,44 @@ async def test_c14_review_solo_para_ficheros_ya_leidos(authapi: Api) -> None:
     assert resp.status_code == 409, (
         resp.text
     )  # existe en su tenant pero aún no hay datos de revisión
+    # `detail` distingue el 409 transitorio (pending_ocr, el frontend reintenta) de uno permanente:
+    # sin esto, el frontend no puede saber si merece la pena esperar (regresión post-S2.4).
+    assert resp.json()["detail"] == "La factura todavía se está procesando con IA"
+
+
+async def test_c14b_review_de_un_fallo_ocr_permanente_no_es_pending(authapi: Api) -> None:
+    """C14: GET review de un fichero en `ocr_failed` -> 409 con un `detail` distinto de pending_ocr.
+
+    A diferencia de `pending_ocr` (transitorio, el worker aún no ha terminado), `ocr_failed` es un
+    estado permanente: el frontend no debe tratarlo como "sigue procesando" y reintentar en bucle.
+    """
+    client, dsns = authapi
+    from tests._auth import USER_PASSWORD, USER_PASSWORD_HASH, login  # noqa: PLC0415
+
+    tenant_id = await seed_tenant(dsns["admin"], "ilex", "ILEX")
+    user_id = await seed_user(
+        dsns["admin"],
+        tenant_id=tenant_id,
+        email="ana@ilex.es",
+        role="user",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    company_id = await seed_company(
+        dsns["admin"], tenant_id=tenant_id, name="Mi Empresa", cif=OWN_CIF
+    )
+    await seed_membership(
+        dsns["admin"], user_id=user_id, company_id=company_id, tenant_id=tenant_id
+    )
+    file_id = await seed_uploaded_file(
+        dsns, tenant_id=tenant_id, company_id=company_id, uploaded_by=user_id, status="ocr_failed"
+    )
+    token = (await login(client, "ilex.localhost", "ana@ilex.es", USER_PASSWORD)).json()[
+        "access_token"
+    ]
+
+    resp = await client.get(review_url(file_id), headers=auth(token))
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"] == "El fichero no tiene datos de revisión que confirmar"
 
 
 async def test_c13b_review_expone_blocking_reasons(authapi: Api) -> None:

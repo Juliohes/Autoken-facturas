@@ -11,7 +11,7 @@ import { ResponsibilityCheckbox } from './ResponsibilityCheckbox'
 import { isConfirmEnabled } from './confirmGate'
 import { formStateToConfirmBody, initialFormState, type ConfirmFormState } from './formState'
 import { useConfirm } from './useConfirm'
-import { useReview } from './useReview'
+import { useReview, PendingOcrError } from './useReview'
 import { WARNING_IMBALANCE, type Confidence, type ReviewResponse } from './types'
 
 // Aviso rojo de responsabilidad, SIEMPRE bajo el botón (spec §2, C9).
@@ -31,7 +31,18 @@ export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction = '
   const review = useReview(fileId)
 
   if (review.isLoading) {
-    return <p className="p-6 text-slate-400">Cargando datos de revisión…</p>
+    const isPendingOcr = review.failureReason instanceof PendingOcrError
+    return (
+      <div className="p-6 flex flex-col items-center justify-center space-y-4 text-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-emerald-500" />
+        <p className="text-slate-100 font-medium">
+          {isPendingOcr ? 'Procesando factura con IA…' : 'Cargando datos de revisión…'}
+        </p>
+        <p className="text-sm text-slate-400">
+          {isPendingOcr ? 'Esto puede tardar unos segundos.' : 'Espera un momento, por favor.'}
+        </p>
+      </div>
+    )
   }
   if (review.isError || !review.data) {
     return (
