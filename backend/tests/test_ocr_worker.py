@@ -63,6 +63,41 @@ async def test_c1_factura_legible_pasa_a_ocr_done(authapi: Api) -> None:
     assert await file_status(dsns, file_id=file_id) == "ocr_done"
 
 
+async def test_c1b_confidences_indexadas_por_el_mismo_nombre_que_los_campos(authapi: Api) -> None:
+    """C1 (regresión, 2026-08-07): `confidences` debe indexarse con el MISMO nombre que `fields`
+    en la respuesta de `review` (`total_amount`, `counterparty_tax_id`), no una forma corta.
+
+    Bug real reproducido de extremo a extremo con el worker OCR de verdad (lo reportó Julio: "pone
+    No leído pero sí aparece una cantidad que la IA ha sacado, además me pasa varias veces en la
+    foto"): `ocr.analysis.analyze_invoice` guardaba `confidences` con claves cortas (`total`,
+    `counterparty`) mientras la pantalla de revisión consulta `total_amount`/`counterparty_tax_id`
+    (los mismos nombres que `fields`) -> nunca encontraba la confianza real y esos dos campos,
+    aunque la IA los hubiera leído con confianza `alta`, siempre se pintaban como "no leído" en
+    rojo pese a mostrar el valor leído.
+    """
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns)
+
+    await run_ocr(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        file_id=file_id,
+        extractor=make_extractor(build_extracted()),  # lectura limpia, confianza alta en todo
+        ranking_extractors=[],
+    )
+
+    row = await fetch_extraction(dsns, file_id=file_id)
+    assert row is not None
+    confidences = row["confidences"]
+    if isinstance(confidences, str):
+        import json  # noqa: PLC0415
+
+        confidences = json.loads(confidences)
+    assert confidences.get("total_amount") == "alta", confidences
+    assert confidences.get("counterparty_tax_id") == "alta", confidences
+    assert confidences.get("issue_date") == "alta", confidences
+
+
 async def test_c2_campo_no_legible_se_queda_null_no_inventado(authapi: Api) -> None:
     """C2 (anti-alucinación): contraparte no legible -> null persistido, nunca inventado."""
     _client, dsns = authapi
