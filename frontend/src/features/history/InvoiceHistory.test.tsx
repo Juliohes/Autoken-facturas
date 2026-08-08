@@ -60,7 +60,8 @@ describe('InvoiceHistory (S2.6)', () => {
     expect(rows).toHaveLength(2)
     // La más reciente arriba (el backend ya ordena; la pantalla no reordena).
     expect(within(rows[0]).getByText('Reciente SL')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('121.00')).toBeInTheDocument()
+    // Con coma decimal, nunca con punto (2026-08-08, hallazgo de Julio).
+    expect(within(rows[0]).getByText('121,00')).toBeInTheDocument()
     expect(within(rows[0]).getByText('valid')).toBeInTheDocument()
     expect(within(rows[0]).getByText(/2026-07-20/)).toBeInTheDocument()
     expect(within(rows[1]).getByText('Antigua SL')).toBeInTheDocument()

@@ -197,6 +197,33 @@ describe('InvoicesPanel (S3.1)', () => {
     expect(patchMock).not.toHaveBeenCalled()
   })
 
+  it('2026-08-08: las celdas de importe se editan con coma decimal, nunca con punto', async () => {
+    mockRoutes({
+      panel: makePage([makeRow({ id: 'inv-1', net_amount: '100.00' })]),
+    })
+    patchMock.mockResolvedValue({ data: { id: 'inv-1' }, error: undefined })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+    await user.click(screen.getByRole('button', { name: 'Editar' }))
+
+    // El valor inicial se muestra con coma (hallazgo de Julio: seguía mostrando "100.00").
+    const baseInput = screen.getByLabelText('Base')
+    expect(baseInput).toHaveValue('100,00')
+
+    // Editar con coma se envía al backend con punto (lo que espera `Decimal`).
+    await user.clear(baseInput)
+    await user.type(baseInput, '150,50')
+    await user.tab()
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith('/api/v1/invoices/{invoice_id}', {
+        params: { path: { invoice_id: 'inv-1' } },
+        body: { net_amount: '150.50' },
+      })
+    })
+  })
+
   it('2026-08-01: "Ver" muestra la foto original en una ventana, no abre una URL de MinIO', async () => {
     mockRoutes({ imageBlob: new Blob(['contenido-foto'], { type: 'image/jpeg' }) })
     const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:foto-mock')
@@ -250,6 +277,38 @@ describe('InvoicesPanel (S3.1)', () => {
       })
     })
     expect(screen.queryByRole('dialog', { name: 'Tramos de IVA' })).not.toBeInTheDocument()
+  })
+
+  it('2026-08-08: la ventana de tramos muestra base/cuota con coma, y tolera editar con coma', async () => {
+    mockRoutes({
+      panel: makePage([
+        makeRow({ id: 'inv-1', tax_lines: [{ iva_pct: '21', base: '100.00', cuota: '21.00' }] }),
+      ]),
+    })
+    patchMock.mockResolvedValue({ data: { id: 'inv-1' }, error: undefined })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+
+    await user.click(screen.getByRole('button', { name: '1 tramo' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Tramos de IVA' })
+    // Valor inicial con coma (hallazgo de Julio: esta ventana seguía mostrando "100.00").
+    expect(within(dialog).getByLabelText('Tramo 1: Base')).toHaveValue('100,00')
+    expect(within(dialog).getByLabelText('Tramo 1: Cuota')).toHaveValue('21,00')
+
+    const cuotaInput = within(dialog).getByLabelText('Tramo 1: Cuota')
+    await user.clear(cuotaInput)
+    await user.type(cuotaInput, '25,50')
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() => {
+      expect(patchMock).toHaveBeenCalledWith('/api/v1/invoices/{invoice_id}', {
+        params: { path: { invoice_id: 'inv-1' } },
+        body: {
+          tax_lines: [{ iva_pct: '21', base: '100.00', cuota: '25.50' }],
+        },
+      })
+    })
   })
 
   it('C10: "Descargar Excel" pide el export con los filtros aplicados (sin cursor)', async () => {

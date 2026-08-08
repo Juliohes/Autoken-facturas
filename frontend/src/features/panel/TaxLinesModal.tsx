@@ -5,6 +5,7 @@
 // celdas del panel (que se guardan solas al perder el foco).
 import { useState } from 'react'
 
+import { fromAmountInputValue, toAmountInputValue } from '../../shared/format'
 import { useEditInvoice } from './useEditInvoice'
 import type { InvoiceRow } from './types'
 
@@ -14,12 +15,14 @@ interface TaxLineDraft {
   cuota: string
 }
 
+// `base`/`cuota` con coma decimal (2026-08-08, hallazgo de Julio: esta ventana seguía mostrando
+// el punto crudo del backend); `iva_pct` es un tipo (%), no un importe, se deja tal cual.
 function draftsFrom(row: InvoiceRow): TaxLineDraft[] {
   if (row.tax_lines.length === 0) return [{ iva_pct: '', base: '', cuota: '' }]
   return row.tax_lines.map((line) => ({
     iva_pct: line.iva_pct ?? '',
-    base: line.base ?? '',
-    cuota: line.cuota ?? '',
+    base: toAmountInputValue(line.base),
+    cuota: toAmountInputValue(line.cuota),
   }))
 }
 
@@ -43,8 +46,8 @@ export function TaxLinesModal({ invoice, onClose }: Props) {
       .filter((line) => line.iva_pct !== '' || line.base !== '' || line.cuota !== '')
       .map((line) => ({
         iva_pct: line.iva_pct === '' ? null : line.iva_pct,
-        base: line.base === '' ? null : line.base,
-        cuota: line.cuota === '' ? null : line.cuota,
+        base: fromAmountInputValue(line.base),
+        cuota: fromAmountInputValue(line.cuota),
       }))
     editInvoice.mutate({ invoiceId: invoice.id, body: { tax_lines } }, { onSuccess: onClose })
   }
