@@ -390,4 +390,18 @@ describe('InvoicesPanel (S3.1)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo cargar/i)
     expect(screen.queryByTestId('invoices-table')).not.toBeInTheDocument()
   })
+
+  it('S6.2 C3: el panel del tenant nunca muestra un botón/enlace "Laboratorio" (vive solo en plataforma)', async () => {
+    mockRoutes()
+    renderPanel()
+
+    await screen.findAllByTestId('invoice-row')
+
+    // El laboratorio S6.2 es exclusivo del panel de plataforma (admin-tech): este panel de tenant
+    // no debe ganar NADA nuevo, sin importar quién lo mire (no depende de `is_admin_tech`, este
+    // componente ni siquiera consulta la sesión).
+    expect(screen.queryByText(/laboratorio/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /laboratorio/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /laboratorio/i })).not.toBeInTheDocument()
+  })
 })

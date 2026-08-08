@@ -21,7 +21,13 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-__all__ = ["EngineRankingSummary", "get_engine_summary", "upsert_ranking_entry"]
+__all__ = [
+    "EngineRankingSummary",
+    "RankingEntry",
+    "get_engine_summary",
+    "list_ranking_entries",
+    "upsert_ranking_entry",
+]
 
 _TENANT_FROM_CONTEXT = "NULLIF(current_setting('app.tenant_id', true), '')::uuid"
 
@@ -42,6 +48,18 @@ class EngineRankingSummary:
     invoices_read: int
     average_score: float
     first_place_count: int
+
+
+@dataclass(frozen=True)
+class RankingEntry:
+    """Una fila de `ocr_ranking_entries` de UN fichero concreto (S6.2, laboratorio admin-tech,
+    comparativa de modelos): a diferencia de `EngineRankingSummary` (agregado A TRAVÉS de todos los
+    tenants para el panel de ranking, S4.8), esta es la lectura de un motor para una factura."""
+
+    engine: str
+    model: str
+    reading: dict[str, Any]
+    score: int
 
 
 async def upsert_ranking_entry(
@@ -66,6 +84,26 @@ async def upsert_ranking_entry(
             "score": score,
         },
     )
+
+
+async def list_ranking_entries(session: AsyncSession, uploaded_file_id: UUID) -> list[RankingEntry]:
+    """Comparativa de motores de UN fichero, ordenada de mayor a menor puntuación (S6.2, laboratorio
+    admin-tech, spec C12/C13). Sesión dentro de una `tenant_session` ya abierta (RLS de dos niveles,
+    a diferencia de `get_engine_summary`, que agrega a través de todos los tenants sin RLS). Lista
+    vacía si el experimento no estaba encendido cuando se procesó esa factura (nunca un error)."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT engine, model, reading, score FROM ocr_ranking_entries "
+                "WHERE uploaded_file_id = :fid ORDER BY score DESC"
+            ),
+            {"fid": str(uploaded_file_id)},
+        )
+    ).all()
+    return [
+        RankingEntry(engine=row.engine, model=row.model, reading=dict(row.reading), score=row.score)
+        for row in rows
+    ]
 
 
 async def get_engine_summary(session: AsyncSession) -> list[EngineRankingSummary]:

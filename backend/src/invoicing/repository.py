@@ -63,16 +63,26 @@ class HistoryEntry:
 
 @dataclass(frozen=True)
 class InvoiceRecord:
-    """Estado actual de una factura confirmada, para calcular el diff de una edición (S3.3).
+    """Estado actual de una factura confirmada, para calcular el diff de una edición (S3.3) o para
+    la Lectura 3 (guardado final) del laboratorio OCR (S6.2).
 
     `tax_lines` en bruto (tuplas `(iva_pct, base, cuota)`, como `insert_tax_lines`): el repositorio
     no conoce el tipo `ocr.verification.TaxLine` (es del contexto `ocr`); esa conversión es del
     servicio, igual que ya hace con los tramos de la extracción OCR (`_extraction_tax_lines`).
+
+    `uploaded_file_id`/`direction`/`invoice_number`/`is_test`/`balance_ok`/`status`/`confirmed_by`/
+    `confirmed_at` (S6.2): `edit_invoice`/`get_invoice` no los necesitaban hasta ahora, pero
+    `get_invoice_by_uploaded_file_id` sí (el laboratorio muestra la factura confirmada completa,
+    spec C10) — se añaden aquí, no en un dataclass paralelo, para no duplicar la lectura de
+    `invoices` en dos sitios (única fuente de verdad de "cómo se lee una factura").
     """
 
     id: UUID
     company_id: UUID
+    uploaded_file_id: UUID
+    direction: str
     issue_date: date | None
+    invoice_number: str | None
     counterparty_tax_id: str | None
     counterparty_name: str | None
     counterparty_cif_status: str
@@ -80,12 +90,66 @@ class InvoiceRecord:
     tax_amount: Decimal | None
     total_amount: Decimal | None
     irpf_amount: Decimal | None
+    is_test: bool
+    balance_ok: bool | None
+    status: str
+    confirmed_by: UUID
+    confirmed_at: datetime
     tax_lines: list[tuple[Decimal | None, Decimal | None, Decimal | None]]
 
 
 def is_duplicate_invoice(exc: IntegrityError) -> bool:
     """True si la `IntegrityError` viene del UNIQUE `(uploaded_file_id)` de `invoices`."""
     return violates_unique_constraint(exc, _UPLOADED_FILE_UNIQUE)
+
+
+# Columnas comunes a `get_invoice`/`get_invoice_by_uploaded_file_id` (S6.2): única fuente de
+# verdad de "cómo se lee una factura confirmada", solo cambia el `WHERE`.
+_INVOICE_COLUMNS = (
+    "id, company_id, uploaded_file_id, direction, issue_date, invoice_number, "
+    "pgp_sym_decrypt(counterparty_tax_id, :key)::text AS counterparty_tax_id, "
+    "pgp_sym_decrypt(counterparty_name, :key)::text AS counterparty_name, "
+    "counterparty_cif_status, net_amount, tax_amount, total_amount, irpf_amount, "
+    "is_test, balance_ok, status, confirmed_by, confirmed_at"
+)
+
+
+async def _tax_lines_for_invoice(
+    session: AsyncSession, invoice_id: UUID
+) -> list[tuple[Decimal | None, Decimal | None, Decimal | None]]:
+    lines = (
+        await session.execute(
+            text("SELECT iva_pct, base, cuota FROM invoice_tax_lines WHERE invoice_id = :id"),
+            {"id": str(invoice_id)},
+        )
+    ).all()
+    return [(line.iva_pct, line.base, line.cuota) for line in lines]
+
+
+def _to_invoice_record(
+    row: Any, tax_lines: list[tuple[Decimal | None, Decimal | None, Decimal | None]]
+) -> InvoiceRecord:
+    return InvoiceRecord(
+        id=row.id,
+        company_id=row.company_id,
+        uploaded_file_id=row.uploaded_file_id,
+        direction=row.direction,
+        issue_date=row.issue_date,
+        invoice_number=row.invoice_number,
+        counterparty_tax_id=row.counterparty_tax_id,
+        counterparty_name=row.counterparty_name,
+        counterparty_cif_status=row.counterparty_cif_status,
+        net_amount=row.net_amount,
+        tax_amount=row.tax_amount,
+        total_amount=row.total_amount,
+        irpf_amount=row.irpf_amount,
+        is_test=row.is_test,
+        balance_ok=row.balance_ok,
+        status=row.status,
+        confirmed_by=row.confirmed_by,
+        confirmed_at=row.confirmed_at,
+        tax_lines=tax_lines,
+    )
 
 
 async def get_invoice(
@@ -99,37 +163,36 @@ async def get_invoice(
     """
     row = (
         await session.execute(
-            text(
-                "SELECT id, company_id, issue_date, "
-                " pgp_sym_decrypt(counterparty_tax_id, :key)::text AS counterparty_tax_id, "
-                " pgp_sym_decrypt(counterparty_name, :key)::text AS counterparty_name, "
-                " counterparty_cif_status, net_amount, tax_amount, total_amount, irpf_amount "
-                "FROM invoices WHERE id = :id"
-            ),
+            text(f"SELECT {_INVOICE_COLUMNS} FROM invoices WHERE id = :id"),  # noqa: S608
             {"id": str(invoice_id), "key": encryption_key},
         )
     ).first()
     if row is None:
         return None
-    lines = (
+    return _to_invoice_record(row, await _tax_lines_for_invoice(session, invoice_id))
+
+
+async def get_invoice_by_uploaded_file_id(
+    session: AsyncSession, uploaded_file_id: UUID, *, encryption_key: str
+) -> InvoiceRecord | None:
+    """Estado actual de la factura confirmada de un fichero visible en el contexto (RLS), o `None`.
+
+    Usado por el laboratorio OCR (S6.2, Lectura 3): a diferencia de `get_invoice` (por `invoice_id`,
+    S3.3), el laboratorio arranca de un `uploaded_file_id` (spec C10). `None` cubre tanto "no existe
+    ninguna factura para ese fichero" como "el fichero pertenece a otro tenant" (la RLS de dos
+    niveles lo hace invisible sin ninguna comprobación manual adicional, spec C5).
+    """
+    row = (
         await session.execute(
-            text("SELECT iva_pct, base, cuota FROM invoice_tax_lines WHERE invoice_id = :id"),
-            {"id": str(invoice_id)},
+            text(  # noqa: S608
+                f"SELECT {_INVOICE_COLUMNS} FROM invoices WHERE uploaded_file_id = :fid"
+            ),
+            {"fid": str(uploaded_file_id), "key": encryption_key},
         )
-    ).all()
-    return InvoiceRecord(
-        id=row.id,
-        company_id=row.company_id,
-        issue_date=row.issue_date,
-        counterparty_tax_id=row.counterparty_tax_id,
-        counterparty_name=row.counterparty_name,
-        counterparty_cif_status=row.counterparty_cif_status,
-        net_amount=row.net_amount,
-        tax_amount=row.tax_amount,
-        total_amount=row.total_amount,
-        irpf_amount=row.irpf_amount,
-        tax_lines=[(line.iva_pct, line.base, line.cuota) for line in lines],
-    )
+    ).first()
+    if row is None:
+        return None
+    return _to_invoice_record(row, await _tax_lines_for_invoice(session, row.id))
 
 
 async def update_invoice(
@@ -350,6 +413,46 @@ async def insert_corrections(
                 "corrected_by": str(corrected_by),
             },
         )
+
+
+@dataclass(frozen=True)
+class CorrectionEntry:
+    """Una fila de `ocr_corrections`: un campo que el humano cambió respecto al OCR al confirmar
+    (S2.5), tal como la muestra la Lectura 3 del laboratorio OCR (S6.2, spec C10)."""
+
+    field: str
+    ai_value: str | None
+    human_value: str | None
+    corrected_by: UUID
+    created_at: datetime
+
+
+async def list_corrections(session: AsyncSession, uploaded_file_id: UUID) -> list[CorrectionEntry]:
+    """Correcciones de un fichero visibles en el contexto (RLS), más antigua primero (S6.2).
+
+    `ocr_corrections` es append-only y hoy solo se escribe una vez, al confirmar (S2.5): no hay
+    ambigüedad de orden real, pero se ordena igualmente por claridad (spec C10, "las 2
+    correcciones").
+    """
+    rows = (
+        await session.execute(
+            text(
+                "SELECT field, ai_value, human_value, corrected_by, created_at "
+                "FROM ocr_corrections WHERE uploaded_file_id = :fid ORDER BY created_at"
+            ),
+            {"fid": str(uploaded_file_id)},
+        )
+    ).all()
+    return [
+        CorrectionEntry(
+            field=row.field,
+            ai_value=row.ai_value,
+            human_value=row.human_value,
+            corrected_by=row.corrected_by,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
 
 
 # Campos sensibles cuyo old_value/new_value en `invoice_edits` se cifran (spec S5.2 C7): el resto

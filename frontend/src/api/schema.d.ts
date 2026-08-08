@@ -908,6 +908,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/tenants/{tenant_id}/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tenant Invoices
+         * @description Facturas confirmadas del tenant elegido desde el laboratorio (S6.2, spec C2). Id
+         *     inexistente -> 404 explícito (spec C4).
+         */
+        get: operations["list_tenant_invoices_api_v1_platform_tenants__tenant_id__invoices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenant_id}/invoices/{file_id}/lab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Invoice Lab
+         * @description Las 3 lecturas + comparativa de modelos de una factura del tenant elegido (S6.2, spec
+         *     C6-C13). Tenant inexistente -> 404 (spec C4); fichero de otro tenant o inexistente -> 404 (spec
+         *     C5).
+         */
+        get: operations["get_invoice_lab_api_v1_platform_tenants__tenant_id__invoices__file_id__lab_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1316,61 +1359,6 @@ export interface components {
             balance_ok: boolean | null;
         };
         /**
-         * InvoiceRowOut
-         * @description Una fila del panel de facturas (spec §2/§3 C8).
-         */
-        InvoiceRowOut: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Company Name */
-            company_name: string;
-            /** Company Cif */
-            company_cif: string;
-            /** Issue Date */
-            issue_date: string | null;
-            /** Direction */
-            direction: string;
-            /** Counterparty Tax Id */
-            counterparty_tax_id: string | null;
-            /** Counterparty Name */
-            counterparty_name: string | null;
-            /** Counterparty Cif Status */
-            counterparty_cif_status: string;
-            /** Net Amount */
-            net_amount: string | null;
-            /** Tax Amount */
-            tax_amount: string | null;
-            /** Total Amount */
-            total_amount: string | null;
-            /** Irpf Amount */
-            irpf_amount: string | null;
-            /** Tax Lines */
-            tax_lines: components["schemas"]["TaxLineOut"][];
-            /**
-             * Confirmed At
-             * Format: date-time
-             */
-            confirmed_at: string;
-            /**
-             * Confirmed By
-             * Format: uuid
-             */
-            confirmed_by: string;
-            /**
-             * Uploaded File Id
-             * Format: uuid
-             */
-            uploaded_file_id: string;
-            /**
-             * Uploaded At
-             * Format: date-time
-             */
-            uploaded_at: string;
-        };
-        /**
          * LoginRequest
          * @description Cuerpo de `POST /auth/login`.
          */
@@ -1429,7 +1417,7 @@ export interface components {
          */
         PanelOut: {
             /** Items */
-            items: components["schemas"]["InvoiceRowOut"][];
+            items: components["schemas"]["reporting__router__InvoiceRowOut"][];
             /** Next Cursor */
             next_cursor: string | null;
         };
@@ -1504,18 +1492,6 @@ export interface components {
             base?: number | string | null;
             /** Cuota */
             cuota?: number | string | null;
-        };
-        /**
-         * TaxLineOut
-         * @description Un tramo de IVA de la fila del panel.
-         */
-        TaxLineOut: {
-            /** Iva Pct */
-            iva_pct: string | null;
-            /** Base */
-            base: string | null;
-            /** Cuota */
-            cuota: string | null;
         };
         /**
          * TenantCreateIn
@@ -1665,6 +1641,141 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * InvoiceRowOut
+         * @description Una fila del listado de facturas confirmadas de un tenant (S6.2, spec C2): mismas columnas
+         *     que ya muestra `InvoicesPanel` del tenant (S3.1), aquí en solo lectura desde plataforma.
+         */
+        platform_admin__lab_router__InvoiceRowOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Company Name */
+            company_name: string;
+            /** Company Cif */
+            company_cif: string;
+            /** Issue Date */
+            issue_date: string | null;
+            /** Direction */
+            direction: string;
+            /** Counterparty Tax Id */
+            counterparty_tax_id: string | null;
+            /** Counterparty Name */
+            counterparty_name: string | null;
+            /** Counterparty Cif Status */
+            counterparty_cif_status: string;
+            /** Net Amount */
+            net_amount: string | null;
+            /** Tax Amount */
+            tax_amount: string | null;
+            /** Total Amount */
+            total_amount: string | null;
+            /** Irpf Amount */
+            irpf_amount: string | null;
+            /** Tax Lines */
+            tax_lines: components["schemas"]["platform_admin__lab_router__TaxLineOut"][];
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /**
+             * Confirmed By
+             * Format: uuid
+             */
+            confirmed_by: string;
+            /**
+             * Uploaded File Id
+             * Format: uuid
+             */
+            uploaded_file_id: string;
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+        };
+        /**
+         * TaxLineOut
+         * @description Un tramo de IVA de una fila del listado (mismo shape que `reporting.router.TaxLineOut`).
+         */
+        platform_admin__lab_router__TaxLineOut: {
+            /** Iva Pct */
+            iva_pct: string | null;
+            /** Base */
+            base: string | null;
+            /** Cuota */
+            cuota: string | null;
+        };
+        /**
+         * InvoiceRowOut
+         * @description Una fila del panel de facturas (spec §2/§3 C8).
+         */
+        reporting__router__InvoiceRowOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Company Name */
+            company_name: string;
+            /** Company Cif */
+            company_cif: string;
+            /** Issue Date */
+            issue_date: string | null;
+            /** Direction */
+            direction: string;
+            /** Counterparty Tax Id */
+            counterparty_tax_id: string | null;
+            /** Counterparty Name */
+            counterparty_name: string | null;
+            /** Counterparty Cif Status */
+            counterparty_cif_status: string;
+            /** Net Amount */
+            net_amount: string | null;
+            /** Tax Amount */
+            tax_amount: string | null;
+            /** Total Amount */
+            total_amount: string | null;
+            /** Irpf Amount */
+            irpf_amount: string | null;
+            /** Tax Lines */
+            tax_lines: components["schemas"]["reporting__router__TaxLineOut"][];
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /**
+             * Confirmed By
+             * Format: uuid
+             */
+            confirmed_by: string;
+            /**
+             * Uploaded File Id
+             * Format: uuid
+             */
+            uploaded_file_id: string;
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+        };
+        /**
+         * TaxLineOut
+         * @description Un tramo de IVA de la fila del panel.
+         */
+        reporting__router__TaxLineOut: {
+            /** Iva Pct */
+            iva_pct: string | null;
+            /** Base */
+            base: string | null;
+            /** Cuota */
+            cuota: string | null;
         };
     };
     responses: never;
@@ -2972,6 +3083,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EngineRankingOut"][];
+                };
+            };
+        };
+    };
+    list_tenant_invoices_api_v1_platform_tenants__tenant_id__invoices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["platform_admin__lab_router__InvoiceRowOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_invoice_lab_api_v1_platform_tenants__tenant_id__invoices__file_id__lab_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

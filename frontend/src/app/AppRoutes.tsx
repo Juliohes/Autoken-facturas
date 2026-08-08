@@ -19,6 +19,7 @@ import { ConfirmationScreen } from '../features/confirmation/ConfirmationScreen'
 import { InvoiceHistory } from '../features/history/InvoiceHistory'
 import { InvoicesPanel } from '../features/panel/InvoicesPanel'
 import { OcrRanking } from '../features/platform/OcrRanking'
+import { PlatformLab } from '../features/platform/PlatformLab'
 import { PlatformSettings } from '../features/platform/PlatformSettings'
 import { PlatformTenants } from '../features/platform/PlatformTenants'
 import { LoginScreen } from '../features/session/LoginScreen'
@@ -148,6 +149,14 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
           element={
             <ProtectedRoute path={ROUTES.platformOcrRanking}>
               <OcrRanking />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.platformLab}
+          element={
+            <ProtectedRoute path={ROUTES.platformLab}>
+              <PlatformLab />
             </ProtectedRoute>
           }
         />

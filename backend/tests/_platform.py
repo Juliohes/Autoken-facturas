@@ -19,7 +19,9 @@ from tests._dbtest import seed_user
 PANEL_HOST = "panel.localhost"
 
 
-async def seed_platform_admin(dsns: dict[str, str], *, email: str = "julio@autoken.es") -> str:
+async def seed_platform_admin(
+    dsns: dict[str, str], *, email: str = "julio@autoken.es", is_admin_tech: bool = False
+) -> str:
     """Siembra un `platform_admin` (sin tenant) con contraseña y TOTP ya listos. Devuelve su id."""
     return await seed_user(
         dsns["admin"],
@@ -28,6 +30,7 @@ async def seed_platform_admin(dsns: dict[str, str], *, email: str = "julio@autok
         role="platform_admin",
         password_hash=PLATFORM_PASSWORD_HASH,
         totp_secret=TOTP_SECRET,
+        is_admin_tech=is_admin_tech,
     )
 
 

@@ -827,6 +827,55 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   ningún aviso. Corregido para que ese caso ambiguo se rechace con un error claro en vez de
   aceptarse mal.
 
+- **La pantalla de confirmar, reorganizada en bloques** (08/08/2026): tras el rediseño de arriba,
+  Julio pidió agrupar visiblemente los datos por tipo en vez de tenerlos todos sueltos: los datos
+  de la contraparte (proveedor/cliente) por un lado, los importes por otro, la fecha y el número de
+  factura en su propio bloque, y los datos de la propia empresa (que no lee la IA, vienen del
+  registro) al final, tal cual estaban.
+
+- **Las cantidades con coma se colaron solo a medias** (08/08/2026): el cambio de "punto a coma" de
+  arriba solo se había hecho en la pantalla de confirmar una factura nueva; el panel de facturas ya
+  guardadas, la ventana de editar tramos de IVA y el historial seguían mostrando el punto de
+  siempre. Julio lo señaló explícitamente ("esto ya te lo comenté que lo cambiaras, no puede volver
+  a pasar"). Corregido de raíz: ahora las 4 pantallas comparten una única pieza de código para
+  mostrar/editar importes, así que un fallo así no puede volver a colarse en una pantalla sí y en
+  otra no.
+
+- **Check verde de "CIF verificado" + explicación de por qué no se puede confirmar** (08/08/2026):
+  antes, cuando el CIF de la contraparte quedaba verificado, aparecía un texto largo "CIF de
+  contraparte verificado". Julio pidió algo más discreto: un check verde al lado del dato, mismo
+  estilo que el aviso rojo de "dudoso, revisar". También se añadió un aviso claro explicando POR QUÉ
+  a veces el botón "Confirmar y guardar" no deja avanzar: cuando el CIF de la propia empresa no
+  aparece en la factura, solo un administrador de la asesoría puede confirmarla así (regla de
+  responsabilidad ya existente, ahora explicada en pantalla en vez de solo bloquear en silencio).
+
+- **S6.2 — Laboratorio OCR, una herramienta de diagnóstico solo para Julio** (08/08/2026): petición
+  directa de Julio para poder ver, factura a factura, "las 3 fotografías" de cómo se procesó un dato
+  a lo largo de todo el camino: qué leyó la IA en crudo, qué calculó el programa después de aplicar
+  sus reglas internas, y qué quedó finalmente guardado tras los cambios del empleado. Así puede
+  averiguar si un dato salió mal porque la IA leyó mal, porque el cálculo interno descartó algo
+  bueno, o porque fue una corrección legítima de una persona — y con el tiempo, mejorar la
+  precisión del sistema. También incluye, aparte, una comparativa de qué leyó cada uno de los 6
+  motores de IA candidatos en esa factura (cuando esa comparativa estuviera encendida).
+
+  Julio pidió inicialmente que se pudiera abrir desde la propia pantalla de facturas de cada
+  asesoría, pero al aprobar la spec técnica lo corrigió: **el laboratorio solo puede verlo él
+  mismo, nunca ninguna asesoría desde su panel normal de facturas** ("cada uno el suyo"). Por eso
+  vive en una pantalla nueva, propia del panel de plataforma (el mismo sitio que ya tenía el
+  interruptor de S4.10 y el ranking de modelos de S4.8), donde Julio elige primero QUÉ asesoría
+  quiere mirar, ve su lista de facturas ya confirmadas, y desde ahí abre "Ver" (la foto) o
+  "Laboratorio" (las 3 lecturas) de cualquiera. El panel de facturas de cada asesoría se comprobó
+  con una prueba automática dedicada que no gana absolutamente nada nuevo con esta tarea.
+
+  Auditoría (tres ángulos distintos): se encontró y corrigió un fallo real antes de cerrar la
+  tarea — el listado de facturas del laboratorio reutilizaba por error la misma pieza que ya usa el
+  panel normal para "una página de 50 en 50", así que una asesoría con más de 50 facturas
+  confirmadas se habría quedado sin ver las más antiguas, sin ningún aviso de que faltaban. Se
+  corrigió para que el laboratorio muestre siempre la lista completa. También se aprovechó para
+  mostrar los tramos de IVA (antes se quedaban invisibles sin querer en las 3 lecturas) y para que
+  los tipos de datos del laboratorio reutilicen los ya existentes del resto de la aplicación en vez
+  de duplicarlos.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

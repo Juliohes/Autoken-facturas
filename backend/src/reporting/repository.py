@@ -234,6 +234,71 @@ async def list_invoices(
     ]
 
 
+async def list_all(
+    session: AsyncSession, *, filters: Filters, encryption_key: str
+) -> list[InvoiceRow]:
+    """Todas las facturas confirmadas que casan los filtros, sin paginar (S6.2, laboratorio OCR).
+
+    A diferencia de `list_invoices` (panel, pide `PAGE_SIZE + 1` para que el llamante recorte a una
+    página), esto trae `InvoiceRow` completo (con `id`/`uploaded_file_id`, que el laboratorio
+    necesita para los botones "Ver"/"Laboratorio" por fila) hasta `EXPORT_LIMIT`, sin cursor. Mismo
+    criterio que `list_for_export` (spec S3.2 §5: nunca se trunca en silencio) — evita el bug real
+    encontrado en auditoría: reutilizar `list_invoices` tal cual devolvía como mucho 51 filas sin
+    ningún aviso ni forma de ver el resto para un tenant con más de 50 facturas confirmadas.
+    """
+    where, params = _build_where(filters, cursor=None)
+    params["limit"] = EXPORT_LIMIT
+    params["key"] = encryption_key
+    rows = (
+        await session.execute(
+            text(
+                "SELECT i.id, "
+                " pgp_sym_decrypt(c.name, :key)::text AS company_name, "
+                " pgp_sym_decrypt(c.cif, :key)::text AS company_cif, "
+                " i.issue_date, i.direction, "
+                " pgp_sym_decrypt(i.counterparty_tax_id, :key)::text AS counterparty_tax_id, "
+                " pgp_sym_decrypt(i.counterparty_name, :key)::text AS counterparty_name, "
+                " i.counterparty_cif_status, i.net_amount, i.tax_amount, "
+                " i.total_amount, i.irpf_amount, i.confirmed_at, i.confirmed_by, "
+                " i.uploaded_file_id, uf.created_at AS uploaded_at "
+                "FROM invoices i "
+                "JOIN uploaded_files uf ON uf.id = i.uploaded_file_id "
+                "JOIN companies c ON c.id = i.company_id "
+                f"WHERE {where} "
+                f"{_ORDER_BY} "
+                "LIMIT :limit"
+            ),
+            params,
+        )
+    ).all()
+    if len(rows) == EXPORT_LIMIT:
+        logger.warning("reporting.lab.limit_reached", limit=EXPORT_LIMIT)
+
+    tax_lines_by_invoice = await _tax_lines_for(session, [row.id for row in rows])
+    return [
+        InvoiceRow(
+            id=row.id,
+            company_name=row.company_name,
+            company_cif=row.company_cif,
+            issue_date=row.issue_date,
+            direction=row.direction,
+            counterparty_tax_id=row.counterparty_tax_id,
+            counterparty_name=row.counterparty_name,
+            counterparty_cif_status=row.counterparty_cif_status,
+            net_amount=row.net_amount,
+            tax_amount=row.tax_amount,
+            total_amount=row.total_amount,
+            irpf_amount=row.irpf_amount,
+            confirmed_at=row.confirmed_at,
+            confirmed_by=row.confirmed_by,
+            uploaded_file_id=row.uploaded_file_id,
+            uploaded_at=row.uploaded_at,
+            tax_lines=tax_lines_by_invoice.get(row.id, []),
+        )
+        for row in rows
+    ]
+
+
 async def list_for_export(
     session: AsyncSession, *, filters: Filters, encryption_key: str
 ) -> list[ExportRow]:
