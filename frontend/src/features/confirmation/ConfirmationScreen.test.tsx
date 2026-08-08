@@ -65,25 +65,34 @@ beforeEach(() => {
 })
 
 describe('ConfirmationScreen (S2.4)', () => {
-  it('C1: total, CIF de contraparte (con veredicto) y fecha visibles; el resto plegado', async () => {
+  it('C1 (enmienda S6.1 §8): datos organizados en 4 secciones siempre visibles', async () => {
     renderScreen()
 
-    // Siempre visibles y fuera del desplegable.
-    const total = await screen.findByLabelText('Importe total')
-    const cif = screen.getByLabelText('CIF de contraparte')
-    const fecha = screen.getByLabelText('Fecha')
-    expect(total).toBeInTheDocument()
-    expect(cif).toBeInTheDocument()
-    expect(fecha).toBeInTheDocument()
-    expect(screen.getByTestId('counterparty-verdict')).toBeInTheDocument()
+    // Sección Contraparte: CIF + veredicto + nombre juntos.
+    const contraparte = await screen.findByTestId('section-counterparty')
+    expect(within(contraparte).getByLabelText('CIF de contraparte')).toBeInTheDocument()
+    expect(within(contraparte).getByTestId('counterparty-verdict')).toBeInTheDocument()
+    expect(within(contraparte).getByLabelText('Nombre de la contraparte')).toBeInTheDocument()
 
-    // El resto vive dentro de un <details> plegado por defecto.
-    const details = screen.getByTestId('more-fields')
-    expect(details).not.toHaveAttribute('open')
-    expect(details).not.toContainElement(total)
-    expect(within(details).getByLabelText('Nombre de la contraparte')).toBeInTheDocument()
-    expect(within(details).getByLabelText('Base imponible')).toBeInTheDocument()
-    expect(within(details).getByLabelText('IRPF (retención)')).toBeInTheDocument()
+    // Sección Importes: base, IVA, total e IRPF juntos (tramos e IRPF conservan su desplegable).
+    const importes = screen.getByTestId('section-amounts')
+    expect(within(importes).getByLabelText('Base imponible')).toBeInTheDocument()
+    expect(within(importes).getByLabelText('IVA')).toBeInTheDocument()
+    expect(within(importes).getByLabelText('Importe total')).toBeInTheDocument()
+    expect(within(importes).getByTestId('tax-lines')).toBeInTheDocument()
+    expect(within(importes).getByLabelText('IRPF (retención)')).toBeInTheDocument()
+
+    // Sección Fecha y número de factura, juntos.
+    const invoiceIdentity = screen.getByTestId('section-invoice-identity')
+    expect(within(invoiceIdentity).getByLabelText('Fecha')).toBeInTheDocument()
+    expect(within(invoiceIdentity).getByLabelText('Número de factura')).toBeInTheDocument()
+
+    // Sección Datos propios: al final, sin cambios de comportamiento (texto plano, no editable).
+    const ownIdentity = screen.getByTestId('own-identity')
+    expect(ownIdentity).toHaveTextContent('Mi Empresa SL')
+
+    // Ya no hay una sección "siempre visible" separada de una "plegada" (enmienda §8).
+    expect(screen.queryByTestId('more-fields')).not.toBeInTheDocument()
   })
 
   it('C2: media = dudoso (amarillo), alta sin marca (spec S6.1 C20: baja+valor ya no es "no leído")', async () => {
@@ -484,7 +493,7 @@ describe('ConfirmationScreen (S2.4)', () => {
 
 // spec: docs/specs/S6.1-rediseno-celdas-comprobacion.md
 describe('ConfirmationScreen — S6.1 rediseño de celdas de comprobación', () => {
-  it('C6: número de factura siempre visible, junto a total/CIF/fecha', async () => {
+  it('C6 (enmienda §8): número de factura visible, junto a la fecha, en su propia sección', async () => {
     getMock.mockResolvedValue({
       data: makeReview({ fields: { ...makeReview().fields, invoice_number: 'F-2026-001' } }),
       error: undefined,
@@ -494,8 +503,9 @@ describe('ConfirmationScreen — S6.1 rediseño de celdas de comprobación', () 
     const invoiceNumber = await screen.findByLabelText('Número de factura')
     expect(invoiceNumber).toBeInTheDocument()
     expect(invoiceNumber).toHaveValue('F-2026-001')
-    const details = screen.getByTestId('more-fields')
-    expect(details).not.toContainElement(invoiceNumber)
+    const section = screen.getByTestId('section-invoice-identity')
+    expect(section).toContainElement(invoiceNumber)
+    expect(within(section).getByLabelText('Fecha')).toBeInTheDocument()
   })
 
   it('C8: el desplegable de tramos resume tasa + base de cada tramo existente', async () => {
