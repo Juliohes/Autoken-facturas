@@ -582,6 +582,50 @@
   `user`; un `tenant_admin` conserva la vista completa de su asesoría) y un filtro `confirmed_by`
   opcional en `list_history`. 8 tests de regresión nuevos (review/confirm/download-url/image/
   historial, cada uno con su contraparte de que `tenant_admin` sigue viendo todo).
+- **Fix urgente: pantalla de confirmación mostraba error al llegar antes de que terminara el OCR
+  (07/08/2026, PR #140)**: tras subir una foto, la app navegaba a `/confirmar` antes de que el
+  worker OCR terminara; `GET review` respondía 409 (`pending_ocr`) y la pantalla mostraba un error
+  genérico. Se distingue ahora `PendingOcr` (transitorio, backend `service.py`) de `NotConfirmable`
+  (permanente: `ocr_failed`/ya confirmado) con un `detail` propio; el frontend (`useReview.ts`)
+  solo reintenta en segundo plano (~67s) cuando es el caso transitorio, mostrando "Procesando
+  factura con IA…"; cualquier otro 409 cae al error inmediato de siempre.
+- **Fix urgente: `confidences` con claves distintas a `fields` — total/CIF SIEMPRE "No leído"
+  (07/08/2026, PR #141+#142)**: bug real reportado por Julio ("pone No leído pero sí aparece una
+  cantidad que la IA ha sacado"). `ocr.analysis.analyze_invoice` guardaba `confidences` con claves
+  cortas (`total`, `counterparty`) que no coincidían con las de `fields` (`total_amount`,
+  `counterparty_tax_id`) que consulta el frontend — el lookup fallaba siempre y esos dos campos
+  aparecían "No leído" sin importar la confianza real. Reproducido de extremo a extremo con el
+  worker OCR real antes de arreglarlo. De paso (PR #141) se corrigió una deriva ORM<->migración
+  preexistente en `platform_settings` (desde S4.10) que una versión nueva de `alembic` (sin
+  lockfile en el repo) empezó a detectar, bloqueando la CI de cualquier PR.
+- **S6.1: rediseño de las celdas de comprobación (08/08/2026)** — primera tarea con spec propia
+  (`docs/specs/S6.1-rediseno-celdas-comprobacion.md`) tras el cierre del Sprint 5, a petición
+  directa de Julio. **Número de factura**: nuevo campo de oro leído por la IA (como
+  total/CIF/fecha) end-to-end por los 6 motores + árbitro + análisis + review/confirm +
+  persistencia (migración 0027, sin cifrar — mismo criterio que importes/fecha, no es dato
+  de identidad); siempre visible en pantalla. **Ampliación decidida por Julio durante la fase
+  roja** (no estaba en la petición original, se le preguntó explícitamente al descubrir el hueco):
+  base imponible e IVA total TAMBIÉN pasan a campos de oro con confianza propia (antes nunca la
+  tuvieron, siempre "No leído" sin importar la lectura real — mismo patrón que el bug de PR #142
+  pero para estos dos campos, nunca habían llegado a tener el dato en absoluto). **Tramos de IVA**:
+  desplegable con resumen tasa+base; añadir solo ofrece las tasas cerradas {21,10,4,Sin IVA} aún no
+  usadas (`frontend/.../taxLines.ts`, nuevo); botón quitar. **IRPF**: sigue manual (no leído por
+  IA, decisión explícita fuera de alcance), ahora en su propio desplegable, vacío de verdad si no
+  hay valor. **Formato con coma decimal** en todo el formulario, tolerante a punto al editar.
+  **"No leído" -> "Dudoso, revisar"** cuando hay valor con confianza baja/ausente (`confidence.ts`,
+  nueva marca `revisar`); "No leído" reservado a cuando el valor es null de verdad, mandando
+  incluso sobre confianza `media` (contradicción real detectada en la propia spec durante la
+  implementación y corregida ahí mismo, ver spec §0/C22). Auditoría de 3 lentes: 0
+  críticos/altos de arquitectura/SOLID, **1 alto real de patrones+seguridad corregido antes de
+  cerrar** (verificado empíricamente): la conversión coma->punto del importe solo reemplazaba la
+  primera coma, así que un error de tecleo con coma de miles (ej. "1,234" queriendo decir 1234) se
+  habría convertido en silencio en un importe ~1000x distinto, sintácticamente válido; corregido
+  para no convertir una coma ambigua (3+ dígitos detrás), dejando que el backend la rechace con un
+  error claro. Resto de hallazgos (8 medios/bajos: DRY en `_needs_review`/`formState.ts`,
+  candidato a extraer `TaxLinesEditor`, normalización de `invoice_number` en el diff de
+  correcciones, `ocr/scoring.py::serialize_reading` no serializa el campo nuevo para el panel de
+  ranking S4.8 —desactivado por defecto—, entre otros) documentados como avisos no bloqueantes. 757
+  tests de backend + 244 de frontend, ruff/mypy/eslint/tsc limpios.
 
 ---
 
