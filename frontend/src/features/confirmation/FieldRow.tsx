@@ -16,10 +16,11 @@ interface FieldRowProps {
   onChange: (value: string) => void
 }
 
-// Clases de color por marca (amarillo = dudoso, rojo = no leído; sin marca = alta).
+// Clases de color por marca (amarillo = dudoso; rojo = revisar/no leído; sin marca = alta).
 const MARK_CLASS: Record<string, string> = {
   ok: 'border-slate-600',
   dudoso: 'border-yellow-500 bg-yellow-500/10',
+  revisar: 'border-red-500 bg-red-500/10',
   no_leido: 'border-red-500 bg-red-500/10',
 }
 
@@ -32,7 +33,7 @@ export function FieldRow({
   type = 'text',
   onChange,
 }: FieldRowProps) {
-  const mark = scored ? confidenceMark(confidence) : 'ok'
+  const mark = scored ? confidenceMark(confidence, value.trim() !== '') : 'ok'
   const markText = confidenceLabel(mark)
 
   return (

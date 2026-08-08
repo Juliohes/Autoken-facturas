@@ -201,6 +201,7 @@ async def insert_invoice(
     counterparty_tax_id_blind_index: str | None,
     counterparty_name: str | None,
     counterparty_cif_status: str,
+    invoice_number: str | None,
     net_amount: Decimal | None,
     tax_amount: Decimal | None,
     total_amount: Decimal | None,
@@ -223,13 +224,13 @@ async def insert_invoice(
                 f"INSERT INTO invoices "
                 f"(tenant_id, company_id, uploaded_file_id, direction, issue_date, "
                 f" counterparty_tax_id, counterparty_tax_id_blind_index, counterparty_name, "
-                f" counterparty_cif_status, "
+                f" counterparty_cif_status, invoice_number, "
                 f" net_amount, tax_amount, total_amount, irpf_amount, is_test, balance_ok, "
                 f" snapshot, status, confirmed_by) "
                 f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :uploaded_file_id, :direction, "
                 f" :issue_date, pgp_sym_encrypt(:counterparty_tax_id, :key), "
                 f" :counterparty_tax_id_blind_index, pgp_sym_encrypt(:counterparty_name, :key), "
-                f" :counterparty_cif_status, "
+                f" :counterparty_cif_status, :invoice_number, "
                 f" :net_amount, :tax_amount, :total_amount, :irpf_amount, :is_test, :balance_ok, "
                 f" CAST(:snapshot AS jsonb), 'confirmed', :confirmed_by) "
                 f"RETURNING id"
@@ -243,6 +244,7 @@ async def insert_invoice(
                 "counterparty_tax_id_blind_index": counterparty_tax_id_blind_index,
                 "counterparty_name": counterparty_name,
                 "counterparty_cif_status": counterparty_cif_status,
+                "invoice_number": invoice_number,
                 "net_amount": net_amount,
                 "tax_amount": tax_amount,
                 "total_amount": total_amount,

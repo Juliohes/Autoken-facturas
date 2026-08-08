@@ -41,14 +41,19 @@ EXTRACTION_PROMPT = (
     '  "total_amount": number|null,\n'
     '  "total_confidence": "alta"|"media"|"baja",\n'
     '  "net_amount": number|null,\n'
+    '  "net_amount_confidence": "alta"|"media"|"baja",\n'
     '  "tax_amount": number|null,\n'
+    '  "tax_amount_confidence": "alta"|"media"|"baja",\n'
+    '  "invoice_number": string|null,\n'
+    '  "invoice_number_confidence": "alta"|"media"|"baja",\n'
     '  "tax_lines": [{"base": number, "rate": number, "cuota": number}],\n'
     '  "tax_ids": [{"value": "CIF/NIF"|null, "name": string|null, '
     '"confidence": "alta"|"media"|"baja"}]\n'
     "}\n"
-    "Reglas: transcribe fielmente los identificadores fiscales (CIF/NIF) tal como aparecen; si un "
-    "dato es ilegible, ponlo a null y baja su confianza. No corrijas ni inventes valores. Pon un "
-    "objeto en tax_ids por cada identificador fiscal que aparezca en la factura."
+    "Reglas: transcribe fielmente los identificadores fiscales (CIF/NIF) y el número de factura "
+    "tal como aparecen; si un dato es ilegible, ponlo a null y baja su confianza. No corrijas ni "
+    "inventes valores. Pon un objeto en tax_ids por cada identificador fiscal que aparezca en la "
+    "factura."
 )
 
 
@@ -90,7 +95,11 @@ def parse_structured_invoice(payload: str | None, *, engine: str, model: str) ->
             total_amount=_as_optional_decimal(data.get("total_amount")),
             total_confidence=_as_confidence(data.get("total_confidence")),
             net_amount=_as_optional_decimal(data.get("net_amount")),
+            net_amount_confidence=_as_confidence(data.get("net_amount_confidence")),
             tax_amount=_as_optional_decimal(data.get("tax_amount")),
+            tax_amount_confidence=_as_confidence(data.get("tax_amount_confidence")),
+            invoice_number=_as_str(data.get("invoice_number")),
+            invoice_number_confidence=_as_confidence(data.get("invoice_number_confidence")),
             tax_lines=tax_lines,
             tax_ids=tax_ids,
             engine=engine,

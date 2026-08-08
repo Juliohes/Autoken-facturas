@@ -127,7 +127,12 @@ class AzureDocIntelInvoiceExtractor:
             total_amount=self._currency_value(fields.get("InvoiceTotal")),
             total_confidence=self._confidence(fields.get("InvoiceTotal")),
             net_amount=self._currency_value(fields.get("SubTotal")),
+            net_amount_confidence=self._confidence(fields.get("SubTotal")),
             tax_amount=self._currency_value(fields.get("TotalTax")),
+            tax_amount_confidence=self._confidence(fields.get("TotalTax")),
+            # `InvoiceId`: campo nativo de `prebuilt-invoice` para el número de factura (S6.1).
+            invoice_number=self._string_value(fields.get("InvoiceId")),
+            invoice_number_confidence=self._confidence(fields.get("InvoiceId")),
             tax_lines=(),  # `Items` de Azure no es un desglose de IVA por tipo (ver docstring).
             tax_ids=tax_ids,
             engine=_ENGINE_NAME,

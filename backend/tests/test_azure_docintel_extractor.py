@@ -71,6 +71,32 @@ async def test_c6_traduce_los_campos_reconocidos() -> None:
     assert invoice.tax_lines == ()  # Azure no da desglose de IVA por tipo (ver docstring)
 
 
+async def test_s6_1_c1_traduce_el_numero_de_factura() -> None:
+    """spec: S6.1 C1 — `InvoiceId` de Azure (`prebuilt-invoice`) -> `invoice_number` + confianza."""
+    fields = {"InvoiceId": _field(value_string="F-2026-001", confidence=0.95)}
+    extractor = _extractor_with_result(_fake_result(fields))
+
+    invoice = await extractor.extract(b"x", "image/png")
+
+    assert invoice.invoice_number == "F-2026-001"
+    assert invoice.invoice_number_confidence == "alta"
+
+
+async def test_s6_1_c25_traduce_la_confianza_de_base_imponible_e_iva() -> None:
+    """spec: S6.1 C25 — `SubTotal`/`TotalTax` de Azure también aportan su propia confianza, no
+    solo el importe (Área F, ampliación)."""
+    fields = {
+        "SubTotal": _field(value_currency=_currency(100.0), confidence=0.95),
+        "TotalTax": _field(value_currency=_currency(21.0), confidence=0.4),
+    }
+    extractor = _extractor_with_result(_fake_result(fields))
+
+    invoice = await extractor.extract(b"x", "image/png")
+
+    assert invoice.net_amount_confidence == "alta"
+    assert invoice.tax_amount_confidence == "baja"
+
+
 async def test_c6_campo_no_reconocido_por_azure_queda_null() -> None:
     """Anti-alucinación: un campo que Azure no reconoció en la factura nunca se inventa."""
     extractor = _extractor_with_result(_fake_result({}))
@@ -80,6 +106,7 @@ async def test_c6_campo_no_reconocido_por_azure_queda_null() -> None:
     assert invoice.issue_date is None
     assert invoice.total_amount is None
     assert invoice.tax_ids == ()
+    assert invoice.invoice_number is None  # spec: S6.1 C2
 
 
 @pytest.mark.parametrize(("score", "expected"), [(0.95, "alta"), (0.7, "media"), (0.2, "baja")])

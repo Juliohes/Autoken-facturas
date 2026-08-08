@@ -786,6 +786,47 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   bloqueado, sin tocar en nada lo que ve un administrador de asesoría (que sigue viendo el trabajo de
   todos los empleados de su cartera, como corresponde a su papel).
 
+- **La pantalla de confirmar avisaba mal mientras la IA seguía leyendo la factura** (07/08/2026): al
+  subir una foto, la app llevaba al empleado directamente a la pantalla de revisar antes de que la
+  lectura automática hubiera terminado, y eso se veía como un error confuso ("no se pudieron cargar
+  los datos"). Ahora se ve un mensaje claro de "Procesando factura con IA…" con una ruedecita que se
+  actualiza sola; y si la lectura falla de verdad (no solo tarda), el aviso de error llega enseguida
+  en vez de hacer esperar más de un minuto en balde.
+
+- **El aviso rojo "No leído" mentía en el importe total y el CIF, dos de los datos más
+  importantes** (07/08/2026): Julio detectó que esos dos campos siempre salían marcados como "No
+  leído" aunque la IA los hubiera leído perfectamente. La causa: una pieza interna guardaba el nivel
+  de confianza de esos dos datos con un nombre distinto al que consultaba la pantalla, así que nunca
+  lo encontraba y por defecto asumía lo peor. Arreglado para que el aviso diga la verdad.
+
+- **Rediseño completo de la pantalla de "revisar y confirmar" una factura** (08/08/2026): Julio
+  pidió varios cambios juntos sobre la pantalla donde el empleado repasa lo que ha leído la IA antes
+  de guardar la factura.
+  - **Número de factura**: hasta ahora nadie lo leía, había que teclearlo a mano. Ahora la IA lo lee
+    igual que el importe o el CIF, con su propio aviso de fiabilidad.
+  - Al construir esto se descubrió que otros dos datos, la base imponible y el IVA, **nunca habían
+    tenido ese aviso de confianza propio**: siempre salían en rojo sin importar si estaban bien
+    leídos. Julio decidió arreglarlo también: ahora esos dos datos se leen y se puntúan igual que el
+    resto.
+  - **Tramos de IVA**: antes se editaban en casillas de texto libre, con riesgo de escribir un tipo
+    de IVA que no existe en España. Ahora se eligen de una lista cerrada de solo 4 opciones (21%,
+    10%, 4% o Sin IVA), con botones para añadir o quitar un tramo.
+  - **IRPF**: sigue siendo un dato que rellena el empleado a mano (la IA no lo lee), pero ahora vive
+    dentro de un desplegable en vez de estar siempre a la vista, y si la factura no lleva retención
+    no aparece ningún número falso.
+  - **Las cantidades se ven con coma, no con punto** (123,45 en vez de 123.45), como se escriben en
+    España.
+  - **El aviso rojo "No leído" ya no confunde**: si la IA propone un número pero no está segura,
+    ahora dice "Dudoso, revisar" (hay un dato, compruébalo); "No leído" se reserva para cuando de
+    verdad no hay nada que mostrar.
+
+  Auditoría final (revisión cruzada por tres ángulos distintos, como en toda tarea de este tamaño):
+  se encontró y corrigió un fallo real antes de cerrar la tarea — al convertir una coma en un punto
+  para mandar el importe al servidor, un error de tecleo con una coma de miles (escribir "1,234"
+  queriendo decir 1234) se habría convertido en silencio en un importe casi 1000 veces distinto, sin
+  ningún aviso. Corregido para que ese caso ambiguo se rechace con un error claro en vez de
+  aceptarse mal.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

@@ -10,6 +10,7 @@ import { FieldRow } from './FieldRow'
 import { ResponsibilityCheckbox } from './ResponsibilityCheckbox'
 import { isConfirmEnabled } from './confirmGate'
 import { formStateToConfirmBody, initialFormState, type ConfirmFormState } from './formState'
+import { availableTaxRates, taxRateLabel } from './taxLines'
 import { useConfirm } from './useConfirm'
 import { useReview, PendingOcrError } from './useReview'
 import { WARNING_IMBALANCE, type Confidence, type ReviewResponse } from './types'
@@ -115,13 +116,20 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
     <section className="mx-auto max-w-xl space-y-4 p-6 text-slate-100">
       <h1 className="text-xl font-semibold">Revisar y confirmar</h1>
 
-      {/* C1: tres campos siempre visibles (total, CIF de contraparte, fecha). */}
+      {/* C1/S6.1 C6: cuatro campos siempre visibles (total, CIF de contraparte, fecha, nº factura). */}
       <FieldRow
         name="total_amount"
         label="Importe total"
         value={form.total_amount}
         confidence={conf('total_amount')}
         onChange={(v) => set({ total_amount: v })}
+      />
+      <FieldRow
+        name="invoice_number"
+        label="Número de factura"
+        value={form.invoice_number}
+        confidence={conf('invoice_number')}
+        onChange={(v) => set({ invoice_number: v })}
       />
       <div className="space-y-2">
         <FieldRow
@@ -177,52 +185,97 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
             confidence={conf('tax_amount')}
             onChange={(v) => set({ tax_amount: v })}
           />
-          <FieldRow
-            name="irpf_amount"
-            label="IRPF (retención)"
-            value={form.irpf_amount}
-            scored={false}
-            onChange={(v) => set({ irpf_amount: v })}
-          />
-          {form.tax_lines.map((line, i) => (
-            <div key={i} className="grid grid-cols-3 gap-2 sm:gap-3" data-testid={`tax-line-${i}`}>
+          {/* S6.1 C13-C15: IRPF en su propio desplegable; sigue sin ser un campo de oro leído por
+              IA (manual, como siempre), vacío de verdad si no hay retención. */}
+          <details data-testid="irpf-details" className="rounded-md border border-slate-700 p-3">
+            <summary className="cursor-pointer text-sm text-slate-300">IRPF</summary>
+            <div className="mt-3">
               <FieldRow
-                name={`tax_lines.${i}.iva_pct`}
-                label="% IVA"
-                value={line.iva_pct}
+                name="irpf_amount"
+                label="IRPF (retención)"
+                value={form.irpf_amount}
                 scored={false}
-                onChange={(v) =>
-                  set({
-                    tax_lines: form.tax_lines.map((l, j) =>
-                      j === i ? { ...l, iva_pct: v } : l,
-                    ),
-                  })
-                }
-              />
-              <FieldRow
-                name={`tax_lines.${i}.base`}
-                label="Base"
-                value={line.base}
-                scored={false}
-                onChange={(v) =>
-                  set({
-                    tax_lines: form.tax_lines.map((l, j) => (j === i ? { ...l, base: v } : l)),
-                  })
-                }
-              />
-              <FieldRow
-                name={`tax_lines.${i}.cuota`}
-                label="Cuota"
-                value={line.cuota}
-                scored={false}
-                onChange={(v) =>
-                  set({
-                    tax_lines: form.tax_lines.map((l, j) => (j === i ? { ...l, cuota: v } : l)),
-                  })
-                }
+                onChange={(v) => set({ irpf_amount: v })}
               />
             </div>
-          ))}
+          </details>
+
+          {/* S6.1 C8-C12: tramos de IVA en desplegable con resumen; añadir/quitar con tasa
+              cerrada {21,10,4,Sin IVA}, nunca un % libre. */}
+          <details data-testid="tax-lines" className="rounded-md border border-slate-700 p-3">
+            <summary className="cursor-pointer text-sm text-slate-300">Tramos de IVA</summary>
+            <div className="mt-3 space-y-3">
+              {form.tax_lines.map((line, i) => (
+                <div
+                  key={i}
+                  className="space-y-2 rounded-md border border-slate-700 p-2"
+                  data-testid={`tax-line-${i}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span data-testid={`tax-line-${i}-summary`} className="text-sm text-slate-300">
+                      {taxRateLabel(line.iva_pct)} · Base {line.base || '—'}
+                    </span>
+                    <button
+                      type="button"
+                      data-testid={`remove-tax-line-${i}`}
+                      onClick={() =>
+                        set({ tax_lines: form.tax_lines.filter((_, j) => j !== i) })
+                      }
+                      className="text-xs font-semibold text-red-400"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                    <FieldRow
+                      name={`tax_lines.${i}.base`}
+                      label="Base"
+                      value={line.base}
+                      scored={false}
+                      onChange={(v) =>
+                        set({
+                          tax_lines: form.tax_lines.map((l, j) => (j === i ? { ...l, base: v } : l)),
+                        })
+                      }
+                    />
+                    <FieldRow
+                      name={`tax_lines.${i}.cuota`}
+                      label="Cuota"
+                      value={line.cuota}
+                      scored={false}
+                      onChange={(v) =>
+                        set({
+                          tax_lines: form.tax_lines.map((l, j) => (j === i ? { ...l, cuota: v } : l)),
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              ))}
+              {availableTaxRates(form.tax_lines).length > 0 && (
+                <select
+                  data-testid="add-tax-line-rate"
+                  aria-label="Añadir tramo de IVA"
+                  value=""
+                  onChange={(e) => {
+                    const rate = e.target.value
+                    if (!rate) return
+                    set({
+                      tax_lines: [...form.tax_lines, { iva_pct: rate, base: '', cuota: '' }],
+                    })
+                  }}
+                  className="w-full rounded-md border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100"
+                >
+                  <option value="">Añadir tramo…</option>
+                  {availableTaxRates(form.tax_lines).map((rate) => (
+                    <option key={rate} value={rate}>
+                      {taxRateLabel(rate)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </details>
           {/* Identidad propia conocida (no editable, no se puntúa; ADR-0011). */}
           <div data-testid="own-identity" className="text-sm text-slate-400">
             <p>Empresa propia: {review.own.name ?? '—'}</p>

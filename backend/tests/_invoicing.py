@@ -71,24 +71,28 @@ async def seed_extraction(
     net: str = "100.00",
     tax: str = "21.00",
     status: str = "needs_review",
+    invoice_number: str | None = None,
+    confidences: dict[str, str] | None = None,
 ) -> None:
     """Siembra la fila `ocr_extractions` (baseline del OCR para el diff de correcciones).
 
     `counterparty_tax_id`/`counterparty_name` viven cifrados desde S5.2 (`pgp_sym_encrypt`, clave
     derivada por tenant); se cifra aquí con la MISMA clave maestra que usará la aplicación bajo
-    test.
+    test. `confidences` por defecto vacío (compatibilidad con los tests que no la ejercen); pásala
+    con las mismas claves que `ocr.analysis.analyze_invoice` (S6.1: `invoice_number`, `net_amount`,
+    `tax_amount`, además de las ya existentes) para probar cómo las expone `GET review`.
     """
     key = _encryption_key_for(tenant_id)
     conn = await asyncpg.connect(dsns["admin"])
     try:
         await conn.execute(
             "INSERT INTO ocr_extractions (id, tenant_id, company_id, uploaded_file_id, issue_date, "
-            "total_amount, net_amount, tax_amount, tax_lines, counterparty_tax_id, "
+            "total_amount, net_amount, tax_amount, invoice_number, tax_lines, counterparty_tax_id, "
             "counterparty_name, "
             "own_tax_id_present, confidences, validations, engine, model, raw, status) VALUES "
-            "($1,$2,$3,$4,$5::date,$6::numeric,$7::numeric,$8::numeric,$9::jsonb,"
-            "pgp_sym_encrypt($10,$14),pgp_sym_encrypt($11,$14),$12,"
-            "'{}'::jsonb,'{}'::jsonb,'fake','fake-1','{}'::jsonb,$13)",
+            "($1,$2,$3,$4,$5::date,$6::numeric,$7::numeric,$8::numeric,$9,$10::jsonb,"
+            "pgp_sym_encrypt($11,$15),pgp_sym_encrypt($12,$15),$13,"
+            "$14::jsonb,'{}'::jsonb,'fake','fake-1','{}'::jsonb,$16)",
             str(uuid4()),
             tenant_id,
             company_id,
@@ -97,12 +101,14 @@ async def seed_extraction(
             total,
             net,
             tax,
+            invoice_number,
             json.dumps([{"base": net, "rate": "21", "cuota": tax}]),
             counterparty_tax_id,
             counterparty_name,
             own_tax_id_present,
-            status,
+            json.dumps(confidences or {}),
             key,
+            status,
         )
     finally:
         await conn.close()
@@ -121,6 +127,8 @@ async def seed_confirmable(
     own_present: bool = True,
     seed_master: bool = True,
     file_status: str = "needs_review",
+    invoice_number: str | None = None,
+    confidences: dict[str, str] | None = None,
 ) -> dict:
     """Siembra tenant+usuario+empresa(own_cif)+membership+uploaded_file+ocr_extraction; sin red.
 
@@ -150,6 +158,8 @@ async def seed_confirmable(
         counterparty_tax_id=counterparty_cif,
         counterparty_name=counterparty_name,
         own_tax_id_present=own_present,
+        invoice_number=invoice_number,
+        confidences=confidences,
     )
     if seed_master:
         await seed_counterparty(
@@ -179,6 +189,7 @@ def confirm_body(
     direction: str = "recibida",
     responsibility_accepted: bool = True,
     is_test: bool = False,
+    invoice_number: str | None = "F-2026-001",
 ) -> dict:
     return {
         "direction": direction,
@@ -191,6 +202,7 @@ def confirm_body(
         "tax_lines": tax_lines if tax_lines is not None else DEFAULT_TAX_LINES,
         "responsibility_accepted": responsibility_accepted,
         "is_test": is_test,
+        "invoice_number": invoice_number,
     }
 
 

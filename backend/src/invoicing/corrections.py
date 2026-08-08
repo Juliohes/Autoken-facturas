@@ -46,6 +46,7 @@ class ConfirmedFields:
     tax_amount: Decimal | None
     counterparty_tax_id: str | None
     counterparty_name: str | None
+    invoice_number: str | None = None
     tax_lines: tuple[TaxLineFields, ...] = ()
 
 
@@ -59,6 +60,7 @@ class BaselineFields:
     tax_amount: Decimal | None
     counterparty_tax_id: str | None
     counterparty_name: str | None
+    invoice_number: str | None = None
     tax_lines: tuple[TaxLineFields, ...] = ()
 
 
@@ -110,6 +112,8 @@ def diff_corrections(baseline: BaselineFields, confirmed: ConfirmedFields) -> li
         add("counterparty_tax_id", baseline.counterparty_tax_id, confirmed.counterparty_tax_id)
     if _norm_name(baseline.counterparty_name) != _norm_name(confirmed.counterparty_name):
         add("counterparty_name", baseline.counterparty_name, confirmed.counterparty_name)
+    if baseline.invoice_number != confirmed.invoice_number:  # spec: S6.1 C5
+        add("invoice_number", baseline.invoice_number, confirmed.invoice_number)
 
     _diff_tax_lines(baseline.tax_lines, confirmed.tax_lines, add)
     return corrections

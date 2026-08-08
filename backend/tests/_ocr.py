@@ -108,13 +108,21 @@ def build_extracted(
     confidence: str = "alta",
     engine: str = "fake",
     model: str = "fake-1",
+    invoice_number: str | None = "F-2026-001",
+    invoice_number_confidence: str | None = None,
+    net_confidence: str | None = None,
+    tax_confidence: str | None = None,
 ):
     """Construye un `ExtractedInvoice` de prueba (import perezoso de los tipos de producción).
 
     Por defecto: factura legible y coherente (own presente, contraparte válida, cuadre OK, alto).
     Los tests sobreescriben el campo que quieren romper. `own_cif=None` -> el CIF propio no aparece
     (C4); `counterparty_cif=None` -> contraparte no legible (C2). `engine`/`model`: identidad del
-    motor (S4.8, ranking multi-modelo — distinguir varios motores dobles entre sí)."""
+    motor (S4.8, ranking multi-modelo — distinguir varios motores dobles entre sí).
+
+    `invoice_number_confidence`/`net_confidence`/`tax_confidence` caen a `confidence` si no se
+    pasan explícitos (spec S6.1, Áreas A/F: número de factura, base imponible e IVA total pasan a
+    ser campos de oro con confianza propia, igual que fecha/total)."""
     from ocr.extraction import ExtractedInvoice, ExtractedTaxId, ExtractedTaxLine
 
     tax_ids: list = []
@@ -137,9 +145,13 @@ def build_extracted(
         total_amount=total,
         total_confidence=confidence,
         net_amount=net,
+        net_amount_confidence=net_confidence or confidence,
         tax_amount=tax,
+        tax_amount_confidence=tax_confidence or confidence,
         tax_lines=tax_lines,
         tax_ids=tuple(tax_ids),
+        invoice_number=invoice_number,
+        invoice_number_confidence=invoice_number_confidence or confidence,
         engine=engine,
         model=model,
         raw={},
