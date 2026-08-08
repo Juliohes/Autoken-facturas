@@ -317,6 +317,83 @@ async def test_c12_review_devuelve_campos_confianzas_y_veredicto(authapi: Api) -
     assert "total_amount" in body["fields"]
 
 
+# --- S6.1: número de factura + base imponible/IVA como campos de oro ------------------------------
+
+
+async def test_s6_1_c1_review_expone_numero_de_factura(authapi: Api) -> None:
+    """spec: S6.1 C1 — `GET review` expone `invoice_number` en `fields` y en `confidences`."""
+    client, dsns = authapi
+    s = await seed_confirmable(
+        dsns, client, invoice_number="F-2026-004", confidences={"invoice_number": "alta"}
+    )
+
+    resp = await client.get(review_url(s["file_id"]), headers=auth(s["token"]))
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "invoice_number" in body["fields"]
+    assert "invoice_number" in body["confidences"]
+
+
+async def test_s6_1_c5_confirmar_persiste_numero_de_factura(authapi: Api) -> None:
+    """spec: S6.1 C5 — el número de factura confirmado se persiste en `invoices.invoice_number`."""
+    client, dsns = authapi
+    s = await seed_confirmable(dsns, client)
+
+    resp = await client.post(
+        confirm_url(s["file_id"]),
+        headers=auth(s["token"]),
+        json=confirm_body(invoice_number="F-2026-002"),
+    )
+
+    assert resp.status_code == 201, resp.text
+    invoice = await fetch_invoice(dsns, file_id=s["file_id"])
+    assert invoice is not None
+    assert invoice["invoice_number"] == "F-2026-002"
+
+
+async def test_s6_1_c7_numero_de_factura_no_se_cifra(authapi: Api) -> None:
+    """spec: S6.1 C7 — a diferencia del CIF/nombre de contraparte (S5.2), `invoice_number` se
+    persiste en texto plano (mismo criterio que `total_amount`/`issue_date`): una lectura SQL
+    directa, sin `pgp_sym_decrypt`, debe devolver el valor legible tal cual."""
+    client, dsns = authapi
+    s = await seed_confirmable(dsns, client)
+
+    resp = await client.post(
+        confirm_url(s["file_id"]),
+        headers=auth(s["token"]),
+        json=confirm_body(invoice_number="F-2026-003"),
+    )
+    assert resp.status_code == 201, resp.text
+
+    import asyncpg  # noqa: PLC0415
+
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        raw_value = await conn.fetchval(
+            "SELECT invoice_number FROM invoices WHERE uploaded_file_id = $1", s["file_id"]
+        )
+    finally:
+        await conn.close()
+    assert raw_value == "F-2026-003"
+
+
+async def test_s6_1_c25_review_expone_confianza_de_base_imponible_e_iva(authapi: Api) -> None:
+    """spec: S6.1 C25 — `GET review` expone confianza propia de `net_amount`/`tax_amount`, ya no
+    quedan huérfanos de confianza (Área F, ampliación 2026-08-08)."""
+    client, dsns = authapi
+    s = await seed_confirmable(
+        dsns, client, confidences={"net_amount": "alta", "tax_amount": "alta"}
+    )
+
+    resp = await client.get(review_url(s["file_id"]), headers=auth(s["token"]))
+
+    assert resp.status_code == 200, resp.text
+    confidences = resp.json()["confidences"]
+    assert "net_amount" in confidences
+    assert "tax_amount" in confidences
+
+
 async def test_c13_review_acotado_al_tenant_y_empresa(authapi: Api) -> None:
     """C13: GET review de un fichero de otro tenant -> 404; sin pertenencia -> 403."""
     client, dsns = authapi

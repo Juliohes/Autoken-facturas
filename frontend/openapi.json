@@ -2283,6 +2283,17 @@
             ],
             "title": "Counterparty Name"
           },
+          "invoice_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Number"
+          },
           "net_amount": {
             "anyOf": [
               {

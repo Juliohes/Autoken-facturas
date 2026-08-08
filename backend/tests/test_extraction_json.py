@@ -20,7 +20,11 @@ _VALID_PAYLOAD = {
     "total_amount": 121.0,
     "total_confidence": "alta",
     "net_amount": 100.0,
+    "net_amount_confidence": "alta",
     "tax_amount": 21.0,
+    "tax_amount_confidence": "alta",
+    "invoice_number": "F-2026-001",
+    "invoice_number_confidence": "alta",
     "tax_lines": [{"base": 100.0, "rate": 21.0, "cuota": 21.0}],
     "tax_ids": [{"value": "B06183446", "name": "Mi Empresa SL", "confidence": "alta"}],
 }
@@ -42,6 +46,31 @@ def test_campo_no_legible_queda_null_no_inventado() -> None:
     invoice = parse_structured_invoice(json.dumps(payload), engine="gpt-5.1", model="gpt-5.1")
     assert invoice.total_amount is None
     assert invoice.tax_ids == ()
+
+
+def test_s6_1_c1_parsea_numero_de_factura_y_su_confianza() -> None:
+    """spec: S6.1 C1 — `invoice_number`/`invoice_number_confidence` del JSON compartido."""
+    invoice = parse_structured_invoice(
+        json.dumps(_VALID_PAYLOAD), engine="gemini-3-flash", model="gemini-3-flash"
+    )
+    assert invoice.invoice_number == "F-2026-001"
+    assert invoice.invoice_number_confidence == "alta"
+
+
+def test_s6_1_c2_numero_de_factura_no_legible_queda_null() -> None:
+    """spec: S6.1 C2 (anti-alucinación) — `invoice_number: null` en el JSON -> `None`."""
+    payload = dict(_VALID_PAYLOAD, invoice_number=None)
+    invoice = parse_structured_invoice(json.dumps(payload), engine="claude-vertex", model="x")
+    assert invoice.invoice_number is None
+
+
+def test_s6_1_c25_parsea_confianza_propia_de_base_imponible_e_iva() -> None:
+    """spec: S6.1 C25 — `net_amount_confidence`/`tax_amount_confidence` (Área F, ampliación)."""
+    invoice = parse_structured_invoice(
+        json.dumps(_VALID_PAYLOAD), engine="gemini-3-flash", model="gemini-3-flash"
+    )
+    assert invoice.net_amount_confidence == "alta"
+    assert invoice.tax_amount_confidence == "alta"
 
 
 def test_respuesta_vacia_da_error_tipado() -> None:

@@ -99,6 +99,11 @@ def analyze_invoice(invoice: ExtractedInvoice, own_cif: str) -> InvoiceAnalysis:
         "issue_date": invoice.issue_date_confidence,
         "total_amount": invoice.total_confidence,
         "counterparty_tax_id": counterparty.confidence if counterparty is not None else None,
+        # S6.1: número de factura, base imponible e IVA total pasan a ser campos de oro con
+        # confianza propia (antes `net_amount`/`tax_amount` quedaban huérfanos de confianza).
+        "invoice_number": invoice.invoice_number_confidence,
+        "net_amount": invoice.net_amount_confidence,
+        "tax_amount": invoice.tax_amount_confidence,
     }
     validations = {
         "own_tax_id_present": own_present,
@@ -152,6 +157,13 @@ def _needs_review(
     if invoice.issue_date is None or is_low(invoice.issue_date_confidence):
         return True
     if invoice.total_amount is None or is_low(invoice.total_confidence):
+        return True
+    # S6.1: número de factura, base imponible e IVA total, mismo criterio que fecha/total.
+    if invoice.invoice_number is None or is_low(invoice.invoice_number_confidence):
+        return True
+    if invoice.net_amount is None or is_low(invoice.net_amount_confidence):
+        return True
+    if invoice.tax_amount is None or is_low(invoice.tax_amount_confidence):
         return True
     if not own_present:  # el CIF propio no aparece (anti-foto-equivocada)
         return True

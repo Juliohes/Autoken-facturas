@@ -139,6 +139,7 @@ class ConfirmCommand:
     tax_lines: list[ConfirmTaxLine]
     responsibility_accepted: bool
     is_test: bool
+    invoice_number: str | None = None
 
 
 @dataclass(frozen=True)
@@ -353,6 +354,7 @@ async def review(identity: AuthContext, file_id: UUID) -> ReviewData:
             "total_amount": _num(extraction.total_amount),
             "net_amount": _num(extraction.net_amount),
             "tax_amount": _num(extraction.tax_amount),
+            "invoice_number": extraction.invoice_number,
             "counterparty_tax_id": extraction.counterparty_tax_id,
             "counterparty_name": extraction.counterparty_name,
             "tax_lines": extraction.tax_lines,
@@ -430,6 +432,7 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
             counterparty_tax_id_blind_index=tax_id_idx,
             counterparty_name=command.counterparty_name,
             counterparty_cif_status=verdict.status,
+            invoice_number=command.invoice_number,
             net_amount=command.net_amount,
             tax_amount=command.tax_amount,
             total_amount=command.total_amount,
@@ -769,6 +772,7 @@ def _diff(extraction: ExtractionRecord, command: ConfirmCommand) -> list[Correct
         tax_amount=extraction.tax_amount,
         counterparty_tax_id=extraction.counterparty_tax_id,
         counterparty_name=extraction.counterparty_name,
+        invoice_number=extraction.invoice_number,
         tax_lines=_tax_line_fields(_extraction_tax_lines(extraction)),
     )
     confirmed = ConfirmedFields(
@@ -778,6 +782,7 @@ def _diff(extraction: ExtractionRecord, command: ConfirmCommand) -> list[Correct
         tax_amount=command.tax_amount,
         counterparty_tax_id=command.counterparty_tax_id,
         counterparty_name=command.counterparty_name,
+        invoice_number=command.invoice_number,
         tax_lines=_tax_line_fields(_command_tax_lines(command)),
     )
     return diff_corrections(baseline, confirmed)
@@ -800,6 +805,7 @@ def _snapshot(
         "counterparty_tax_id": command.counterparty_tax_id,
         "counterparty_name": command.counterparty_name,
         "counterparty_cif_status": verdict.status,
+        "invoice_number": command.invoice_number,
         "net_amount": _num(command.net_amount),
         "tax_amount": _num(command.tax_amount),
         "total_amount": _num(command.total_amount),

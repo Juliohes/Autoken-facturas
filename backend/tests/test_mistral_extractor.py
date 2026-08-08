@@ -46,6 +46,10 @@ async def test_c5_todos_los_campos_quedan_null_pase_lo_que_pase() -> None:
     assert invoice.tax_ids == ()
     assert invoice.issue_date_confidence == "baja"
     assert invoice.total_confidence == "baja"
+    assert invoice.invoice_number is None  # spec: S6.1 C4 (asimetría de Mistral, sin inventar)
+    assert invoice.invoice_number_confidence == "baja"
+    assert invoice.net_amount_confidence == "baja"  # spec: S6.1 C28
+    assert invoice.tax_amount_confidence == "baja"
 
 
 async def test_content_type_no_soportado_da_error_tipado() -> None:

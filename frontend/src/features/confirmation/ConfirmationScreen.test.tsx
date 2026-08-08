@@ -26,6 +26,7 @@ function makeReview(over: Partial<ReviewResponse> = {}): ReviewResponse {
       total_amount: '100.00',
       net_amount: '82.64',
       tax_amount: '17.36',
+      invoice_number: 'F-2026-001',
       counterparty_tax_id: 'B12345678',
       counterparty_name: 'Proveedor SL',
       tax_lines: [],
@@ -85,9 +86,12 @@ describe('ConfirmationScreen (S2.4)', () => {
     expect(within(details).getByLabelText('IRPF (retención)')).toBeInTheDocument()
   })
 
-  it('C2: media = dudoso (amarillo), baja/ausente = no leído (rojo), alta sin marca', async () => {
+  it('C2: media = dudoso (amarillo), alta sin marca (spec S6.1 C20: baja+valor ya no es "no leído")', async () => {
     getMock.mockResolvedValue({
       data: makeReview({
+        // `issue_date` tiene valor en `makeReview()` (no es null): con confianza `baja` debe
+        // marcarse "Dudoso, revisar" (spec S6.1 C20), NO "No leído" (eso es solo para C21, valor
+        // realmente ausente — ver el describe "S6.1" más abajo).
         confidences: { total_amount: 'media', issue_date: 'baja', counterparty_tax_id: 'alta' },
       }),
       error: undefined,
@@ -99,8 +103,8 @@ describe('ConfirmationScreen (S2.4)', () => {
     expect(totalMark).toHaveTextContent('Dudoso')
 
     const dateMark = screen.getByTestId('mark-issue_date')
-    expect(dateMark).toHaveAttribute('data-mark', 'no_leido')
-    expect(dateMark).toHaveTextContent('No leído')
+    expect(dateMark).toHaveAttribute('data-mark', 'revisar')
+    expect(dateMark).toHaveTextContent('Dudoso, revisar')
 
     // `alta` no lleva marca de aviso.
     expect(screen.queryByTestId('mark-counterparty_tax_id')).not.toBeInTheDocument()
@@ -475,5 +479,166 @@ describe('ConfirmationScreen (S2.4)', () => {
     )
     expect(screen.queryByText('Procesando factura con IA…')).not.toBeInTheDocument()
     expect(reviewCallCount).toBe(1)
+  })
+})
+
+// spec: docs/specs/S6.1-rediseno-celdas-comprobacion.md
+describe('ConfirmationScreen — S6.1 rediseño de celdas de comprobación', () => {
+  it('C6: número de factura siempre visible, junto a total/CIF/fecha', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({ fields: { ...makeReview().fields, invoice_number: 'F-2026-001' } }),
+      error: undefined,
+    })
+    renderScreen()
+
+    const invoiceNumber = await screen.findByLabelText('Número de factura')
+    expect(invoiceNumber).toBeInTheDocument()
+    expect(invoiceNumber).toHaveValue('F-2026-001')
+    const details = screen.getByTestId('more-fields')
+    expect(details).not.toContainElement(invoiceNumber)
+  })
+
+  it('C8: el desplegable de tramos resume tasa + base de cada tramo existente', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({
+        fields: {
+          ...makeReview().fields,
+          tax_lines: [
+            { base: '100.00', rate: '21', cuota: '21.00' },
+            { base: '50.00', rate: '10', cuota: '5.00' },
+          ],
+        },
+      }),
+      error: undefined,
+    })
+    renderScreen()
+
+    const taxLines = await screen.findByTestId('tax-lines')
+    expect(within(taxLines).getByTestId('tax-line-0-summary')).toHaveTextContent('21%')
+    expect(within(taxLines).getByTestId('tax-line-0-summary')).toHaveTextContent('100,00')
+    expect(within(taxLines).getByTestId('tax-line-1-summary')).toHaveTextContent('10%')
+    expect(within(taxLines).getByTestId('tax-line-1-summary')).toHaveTextContent('50,00')
+  })
+
+  it('C9: "Añadir tramo" solo ofrece las tasas todavía no usadas', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({
+        fields: {
+          ...makeReview().fields,
+          tax_lines: [
+            { base: '100.00', rate: '21', cuota: '21.00' },
+            { base: '50.00', rate: '10', cuota: '5.00' },
+          ],
+        },
+      }),
+      error: undefined,
+    })
+    renderScreen()
+
+    const select = await screen.findByTestId('add-tax-line-rate')
+    const optionLabels = within(select)
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(optionLabels).toEqual(['Añadir tramo…', '4%', 'Sin IVA'])
+  })
+
+  it('C9b: elegir una tasa en "Añadir tramo" añade un tramo nuevo editable', async () => {
+    const user = userEvent.setup()
+    getMock.mockResolvedValue({
+      data: makeReview({ fields: { ...makeReview().fields, tax_lines: [] } }),
+      error: undefined,
+    })
+    renderScreen()
+
+    const select = await screen.findByTestId('add-tax-line-rate')
+    await user.selectOptions(select, '4')
+
+    expect(await screen.findByTestId('tax-line-0')).toBeInTheDocument()
+    expect(screen.getByTestId('tax-line-0-summary')).toHaveTextContent('4%')
+  })
+
+  it('C10: con las 4 tasas ya usadas, no queda ninguna disponible para añadir', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({
+        fields: {
+          ...makeReview().fields,
+          tax_lines: [
+            { base: '100.00', rate: '21', cuota: '21.00' },
+            { base: '50.00', rate: '10', cuota: '5.00' },
+            { base: '25.00', rate: '4', cuota: '1.00' },
+            { base: '10.00', rate: '0', cuota: '0.00' },
+          ],
+        },
+      }),
+      error: undefined,
+    })
+    renderScreen()
+
+    await screen.findByTestId('tax-lines')
+    expect(screen.queryByTestId('add-tax-line-rate')).not.toBeInTheDocument()
+  })
+
+  it('C12: quitar un tramo lo elimina y su tasa vuelve a estar disponible para añadir', async () => {
+    const user = userEvent.setup()
+    getMock.mockResolvedValue({
+      data: makeReview({
+        fields: { ...makeReview().fields, tax_lines: [{ base: '100.00', rate: '21', cuota: '21.00' }] },
+      }),
+      error: undefined,
+    })
+    renderScreen()
+
+    await user.click(await screen.findByTestId('remove-tax-line-0'))
+
+    expect(screen.queryByTestId('tax-line-0')).not.toBeInTheDocument()
+    const select = screen.getByTestId('add-tax-line-rate')
+    expect(within(select).getByRole('option', { name: '21%' })).toBeInTheDocument()
+  })
+
+  it('C13: sin IRPF en la factura, el desplegable no muestra ninguna cantidad', async () => {
+    renderScreen()
+
+    const irpfInput = await screen.findByLabelText('IRPF (retención)')
+    expect(irpfInput).toHaveValue('')
+    const details = screen.getByTestId('irpf-details')
+    expect(details).toContainElement(irpfInput)
+  })
+
+  it('C15: el IRPF sigue siendo editable dentro de su desplegable', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+
+    const irpfInput = await screen.findByLabelText('IRPF (retención)')
+    await user.type(irpfInput, '15,00')
+
+    expect(irpfInput).toHaveValue('15,00')
+  })
+
+  it('C20: un valor presente con confianza baja se marca "Dudoso, revisar", no "No leído"', async () => {
+    getMock.mockResolvedValue({
+      // `total_amount` tiene un valor real ('100.00') en `makeReview()`.
+      data: makeReview({ confidences: { total_amount: 'baja' } }),
+      error: undefined,
+    })
+    renderScreen()
+
+    const mark = await screen.findByTestId('mark-total_amount')
+    expect(mark).toHaveAttribute('data-mark', 'revisar')
+    expect(mark).toHaveTextContent('Dudoso, revisar')
+  })
+
+  it('C21: un campo REALMENTE ausente (null) se marca "No leído"', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({
+        fields: { ...makeReview().fields, total_amount: null },
+        confidences: { total_amount: 'baja' },
+      }),
+      error: undefined,
+    })
+    renderScreen()
+
+    const mark = await screen.findByTestId('mark-total_amount')
+    expect(mark).toHaveAttribute('data-mark', 'no_leido')
+    expect(mark).toHaveTextContent('No leído')
   })
 })

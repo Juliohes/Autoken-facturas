@@ -33,6 +33,7 @@ export interface ReviewFields {
   total_amount: string | null
   net_amount: string | null
   tax_amount: string | null
+  invoice_number: string | null
   counterparty_tax_id: string | null
   counterparty_name: string | null
   tax_lines: ReviewTaxLine[]

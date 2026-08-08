@@ -67,6 +67,8 @@ class Invoice(Base):
     counterparty_tax_id_blind_index: Mapped[str | None] = mapped_column(Text, nullable=True)
     counterparty_name: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
     counterparty_cif_status: Mapped[str] = mapped_column(Text, nullable=False)
+    # Sin cifrar (S6.1 C7): mismo criterio que los importes/fecha, no es un dato de identidad.
+    invoice_number: Mapped[str | None] = mapped_column(Text, nullable=True)
     net_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     tax_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)

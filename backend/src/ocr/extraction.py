@@ -71,9 +71,10 @@ class ExtractedTaxLine:
 class ExtractedInvoice:
     """Campos de oro de una factura leídos por el extractor, con su confianza por campo.
 
-    El foco de lectura es fecha + importes + identificadores fiscales de la factura; el CIF/nombre
-    propios NO se leen aquí (se conocen desde `companies` y se inyectan en el análisis). `raw` deja
-    la respuesta del proveedor para trazabilidad, sin acoplar el dominio a su formato.
+    El foco de lectura es fecha + importes + identificadores fiscales + número de factura; el
+    CIF/nombre propios NO se leen aquí (se conocen desde `companies` y se inyectan en el análisis).
+    `net_amount`/`tax_amount` llevan confianza propia desde S6.1 (antes salían sin puntuar). `raw`
+    deja la respuesta del proveedor para trazabilidad, sin acoplar el dominio a su formato.
     """
 
     issue_date: date | None
@@ -81,7 +82,11 @@ class ExtractedInvoice:
     total_amount: Decimal | None
     total_confidence: Confidence
     net_amount: Decimal | None
+    net_amount_confidence: Confidence
     tax_amount: Decimal | None
+    tax_amount_confidence: Confidence
+    invoice_number: str | None
+    invoice_number_confidence: Confidence
     tax_lines: tuple[ExtractedTaxLine, ...]
     tax_ids: tuple[ExtractedTaxId, ...]
     engine: str

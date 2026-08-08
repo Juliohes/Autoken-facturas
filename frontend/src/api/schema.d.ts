@@ -1076,6 +1076,8 @@ export interface components {
             counterparty_tax_id?: string | null;
             /** Counterparty Name */
             counterparty_name?: string | null;
+            /** Invoice Number */
+            invoice_number?: string | null;
             /** Net Amount */
             net_amount?: number | string | null;
             /** Tax Amount */

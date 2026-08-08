@@ -29,10 +29,11 @@ class _Scalar:
 def reconcile(candidates: Sequence[ExtractedInvoice]) -> ExtractedInvoice:
     """Reconcilia las lecturas de los extractores en un `ExtractedInvoice` (con N=1, identidad).
 
-    - Campos con confianza propia (`issue_date`, `total_amount`): gana la lectura NO nula de mayor
-      confianza; si todas son nulas, se conserva la nula de mayor confianza declarada.
-    - Resto de campos (importes sin confianza propia, tramos, identificadores, metadatos): salen de
-      la lectura primaria (la de mayor confianza de total). Con N=1 todo sale del mismo candidato.
+    - Campos con confianza propia (`issue_date`, `total_amount`, `net_amount`, `tax_amount`,
+      `invoice_number`, spec S6.1): gana la lectura NO nula de mayor confianza; si todas son nulas,
+      se conserva la nula de mayor confianza declarada.
+    - Resto de campos (tramos, identificadores, metadatos): salen de la lectura primaria (la de
+      mayor confianza de total). Con N=1 todo sale del mismo candidato.
 
     El cruce fino de tramos/identificadores entre motores queda diferido (ADR-0016); hoy N=1.
     """
@@ -41,6 +42,9 @@ def reconcile(candidates: Sequence[ExtractedInvoice]) -> ExtractedInvoice:
 
     issue = _best_scalar(candidates, "issue_date", "issue_date_confidence")
     total = _best_scalar(candidates, "total_amount", "total_confidence")
+    net = _best_scalar(candidates, "net_amount", "net_amount_confidence")
+    tax = _best_scalar(candidates, "tax_amount", "tax_amount_confidence")
+    invoice_number = _best_scalar(candidates, "invoice_number", "invoice_number_confidence")
     primary = _primary(candidates)
 
     return ExtractedInvoice(
@@ -48,8 +52,12 @@ def reconcile(candidates: Sequence[ExtractedInvoice]) -> ExtractedInvoice:
         issue_date_confidence=issue.confidence,
         total_amount=total.value,  # type: ignore[arg-type]
         total_confidence=total.confidence,
-        net_amount=primary.net_amount,
-        tax_amount=primary.tax_amount,
+        net_amount=net.value,  # type: ignore[arg-type]
+        net_amount_confidence=net.confidence,
+        tax_amount=tax.value,  # type: ignore[arg-type]
+        tax_amount_confidence=tax.confidence,
+        invoice_number=invoice_number.value,  # type: ignore[arg-type]
+        invoice_number_confidence=invoice_number.confidence,
         tax_lines=primary.tax_lines,
         tax_ids=primary.tax_ids,
         engine=primary.engine,

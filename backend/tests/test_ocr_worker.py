@@ -98,6 +98,158 @@ async def test_c1b_confidences_indexadas_por_el_mismo_nombre_que_los_campos(auth
     assert confidences.get("issue_date") == "alta", confidences
 
 
+def _confidences(row: dict) -> dict:
+    """`row["confidences"]` puede venir como `dict` o como `str` JSON según el driver; normaliza."""
+    confidences = row["confidences"]
+    if isinstance(confidences, str):
+        import json  # noqa: PLC0415
+
+        return json.loads(confidences)
+    return confidences
+
+
+# --- S6.1: número de factura como campo de oro nuevo (spec docs/specs/S6.1-...) -------------------
+
+
+async def test_s6_1_c1_numero_de_factura_extraido_con_confianza(authapi: Api) -> None:
+    """spec: S6.1 C1 — número de factura legible -> persistido con su propia confianza."""
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns)
+
+    await run_ocr(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        file_id=file_id,
+        extractor=make_extractor(build_extracted(invoice_number="F-2026-001")),
+        ranking_extractors=[],
+    )
+
+    row = await fetch_extraction(dsns, file_id=file_id)
+    assert row is not None
+    assert row["invoice_number"] == "F-2026-001"
+    assert _confidences(row).get("invoice_number") == "alta"
+
+
+async def test_s6_1_c2_numero_de_factura_no_legible_queda_null(authapi: Api) -> None:
+    """spec: S6.1 C2 (anti-alucinación) — sin número de factura legible -> null, nunca inventado."""
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns)
+
+    await run_ocr(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        file_id=file_id,
+        extractor=make_extractor(
+            build_extracted(invoice_number=None, invoice_number_confidence="baja")
+        ),
+        ranking_extractors=[],
+    )
+
+    row = await fetch_extraction(dsns, file_id=file_id)
+    assert row is not None
+    assert row["invoice_number"] is None
+    assert _confidences(row).get("invoice_number") == "baja"
+
+
+async def test_s6_1_c3_numero_de_factura_dudoso_enruta_a_revision(authapi: Api) -> None:
+    """spec: S6.1 C3 — número de factura con confianza baja -> needs_review (misma lógica que
+    fecha/total/contraparte)."""
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns)
+
+    await run_ocr(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        file_id=file_id,
+        extractor=make_extractor(
+            build_extracted(invoice_number="F-2026-001", invoice_number_confidence="baja")
+        ),
+        ranking_extractors=[],
+    )
+
+    row = await fetch_extraction(dsns, file_id=file_id)
+    assert row["status"] == "needs_review"
+    assert await file_status(dsns, file_id=file_id) == "needs_review"
+
+
+# --- S6.1: base imponible e IVA total como campos de oro (Área F, ampliación 2026-08-08) ----------
+
+
+async def test_s6_1_c25_base_imponible_e_iva_con_confianza_propia(authapi: Api) -> None:
+    """spec: S6.1 C25 — base imponible e IVA total ya no quedan huérfanos de confianza."""
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns)
+
+    await run_ocr(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        file_id=file_id,
+        extractor=make_extractor(build_extracted()),  # lectura limpia, confianza alta en todo
+        ranking_extractors=[],
+    )
+
+    row = await fetch_extraction(dsns, file_id=file_id)
+    confidences = _confidences(row)
+    assert confidences.get("net_amount") == "alta", confidences
+    assert confidences.get("tax_amount") == "alta", confidences
+
+
+async def test_s6_1_c26_base_imponible_no_legible_queda_null(authapi: Api) -> None:
+    """spec: S6.1 C26 (anti-alucinación) — sin base imponible/IVA legibles -> null."""
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns)
+
+    await run_ocr(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        file_id=file_id,
+        extractor=make_extractor(
+            build_extracted(net=None, tax=None, net_confidence="baja", tax_confidence="baja")
+        ),
+        ranking_extractors=[],
+    )
+
+    row = await fetch_extraction(dsns, file_id=file_id)
+    assert row["net_amount"] is None
+    assert row["tax_amount"] is None
+    confidences = _confidences(row)
+    assert confidences.get("net_amount") == "baja", confidences
+    assert confidences.get("tax_amount") == "baja", confidences
+
+
+async def test_s6_1_c27_base_imponible_dudosa_enruta_a_revision(authapi: Api) -> None:
+    """spec: S6.1 C27 — base imponible con confianza baja -> needs_review."""
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns)
+
+    await run_ocr(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        file_id=file_id,
+        extractor=make_extractor(build_extracted(net_confidence="baja")),
+        ranking_extractors=[],
+    )
+
+    assert (await fetch_extraction(dsns, file_id=file_id))["status"] == "needs_review"
+
+
+async def test_s6_1_c27b_iva_total_dudoso_enruta_a_revision(authapi: Api) -> None:
+    """spec: S6.1 C27 — IVA total con confianza baja -> needs_review (mismo criterio, otro
+    campo)."""
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns)
+
+    await run_ocr(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        file_id=file_id,
+        extractor=make_extractor(build_extracted(tax_confidence="baja")),
+        ranking_extractors=[],
+    )
+
+    assert (await fetch_extraction(dsns, file_id=file_id))["status"] == "needs_review"
+
+
 async def test_c2_campo_no_legible_se_queda_null_no_inventado(authapi: Api) -> None:
     """C2 (anti-alucinación): contraparte no legible -> null persistido, nunca inventado."""
     _client, dsns = authapi

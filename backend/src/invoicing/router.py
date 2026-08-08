@@ -56,6 +56,7 @@ class ConfirmIn(BaseModel):
     issue_date: date | None = None
     counterparty_tax_id: str | None = None
     counterparty_name: str | None = None
+    invoice_number: str | None = None
     net_amount: Decimal | None = None
     tax_amount: Decimal | None = None
     total_amount: Decimal | None = None
@@ -118,6 +119,7 @@ async def confirm_upload(identity: Reviewer, file_id: UUID, body: ConfirmIn) -> 
         issue_date=body.issue_date,
         counterparty_tax_id=body.counterparty_tax_id,
         counterparty_name=body.counterparty_name,
+        invoice_number=body.invoice_number,
         net_amount=body.net_amount,
         tax_amount=body.tax_amount,
         total_amount=body.total_amount,
