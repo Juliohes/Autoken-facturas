@@ -58,3 +58,38 @@ export function formatCurrency(
     useGrouping: true,
   }).format(numeric)
 }
+
+// Una coma seguida de 1-2 dígitos es inequívocamente decimal ("121,45"); 3+ dígitos son ambiguos
+// (¿decimal de 3 cifras real, o una coma de miles tecleada por error, ej. "1,234" queriendo decir
+// 1234?) — no se convierte a ciegas (hallazgo de auditoría S6.1, 2026-08-08).
+const UNAMBIGUOUS_COMMA_DECIMAL = /^-?\d+,\d{1,2}$/
+
+/**
+ * Importe del backend (punto decimal) a coma decimal para un INPUT EDITABLE (a diferencia de
+ * `formatCurrency`, pensada para lectura: no fuerza 2 decimales ni separador de miles, para no
+ * alterar lo que el usuario ve tal cual lo tecleó o lo leyó la IA). `null`/`undefined` -> `''`
+ * (campo vacío, no "null" literal).
+ *
+ * Única fuente de esta conversión en toda la app (2026-08-08, hallazgo de Julio: la misma
+ * conversión se había escrito ya una vez en `confirmation/formState.ts` y el resto de pantallas
+ * con importes editables —`InvoicesPanel`, `TaxLinesModal`— seguían mostrando el punto crudo del
+ * backend porque nunca la reutilizaron). Toda pantalla con un importe editable debe usar esta
+ * función, nunca reimplementar `.replace('.', ',')` por su cuenta.
+ */
+export function toAmountInputValue(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) return ''
+  return String(value).replace('.', ',')
+}
+
+/**
+ * Un importe editado (con coma, o con punto por costumbre — se tolera) al punto decimal que
+ * espera el backend; vacío -> `null`. Una coma ambigua (posible separador de miles, 3+ dígitos
+ * detrás) NO se convierte: se envía tal cual para que el backend la rechace con un error claro en
+ * vez de aceptar en silencio un importe ~1000x distinto del querido. Contrapartida de
+ * `toAmountInputValue`, misma fuente única.
+ */
+export function fromAmountInputValue(value: string): string | null {
+  const trimmed = value.trim()
+  if (trimmed === '') return null
+  return UNAMBIGUOUS_COMMA_DECIMAL.test(trimmed) ? trimmed.replace(',', '.') : trimmed
+}

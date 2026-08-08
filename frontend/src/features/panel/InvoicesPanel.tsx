@@ -6,7 +6,12 @@
 // propia ventana (`TaxLinesModal`, un conjunto se guarda entero, no campo a campo).
 import { useState } from 'react'
 
-import { formatCurrency, formatDateTime } from '../../shared/format'
+import {
+  formatCurrency,
+  formatDateTime,
+  fromAmountInputValue,
+  toAmountInputValue,
+} from '../../shared/format'
 import { ScrollableTable } from '../../shared/ScrollableTable'
 import { useCompanyOptions } from '../companies/useCompanyOptions'
 import { InvoiceImageModal } from './InvoiceImageModal'
@@ -262,13 +267,23 @@ interface EditableCellProps {
   value: string | null
   label: string
   type?: string
+  /** Campo de importe (base/IVA/total/IRPF): se muestra y edita con coma decimal, nunca con punto
+   * (2026-08-08, hallazgo de Julio: esta celda seguía mostrando el punto crudo del backend). */
+  isAmount?: boolean
 }
 
 /** Una celda editable individual: se guarda sola al perder el foco, si el valor cambió de verdad
  * (2026-08-01, "cualquier celda editable" — sin un botón Guardar/Cancelar por fila). */
-function EditableInvoiceCell({ invoiceId, field, value, label, type = 'text' }: EditableCellProps) {
+function EditableInvoiceCell({
+  invoiceId,
+  field,
+  value,
+  label,
+  type = 'text',
+  isAmount = false,
+}: EditableCellProps) {
   const editInvoice = useEditInvoice()
-  const current = value ?? ''
+  const current = isAmount ? toAmountInputValue(value) : (value ?? '')
   return (
     <div>
       <input
@@ -282,7 +297,8 @@ function EditableInvoiceCell({ invoiceId, field, value, label, type = 'text' }: 
         onBlur={(e) => {
           const next = e.target.value
           if (next === current) return
-          editInvoice.mutate({ invoiceId, body: patchFor(field, next === '' ? null : next) })
+          const body = isAmount ? fromAmountInputValue(next) : next === '' ? null : next
+          editInvoice.mutate({ invoiceId, body: patchFor(field, body) })
         }}
         className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 disabled:opacity-40"
       />
@@ -359,6 +375,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
             field="net_amount"
             value={row.net_amount}
             label="Base"
+            isAmount
           />
         ) : (
           formatCurrency(row.net_amount)
@@ -371,6 +388,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
             field="tax_amount"
             value={row.tax_amount}
             label="IVA"
+            isAmount
           />
         ) : (
           formatCurrency(row.tax_amount)
@@ -383,6 +401,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
             field="total_amount"
             value={row.total_amount}
             label="Total"
+            isAmount
           />
         ) : (
           formatCurrency(row.total_amount)
@@ -395,6 +414,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
             field="irpf_amount"
             value={row.irpf_amount}
             label="IRPF"
+            isAmount
           />
         ) : (
           formatCurrency(row.irpf_amount)

@@ -2,6 +2,7 @@
 // de los últimos 7 días del usuario, la más reciente primero. Orquesta el hook de
 // datos y la presentación de cada fila; sin lógica de negocio aquí (vive en el
 // backend, que ya filtra/ordena/acota). Comportamientos C7-C9 de la spec.
+import { formatCurrency } from '../../shared/format'
 import { useInvoiceHistory } from './useInvoiceHistory'
 import type { HistoryEntry } from './types'
 
@@ -53,7 +54,7 @@ function HistoryRow({ entry }: { entry: HistoryEntry }) {
         </p>
       </div>
       <div className="shrink-0 text-right">
-        <p className="font-semibold">{entry.total_amount ?? '—'}</p>
+        <p className="font-semibold">{formatCurrency(entry.total_amount)}</p>
         <p className="text-sm text-slate-400">{entry.counterparty_cif_status}</p>
       </div>
     </li>
