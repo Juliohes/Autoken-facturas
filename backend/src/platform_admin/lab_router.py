@@ -33,7 +33,7 @@ router = APIRouter(prefix="/platform/tenants", tags=["platform"])
 AdminTech = Annotated[AdminTechAuthContext, Depends(require_admin_tech())]
 
 
-class TaxLineOut(BaseModel):
+class LabTaxLineOut(BaseModel):
     """Un tramo de IVA de una fila del listado (mismo shape que `reporting.router.TaxLineOut`)."""
 
     iva_pct: Decimal | None
@@ -41,7 +41,7 @@ class TaxLineOut(BaseModel):
     cuota: Decimal | None
 
 
-class InvoiceRowOut(BaseModel):
+class LabInvoiceRowOut(BaseModel):
     """Una fila del listado de facturas confirmadas de un tenant (S6.2, spec C2): mismas columnas
     que ya muestra `InvoicesPanel` del tenant (S3.1), aquí en solo lectura desde plataforma."""
 
@@ -57,15 +57,15 @@ class InvoiceRowOut(BaseModel):
     tax_amount: Decimal | None
     total_amount: Decimal | None
     irpf_amount: Decimal | None
-    tax_lines: list[TaxLineOut]
+    tax_lines: list[LabTaxLineOut]
     confirmed_at: datetime
     confirmed_by: UUID
     uploaded_file_id: UUID
     uploaded_at: datetime
 
 
-def _row_to_out(row: InvoiceRow) -> InvoiceRowOut:
-    return InvoiceRowOut(
+def _row_to_out(row: InvoiceRow) -> LabInvoiceRowOut:
+    return LabInvoiceRowOut(
         id=row.id,
         company_name=row.company_name,
         company_cif=row.company_cif,
@@ -79,7 +79,7 @@ def _row_to_out(row: InvoiceRow) -> InvoiceRowOut:
         total_amount=row.total_amount,
         irpf_amount=row.irpf_amount,
         tax_lines=[
-            TaxLineOut(iva_pct=line.iva_pct, base=line.base, cuota=line.cuota)
+            LabTaxLineOut(iva_pct=line.iva_pct, base=line.base, cuota=line.cuota)
             for line in row.tax_lines
         ],
         confirmed_at=row.confirmed_at,
@@ -90,7 +90,7 @@ def _row_to_out(row: InvoiceRow) -> InvoiceRowOut:
 
 
 @router.get("/{tenant_id}/invoices")
-async def list_tenant_invoices(identity: AdminTech, tenant_id: UUID) -> list[InvoiceRowOut]:
+async def list_tenant_invoices(identity: AdminTech, tenant_id: UUID) -> list[LabInvoiceRowOut]:
     """Facturas confirmadas del tenant elegido desde el laboratorio (S6.2, spec C2). Id
     inexistente -> 404 explícito (spec C4)."""
     try:

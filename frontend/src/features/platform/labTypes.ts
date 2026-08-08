@@ -8,7 +8,7 @@
 import type { components } from '../../api/schema'
 import type { ReviewResponse } from '../confirmation/types'
 
-export type LabInvoiceRow = components['schemas']['platform_admin__lab_router__InvoiceRowOut']
+export type LabInvoiceRow = components['schemas']['LabInvoiceRowOut']
 
 /** Lectura 1 (IA cruda, spec C6/C7): la respuesta del proveedor tal cual + qué motor la produjo. */
 export interface Reading1 {

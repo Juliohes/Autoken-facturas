@@ -1922,10 +1922,62 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/platform_admin__lab_router__InvoiceRowOut"
+                    "$ref": "#/components/schemas/LabInvoiceRowOut"
                   },
                   "title": "Response List Tenant Invoices Api V1 Platform Tenants  Tenant Id  Invoices Get"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/{tenant_id}/invoices/{file_id}/image": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Get Invoice Image",
+        "description": "Foto original de una factura del tenant elegido, para el bot\u00f3n \"Ver\" del laboratorio (spec\nC2). Mismo patr\u00f3n de 404 que el resto de este router (C4/C5).",
+        "operationId": "get_invoice_image_api_v1_platform_tenants__tenant_id__invoices__file_id__image_get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -3082,6 +3134,366 @@
         "title": "InvoiceOut",
         "description": "Estado de la factura tras la edici\u00f3n (spec S3.3 \u00a72)."
       },
+      "InvoiceRowOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "company_cif": {
+            "type": "string",
+            "title": "Company Cif"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "direction": {
+            "type": "string",
+            "title": "Direction"
+          },
+          "counterparty_tax_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Tax Id"
+          },
+          "counterparty_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Name"
+          },
+          "counterparty_cif_status": {
+            "type": "string",
+            "title": "Counterparty Cif Status"
+          },
+          "net_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Amount"
+          },
+          "tax_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Amount"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
+          },
+          "irpf_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Irpf Amount"
+          },
+          "tax_lines": {
+            "items": {
+              "$ref": "#/components/schemas/TaxLineOut"
+            },
+            "type": "array",
+            "title": "Tax Lines"
+          },
+          "confirmed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Confirmed At"
+          },
+          "confirmed_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Confirmed By"
+          },
+          "uploaded_file_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uploaded File Id"
+          },
+          "uploaded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Uploaded At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "company_name",
+          "company_cif",
+          "issue_date",
+          "direction",
+          "counterparty_tax_id",
+          "counterparty_name",
+          "counterparty_cif_status",
+          "net_amount",
+          "tax_amount",
+          "total_amount",
+          "irpf_amount",
+          "tax_lines",
+          "confirmed_at",
+          "confirmed_by",
+          "uploaded_file_id",
+          "uploaded_at"
+        ],
+        "title": "InvoiceRowOut",
+        "description": "Una fila del panel de facturas (spec \u00a72/\u00a73 C8)."
+      },
+      "LabInvoiceRowOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "company_cif": {
+            "type": "string",
+            "title": "Company Cif"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "direction": {
+            "type": "string",
+            "title": "Direction"
+          },
+          "counterparty_tax_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Tax Id"
+          },
+          "counterparty_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Name"
+          },
+          "counterparty_cif_status": {
+            "type": "string",
+            "title": "Counterparty Cif Status"
+          },
+          "net_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Amount"
+          },
+          "tax_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Amount"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
+          },
+          "irpf_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Irpf Amount"
+          },
+          "tax_lines": {
+            "items": {
+              "$ref": "#/components/schemas/LabTaxLineOut"
+            },
+            "type": "array",
+            "title": "Tax Lines"
+          },
+          "confirmed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Confirmed At"
+          },
+          "confirmed_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Confirmed By"
+          },
+          "uploaded_file_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uploaded File Id"
+          },
+          "uploaded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Uploaded At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "company_name",
+          "company_cif",
+          "issue_date",
+          "direction",
+          "counterparty_tax_id",
+          "counterparty_name",
+          "counterparty_cif_status",
+          "net_amount",
+          "tax_amount",
+          "total_amount",
+          "irpf_amount",
+          "tax_lines",
+          "confirmed_at",
+          "confirmed_by",
+          "uploaded_file_id",
+          "uploaded_at"
+        ],
+        "title": "LabInvoiceRowOut",
+        "description": "Una fila del listado de facturas confirmadas de un tenant (S6.2, spec C2): mismas columnas\nque ya muestra `InvoicesPanel` del tenant (S3.1), aqu\u00ed en solo lectura desde plataforma."
+      },
+      "LabTaxLineOut": {
+        "properties": {
+          "iva_pct": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iva Pct"
+          },
+          "base": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
+          "cuota": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuota"
+          }
+        },
+        "type": "object",
+        "required": [
+          "iva_pct",
+          "base",
+          "cuota"
+        ],
+        "title": "LabTaxLineOut",
+        "description": "Un tramo de IVA de una fila del listado (mismo shape que `reporting.router.TaxLineOut`)."
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -3201,7 +3613,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/reporting__router__InvoiceRowOut"
+              "$ref": "#/components/schemas/InvoiceRowOut"
             },
             "type": "array",
             "title": "Items"
@@ -3397,6 +3809,54 @@
         "type": "object",
         "title": "TaxLineIn",
         "description": "Un tramo de IVA confirmado del body de `confirm`."
+      },
+      "TaxLineOut": {
+        "properties": {
+          "iva_pct": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iva Pct"
+          },
+          "base": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
+          "cuota": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuota"
+          }
+        },
+        "type": "object",
+        "required": [
+          "iva_pct",
+          "base",
+          "cuota"
+        ],
+        "title": "TaxLineOut",
+        "description": "Un tramo de IVA de la fila del panel."
       },
       "TenantCreateIn": {
         "properties": {
@@ -3750,414 +4210,6 @@
           "type"
         ],
         "title": "ValidationError"
-      },
-      "platform_admin__lab_router__InvoiceRowOut": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
-          "company_name": {
-            "type": "string",
-            "title": "Company Name"
-          },
-          "company_cif": {
-            "type": "string",
-            "title": "Company Cif"
-          },
-          "issue_date": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Issue Date"
-          },
-          "direction": {
-            "type": "string",
-            "title": "Direction"
-          },
-          "counterparty_tax_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Counterparty Tax Id"
-          },
-          "counterparty_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Counterparty Name"
-          },
-          "counterparty_cif_status": {
-            "type": "string",
-            "title": "Counterparty Cif Status"
-          },
-          "net_amount": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Net Amount"
-          },
-          "tax_amount": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tax Amount"
-          },
-          "total_amount": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Total Amount"
-          },
-          "irpf_amount": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Irpf Amount"
-          },
-          "tax_lines": {
-            "items": {
-              "$ref": "#/components/schemas/platform_admin__lab_router__TaxLineOut"
-            },
-            "type": "array",
-            "title": "Tax Lines"
-          },
-          "confirmed_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Confirmed At"
-          },
-          "confirmed_by": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Confirmed By"
-          },
-          "uploaded_file_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Uploaded File Id"
-          },
-          "uploaded_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Uploaded At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "company_name",
-          "company_cif",
-          "issue_date",
-          "direction",
-          "counterparty_tax_id",
-          "counterparty_name",
-          "counterparty_cif_status",
-          "net_amount",
-          "tax_amount",
-          "total_amount",
-          "irpf_amount",
-          "tax_lines",
-          "confirmed_at",
-          "confirmed_by",
-          "uploaded_file_id",
-          "uploaded_at"
-        ],
-        "title": "InvoiceRowOut",
-        "description": "Una fila del listado de facturas confirmadas de un tenant (S6.2, spec C2): mismas columnas\nque ya muestra `InvoicesPanel` del tenant (S3.1), aqu\u00ed en solo lectura desde plataforma."
-      },
-      "platform_admin__lab_router__TaxLineOut": {
-        "properties": {
-          "iva_pct": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Iva Pct"
-          },
-          "base": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Base"
-          },
-          "cuota": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cuota"
-          }
-        },
-        "type": "object",
-        "required": [
-          "iva_pct",
-          "base",
-          "cuota"
-        ],
-        "title": "TaxLineOut",
-        "description": "Un tramo de IVA de una fila del listado (mismo shape que `reporting.router.TaxLineOut`)."
-      },
-      "reporting__router__InvoiceRowOut": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
-          "company_name": {
-            "type": "string",
-            "title": "Company Name"
-          },
-          "company_cif": {
-            "type": "string",
-            "title": "Company Cif"
-          },
-          "issue_date": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Issue Date"
-          },
-          "direction": {
-            "type": "string",
-            "title": "Direction"
-          },
-          "counterparty_tax_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Counterparty Tax Id"
-          },
-          "counterparty_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Counterparty Name"
-          },
-          "counterparty_cif_status": {
-            "type": "string",
-            "title": "Counterparty Cif Status"
-          },
-          "net_amount": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Net Amount"
-          },
-          "tax_amount": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tax Amount"
-          },
-          "total_amount": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Total Amount"
-          },
-          "irpf_amount": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Irpf Amount"
-          },
-          "tax_lines": {
-            "items": {
-              "$ref": "#/components/schemas/reporting__router__TaxLineOut"
-            },
-            "type": "array",
-            "title": "Tax Lines"
-          },
-          "confirmed_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Confirmed At"
-          },
-          "confirmed_by": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Confirmed By"
-          },
-          "uploaded_file_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Uploaded File Id"
-          },
-          "uploaded_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Uploaded At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "company_name",
-          "company_cif",
-          "issue_date",
-          "direction",
-          "counterparty_tax_id",
-          "counterparty_name",
-          "counterparty_cif_status",
-          "net_amount",
-          "tax_amount",
-          "total_amount",
-          "irpf_amount",
-          "tax_lines",
-          "confirmed_at",
-          "confirmed_by",
-          "uploaded_file_id",
-          "uploaded_at"
-        ],
-        "title": "InvoiceRowOut",
-        "description": "Una fila del panel de facturas (spec \u00a72/\u00a73 C8)."
-      },
-      "reporting__router__TaxLineOut": {
-        "properties": {
-          "iva_pct": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Iva Pct"
-          },
-          "base": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Base"
-          },
-          "cuota": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cuota"
-          }
-        },
-        "type": "object",
-        "required": [
-          "iva_pct",
-          "base",
-          "cuota"
-        ],
-        "title": "TaxLineOut",
-        "description": "Un tramo de IVA de la fila del panel."
       }
     }
   }
