@@ -113,25 +113,15 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
   }
 
   return (
-    <section className="mx-auto max-w-xl space-y-4 p-6 text-slate-100">
+    <section className="mx-auto max-w-xl space-y-6 p-6 text-slate-100">
       <h1 className="text-xl font-semibold">Revisar y confirmar</h1>
 
-      {/* C1/S6.1 C6: cuatro campos siempre visibles (total, CIF de contraparte, fecha, nº factura). */}
-      <FieldRow
-        name="total_amount"
-        label="Importe total"
-        value={form.total_amount}
-        confidence={conf('total_amount')}
-        onChange={(v) => set({ total_amount: v })}
-      />
-      <FieldRow
-        name="invoice_number"
-        label="Número de factura"
-        value={form.invoice_number}
-        confidence={conf('invoice_number')}
-        onChange={(v) => set({ invoice_number: v })}
-      />
-      <div className="space-y-2">
+      {/* Enmienda S6.1 §8 (2026-08-08, tras probar con Julio): 4 secciones siempre visibles, en
+          vez de "3-4 campos siempre visibles + resto plegado". Solo tramos de IVA e IRPF
+          conservan su propio desplegable interno (sin cambios de comportamiento ahí). */}
+
+      <div data-testid="section-counterparty" className="space-y-3 rounded-md border border-slate-700 p-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Contraparte</h2>
         <FieldRow
           name="counterparty_tax_id"
           label="CIF de contraparte"
@@ -140,149 +130,169 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
           onChange={(v) => set({ counterparty_tax_id: v })}
         />
         <CounterpartyVerdictBlock verdict={review.counterparty_verdict} />
+        <FieldRow
+          name="counterparty_name"
+          label="Nombre de la contraparte"
+          value={form.counterparty_name}
+          confidence={conf('counterparty_name')}
+          onChange={(v) => set({ counterparty_name: v })}
+        />
       </div>
-      <FieldRow
-        name="issue_date"
-        label="Fecha"
-        type="date"
-        value={form.issue_date}
-        confidence={conf('issue_date')}
-        onChange={(v) => set({ issue_date: v })}
-      />
 
-      {/* C10: descuadre aritmético -> aviso "Revisar" (no bloquea). */}
-      {hasImbalance && (
-        <p
-          data-testid="warning-imbalance"
-          className="rounded-md border border-yellow-500 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200"
-        >
-          Revisar: el total no cuadra con los tramos de IVA.
-        </p>
-      )}
+      <div data-testid="section-amounts" className="space-y-3 rounded-md border border-slate-700 p-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Importes</h2>
+        <FieldRow
+          name="net_amount"
+          label="Base imponible"
+          value={form.net_amount}
+          confidence={conf('net_amount')}
+          onChange={(v) => set({ net_amount: v })}
+        />
 
-      {/* C1: el resto plegado por defecto. */}
-      <details data-testid="more-fields" className="rounded-md border border-slate-700 p-3">
-        <summary className="cursor-pointer text-sm text-slate-300">Ver todos los campos</summary>
-        <div className="mt-3 space-y-3">
-          <FieldRow
-            name="counterparty_name"
-            label="Nombre de la contraparte"
-            value={form.counterparty_name}
-            confidence={conf('counterparty_name')}
-            onChange={(v) => set({ counterparty_name: v })}
-          />
-          <FieldRow
-            name="net_amount"
-            label="Base imponible"
-            value={form.net_amount}
-            confidence={conf('net_amount')}
-            onChange={(v) => set({ net_amount: v })}
-          />
-          <FieldRow
-            name="tax_amount"
-            label="IVA"
-            value={form.tax_amount}
-            confidence={conf('tax_amount')}
-            onChange={(v) => set({ tax_amount: v })}
-          />
-          {/* S6.1 C13-C15: IRPF en su propio desplegable; sigue sin ser un campo de oro leído por
-              IA (manual, como siempre), vacío de verdad si no hay retención. */}
-          <details data-testid="irpf-details" className="rounded-md border border-slate-700 p-3">
-            <summary className="cursor-pointer text-sm text-slate-300">IRPF</summary>
-            <div className="mt-3">
-              <FieldRow
-                name="irpf_amount"
-                label="IRPF (retención)"
-                value={form.irpf_amount}
-                scored={false}
-                onChange={(v) => set({ irpf_amount: v })}
-              />
-            </div>
-          </details>
-
-          {/* S6.1 C8-C12: tramos de IVA en desplegable con resumen; añadir/quitar con tasa
-              cerrada {21,10,4,Sin IVA}, nunca un % libre. */}
-          <details data-testid="tax-lines" className="rounded-md border border-slate-700 p-3">
-            <summary className="cursor-pointer text-sm text-slate-300">Tramos de IVA</summary>
-            <div className="mt-3 space-y-3">
-              {form.tax_lines.map((line, i) => (
-                <div
-                  key={i}
-                  className="space-y-2 rounded-md border border-slate-700 p-2"
-                  data-testid={`tax-line-${i}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span data-testid={`tax-line-${i}-summary`} className="text-sm text-slate-300">
-                      {taxRateLabel(line.iva_pct)} · Base {line.base || '—'}
-                    </span>
-                    <button
-                      type="button"
-                      data-testid={`remove-tax-line-${i}`}
-                      onClick={() =>
-                        set({ tax_lines: form.tax_lines.filter((_, j) => j !== i) })
-                      }
-                      className="text-xs font-semibold text-red-400"
-                    >
-                      Quitar
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                    <FieldRow
-                      name={`tax_lines.${i}.base`}
-                      label="Base"
-                      value={line.base}
-                      scored={false}
-                      onChange={(v) =>
-                        set({
-                          tax_lines: form.tax_lines.map((l, j) => (j === i ? { ...l, base: v } : l)),
-                        })
-                      }
-                    />
-                    <FieldRow
-                      name={`tax_lines.${i}.cuota`}
-                      label="Cuota"
-                      value={line.cuota}
-                      scored={false}
-                      onChange={(v) =>
-                        set({
-                          tax_lines: form.tax_lines.map((l, j) => (j === i ? { ...l, cuota: v } : l)),
-                        })
-                      }
-                    />
-                  </div>
+        {/* S6.1 C8-C12: tramos de IVA en desplegable con resumen; añadir/quitar con tasa
+            cerrada {21,10,4,Sin IVA}, nunca un % libre. */}
+        <details data-testid="tax-lines" className="rounded-md border border-slate-700 p-3">
+          <summary className="cursor-pointer text-sm text-slate-300">Tramos de IVA</summary>
+          <div className="mt-3 space-y-3">
+            {form.tax_lines.map((line, i) => (
+              <div
+                key={i}
+                className="space-y-2 rounded-md border border-slate-700 p-2"
+                data-testid={`tax-line-${i}`}
+              >
+                <div className="flex items-center justify-between">
+                  <span data-testid={`tax-line-${i}-summary`} className="text-sm text-slate-300">
+                    {taxRateLabel(line.iva_pct)} · Base {line.base || '—'}
+                  </span>
+                  <button
+                    type="button"
+                    data-testid={`remove-tax-line-${i}`}
+                    onClick={() => set({ tax_lines: form.tax_lines.filter((_, j) => j !== i) })}
+                    className="text-xs font-semibold text-red-400"
+                  >
+                    Quitar
+                  </button>
                 </div>
-              ))}
-              {availableTaxRates(form.tax_lines).length > 0 && (
-                <select
-                  data-testid="add-tax-line-rate"
-                  aria-label="Añadir tramo de IVA"
-                  value=""
-                  onChange={(e) => {
-                    const rate = e.target.value
-                    if (!rate) return
-                    set({
-                      tax_lines: [...form.tax_lines, { iva_pct: rate, base: '', cuota: '' }],
-                    })
-                  }}
-                  className="w-full rounded-md border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100"
-                >
-                  <option value="">Añadir tramo…</option>
-                  {availableTaxRates(form.tax_lines).map((rate) => (
-                    <option key={rate} value={rate}>
-                      {taxRateLabel(rate)}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          </details>
-          {/* Identidad propia conocida (no editable, no se puntúa; ADR-0011). */}
-          <div data-testid="own-identity" className="text-sm text-slate-400">
-            <p>Empresa propia: {review.own.name ?? '—'}</p>
-            <p>CIF propio: {review.own.cif ?? '—'}</p>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                  <FieldRow
+                    name={`tax_lines.${i}.base`}
+                    label="Base"
+                    value={line.base}
+                    scored={false}
+                    onChange={(v) =>
+                      set({
+                        tax_lines: form.tax_lines.map((l, j) => (j === i ? { ...l, base: v } : l)),
+                      })
+                    }
+                  />
+                  <FieldRow
+                    name={`tax_lines.${i}.cuota`}
+                    label="Cuota"
+                    value={line.cuota}
+                    scored={false}
+                    onChange={(v) =>
+                      set({
+                        tax_lines: form.tax_lines.map((l, j) => (j === i ? { ...l, cuota: v } : l)),
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            ))}
+            {availableTaxRates(form.tax_lines).length > 0 && (
+              <select
+                data-testid="add-tax-line-rate"
+                aria-label="Añadir tramo de IVA"
+                value=""
+                onChange={(e) => {
+                  const rate = e.target.value
+                  if (!rate) return
+                  set({ tax_lines: [...form.tax_lines, { iva_pct: rate, base: '', cuota: '' }] })
+                }}
+                className="w-full rounded-md border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100"
+              >
+                <option value="">Añadir tramo…</option>
+                {availableTaxRates(form.tax_lines).map((rate) => (
+                  <option key={rate} value={rate}>
+                    {taxRateLabel(rate)}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
-        </div>
-      </details>
+        </details>
+
+        <FieldRow
+          name="tax_amount"
+          label="IVA"
+          value={form.tax_amount}
+          confidence={conf('tax_amount')}
+          onChange={(v) => set({ tax_amount: v })}
+        />
+        <FieldRow
+          name="total_amount"
+          label="Importe total"
+          value={form.total_amount}
+          confidence={conf('total_amount')}
+          onChange={(v) => set({ total_amount: v })}
+        />
+
+        {/* S6.1 C13-C15: IRPF en su propio desplegable; sigue sin ser un campo de oro leído por IA
+            (manual, como siempre), vacío de verdad si no hay retención. */}
+        <details data-testid="irpf-details" className="rounded-md border border-slate-700 p-3">
+          <summary className="cursor-pointer text-sm text-slate-300">IRPF</summary>
+          <div className="mt-3">
+            <FieldRow
+              name="irpf_amount"
+              label="IRPF (retención)"
+              value={form.irpf_amount}
+              scored={false}
+              onChange={(v) => set({ irpf_amount: v })}
+            />
+          </div>
+        </details>
+
+        {/* C10: descuadre aritmético -> aviso "Revisar" (no bloquea). */}
+        {hasImbalance && (
+          <p
+            data-testid="warning-imbalance"
+            className="rounded-md border border-yellow-500 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200"
+          >
+            Revisar: el total no cuadra con los tramos de IVA.
+          </p>
+        )}
+      </div>
+
+      <div
+        data-testid="section-invoice-identity"
+        className="space-y-3 rounded-md border border-slate-700 p-4"
+      >
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Fecha y número de factura
+        </h2>
+        <FieldRow
+          name="issue_date"
+          label="Fecha"
+          type="date"
+          value={form.issue_date}
+          confidence={conf('issue_date')}
+          onChange={(v) => set({ issue_date: v })}
+        />
+        <FieldRow
+          name="invoice_number"
+          label="Número de factura"
+          value={form.invoice_number}
+          confidence={conf('invoice_number')}
+          onChange={(v) => set({ invoice_number: v })}
+        />
+      </div>
+
+      {/* Identidad propia conocida (no editable, no se puntúa; ADR-0011): al final, texto plano,
+          sin caja de campo — viene del registro de la empresa, no se lee ni se confirma aquí. */}
+      <div data-testid="own-identity" className="text-sm text-slate-400">
+        <p>Empresa propia: {review.own.name ?? '—'}</p>
+        <p>CIF propio: {review.own.cif ?? '—'}</p>
+      </div>
 
       {/* S3.5: solo el tenant_admin puede marcar una factura como de prueba (excluida de
           informes, purgable de un clic); un empleado ni ve la casilla. */}
