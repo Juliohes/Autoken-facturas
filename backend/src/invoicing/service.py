@@ -18,6 +18,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from companies import repository as companies_repo
 from companies.service import tenant_encryption_key as company_encryption_key
@@ -317,29 +318,29 @@ def _command_tax_lines(command: ConfirmCommand) -> list[TaxLine]:
     return lines
 
 
-async def review(identity: AuthContext, file_id: UUID) -> ReviewData:
-    """Datos de revisión de un fichero ya leído (S2.4): campos + confianzas + veredicto + avisos.
+async def build_review_data(
+    session: AsyncSession,
+    tenant_id: UUID,
+    company_id: UUID,
+    extraction: ExtractionRecord,
+    role: str,
+) -> ReviewData:
+    """Calcula los datos de revisión (campos + confianzas + veredicto + avisos) a partir de una
+    extracción OCR ya cargada (S2.4).
 
-    Autoriza (403/404), exige estado confirmable con extracción (409), reverifica el CIF de
-    contraparte en servidor (S2.8) y NO persiste nada.
+    Extraído de `review()` (S6.2, laboratorio admin-tech): la Lectura 2 del laboratorio necesita
+    EXACTAMENTE este mismo cálculo pero sin la guarda de estado `_CONFIRMABLE_STATES` que sí aplica
+    `review()` (spec docs/specs/S6.2-laboratorio-ocr-admin-tech.md C8/C9) — se factoriza aquí para
+    que ambos llamantes compartan una única implementación, en vez de duplicar la lógica de negocio.
+    Sin efectos secundarios ni comprobación de estado del fichero: solo lectura.
     """
-    file_ctx = await _load_file(identity, file_id)
-    if file_ctx.status not in _CONFIRMABLE_STATES:
-        if file_ctx.status == FileStatus.PENDING_OCR.value:
-            raise PendingOcr
-        raise NotConfirmable
-    ocr_key = tenant_encryption_key(get_settings(), identity.tenant_id)
-    extraction = await ocr_repo.get_extraction(identity.session, file_id, encryption_key=ocr_key)
-    if extraction is None:
-        raise NotConfirmable
-
     verdict = await verify_counterparty(
-        identity.tenant_id, extraction.counterparty_tax_id, extraction.counterparty_name
+        tenant_id, extraction.counterparty_tax_id, extraction.counterparty_name
     )
     own = await companies_repo.get_company(
-        identity.session,
-        file_ctx.company_id,
-        encryption_key=company_encryption_key(get_settings(), identity.tenant_id),
+        session,
+        company_id,
+        encryption_key=company_encryption_key(get_settings(), tenant_id),
     )
 
     warnings: list[str] = []
@@ -366,7 +367,28 @@ async def review(identity: AuthContext, file_id: UUID) -> ReviewData:
             "name": own.name if own is not None else None,
         },
         warnings=warnings,
-        blocking_reasons=_blocking_reasons(verdict, extraction.own_tax_id_present, identity.role),
+        blocking_reasons=_blocking_reasons(verdict, extraction.own_tax_id_present, role),
+    )
+
+
+async def review(identity: AuthContext, file_id: UUID) -> ReviewData:
+    """Datos de revisión de un fichero ya leído (S2.4): campos + confianzas + veredicto + avisos.
+
+    Autoriza (403/404), exige estado confirmable con extracción (409), reverifica el CIF de
+    contraparte en servidor (S2.8) y NO persiste nada.
+    """
+    file_ctx = await _load_file(identity, file_id)
+    if file_ctx.status not in _CONFIRMABLE_STATES:
+        if file_ctx.status == FileStatus.PENDING_OCR.value:
+            raise PendingOcr
+        raise NotConfirmable
+    ocr_key = tenant_encryption_key(get_settings(), identity.tenant_id)
+    extraction = await ocr_repo.get_extraction(identity.session, file_id, encryption_key=ocr_key)
+    if extraction is None:
+        raise NotConfirmable
+
+    return await build_review_data(
+        identity.session, identity.tenant_id, file_ctx.company_id, extraction, identity.role
     )
 
 

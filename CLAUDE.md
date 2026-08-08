@@ -626,6 +626,65 @@
   correcciones, `ocr/scoring.py::serialize_reading` no serializa el campo nuevo para el panel de
   ranking S4.8 —desactivado por defecto—, entre otros) documentados como avisos no bloqueantes. 757
   tests de backend + 244 de frontend, ruff/mypy/eslint/tsc limpios.
+- **Enmienda S6.1 §8 — reorganización en 4 secciones (PR #144, 08/08/2026)**: a petición de Julio
+  tras probar el rediseño anterior, `ConfirmationScreen.tsx` agrupa los campos en bloques visibles
+  (contraparte / importes / identidad de la factura / identidad propia), sin cambiar ninguna lógica
+  de negocio, solo presentación.
+- **Fix: coma decimal solo llegó a la pantalla de confirmación, no al resto (PR #145, 08/08/2026)**:
+  hallazgo de Julio ("esto ya te lo comenté que lo cambiaras, no puede volver a pasar") — el panel
+  de facturas (`InvoicesPanel.tsx`), la ventana de tramos de IVA (`TaxLinesModal.tsx`) y el
+  historial (`InvoiceHistory.tsx`) seguían mostrando/editando importes con punto. Corregido
+  centralizando la conversión coma↔punto en `shared/format.ts`
+  (`toAmountInputValue`/`fromAmountInputValue`, con la misma regex anti-ambigüedad de S6.1),
+  reutilizada por las 4 pantallas — evita que el mismo bug reaparezca en una pantalla sí y en otra
+  no. `confirmation/formState.ts` refactorizado para reutilizarlas en vez de mantener su propia
+  copia (DRY, hallazgo de la auditoría de S6.1).
+- **Fix: check verde de CIF verificado + explicación del bloqueo de "Confirmar y guardar" (PR #146,
+  08/08/2026)**: a petición de Julio, el bloque largo "CIF de contraparte verificado" se sustituye
+  por un check verde junto al dato (mismo estilo que la marca roja de "Dudoso, revisar",
+  `FieldRow.tsx` gana un prop `extraBadge`); nuevo aviso visible explicando que, cuando el CIF
+  propio no aparece en la factura, solo un `tenant_admin` puede confirmarla (motivo de bloqueo
+  `own_tax_id_missing`, ya existente desde ADR-0011, antes solo bloqueaba en silencio).
+- **S6.2: laboratorio OCR de diagnóstico por factura, solo para admin-tech (08/08/2026)** — spec
+  propia (`docs/specs/S6.2-laboratorio-ocr-admin-tech.md`), petición directa de Julio: ver, por cada
+  factura ya confirmada, las 3 "lecturas" del dato a lo largo del proceso (Lectura 1: `ocr_
+  extractions.raw` tal cual + motor que la produjo, S2.3/ADR-0016; Lectura 2: `analyze_invoice` +
+  `verify_counterparty` recalculados AHORA con las reglas actuales, sin la guarda `_CONFIRMABLE_
+  STATES`/`NotConfirmable` de `review()` — nueva `invoicing.service.build_review_data`, extraída de
+  `review()` sin duplicar lógica, reutilizada por ambos; Lectura 3: la factura confirmada +
+  `ocr_corrections`, S2.5) más la comparativa multi-modelo (`ocr_ranking_entries`, S4.8) cuando
+  existiera. **Enmienda de Julio tras aprobar la spec** (corrección de diseño, no un hallazgo de
+  auditoría): el laboratorio pasa de ser accesible desde el panel de facturas de cada tenant a vivir
+  EXCLUSIVAMENTE en el panel de plataforma (`platform_admin` + `is_admin_tech`, mecanismo 100% ya
+  existente de S4.10, sin tocar `identity/dependencies.py`/`AuthContext`) — elige un tenant (selector
+  ya existente de S4.1) y ve sus facturas confirmadas desde ahí; el panel tenant-scoped
+  (`InvoicesPanel.tsx`) no gana absolutamente nada, verificado con un test de regresión dedicado.
+  Para leer datos de un tenant concreto desde una sesión de plataforma se reutiliza el patrón ya
+  auditado de `export_tenant` (S4.7): `platform_admin/lab_service.py` valida el tenant
+  (`list_tenants`) y abre su propia `tenant_session(tenant_id)`, apoyada en la RLS de dos niveles ya
+  construida — sin ninguna función `SECURITY DEFINER` nueva. Nuevo endpoint de imagen
+  (`GET .../invoices/{file_id}/image`, `platform_admin/lab_router.py`) para el botón "Ver": no
+  reutiliza `invoice_intake.service.authorize_file_access` (exige un `actor_user_id`/`actor_role`
+  tenant-scoped que un admin-tech no tiene) sino el mismo patrón `tenant_session` — verificado en
+  auditoría que, a diferencia de esa función, solo puede servir fotos de facturas YA confirmadas
+  (más restrictivo, no menos). 16 tests de backend nuevos (`test_platform_lab.py`) + 4 de frontend
+  (`PlatformLab.test.tsx`) + 1 de regresión en `InvoicesPanel.test.tsx` (C3, el panel del tenant no
+  cambia). **Auditoría de 3 lentes, 1 ALTO real corregido antes de cerrar** (coincidente en 2
+  lentes): `list_tenant_invoices` reutilizaba `reporting_repository.list_invoices` (el repositorio
+  PAGINADO del panel, `PAGE_SIZE+1=51` filas para que el LLAMANTE recorte una página) sin recortar
+  ni paginar — cualquier tenant con más de 50 facturas confirmadas (Setex ya tiene 29 y crece)
+  habría perdido en silencio las más antiguas, sin aviso ni forma de verlas; corregido con
+  `reporting_repository.list_all` nueva, mismo criterio de "nunca se trunca en silencio" que ya usa
+  `list_for_export` (S3.2), con test de regresión sembrando 55 facturas reales. Resto de hallazgos
+  (medios/bajos, no bloqueantes): tipos de frontend (`labTypes.ts`) duplicaban a mano el shape de
+  `ReviewResponse`/`InvoiceRowOut` en vez de reutilizarlos del esquema generado — corregido; los
+  tramos de IVA de las Lecturas 2/3 quedaban invisibles sin querer (el filtro genérico de campos
+  descarta arrays) — corregido, se muestran aparte; la Lectura 2 se recalcula con el rol más
+  restrictivo (`USER`) en vez del rol real de quien confirmó — decisión de diseño documentada y
+  hecha explícita en la propia pantalla, no un bug. 773 tests de backend + 260 de frontend, todos en
+  verde, ruff/mypy/eslint/tsc limpios. Frontend: nueva ruta `/plataforma/laboratorio` +
+  entrada de menú "Laboratorio" (visible solo con `is_admin_tech`, mismo patrón que Ajustes/Ranking
+  OCR).
 
 ---
 

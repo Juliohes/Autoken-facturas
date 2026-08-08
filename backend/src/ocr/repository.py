@@ -64,6 +64,11 @@ class ExtractionRecord:
 
     `tax_lines` conserva el formato persistido por el worker (`[{base, rate, cuota}]`). Los
     importes son `Decimal` (o `None` si el campo no se leyó, regla anti-alucinación).
+
+    `raw`/`engine`/`model` (S6.2, laboratorio admin-tech): la respuesta cruda del proveedor tal
+    cual (Lectura 1 del laboratorio, `docs/specs/S6.2-laboratorio-ocr-admin-tech.md` C6/C7) y qué
+    motor la produjo. Ya existían como columnas de `ocr_extractions` desde S2.3 (persistidas por
+    `upsert_extraction`); antes de S6.2 ninguna consulta las traía de vuelta.
     """
 
     issue_date: date | None
@@ -77,6 +82,9 @@ class ExtractionRecord:
     own_tax_id_present: bool
     confidences: dict[str, Any]
     status: str
+    raw: dict[str, Any]
+    engine: str
+    model: str
 
 
 async def get_extraction(
@@ -84,9 +92,10 @@ async def get_extraction(
 ) -> ExtractionRecord | None:
     """Lee la extracción vigente de un fichero en el contexto (RLS), o `None` si no hay.
 
-    La usan la pantalla de revisión (S2.4) y la confirmación (S2.5): el baseline del OCR (S2.3) para
-    pintar los campos con su confianza y para el diff de `ocr_corrections` (campos que el humano
-    cambió respecto a lo que leyó la IA).
+    La usan la pantalla de revisión (S2.4), la confirmación (S2.5) y el laboratorio OCR (S6.2): el
+    baseline del OCR (S2.3) para pintar los campos con su confianza y para el diff de
+    `ocr_corrections` (campos que el humano cambió respecto a lo que leyó la IA), o para mostrar la
+    respuesta cruda del proveedor (Lectura 1 del laboratorio).
     """
     row = (
         await session.execute(
@@ -95,7 +104,7 @@ async def get_extraction(
                 "tax_lines, "
                 "pgp_sym_decrypt(counterparty_tax_id, :key)::text AS counterparty_tax_id, "
                 "pgp_sym_decrypt(counterparty_name, :key)::text AS counterparty_name, "
-                "own_tax_id_present, confidences, status "
+                "own_tax_id_present, confidences, status, raw, engine, model "
                 "FROM ocr_extractions WHERE uploaded_file_id = :fid"
             ),
             {"fid": str(uploaded_file_id), "key": encryption_key},
@@ -115,6 +124,9 @@ async def get_extraction(
         own_tax_id_present=row.own_tax_id_present,
         confidences=dict(row.confidences),
         status=row.status,
+        raw=dict(row.raw),
+        engine=row.engine,
+        model=row.model,
     )
 
 

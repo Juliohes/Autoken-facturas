@@ -908,6 +908,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/tenants/{tenant_id}/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tenant Invoices
+         * @description Facturas confirmadas del tenant elegido desde el laboratorio (S6.2, spec C2). Id
+         *     inexistente -> 404 explícito (spec C4).
+         */
+        get: operations["list_tenant_invoices_api_v1_platform_tenants__tenant_id__invoices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenant_id}/invoices/{file_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Invoice Image
+         * @description Foto original de una factura del tenant elegido, para el botón "Ver" del laboratorio (spec
+         *     C2). Mismo patrón de 404 que el resto de este router (C4/C5).
+         */
+        get: operations["get_invoice_image_api_v1_platform_tenants__tenant_id__invoices__file_id__image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenant_id}/invoices/{file_id}/lab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Invoice Lab
+         * @description Las 3 lecturas + comparativa de modelos de una factura del tenant elegido (S6.2, spec
+         *     C6-C13). Tenant inexistente -> 404 (spec C4); fichero de otro tenant o inexistente -> 404 (spec
+         *     C5).
+         */
+        get: operations["get_invoice_lab_api_v1_platform_tenants__tenant_id__invoices__file_id__lab_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1369,6 +1433,74 @@ export interface components {
              * Format: date-time
              */
             uploaded_at: string;
+        };
+        /**
+         * LabInvoiceRowOut
+         * @description Una fila del listado de facturas confirmadas de un tenant (S6.2, spec C2): mismas columnas
+         *     que ya muestra `InvoicesPanel` del tenant (S3.1), aquí en solo lectura desde plataforma.
+         */
+        LabInvoiceRowOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Company Name */
+            company_name: string;
+            /** Company Cif */
+            company_cif: string;
+            /** Issue Date */
+            issue_date: string | null;
+            /** Direction */
+            direction: string;
+            /** Counterparty Tax Id */
+            counterparty_tax_id: string | null;
+            /** Counterparty Name */
+            counterparty_name: string | null;
+            /** Counterparty Cif Status */
+            counterparty_cif_status: string;
+            /** Net Amount */
+            net_amount: string | null;
+            /** Tax Amount */
+            tax_amount: string | null;
+            /** Total Amount */
+            total_amount: string | null;
+            /** Irpf Amount */
+            irpf_amount: string | null;
+            /** Tax Lines */
+            tax_lines: components["schemas"]["LabTaxLineOut"][];
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /**
+             * Confirmed By
+             * Format: uuid
+             */
+            confirmed_by: string;
+            /**
+             * Uploaded File Id
+             * Format: uuid
+             */
+            uploaded_file_id: string;
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+        };
+        /**
+         * LabTaxLineOut
+         * @description Un tramo de IVA de una fila del listado (mismo shape que `reporting.router.TaxLineOut`).
+         */
+        LabTaxLineOut: {
+            /** Iva Pct */
+            iva_pct: string | null;
+            /** Base */
+            base: string | null;
+            /** Cuota */
+            cuota: string | null;
         };
         /**
          * LoginRequest
@@ -2972,6 +3104,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EngineRankingOut"][];
+                };
+            };
+        };
+    };
+    list_tenant_invoices_api_v1_platform_tenants__tenant_id__invoices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabInvoiceRowOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_invoice_image_api_v1_platform_tenants__tenant_id__invoices__file_id__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_invoice_lab_api_v1_platform_tenants__tenant_id__invoices__file_id__lab_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

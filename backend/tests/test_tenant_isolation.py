@@ -83,6 +83,9 @@ _PROTECTED_ROUTES = {
     ("GET", f"{API}/platform/settings"),
     ("PUT", f"{API}/platform/settings"),
     ("GET", f"{API}/platform/ocr-ranking"),
+    ("GET", f"{API}/platform/tenants/{{tenant_id}}/invoices"),
+    ("GET", f"{API}/platform/tenants/{{tenant_id}}/invoices/{{file_id}}/lab"),
+    ("GET", f"{API}/platform/tenants/{{tenant_id}}/invoices/{{file_id}}/image"),
 }
 
 
@@ -149,6 +152,9 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ("GET", f"{API}/platform/settings", {}),
         ("PUT", f"{API}/platform/settings", {"json": {"ocr_experiment_enabled": True}}),
         ("GET", f"{API}/platform/ocr-ranking", {}),
+        ("GET", f"{API}/platform/tenants/{dummy_id}/invoices", {}),
+        ("GET", f"{API}/platform/tenants/{dummy_id}/invoices/{dummy_id}/lab", {}),
+        ("GET", f"{API}/platform/tenants/{dummy_id}/invoices/{dummy_id}/image", {}),
     ]
 
 
