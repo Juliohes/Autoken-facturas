@@ -13,7 +13,7 @@ import { formStateToConfirmBody, initialFormState, type ConfirmFormState } from 
 import { availableTaxRates, taxRateLabel } from './taxLines'
 import { useConfirm } from './useConfirm'
 import { useReview, PendingOcrError } from './useReview'
-import { WARNING_IMBALANCE, type Confidence, type ReviewResponse } from './types'
+import { BLOCKING_REASONS, WARNING_IMBALANCE, type Confidence, type ReviewResponse } from './types'
 
 // Aviso rojo de responsabilidad, SIEMPRE bajo el botón (spec §2, C9).
 export const RESPONSIBILITY_NOTICE =
@@ -100,6 +100,12 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
   })
 
   const hasImbalance = review.warnings.includes(WARNING_IMBALANCE)
+  // 2026-08-08 (petición de Julio): sin caja "CIF de contraparte verificado" — un check verde
+  // junto al campo, mismo estilo que las marcas de confianza. La caja se conserva para los casos
+  // que sí necesitan explicación (inválido/no encontrado/nombre que no coincide/sin verificar).
+  const isCounterpartyVerified =
+    review.counterparty_verdict.status === 'valid' && review.counterparty_verdict.name_match !== false
+  const missingOwnTaxId = review.blocking_reasons.includes(BLOCKING_REASONS.ownTaxIdMissing)
 
   const handleConfirm = () => {
     // `direction` llega de la selección Recibida/Emitida de S2.2; por defecto "recibida" si se
@@ -128,8 +134,19 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
           value={form.counterparty_tax_id}
           confidence={conf('counterparty_tax_id')}
           onChange={(v) => set({ counterparty_tax_id: v })}
+          extraBadge={
+            isCounterpartyVerified ? (
+              <span
+                data-testid="mark-counterparty-verified"
+                title="CIF verificado"
+                className="rounded px-1.5 py-0.5 text-xs font-semibold text-emerald-300"
+              >
+                ✓
+              </span>
+            ) : undefined
+          }
         />
-        <CounterpartyVerdictBlock verdict={review.counterparty_verdict} />
+        {!isCounterpartyVerified && <CounterpartyVerdictBlock verdict={review.counterparty_verdict} />}
         <FieldRow
           name="counterparty_name"
           label="Nombre de la contraparte"
@@ -293,6 +310,19 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
         <p>Empresa propia: {review.own.name ?? '—'}</p>
         <p>CIF propio: {review.own.cif ?? '—'}</p>
       </div>
+
+      {/* 2026-08-08 (hallazgo de Julio): antes este motivo de bloqueo no tenía NINGÚN mensaje
+          visible — el botón se deshabilitaba sin que el usuario supiera por qué. */}
+      {missingOwnTaxId && (
+        <p
+          data-testid="warning-own-tax-id-missing"
+          role="alert"
+          className="rounded-md border border-red-500 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+        >
+          Tu CIF no aparece en esta factura: solo un administrador de la asesoría puede confirmarla
+          así. Revisa la foto o pide a un administrador que la confirme.
+        </p>
+      )}
 
       {/* S3.5: solo el tenant_admin puede marcar una factura como de prueba (excluida de
           informes, purgable de un clic); un empleado ni ve la casilla. */}

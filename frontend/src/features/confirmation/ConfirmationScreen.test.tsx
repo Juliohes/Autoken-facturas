@@ -68,10 +68,10 @@ describe('ConfirmationScreen (S2.4)', () => {
   it('C1 (enmienda S6.1 §8): datos organizados en 4 secciones siempre visibles', async () => {
     renderScreen()
 
-    // Sección Contraparte: CIF + veredicto + nombre juntos.
+    // Sección Contraparte: CIF (con su check de verificado, spec por defecto 'valid') + nombre.
     const contraparte = await screen.findByTestId('section-counterparty')
     expect(within(contraparte).getByLabelText('CIF de contraparte')).toBeInTheDocument()
-    expect(within(contraparte).getByTestId('counterparty-verdict')).toBeInTheDocument()
+    expect(within(contraparte).getByTestId('mark-counterparty-verified')).toBeInTheDocument()
     expect(within(contraparte).getByLabelText('Nombre de la contraparte')).toBeInTheDocument()
 
     // Sección Importes: base, IVA, total e IRPF juntos (tramos e IRPF conservan su desplegable).
@@ -119,7 +119,7 @@ describe('ConfirmationScreen (S2.4)', () => {
     expect(screen.queryByTestId('mark-counterparty_tax_id')).not.toBeInTheDocument()
   })
 
-  it('C3: veredicto valid+name_match -> verde', async () => {
+  it('C3 (revisado 2026-08-08): veredicto valid+name_match -> check verde junto al CIF, sin caja', async () => {
     getMock.mockResolvedValue({
       data: makeReview({
         counterparty_verdict: { status: 'valid', name_match: true, official_name: null },
@@ -127,9 +127,12 @@ describe('ConfirmationScreen (S2.4)', () => {
       error: undefined,
     })
     renderScreen()
-    const block = await screen.findByTestId('counterparty-verdict')
-    expect(block).toHaveAttribute('data-tone', 'ok')
-    expect(block).toHaveTextContent(/verificado/i)
+
+    // Julio pidió quitar la caja "CIF de contraparte verificado": ahora es un check junto al
+    // campo, mismo estilo que las marcas de confianza (Dudoso/No leído), en verde.
+    const badge = await screen.findByTestId('mark-counterparty-verified')
+    expect(badge).toHaveTextContent('✓')
+    expect(screen.queryByTestId('counterparty-verdict')).not.toBeInTheDocument()
   })
 
   it('C3: veredicto valid+name_match=false -> aviso con la razón social oficial', async () => {
@@ -224,6 +227,27 @@ describe('ConfirmationScreen (S2.4)', () => {
     await screen.findByLabelText('Importe total')
     await acceptResponsibility(user)
     expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+  })
+
+  it('C6 (2026-08-08, hallazgo de Julio): own_tax_id_missing explica en pantalla por qué no se puede confirmar', async () => {
+    // Antes de este cambio, `own_tax_id_missing` bloqueaba el botón sin ningún mensaje visible: el
+    // usuario no tenía forma de saber por qué. `counterparty_cif_invalid`/`not_found` ya se
+    // explicaban vía el veredicto del CIF; este era el único motivo de bloqueo mudo.
+    getMock.mockResolvedValue({
+      data: makeReview({ blocking_reasons: ['own_tax_id_missing'] }),
+      error: undefined,
+    })
+    renderScreen()
+
+    expect(await screen.findByTestId('warning-own-tax-id-missing')).toHaveTextContent(
+      /tu cif no aparece en esta factura/i,
+    )
+  })
+
+  it('sin own_tax_id_missing, no se muestra el aviso', async () => {
+    renderScreen()
+    await screen.findByLabelText('Importe total')
+    expect(screen.queryByTestId('warning-own-tax-id-missing')).not.toBeInTheDocument()
   })
 
   it('C7: sin aceptar responsabilidad el botón está deshabilitado; al marcarlo se habilita', async () => {

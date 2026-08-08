@@ -1,6 +1,6 @@
 // Fila de un campo editable con su marca de confianza (spec §2, C2). Presentación
 // pura: recibe el valor y la confianza, no conoce la lógica de negocio.
-import type { ChangeEvent } from 'react'
+import type { ChangeEvent, ReactNode } from 'react'
 
 import { confidenceLabel, confidenceMark } from './confidence'
 import type { Confidence } from './types'
@@ -14,6 +14,9 @@ interface FieldRowProps {
   scored?: boolean
   type?: 'text' | 'date'
   onChange: (value: string) => void
+  /** Aviso adicional junto a la etiqueta, además de la marca de confianza (p. ej. el check verde
+   * de CIF verificado, 2026-08-08): mismo sitio, no conoce de dónde viene. */
+  extraBadge?: ReactNode
 }
 
 // Clases de color por marca (amarillo = dudoso; rojo = revisar/no leído; sin marca = alta).
@@ -32,6 +35,7 @@ export function FieldRow({
   scored = true,
   type = 'text',
   onChange,
+  extraBadge,
 }: FieldRowProps) {
   const mark = scored ? confidenceMark(confidence, value.trim() !== '') : 'ok'
   const markText = confidenceLabel(mark)
@@ -53,6 +57,7 @@ export function FieldRow({
             {markText}
           </span>
         )}
+        {extraBadge}
       </span>
       <input
         type={type}
