@@ -736,6 +736,29 @@
   `ExamplesModal`) comparten ya el mismo boilerplate de overlay sin extraer a un componente
   genérico — candidato a refactor si aparece un quinto. 778 tests de backend (773 + 5) + 264 de
   frontend (260 + 4), ruff/mypy/eslint/tsc limpios.
+- **S6.4 — laboratorio en panel lateral + rediseño completo del panel de empresas (09/08/2026)**,
+  frontend puro (sin cambios de backend): dos peticiones directas de Julio. (1) Corrigió el diseño
+  del laboratorio otra vez, de ventana centrada a panel lateral derecho ("sería incluso mejor") —
+  mismo `LabDetailModal`, solo cambia la posición/anchura, el contenido no se toca. (2) El panel de
+  "Empresas" (S3.4) tenía 4 enlaces por fila (Editar/Ver facturas/Historial/Borrar) que ensanchaban
+  cada fila; ahora la fila solo tiene "Ver facturas". "Editar" y "Borrar" pasan a ser un único
+  control junto a "Nueva empresa": "Editar" activa la edición de CUALQUIER celda de CUALQUIER fila
+  a la vez (mismo patrón ya usado en `InvoicesPanel`, celda a celda con PATCH parcial al perder el
+  foco); "Borrar" activa un modo de selección (columna de casillas que solo aparece en ese modo) +
+  botón "Borrar seleccionadas (N)" + un aviso emergente propio (`ConfirmDeleteCompaniesDialog`,
+  sustituye al `window.confirm` singular de antes — listar varios nombres en un `confirm()` nativo
+  no queda bien) que borra en paralelo (`Promise.allSettled`, un fallo de una no bloquea al resto).
+  El historial de ediciones por fila se retira del todo por decisión explícita de Julio
+  (`CompanyHistoryPanel.tsx`/`useCompanyHistory.ts` borrados, sin uso en ningún otro sitio). Las
+  columnas del panel de empresas se pueden arrastrar para cambiar su ancho, estilo Excel
+  (`shared/useResizableColumns.ts`, nuevo, reutilizable para futuras tablas), con anchos por
+  defecto más estrechos que antes (Notas, muy estrecha, a petición explícita) y persistidos en
+  `localStorage` por navegador (decisión de Julio tras preguntarle: si recordarlo o no). Sin
+  auditoría de 3 lentes propia (cambio de UI acotado, sin lógica de dominio ni backend nuevo); sí
+  verificación de comportamiento exhaustiva (21 tests nuevos de `CompaniesPanel.test.tsx` cubren
+  cada interacción: edición celda a celda, selección múltiple, confirmación, cancelación, fallo
+  409 de una empresa con usuarios, arrastrar una columna y que sobreviva a una recarga simulada).
+  268 tests de frontend, todos en verde, tsc/eslint limpios.
 
 ---
 
