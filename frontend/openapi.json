@@ -1894,6 +1894,53 @@
         }
       }
     },
+    "/api/v1/platform/ocr-ranking/{engine}/examples": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Get Ranking Examples",
+        "description": "Hasta 5 lecturas reales de este motor, la m\u00e1s reciente primero. Motor sin ninguna lectura\ntodav\u00eda -> lista vac\u00eda (nunca un error).",
+        "operationId": "get_ranking_examples_api_v1_platform_ocr_ranking__engine__examples_get",
+        "parameters": [
+          {
+            "name": "engine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Engine"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EngineRankingExampleOut"
+                  },
+                  "title": "Response Get Ranking Examples Api V1 Platform Ocr Ranking  Engine  Examples Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/tenants/{tenant_id}/invoices": {
       "get": {
         "tags": [
@@ -2605,6 +2652,36 @@
         ],
         "title": "DuplicateRowOut",
         "description": "Fila omitida por CIF ya existente en el informe: n\u00famero de fila (1-based) y CIF."
+      },
+      "EngineRankingExampleOut": {
+        "properties": {
+          "uploaded_file_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uploaded File Id"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "reading": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Reading"
+          },
+          "score": {
+            "type": "integer",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uploaded_file_id",
+          "model",
+          "reading",
+          "score"
+        ],
+        "title": "EngineRankingExampleOut"
       },
       "EngineRankingOut": {
         "properties": {

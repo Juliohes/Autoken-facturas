@@ -685,6 +685,57 @@
   verde, ruff/mypy/eslint/tsc limpios. Frontend: nueva ruta `/plataforma/laboratorio` +
   entrada de menú "Laboratorio" (visible solo con `is_admin_tech`, mismo patrón que Ajustes/Ranking
   OCR).
+- **Activación real del interruptor + reprocesado retroactivo (09/08/2026)** — Julio activó de
+  verdad `platform_settings.ocr_experiment_enabled` desde `/plataforma/ajustes` (coste recurrente
+  real desde entonces para toda factura nueva) y pidió también el reprocesado retroactivo de las
+  facturas ya confirmadas de Setex (`scripts/backfill_ocr_ranking.py --execute`). **Incidente real
+  durante la ejecución, corregido en el momento**: el primer intento se lanzó por error dentro del
+  contenedor `api` (que no monta la credencial de Vertex, solo `worker` la tiene —
+  `docker-compose.yml`, `GOOGLE_APPLICATION_CREDENTIALS`/`../secrets/vertex-sa.json` viven
+  únicamente en el servicio `worker`), así que Gemini Flash/Pro y Claude fallaron en las 7 facturas
+  candidatas mientras Azure DocIntel/Mistral/gpt-5.1 sí se guardaron bien. Reintentado solo con los
+  3 motores fallidos desde `worker` (sin repetir, ni volver a pagar, los 3 que ya habían ido bien):
+  Gemini Flash/Pro se corrigieron; Claude sigue bloqueado por un límite de cuota real de Google
+  Cloud (`RESOURCE_EXHAUSTED` en `anthropic-claude-sonnet-4-5`, pendiente de que Julio pida un
+  aumento de cuota desde la consola de Google Cloud — no es un bug de código). Resultado: 35 de 42
+  lecturas guardadas (5 de 6 motores × 7 facturas). También se usó por primera vez el subcomando
+  `reset-password` de `create_account.py` (S 2026-07-29) para que Julio recuperase el acceso a su
+  propia cuenta `platform_admin` tras perder la contraseña; se encontró y corrigió sobre la marcha
+  que esa cuenta real tenía `is_admin_tech=false` en producción (la documentación previa de S4.10
+  decía lo contrario) — corregido con un `UPDATE` puntual, la única vía posible dado que el flag es
+  deliberadamente "nunca activable desde la aplicación" (decisión de diseño S4.10 §0, sin CLI ni
+  endpoint para esto a propósito).
+- **Laboratorio en ventana emergente + "Ver ejemplos" en el Ranking OCR (09/08/2026)** — dos
+  peticiones directas de Julio tras usar el laboratorio por primera vez. (1) El detalle del
+  laboratorio (S6.2) pasa de mostrarse inline debajo de la tabla a una ventana emergente
+  (`LabDetailModal` envuelve `LabDetailView` sin tocar su interior, mismo patrón `role="dialog"` que
+  el resto de modales del proyecto). (2) El Ranking OCR (S4.8) pedía "más contexto, ver ejemplos
+  concretos, no solo números": nuevo `GET /platform/ocr-ranking/{engine}/examples` (migración
+  `0028_ocr_ranking_examples.py`, función `SECURITY DEFINER` sobre el mismo patrón ya auditado de
+  `ocr_ranking_summary()`/0019) que devuelve hasta 5 lecturas reales de un motor, la más reciente
+  primero, a través de todos los tenants; botón "Ver ejemplos" por fila abre `ExamplesModal.tsx`
+  (fichero propio, mismo patrón de diálogo).
+
+  **Auditoría de 2 lentes (SOLID, patrones+seguridad — arquitectura omitida por alcance pequeño), 1
+  CRÍTICO real corregido antes de cerrar**: el nuevo endpoint devolvía `reading` tal cual, que
+  incluye `counterparty_tax_id`/`counterparty_name` EN CLARO (`ocr/scoring.py::serialize_reading`)
+  — a diferencia de `ocr_ranking_summary()` (solo agregados numéricos), esto exponía contenido real
+  identificable de un cliente de CUALQUIER tenant, navegable con un clic desde una pantalla, y
+  agravaba justo el hallazgo ya documentado y pendiente de decisión en S5.2 §6 (activo de verdad
+  desde el punto anterior de este mismo día). Corregido redactando `counterparty_tax_id`/
+  `counterparty_name` de la respuesta en `ranking_router.py` (el resto de campos, importes/fecha/
+  tramos de IVA, sigue visible) — la decisión de fondo de S5.2 §6 sigue pendiente, esto solo evita
+  agravarla con una vía nueva de exposición; con test de regresión que fija la redacción y otro que
+  demuestra explícitamente la visibilidad cruzada de tenants (antes solo implícita por analogía con
+  el C11 de `ocr_ranking_summary()`, ahora demostrada). Resto de hallazgos (medios/bajos, no
+  bloqueantes): `ExamplesModal` extraído a fichero propio (rompía la convención "un modal, un
+  fichero" del proyecto); un campo anidado de `reading` (p. ej. `tax_lines`) se mostraba como
+  `[object Object]`, ahora como JSON legible; `useOcrRankingExamples` simplificado (no aceptaba
+  `null` en la práctica, único llamante siempre pasa un motor ya elegido). Aviso no bloqueante
+  aceptado: los 4 modales del proyecto (`TaxLinesModal`/`InvoiceImageModal`/`LabDetailModal`/
+  `ExamplesModal`) comparten ya el mismo boilerplate de overlay sin extraer a un componente
+  genérico — candidato a refactor si aparece un quinto. 778 tests de backend (773 + 5) + 264 de
+  frontend (260 + 4), ruff/mypy/eslint/tsc limpios.
 
 ---
 

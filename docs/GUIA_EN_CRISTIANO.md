@@ -876,6 +876,38 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   los tipos de datos del laboratorio reutilicen los ya existentes del resto de la aplicación en vez
   de duplicarlos.
 
+- **Julio activa de verdad la comparativa de 6 IAs + reprocesa las facturas antiguas** (09/08/2026):
+  tras usar el laboratorio por primera vez, Julio encendió el interruptor real desde
+  "Plataforma → Ajustes" — a partir de ese momento, cada factura nueva que se sube dispara de
+  verdad las 6 lecturas de IA (gasto real recurrente, decisión suya). También pidió reprocesar las
+  29 facturas que ya tenía Setex, para que también tuvieran su comparativa. Al hacerlo salieron dos
+  problemas reales, los dos resueltos en el momento: (1) el primer intento se lanzó sin querer
+  desde la pieza del sistema equivocada, así que 3 de los 6 modelos de IA (los dos "Gemini" y
+  "Claude") fallaron en las 7 facturas que sí cumplían los requisitos para reprocesarse — se
+  relanzó solo esos 3, sin repetir (ni volver a pagar) los otros 3 que ya habían salido bien; (2)
+  "Claude" sigue sin poder leer esas facturas por un límite de uso de la cuenta de Google Cloud de
+  Julio (no un fallo del programa) — hace falta que Julio pida ampliar ese límite desde la propia
+  consola de Google para que se resuelva solo. Resultado: 35 de las 42 lecturas posibles (5 de los
+  6 modelos, en las 7 facturas) ya están guardadas y visibles en el laboratorio. De paso, Julio
+  perdió el acceso a su propia cuenta y se usó por primera vez la herramienta ya construida para
+  resetear una contraseña sin que nadie más la vea ni la fije por él.
+
+- **El laboratorio se abre en una ventana emergente + "Ver ejemplos" en el Ranking OCR**
+  (09/08/2026): dos ajustes que Julio pidió nada más empezar a usar las pantallas nuevas. (1) Las 3
+  lecturas del laboratorio ya no aparecen pegadas debajo de la tabla de facturas: se abren en una
+  ventana flotante encima, como el resto de ventanas de la aplicación. (2) La pantalla "Ranking
+  OCR" (que compara qué tal lee cada uno de los 6 modelos de IA) solo mostraba números resumidos;
+  ahora cada motor tiene un botón "Ver ejemplos" que abre una ventana con hasta 5 facturas reales
+  que ese motor leyó, no solo la nota media.
+
+  Al construir esto, la revisión de calidad encontró un problema real de privacidad **antes de
+  publicarlo**: esa ventana de "ejemplos" iba a enseñar, sin querer, el CIF y el nombre reales de
+  clientes de cualquier asesoría (no solo la de Julio) a quien tuviera el permiso de super-admin —
+  un dato identificable de una empresa real, visible con solo un clic. Se corrigió ocultando esos
+  dos datos concretos de esa ventana (el resto, importes y fechas, se sigue viendo igual); el resto
+  del dato ya guardado en la base de datos no se ha tocado, sigue pendiente la misma decisión de
+  fondo sobre si cifrarlo que ya se había dejado anotada para más adelante.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

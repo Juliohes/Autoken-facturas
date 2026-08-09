@@ -152,14 +152,47 @@ describe('PlatformLab (S6.2)', () => {
     await user.selectOptions(select, 't-ilex')
     await user.click(await screen.findByRole('button', { name: 'Laboratorio' }))
 
+    const dialog = await screen.findByRole('dialog', { name: 'Laboratorio de esta factura' })
     await waitFor(() => {
-      expect(screen.getByText(/sin correcciones/i)).toBeInTheDocument()
+      expect(within(dialog).getByText(/sin correcciones/i)).toBeInTheDocument()
     })
-    expect(screen.getByText(/sin datos de comparativa/i)).toBeInTheDocument()
+    expect(within(dialog).getByText(/sin datos de comparativa/i)).toBeInTheDocument()
     // Las 3 lecturas están presentes (aunque sea con datos mínimos del mock).
-    expect(screen.getByTestId('lab-reading-1')).toBeInTheDocument()
-    expect(screen.getByTestId('lab-reading-2')).toBeInTheDocument()
-    expect(screen.getByTestId('lab-reading-3')).toBeInTheDocument()
+    expect(within(dialog).getByTestId('lab-reading-1')).toBeInTheDocument()
+    expect(within(dialog).getByTestId('lab-reading-2')).toBeInTheDocument()
+    expect(within(dialog).getByTestId('lab-reading-3')).toBeInTheDocument()
+  })
+
+  it('el laboratorio se abre en una ventana emergente, no debajo de la tabla, y se puede cerrar', async () => {
+    asUser(true)
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/platform/tenants') && !path.includes('/invoices')) {
+        return Promise.resolve({ data: TENANTS, error: undefined })
+      }
+      if (path.includes('/lab')) {
+        return Promise.resolve({ data: LAB_DETAIL, error: undefined })
+      }
+      if (path.includes('/invoices')) {
+        return Promise.resolve({ data: [INVOICE_ROW], error: undefined })
+      }
+      return Promise.resolve({ data: {}, error: undefined })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+
+    const select = await screen.findByLabelText(/tenant/i)
+    await screen.findByRole('option', { name: 'ILEX Asesoría' })
+    await user.selectOptions(select, 't-ilex')
+    // Antes de abrirlo, no hay ningún diálogo en pantalla.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await user.click(await screen.findByRole('button', { name: 'Laboratorio' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Laboratorio de esta factura' })
+    expect(dialog).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cerrar' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('la comparativa con filas las muestra ordenadas, no el mensaje de "sin datos"', async () => {

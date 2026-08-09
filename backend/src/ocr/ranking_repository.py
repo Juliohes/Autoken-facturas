@@ -22,12 +22,19 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = [
+    "EngineRankingExample",
     "EngineRankingSummary",
     "RankingEntry",
     "get_engine_summary",
     "list_ranking_entries",
+    "list_ranking_examples",
     "upsert_ranking_entry",
 ]
+
+# Tope de ejemplos por motor del panel de plataforma (2026-08-09): una muestra concreta basta para
+# diagnosticar cualitativamente, no hace falta paginar (mismo criterio que otras vistas admin-tech
+# de solo diagnóstico, sin exigir un límite configurable por el cliente).
+_EXAMPLES_LIMIT = 5
 
 _TENANT_FROM_CONTEXT = "NULLIF(current_setting('app.tenant_id', true), '')::uuid"
 
@@ -48,6 +55,18 @@ class EngineRankingSummary:
     invoices_read: int
     average_score: float
     first_place_count: int
+
+
+@dataclass(frozen=True)
+class EngineRankingExample:
+    """Una lectura real de un motor concreto (2026-08-09, panel de plataforma: "ver ejemplos
+    concretos, no solo números"), la más reciente primero. A través de todos los tenants, igual
+    que `EngineRankingSummary` — mismo criterio de visibilidad admin-tech ya establecido."""
+
+    uploaded_file_id: UUID
+    model: str
+    reading: dict[str, Any]
+    score: int
 
 
 @dataclass(frozen=True)
@@ -102,6 +121,29 @@ async def list_ranking_entries(session: AsyncSession, uploaded_file_id: UUID) ->
     ).all()
     return [
         RankingEntry(engine=row.engine, model=row.model, reading=dict(row.reading), score=row.score)
+        for row in rows
+    ]
+
+
+async def list_ranking_examples(session: AsyncSession, engine: str) -> list[EngineRankingExample]:
+    """Hasta `_EXAMPLES_LIMIT` lecturas reales de un motor concreto, la más reciente primero
+    (2026-08-09); llamar desde `shared.db.platform_session` (sin tenant), mismo criterio que
+    `get_engine_summary`. Motor sin ninguna lectura -> lista vacía, nunca un error."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT uploaded_file_id, model, reading, score FROM ocr_ranking_examples(:e, :l)"
+            ),
+            {"e": engine, "l": _EXAMPLES_LIMIT},
+        )
+    ).all()
+    return [
+        EngineRankingExample(
+            uploaded_file_id=row.uploaded_file_id,
+            model=row.model,
+            reading=dict(row.reading),
+            score=row.score,
+        )
         for row in rows
     ]
 
