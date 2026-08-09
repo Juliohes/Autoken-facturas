@@ -1,6 +1,11 @@
 // Pantalla del ranking multi-modelo (S4.8): agregado por motor, ordenado por puntuación media
 // (ya lo devuelve así el backend). Solo lectura, sin gráficas ni historial (spec §6).
+// "Ver ejemplos" (2026-08-09, a petición de Julio: "más contexto, ver ejemplos concretos, no solo
+// números") abre una ventana con hasta 5 lecturas reales de ese motor, no solo el agregado.
+import { useState } from 'react'
+
 import { useSession } from '../session/SessionProvider'
+import { ExamplesModal } from './ExamplesModal'
 import { useOcrRanking } from './useOcrRanking'
 
 // Asimetría de motores documentada en la spec (§0): Azure DocIntel y Mistral OCR4 NO son modelos de
@@ -11,6 +16,7 @@ const ENGINES_SIN_CAMPOS_PROMPTABLES = new Set(['azure-docintel', 'mistral-ocr-4
 
 export function OcrRanking() {
   const { user } = useSession()
+  const [examplesEngine, setExamplesEngine] = useState<string | null>(null)
   // Mismo criterio que PlatformSettings (S4.10, hallazgo de auditoría): evita un GET que el
   // backend rechazaría de todos modos (403) cuando el usuario no tiene el flag.
   const ranking = useOcrRanking(user?.is_admin_tech ?? false)
@@ -59,6 +65,7 @@ export function OcrRanking() {
                 <th className="py-2 pr-4">Facturas leídas</th>
                 <th className="py-2 pr-4">Puntuación media</th>
                 <th className="py-2 pr-4">Primer puesto</th>
+                <th className="py-2 pr-4">Ejemplos</th>
               </tr>
             </thead>
             <tbody>
@@ -78,11 +85,24 @@ export function OcrRanking() {
                   <td className="py-2 pr-4">{row.invoices_read}</td>
                   <td className="py-2 pr-4">{row.average_score.toFixed(2)}</td>
                   <td className="py-2 pr-4">{row.first_place_count}</td>
+                  <td className="py-2 pr-4">
+                    <button
+                      type="button"
+                      onClick={() => setExamplesEngine(row.engine)}
+                      className="text-emerald-400 underline"
+                    >
+                      Ver ejemplos
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {examplesEngine && (
+        <ExamplesModal engine={examplesEngine} onClose={() => setExamplesEngine(null)} />
       )}
     </section>
   )

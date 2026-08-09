@@ -1,7 +1,8 @@
-// Tests de comportamiento de `OcrRanking` (S4.8, C10/C11). Cliente de API mockeado; sesión
-// mockeada para controlar `user.is_admin_tech`.
+// Tests de comportamiento de `OcrRanking` (S4.8, C10/C11; 2026-08-09 "ver ejemplos concretos").
+// Cliente de API mockeado; sesión mockeada para controlar `user.is_admin_tech`.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { api } from '../../api/client'
@@ -116,5 +117,100 @@ describe('OcrRanking (S4.8)', () => {
     renderScreen()
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo cargar el ranking/i)
+  })
+
+  it('2026-08-09: "Ver ejemplos" abre una ventana con lecturas reales de ese motor', async () => {
+    asUser(true)
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/examples')) {
+        return Promise.resolve({
+          data: [
+            {
+              uploaded_file_id: 'f1',
+              model: 'gemini-3-flash-001',
+              // El CIF/nombre de contraparte NUNCA llega aquí (el backend ya los redacta, S5.2
+              // §6): un campo anidado real (`tax_lines`) para probar que se muestra legible.
+              reading: {
+                total_amount: '121.00',
+                tax_lines: [{ iva_pct: '21', base: '100.00', cuota: '21.00' }],
+              },
+              score: 4,
+            },
+          ],
+          error: undefined,
+        })
+      }
+      return Promise.resolve({
+        data: [
+          { engine: 'gemini-3-flash', invoices_read: 10, average_score: 4.5, first_place_count: 6 },
+        ],
+        error: undefined,
+      })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByText('gemini-3-flash')
+
+    await user.click(screen.getByRole('button', { name: 'Ver ejemplos' }))
+
+    const dialog = await screen.findByRole('dialog', { name: /gemini-3-flash/i })
+    expect(getMock).toHaveBeenCalledWith(
+      '/api/v1/platform/ocr-ranking/{engine}/examples',
+      expect.objectContaining({ params: { path: { engine: 'gemini-3-flash' } } }),
+    )
+    expect(within(dialog).getByText('121.00')).toBeInTheDocument()
+    // Un campo anidado (array/objeto) se muestra como JSON legible, no "[object Object]".
+    expect(within(dialog).getByText(/"iva_pct":"21"/)).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cerrar' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('2026-08-09: fallo al cargar los ejemplos muestra un aviso dentro de la ventana', async () => {
+    asUser(true)
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/examples')) {
+        return Promise.resolve({ data: undefined, error: { detail: 'boom' } })
+      }
+      return Promise.resolve({
+        data: [
+          { engine: 'gemini-3-flash', invoices_read: 10, average_score: 4.5, first_place_count: 6 },
+        ],
+        error: undefined,
+      })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByText('gemini-3-flash')
+
+    await user.click(screen.getByRole('button', { name: 'Ver ejemplos' }))
+
+    const dialog = await screen.findByRole('dialog', { name: /gemini-3-flash/i })
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      /no se pudieron cargar los ejemplos/i,
+    )
+  })
+
+  it('2026-08-09: sin ejemplos todavía para ese motor, lo dice explícito', async () => {
+    asUser(true)
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/examples')) {
+        return Promise.resolve({ data: [], error: undefined })
+      }
+      return Promise.resolve({
+        data: [
+          { engine: 'mistral-ocr-4', invoices_read: 3, average_score: 1.2, first_place_count: 0 },
+        ],
+        error: undefined,
+      })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByText('mistral-ocr-4')
+
+    await user.click(screen.getByRole('button', { name: 'Ver ejemplos' }))
+
+    const dialog = await screen.findByRole('dialog', { name: /mistral-ocr-4/i })
+    expect(within(dialog).getByText(/todavía no hay ejemplos/i)).toBeInTheDocument()
   })
 })

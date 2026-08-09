@@ -21,6 +21,7 @@ Contrato que el `implementer` debe respetar (lo fija esta fase roja):
 from __future__ import annotations
 
 import io
+import json
 from datetime import date
 from decimal import Decimal
 from uuid import uuid4
@@ -365,21 +366,26 @@ async def seed_ranking_entry(
     engine: str,
     score: int,
     model: str = "modelo-de-prueba",
+    reading: dict | None = None,
 ) -> None:
     """Inserta directamente una fila de `ocr_ranking_entries` (superusuario), como recomienda la
-    spec S4.8 §7 para probar la agregación del panel (C11) sin depender de motores reales."""
+    spec S4.8 §7 para probar la agregación del panel (C11) sin depender de motores reales.
+    `reading` por defecto vacío (compatibilidad); pásalo para probar los "ejemplos concretos" que
+    consume el panel de plataforma (2026-08-09, a petición de Julio)."""
     conn = await asyncpg.connect(dsns["admin"])
     try:
         await conn.execute(
             "INSERT INTO ocr_ranking_entries "
             "(tenant_id, company_id, uploaded_file_id, engine, model, reading, score) "
-            "VALUES ($1,$2,$3,$4,$5,'{}'::jsonb,$6) "
-            "ON CONFLICT (uploaded_file_id, engine) DO UPDATE SET score = EXCLUDED.score",
+            "VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7) "
+            "ON CONFLICT (uploaded_file_id, engine) DO UPDATE SET score = EXCLUDED.score, "
+            "reading = EXCLUDED.reading",
             tenant_id,
             company_id,
             uploaded_file_id,
             engine,
             model,
+            json.dumps(reading or {}),
             score,
         )
     finally:
