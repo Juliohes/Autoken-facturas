@@ -1,14 +1,14 @@
-// Tests de comportamiento de la pantalla "Empresas" (S3.4), C1-C9 (frontend). El cliente de API
-// está mockeado: se inyectan las respuestas de `reporting/companies`, `companies` y
+// Tests de comportamiento de la pantalla "Empresas" (S3.4 + rediseño 2026-08-09). El cliente de
+// API está mockeado: se inyectan las respuestas de `reporting/companies`, `companies` y
 // `registrations` de cada escenario (sin navegador ni backend reales; jsdom).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { api } from '../../api/client'
 import { CompaniesPanel } from './CompaniesPanel'
-import type { CompanyEdit, CompanyRow, PendingRegistration } from './types'
+import type { CompanyRow, PendingRegistration } from './types'
 
 vi.mock('../../api/client', () => ({
   api: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn(), DELETE: vi.fn() },
@@ -35,18 +35,6 @@ function makeCompany(over: Partial<CompanyRow> = {}): CompanyRow {
   }
 }
 
-function makeEdit(over: Partial<CompanyEdit> = {}): CompanyEdit {
-  return {
-    id: 'e1',
-    field: 'name',
-    old_value: 'Antes SL',
-    new_value: 'Después SL',
-    edited_by: 'u1',
-    edited_at: '2026-08-01T10:00:00Z',
-    ...over,
-  }
-}
-
 function makeRegistration(over: Partial<PendingRegistration> = {}): PendingRegistration {
   return {
     id: 'u1',
@@ -60,11 +48,9 @@ function makeRegistration(over: Partial<PendingRegistration> = {}): PendingRegis
 function mockRoutes({
   companies = [makeCompany()],
   registrations = [],
-  history = [],
 }: {
   companies?: CompanyRow[]
   registrations?: PendingRegistration[]
-  history?: CompanyEdit[]
 } = {}) {
   getMock.mockImplementation((path: string) => {
     if (path.includes('/reporting/companies')) {
@@ -72,9 +58,6 @@ function mockRoutes({
     }
     if (path.includes('/registrations')) {
       return Promise.resolve({ data: registrations, error: undefined })
-    }
-    if (path.includes('/history')) {
-      return Promise.resolve({ data: history, error: undefined })
     }
     throw new Error(`ruta GET no mockeada: ${path}`)
   })
@@ -94,6 +77,7 @@ beforeEach(() => {
   postMock.mockReset()
   patchMock.mockReset()
   deleteMock.mockReset()
+  localStorage.clear()
 })
 
 describe('CompaniesPanel (S3.4)', () => {
@@ -136,78 +120,168 @@ describe('CompaniesPanel (S3.4)', () => {
     })
   })
 
-  it('C3: editar una empresa envía el patch con los campos cambiados', async () => {
+  it('2026-08-09: la fila solo tiene "Ver facturas" — nada de Editar/Borrar/Historial por fila', async () => {
+    mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
+    renderPanel()
+    const [row] = await screen.findAllByTestId('company-row')
+
+    expect(within(row).getByRole('button', { name: 'Ver facturas' })).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Borrar' })).not.toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Historial' })).not.toBeInTheDocument()
+  })
+
+  it('2026-08-09: "Editar" activa la edición de todas las filas a la vez, junto a "Nueva empresa"', async () => {
+    mockRoutes({
+      companies: [
+        makeCompany({ id: 'c1', name: 'Uno' }),
+        makeCompany({ id: 'c2', name: 'Dos' }),
+      ],
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    expect(screen.getAllByRole('button', { name: 'Editar' })).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Editar' }))
+
+    const rows = screen.getAllByTestId('company-row')
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      expect(within(row).getByLabelText('Nombre')).toBeInTheDocument()
+    }
+    expect(screen.getByRole('button', { name: 'Terminar edición' })).toBeInTheDocument()
+  })
+
+  it('2026-08-09: cada celda editable se guarda sola al perder el foco, con patch parcial', async () => {
     mockRoutes({ companies: [makeCompany({ id: 'c1', name: 'Empresa Uno' })] })
     patchMock.mockResolvedValue({ data: makeCompany({ name: 'Empresa Editada' }), error: undefined })
     const user = userEvent.setup()
     renderPanel()
     const [row] = await screen.findAllByTestId('company-row')
+    await user.click(screen.getByRole('button', { name: 'Editar' }))
 
-    await user.click(within(row).getByRole('button', { name: 'Editar' }))
     const nameInput = within(row).getByLabelText('Nombre')
     await user.clear(nameInput)
     await user.type(nameInput, 'Empresa Editada')
-    await user.click(within(row).getByRole('button', { name: 'Guardar' }))
+    await user.tab()
 
     await waitFor(() => {
       expect(patchMock).toHaveBeenCalledWith('/api/v1/companies/{company_id}', {
         params: { path: { company_id: 'c1' } },
-        body: { name: 'Empresa Editada', cif: 'A11111111', notes: null, status: 'active' },
+        body: { name: 'Empresa Editada' },
       })
     })
   })
 
-  it('C4: borrar una empresa con usuarios muestra el motivo del 409, sin desaparecer en silencio', async () => {
+  it('2026-08-09: perder el foco sin cambiar el valor no llama al PATCH', async () => {
+    mockRoutes({ companies: [makeCompany({ id: 'c1', name: 'Empresa Uno' })] })
+    const user = userEvent.setup()
+    renderPanel()
+    const [row] = await screen.findAllByTestId('company-row')
+    await user.click(screen.getByRole('button', { name: 'Editar' }))
+
+    await user.click(within(row).getByLabelText('Nombre'))
+    await user.tab()
+
+    expect(patchMock).not.toHaveBeenCalled()
+  })
+
+  it('2026-08-09: "Borrar" muestra una casilla por fila, sin edición a la vez', async () => {
+    mockRoutes({ companies: [makeCompany({ id: 'c1', name: 'Empresa Uno' })] })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    await user.click(screen.getByRole('button', { name: 'Borrar' }))
+
+    expect(screen.getByLabelText('Seleccionar Empresa Uno')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeDisabled()
+  })
+
+  it('2026-08-09: seleccionar empresas y confirmar el borrado múltiple llama al DELETE de cada una', async () => {
+    mockRoutes({
+      companies: [
+        makeCompany({ id: 'c1', name: 'Uno' }),
+        makeCompany({ id: 'c2', name: 'Dos' }),
+      ],
+    })
+    deleteMock.mockResolvedValue({ data: undefined, error: undefined })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    await user.click(screen.getByRole('button', { name: 'Borrar' }))
+    await user.click(screen.getByLabelText('Seleccionar Uno'))
+    await user.click(screen.getByLabelText('Seleccionar Dos'))
+    await user.click(screen.getByRole('button', { name: 'Borrar seleccionadas (2)' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Confirmar borrado de empresas' })
+    expect(within(dialog).getByText('Uno')).toBeInTheDocument()
+    expect(within(dialog).getByText('Dos')).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Borrar' }))
+
+    await waitFor(() => {
+      expect(deleteMock).toHaveBeenCalledWith('/api/v1/companies/{company_id}', {
+        params: { path: { company_id: 'c1' } },
+      })
+      expect(deleteMock).toHaveBeenCalledWith('/api/v1/companies/{company_id}', {
+        params: { path: { company_id: 'c2' } },
+      })
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('2026-08-09: sin seleccionar ninguna, "Borrar seleccionadas" está deshabilitado', async () => {
     mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    await user.click(screen.getByRole('button', { name: 'Borrar' }))
+
+    expect(screen.getByRole('button', { name: 'Borrar seleccionadas (0)' })).toBeDisabled()
+  })
+
+  it('2026-08-09: cancelar el aviso de confirmación no borra nada', async () => {
+    mockRoutes({ companies: [makeCompany({ id: 'c1', name: 'Uno' })] })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    await user.click(screen.getByRole('button', { name: 'Borrar' }))
+    await user.click(screen.getByLabelText('Seleccionar Uno'))
+    await user.click(screen.getByRole('button', { name: 'Borrar seleccionadas (1)' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Confirmar borrado de empresas' })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(deleteMock).not.toHaveBeenCalled()
+  })
+
+  it('2026-08-09: borrar una empresa con usuarios muestra el motivo del 409, sin desaparecer en silencio', async () => {
+    mockRoutes({ companies: [makeCompany({ id: 'c1', name: 'Uno' })] })
     deleteMock.mockResolvedValue({
       data: undefined,
       error: { detail: 'La empresa tiene usuarios asignados: reasígnalos o quítalos antes de borrarla' },
     })
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const user = userEvent.setup()
     renderPanel()
     await screen.findAllByTestId('company-row')
 
     await user.click(screen.getByRole('button', { name: 'Borrar' }))
+    await user.click(screen.getByLabelText('Seleccionar Uno'))
+    await user.click(screen.getByRole('button', { name: 'Borrar seleccionadas (1)' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Confirmar borrado de empresas' })
+    await user.click(within(dialog).getByRole('button', { name: 'Borrar' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/usuarios asignados/)
-    expect(deleteMock).toHaveBeenCalledWith('/api/v1/companies/{company_id}', {
-      params: { path: { company_id: 'c1' } },
-    })
-    confirmSpy.mockRestore()
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudieron borrar: uno/i)
   })
 
-  it('C12: borrar pide confirmación nativa, con el nombre de la empresa, antes de llamar al endpoint', async () => {
-    mockRoutes({ companies: [makeCompany({ id: 'c1', name: 'Empresa Uno' })] })
-    deleteMock.mockResolvedValue({ data: undefined, error: undefined })
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const user = userEvent.setup()
-    renderPanel()
-    await screen.findAllByTestId('company-row')
-
-    await user.click(screen.getByRole('button', { name: 'Borrar' }))
-
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Empresa Uno'))
-    await waitFor(() => expect(deleteMock).toHaveBeenCalled())
-    confirmSpy.mockRestore()
-  })
-
-  it('C13: cancelar el diálogo de confirmación no llama al borrado', async () => {
-    mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    const user = userEvent.setup()
-    renderPanel()
-    await screen.findAllByTestId('company-row')
-
-    await user.click(screen.getByRole('button', { name: 'Borrar' }))
-
-    expect(confirmSpy).toHaveBeenCalled()
-    expect(deleteMock).not.toHaveBeenCalled()
-    confirmSpy.mockRestore()
-  })
-
-  it('C14: al confirmar y borrar con éxito, la fila desaparece de verdad de la tabla', async () => {
-    let companies = [makeCompany({ id: 'c1', name: 'Empresa Uno' })]
+  it('2026-08-09: al confirmar y borrar con éxito, la fila desaparece de verdad de la tabla', async () => {
+    let companies = [makeCompany({ id: 'c1', name: 'Uno' })]
     getMock.mockImplementation((path: string) => {
       if (path.includes('/reporting/companies')) {
         return Promise.resolve({ data: companies, error: undefined })
@@ -219,16 +293,18 @@ describe('CompaniesPanel (S3.4)', () => {
       companies = []
       return { data: undefined, error: undefined }
     })
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const user = userEvent.setup()
     renderPanel()
     await screen.findAllByTestId('company-row')
 
     await user.click(screen.getByRole('button', { name: 'Borrar' }))
+    await user.click(screen.getByLabelText('Seleccionar Uno'))
+    await user.click(screen.getByRole('button', { name: 'Borrar seleccionadas (1)' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Confirmar borrado de empresas' })
+    await user.click(within(dialog).getByRole('button', { name: 'Borrar' }))
 
     await waitFor(() => expect(screen.queryByTestId('company-row')).not.toBeInTheDocument())
     expect(await screen.findByText('Todavía no hay empresas.')).toBeInTheDocument()
-    confirmSpy.mockRestore()
   })
 
   it('C5: "Ver facturas" llama al callback con el id de la empresa', async () => {
@@ -241,60 +317,6 @@ describe('CompaniesPanel (S3.4)', () => {
     await user.click(screen.getByRole('button', { name: 'Ver facturas' }))
 
     expect(onViewInvoices).toHaveBeenCalledWith('c1')
-  })
-
-  it('2026-08-01: "Historial" muestra las ediciones de la empresa (antes → después)', async () => {
-    mockRoutes({
-      companies: [makeCompany({ id: 'c1' })],
-      history: [
-        makeEdit({ field: 'name', old_value: 'Antes SL', new_value: 'Después SL' }),
-        makeEdit({ id: 'e2', field: 'cif', old_value: 'A11111111', new_value: 'B22222222' }),
-      ],
-    })
-    const user = userEvent.setup()
-    renderPanel()
-    await screen.findAllByTestId('company-row')
-
-    await user.click(screen.getByRole('button', { name: 'Historial' }))
-
-    const rows = await screen.findAllByTestId('company-history-row')
-    expect(rows).toHaveLength(2)
-    expect(rows[0]).toHaveTextContent('Antes SL')
-    expect(rows[0]).toHaveTextContent('Después SL')
-  })
-
-  it('2026-08-01: sin ediciones, el historial dice que no hay nada registrado todavía', async () => {
-    mockRoutes({ companies: [makeCompany({ id: 'c1' })], history: [] })
-    const user = userEvent.setup()
-    renderPanel()
-    await screen.findAllByTestId('company-row')
-
-    await user.click(screen.getByRole('button', { name: 'Historial' }))
-
-    expect(
-      await screen.findByText('Todavía no hay ediciones registradas.'),
-    ).toBeInTheDocument()
-  })
-
-  it('2026-08-01: "Revertir a este valor" envía un PATCH con el valor anterior de ese campo', async () => {
-    mockRoutes({
-      companies: [makeCompany({ id: 'c1', name: 'Después SL' })],
-      history: [makeEdit({ field: 'name', old_value: 'Antes SL', new_value: 'Después SL' })],
-    })
-    patchMock.mockResolvedValue({ data: makeCompany({ name: 'Antes SL' }), error: undefined })
-    const user = userEvent.setup()
-    renderPanel()
-    await screen.findAllByTestId('company-row')
-
-    await user.click(screen.getByRole('button', { name: 'Historial' }))
-    await user.click(await screen.findByRole('button', { name: 'Revertir a este valor' }))
-
-    await waitFor(() => {
-      expect(patchMock).toHaveBeenCalledWith('/api/v1/companies/{company_id}', {
-        params: { path: { company_id: 'c1' } },
-        body: { name: 'Antes SL' },
-      })
-    })
   })
 
   it('C6: lista los registros pendientes con su empresa y la señal de empresa existente', async () => {
@@ -384,5 +406,49 @@ describe('CompaniesPanel (S3.4)', () => {
     expect(confirmSpy).toHaveBeenCalled()
     expect(postMock).not.toHaveBeenCalled()
     confirmSpy.mockRestore()
+  })
+
+  it('2026-08-09: las columnas empiezan estrechas por defecto, sobre todo "Notas"', async () => {
+    mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    const notesHeader = screen.getByText('Notas', { selector: 'th span' }).closest('th')
+    const nameHeader = screen.getByText('Nombre', { selector: 'th span' }).closest('th')
+    const notesWidth = Number(notesHeader?.style.width.replace('px', ''))
+    const nameWidth = Number(nameHeader?.style.width.replace('px', ''))
+    expect(notesWidth).toBeLessThan(nameWidth)
+  })
+
+  it('2026-08-09: arrastrar el asa de una columna cambia su ancho y lo recuerda al recargar', async () => {
+    mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    const handle = screen.getByRole('separator', { name: 'Redimensionar columna Nombre' })
+    const header = screen.getByText('Nombre', { selector: 'th span' }).closest('th') as HTMLElement
+    const startWidth = Number(header.style.width.replace('px', ''))
+
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseMove(document, { clientX: 180 })
+    fireEvent.mouseUp(document)
+
+    const newWidth = Number(header.style.width.replace('px', ''))
+    expect(newWidth).toBe(startWidth + 80)
+    expect(JSON.parse(localStorage.getItem('companies-panel-column-widths') ?? '{}').name).toBe(
+      newWidth,
+    )
+
+    // "Recuerda al recargar": una nueva instancia del panel (simula recargar la página) lee el
+    // ancho ya guardado en este navegador, en vez de volver siempre al valor por defecto.
+    const { unmount } = render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CompaniesPanel />
+      </QueryClientProvider>,
+    )
+    const newHeaders = await screen.findAllByText('Nombre', { selector: 'th span' })
+    const newHeader = newHeaders[newHeaders.length - 1].closest('th') as HTMLElement
+    expect(Number(newHeader.style.width.replace('px', ''))).toBe(newWidth)
+    unmount()
   })
 })

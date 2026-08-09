@@ -908,6 +908,24 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   del dato ya guardado en la base de datos no se ha tocado, sigue pendiente la misma decisión de
   fondo sobre si cifrarlo que ya se había dejado anotada para más adelante.
 
+- **El laboratorio pasa a panel lateral + el panel de Empresas, mucho más compacto** (09/08/2026):
+  dos correcciones más de Julio tras seguir usando las pantallas. (1) La ventana flotante del
+  laboratorio de hace un momento se sustituye por un panel que sale por el lado derecho de la
+  pantalla, en vez de aparecer centrado — más cómodo para consultarlo mientras se ve el resto.
+  (2) El panel "Empresas" tenía 4 enlaces en cada fila (Editar, Ver facturas, Historial, Borrar)
+  que la hacían más ancha de lo necesario. Ahora cada fila solo tiene "Ver facturas"; "Editar" y
+  "Borrar" pasan a ser dos botones únicos junto a "Nueva empresa", arriba del todo:
+  - **Editar**: activa la edición de todos los campos de todas las empresas a la vez (nombre, CIF,
+    notas, estado); cada campo se guarda solo al pasar a otro, sin necesidad de un botón "Guardar"
+    en cada fila.
+  - **Borrar**: aparece una casilla junto a cada empresa para marcar cuáles quieres borrar; al
+    darle a "Borrar seleccionadas" sale un aviso emergente listando los nombres exactos antes de
+    confirmar, y borra todas las marcadas de una vez.
+  - El historial de cambios por empresa se retira por ahora (decisión de Julio).
+  - Las columnas de la tabla ahora se pueden ensanchar o estrechar arrastrando el borde, como en
+    Excel; empiezan más estrechas que antes (la de "Notas", muy estrecha) y el ajuste que hagas se
+    recuerda la próxima vez que entres desde el mismo ordenador.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

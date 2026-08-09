@@ -199,20 +199,21 @@ interface LabDetailProps {
   onClose: () => void
 }
 
-// Ventana emergente (2026-08-09, a petición de Julio: "quiero que aparezca en una ventana
-// emergente, no abajo"), mismo patrón que `TaxLinesModal`/`InvoiceImageModal` (`role="dialog"`,
-// fondo oscuro, clic fuera cierra). `LabDetailView` no cambia por dentro: solo se envuelve.
+// Panel lateral derecho (2026-08-09, corrección de Julio tras probar la primera versión centrada:
+// "en una ventana emergente comprobable o en una sidebar a la derecha, que eso sería incluso
+// mejor"), mismo `role="dialog"` que el resto de diálogos del proyecto (fondo oscuro, clic fuera
+// cierra), solo cambia la posición/anchura. `LabDetailView` no cambia por dentro: solo se envuelve.
 function LabDetailModal({ detail, onClose }: LabDetailProps) {
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-label="Laboratorio de esta factura"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 bg-black/60"
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto"
+        className="ml-auto h-full w-full max-w-2xl overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <LabDetailView detail={detail} onClose={onClose} />
@@ -223,7 +224,7 @@ function LabDetailModal({ detail, onClose }: LabDetailProps) {
 
 function LabDetailView({ detail, onClose }: LabDetailProps) {
   return (
-    <div className="space-y-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
+    <div className="min-h-full space-y-6 border-l border-slate-700 bg-slate-800 p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Laboratorio de esta factura</h2>
         <button type="button" onClick={onClose} className="text-sm text-slate-400 underline">

@@ -12,6 +12,3 @@ export type CompanyUpdate = components['schemas']['CompanyUpdate']
 
 /** Un registro pendiente de aprobación (reutiliza S1.4 tal cual). */
 export type PendingRegistration = components['schemas']['RegistrationOut']
-
-/** Una fila del historial de ediciones de una empresa (2026-08-01). */
-export type CompanyEdit = components['schemas']['CompanyEditOut']
