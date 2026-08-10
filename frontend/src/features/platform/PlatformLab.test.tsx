@@ -2,7 +2,7 @@
 // C1-C2/C6-C13). Cliente de API mockeado; sesión mockeada para controlar `user.is_admin_tech`, mismo
 // patrón que `OcrRanking.test.tsx`/`PlatformSettings.test.tsx`.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
@@ -230,5 +230,128 @@ describe('PlatformLab (S6.2)', () => {
     expect(await screen.findByText('gemini-3-flash')).toBeInTheDocument()
     expect(screen.getByText('mistral-ocr-4')).toBeInTheDocument()
     expect(screen.queryByText(/sin datos de comparativa/i)).not.toBeInTheDocument()
+  })
+
+  it('2026-08-10: la tabla de facturas del tenant se puede redimensionar y ordenar por cabecera', async () => {
+    asUser(true)
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/platform/tenants') && !path.includes('/invoices')) {
+        return Promise.resolve({ data: TENANTS, error: undefined })
+      }
+      if (path.includes('/invoices') && !path.includes('/lab')) {
+        return Promise.resolve({
+          data: [
+            { ...INVOICE_ROW, id: 'inv-1', company_name: 'Zeta SL' },
+            { ...INVOICE_ROW, id: 'inv-2', company_name: 'Alfa SL' },
+          ],
+          error: undefined,
+        })
+      }
+      return Promise.resolve({ data: {}, error: undefined })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+
+    const select = await screen.findByLabelText(/tenant/i)
+    await screen.findByRole('option', { name: 'ILEX Asesoría' })
+    await user.selectOptions(select, 't-ilex')
+    await screen.findAllByTestId('lab-invoice-row')
+
+    await user.click(screen.getByRole('button', { name: 'Empresa' }))
+    const names = screen
+      .getAllByTestId('lab-invoice-row')
+      .map((row) => within(row).getAllByRole('cell')[0].textContent)
+    expect(names).toEqual(['Alfa SL', 'Zeta SL'])
+
+    const handle = screen.getByRole('separator', { name: 'Redimensionar columna Empresa' })
+    const header = screen.getByRole('button', { name: 'Empresa' }).closest('th') as HTMLElement
+    const startWidth = Number(header.style.width.replace('px', ''))
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseMove(document, { clientX: 150 })
+    fireEvent.mouseUp(document, { clientX: 150 })
+    expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 50)
+  })
+
+  it('2026-08-10: la tabla de correcciones (Lectura 3) del laboratorio se puede ordenar por cabecera', async () => {
+    asUser(true)
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/platform/tenants') && !path.includes('/invoices')) {
+        return Promise.resolve({ data: TENANTS, error: undefined })
+      }
+      if (path.includes('/lab')) {
+        return Promise.resolve({
+          data: {
+            ...LAB_DETAIL,
+            reading_3: {
+              invoice: { total_amount: '121.00' },
+              has_corrections: true,
+              corrections: [
+                { field: 'zeta_field', ai_value: 'a', human_value: 'b' },
+                { field: 'alfa_field', ai_value: 'c', human_value: 'd' },
+              ],
+            },
+          },
+          error: undefined,
+        })
+      }
+      if (path.includes('/invoices')) {
+        return Promise.resolve({ data: [INVOICE_ROW], error: undefined })
+      }
+      return Promise.resolve({ data: {}, error: undefined })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+
+    const select = await screen.findByLabelText(/tenant/i)
+    await screen.findByRole('option', { name: 'ILEX Asesoría' })
+    await user.selectOptions(select, 't-ilex')
+    await user.click(await screen.findByRole('button', { name: 'Laboratorio' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Laboratorio de esta factura' })
+    await user.click(within(dialog).getByRole('button', { name: 'Campo' }))
+
+    const rows = within(dialog).getAllByRole('row').filter((r) => within(r).queryAllByRole('cell').length > 0)
+    const fields = rows.map((row) => within(row).getAllByRole('cell')[0].textContent)
+    expect(fields).toEqual(['alfa_field', 'zeta_field'])
+  })
+
+  it('2026-08-10: la comparativa de modelos se puede ordenar por puntuación', async () => {
+    asUser(true)
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/platform/tenants') && !path.includes('/invoices')) {
+        return Promise.resolve({ data: TENANTS, error: undefined })
+      }
+      if (path.includes('/lab')) {
+        return Promise.resolve({
+          data: {
+            ...LAB_DETAIL,
+            ranking: [
+              { engine: 'b-engine', model: 'y', reading: {}, score: 9 },
+              { engine: 'a-engine', model: 'x', reading: {}, score: 2 },
+            ],
+            ranking_available: true,
+          },
+          error: undefined,
+        })
+      }
+      if (path.includes('/invoices')) {
+        return Promise.resolve({ data: [INVOICE_ROW], error: undefined })
+      }
+      return Promise.resolve({ data: {}, error: undefined })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+
+    const select = await screen.findByLabelText(/tenant/i)
+    await screen.findByRole('option', { name: 'ILEX Asesoría' })
+    await user.selectOptions(select, 't-ilex')
+    await user.click(await screen.findByRole('button', { name: 'Laboratorio' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Laboratorio de esta factura' })
+    await screen.findByText('b-engine')
+    await user.click(within(dialog).getByRole('button', { name: 'Puntuación' }))
+
+    const engines = screen.getAllByText(/-engine$/).map((el) => el.textContent)
+    expect(engines).toEqual(['a-engine', 'b-engine'])
   })
 })

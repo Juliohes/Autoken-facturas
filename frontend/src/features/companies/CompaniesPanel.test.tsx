@@ -431,7 +431,10 @@ describe('CompaniesPanel (S3.4)', () => {
 
     fireEvent.mouseDown(handle, { clientX: 100 })
     fireEvent.mouseMove(document, { clientX: 180 })
-    fireEvent.mouseUp(document)
+    // El evento final lleva la posición real del cursor, como en un navegador de verdad — sin
+    // esto, TanStack recalcula el ancho final con `clientX: 0` (el valor por defecto de jsdom) y
+    // lo sobrescribe con un valor absurdo.
+    fireEvent.mouseUp(document, { clientX: 180 })
 
     const newWidth = Number(header.style.width.replace('px', ''))
     expect(newWidth).toBe(startWidth + 80)
@@ -450,5 +453,154 @@ describe('CompaniesPanel (S3.4)', () => {
     const newHeader = newHeaders[newHeaders.length - 1].closest('th') as HTMLElement
     expect(Number(newHeader.style.width.replace('px', ''))).toBe(newWidth)
     unmount()
+  })
+
+  it('2026-08-10: arrastrar el asa con el dedo (táctil) también cambia el ancho de la columna', async () => {
+    // Reproduce el hallazgo real de Julio ("no puedo mover las columnas fácilmente"): en un
+    // móvil/tablet no hay ratón, así que el asa tiene que responder también a gestos táctiles, no
+    // solo a `mousedown`/`mousemove`/`mouseup`.
+    mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    const handle = screen.getByRole('separator', { name: 'Redimensionar columna Nombre' })
+    const header = screen.getByText('Nombre', { selector: 'th span' }).closest('th') as HTMLElement
+    const startWidth = Number(header.style.width.replace('px', ''))
+
+    fireEvent.touchStart(handle, { touches: [{ clientX: 100 }] })
+    fireEvent.touchMove(document, { touches: [{ clientX: 160 }] })
+    fireEvent.touchEnd(document)
+
+    expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 60)
+  })
+
+  it('2026-08-09: el asa de arrastre está siempre disponible, sin tener que pulsar "Editar" antes', async () => {
+    mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    // Sin pulsar "Editar": el asa ya está en el DOM y usable (no depende de un modo de edición).
+    expect(
+      screen.getByRole('separator', { name: 'Redimensionar columna Nombre' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument()
+  })
+
+  it('2026-08-10: pulsar la cabecera "Nombre" ordena las filas alfabéticamente, como en Excel', async () => {
+    mockRoutes({
+      companies: [
+        makeCompany({ id: 'c1', name: 'Zeta SL' }),
+        makeCompany({ id: 'c2', name: 'Alfa SL' }),
+        makeCompany({ id: 'c3', name: 'Medio SL' }),
+      ],
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    const namesInOrder = () =>
+      screen.getAllByTestId('company-row').map((row) => within(row).getAllByRole('cell')[0].textContent)
+
+    // Orden original (tal cual lo devuelve la API): sin ordenar todavía.
+    expect(namesInOrder()).toEqual(['Zeta SL', 'Alfa SL', 'Medio SL'])
+
+    const nameHeader = screen.getByRole('button', { name: 'Nombre' })
+    await user.click(nameHeader)
+    expect(namesInOrder()).toEqual(['Alfa SL', 'Medio SL', 'Zeta SL'])
+
+    await user.click(nameHeader)
+    expect(namesInOrder()).toEqual(['Zeta SL', 'Medio SL', 'Alfa SL'])
+
+    // Tercer clic: vuelve al orden original, no se queda descendente para siempre.
+    await user.click(nameHeader)
+    expect(namesInOrder()).toEqual(['Zeta SL', 'Alfa SL', 'Medio SL'])
+  })
+
+  it('2026-08-10: ordenar por una columna numérica ("Facturas") compara por valor, no como texto', async () => {
+    mockRoutes({
+      companies: [
+        makeCompany({ id: 'c1', name: 'A', invoice_count: 9 }),
+        makeCompany({ id: 'c2', name: 'B', invoice_count: 10 }),
+        makeCompany({ id: 'c3', name: 'C', invoice_count: 2 }),
+      ],
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    await user.click(screen.getByRole('button', { name: 'Facturas' }))
+
+    const namesInOrder = screen
+      .getAllByTestId('company-row')
+      .map((row) => within(row).getAllByRole('cell')[0].textContent)
+    // Orden numérico correcto (2, 9, 10): un orden como texto habría puesto "10" antes que "2".
+    expect(namesInOrder).toEqual(['C', 'A', 'B'])
+  })
+
+  it('2026-08-10: la tabla de registros pendientes también se puede ordenar y redimensionar por cabecera', async () => {
+    mockRoutes({
+      companies: [],
+      registrations: [
+        makeRegistration({ id: 'u1', email: 'zeta@ilex.es' }),
+        makeRegistration({ id: 'u2', email: 'alfa@ilex.es' }),
+      ],
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('registration-row')
+
+    await user.click(screen.getByRole('button', { name: 'Email' }))
+    const emails = screen
+      .getAllByTestId('registration-row')
+      .map((row) => within(row).getAllByRole('cell')[0].textContent)
+    expect(emails).toEqual(['alfa@ilex.es', 'zeta@ilex.es'])
+
+    const handle = screen.getByRole('separator', { name: 'Redimensionar columna Email' })
+    const header = screen.getByRole('button', { name: 'Email' }).closest('th') as HTMLElement
+    const startWidth = Number(header.style.width.replace('px', ''))
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseMove(document, { clientX: 130 })
+    fireEvent.mouseUp(document, { clientX: 130 })
+    expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 30)
+  })
+
+  it('2026-08-10: la tabla lleva un ancho total explícito, no solo table-layout:fixed', async () => {
+    // Regresión real (reportada por Julio, reproducida en un navegador de verdad, no en jsdom):
+    // con `table-layout: fixed` pero SIN un ancho total explícito en el `<table>`, un nombre de
+    // empresa largo hacía que Chrome ignorase los anchos de columna declarados por completo (una
+    // columna de 160px se renderizaba a 401px), así que el asa de arrastre quedaba fuera de donde
+    // se veía la raya entre columnas -- "el cursor cambia pero no se mueve". jsdom no hace layout
+    // de verdad, así que este test no puede comprobar el efecto visual, pero sí que el `<table>`
+    // sigue llevando el ancho explícito que lo arregla (`table.getTotalSize()`), para que no
+    // desaparezca sin darse cuenta en un refactor futuro.
+    mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    const table = screen.getByTestId('companies-table')
+    expect(Number(table.style.width.replace('px', ''))).toBeGreaterThan(0)
+  })
+
+  it('2026-08-10: por defecto ordena por "Última factura", la más reciente arriba, sin pulsar nada', async () => {
+    mockRoutes({
+      companies: [
+        makeCompany({ id: 'c1', name: 'Sin factura nunca', last_invoice_at: null }),
+        makeCompany({ id: 'c2', name: 'Factura antigua', last_invoice_at: '2026-01-01T00:00:00Z' }),
+        makeCompany({ id: 'c3', name: 'Factura más reciente', last_invoice_at: '2026-08-01T00:00:00Z' }),
+      ],
+    })
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    // La que subió la última factura, la primera -- sin pulsar ninguna cabecera. Las que no han
+    // subido nunca (null) van al final, en cualquier orden entre ellas (spec: "me da igual").
+    const names = screen
+      .getAllByTestId('company-row')
+      .map((row) => within(row).getAllByRole('cell')[0].textContent)
+    expect(names).toEqual(['Factura más reciente', 'Factura antigua', 'Sin factura nunca'])
+
+    // La cabecera ya muestra la flecha de "descendente" sin que nadie la haya pulsado.
+    const header = screen.getByRole('button', { name: 'Última factura' }).closest('th') as HTMLElement
+    expect(header).toHaveAttribute('aria-sort', 'descending')
   })
 })

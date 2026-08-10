@@ -66,7 +66,7 @@ export function CompanyTableRow({
   return (
     <tr data-testid="company-row">
       {deleteMode && (
-        <td className="p-2">
+        <td className="truncate p-2">
           <input
             type="checkbox"
             aria-label={`Seleccionar ${company.name}`}
@@ -75,7 +75,7 @@ export function CompanyTableRow({
           />
         </td>
       )}
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableCell
             companyId={company.id}
@@ -89,7 +89,7 @@ export function CompanyTableRow({
           company.name
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableCell
             companyId={company.id}
@@ -103,7 +103,7 @@ export function CompanyTableRow({
           company.cif
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <select
             aria-label="Estado"
@@ -124,7 +124,7 @@ export function CompanyTableRow({
           'Pendiente'
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableCell
             companyId={company.id}
@@ -138,11 +138,11 @@ export function CompanyTableRow({
           (company.notes ?? '—')
         )}
       </td>
-      <td className="p-2">{company.user_count}</td>
-      <td className="p-2">{company.invoice_count}</td>
-      <td className="p-2">{formatDate(company.last_invoice_at)}</td>
-      <td className="p-2">{formatDate(company.created_at)}</td>
-      <td className="p-2">
+      <td className="truncate p-2">{company.user_count}</td>
+      <td className="truncate p-2">{company.invoice_count}</td>
+      <td className="truncate p-2">{formatDate(company.last_invoice_at)}</td>
+      <td className="truncate p-2">{formatDate(company.created_at)}</td>
+      <td className="truncate p-2">
         <button type="button" onClick={onViewInvoices} className="text-emerald-400 underline">
           Ver facturas
         </button>

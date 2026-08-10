@@ -926,6 +926,84 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
     Excel; empiezan más estrechas que antes (la de "Notas", muy estrecha) y el ajuste que hagas se
     recuerda la próxima vez que entres desde el mismo ordenador.
 
+- **Ordenar las tablas pulsando la cabecera + columnas del panel de Facturas también
+  redimensionables (10/08/2026)**: Julio pidió, en las dos tablas grandes de la aplicación
+  ("Empresas" y "Facturas"), poder mover el ancho de las columnas sin tener que pulsar "Editar"
+  antes (ya funcionaba así en "Empresas", pero el asa para agarrar era pequeña y difícil de
+  encontrar — se ensanchó y se le puso un fondo tenue permanente para que se vea sin pasar el
+  ratón por encima) y, sobre todo, poder ordenar las filas pulsando el nombre de la columna que
+  quisiera, como en un Excel de verdad. Ahora las dos tablas funcionan así: un clic ordena de menor
+  a mayor (o alfabéticamente), otro clic lo invierte, y un tercer clic vuelve al orden normal (más
+  reciente primero). El panel de "Facturas" no tenía NINGÚN redimensionado de columnas hasta ahora
+  (solo lo tenía "Empresas"); se añadió igual, junto con el orden. Antes del cambio se comprobó que
+  el aviso de Julio de que "no veía los últimos cambios" no era un fallo de este proyecto sino de
+  la aplicación instalada en su móvil/navegador, que guarda una copia local y tarda en darse cuenta
+  de que hay una versión nueva (recargar la página dos veces, o cerrar y reabrir la app instalada,
+  lo soluciona).
+
+- **El arrastre de columnas no funcionaba de verdad en el móvil (10/08/2026)**: Julio insistió en
+  que seguía sin poder mover las columnas "fácilmente sin entrar en Editar" después del cambio de
+  arriba. En vez de suponer, se probó la aplicación real con un simulador de pantalla táctil (como
+  si fuera un dedo tocando un móvil, no un ratón) — y ahí apareció el fallo de verdad: el código
+  solo sabía escuchar al ratón (agarrar, mover, soltar), y un móvil o una tablet no usan ratón, así
+  que el arrastre con el dedo no hacía absolutamente nada, por muy grande que fuera el asa. Se
+  añadió el mismo mecanismo pero para gestos con el dedo, se comprobó de nuevo con el mismo
+  simulador táctil sobre la aplicación ya desplegada (antes: 160px se quedaban en 160px; después:
+  160px pasan a 220px al arrastrar) y se confirmó que ya funciona en las dos tablas.
+
+- **Todas las tablas de la aplicación, mucho más parecidas a un Excel de verdad (10/08/2026)**:
+  Julio, tras probar el arreglo del punto anterior, dijo que en su ordenador seguía sin poder
+  mover las columnas sin pulsar "Editar" primero, y pidió algo más ambicioso: que TODAS las tablas
+  de TODAS las pantallas de la aplicación (no solo Empresas y Facturas) fueran así de
+  interactivas. En vez de seguir arreglando el mecanismo casero a mano, se cambió por una pieza ya
+  hecha y probada por miles de aplicaciones (una "librería" llamada TanStack Table): mueve columnas
+  y ordena por cabecera igual que antes, pero de forma más sólida, porque el propio fabricante ya
+  se ha encargado de que funcione bien con ratón y con dedo a la vez, en vez de tener que
+  mantenerlo nosotros a mano. Se aplicó a las 9 tablas que tiene la aplicación entera: las dos ya
+  conocidas (Empresas, Facturas) y siete más que hasta ahora no se podían ni ordenar ni
+  redimensionar (la lista de asesorías y sus estadísticas en el panel de plataforma, los registros
+  pendientes de aprobación, el ranking de comparación de las IAs, y las tres tablas del
+  laboratorio de diagnóstico).
+
+  Al construirlo salió un fallo real y curioso, de los que rara vez se ven: un mismo gesto de
+  arrastre con el dedo funcionaba bien la primera vez que se abría la pantalla en una sesión, pero
+  no la segunda. Investigando a fondo (no se asumió que era "cosa del test") se encontró que el
+  motivo era una sutileza de cómo React (la tecnología con la que está hecha toda la pantalla)
+  decide en qué orden aplica dos cambios de estado seguidos cuando viven en dos sitios distintos —
+  no siempre en el orden en que se pidieron. Se corrigió juntando esos dos cambios en un único
+  sitio, forzando el orden correcto siempre. Comprobado dos veces contra la aplicación real ya
+  desplegada, con ratón en un ordenador y con un dedo en un móvil simulado, antes y después de este
+  segundo arreglo.
+
+- **Encontrado el motivo de verdad de "sigo sin poder mover columnas" (10/08/2026)**: Julio insistió
+  una tercera vez en que en su ordenador (con Chrome, ya descartado que fuera la caché del
+  navegador probando en una ventana de incógnito) seguía sin funcionar, y dio un dato clave: "el
+  cursor cambia pero no se mueve". Con esa pista se probó con datos de verdad — un nombre de
+  empresa largo, no los nombres cortos usados en todas las pruebas anteriores — y ahí apareció el
+  fallo real: cuando una celda tiene un texto largo, el navegador estaba **ignorando por completo**
+  el ancho de columna que la aplicación le pedía, sin avisar de ello. Con un nombre corto esto
+  nunca se notaba, por eso ni las pruebas automáticas ni las primeras comprobaciones lo habían
+  visto. Esto explicaba también otra cosa que Julio había notado: por qué las columnas se veían
+  "más juntas" al activar "Editar" (con Editar, cada celda pasa a ser una casilla de escribir, que
+  no sufre este problema del navegador).
+
+  Corregido dándole a la tabla, además de las anchuras de cada columna, un ancho TOTAL — la suma de
+  todas — algo que el navegador necesita para respetar de verdad lo que se le pide en vez de
+  decidir por su cuenta. Se aplicó a las 9 tablas de la aplicación, junto con recortar con puntos
+  suspensivos ("…") el texto que no cabe, en vez de dejarlo desbordarse sin control. Comprobado con
+  los mismos nombres largos que causaban el fallo, contra la aplicación real ya desplegada: ahora
+  la columna mide exactamente lo que debe medir y el arrastre funciona de principio a fin.
+
+- **La empresa con la factura más reciente, siempre arriba + buscar empresa escribiendo
+  (10/08/2026)**: dos peticiones nuevas de Julio, para todas las asesorías por igual. (1) La
+  pantalla "Empresas" ahora empieza siempre ordenada con la empresa que subió la última factura
+  arriba del todo, sin tener que pulsar nada — las que nunca han subido ninguna van al final, sin
+  que importe el orden entre ellas. Sigue pudiéndose cambiar pulsando cualquier otra cabecera,
+  como siempre. (2) En el panel de "Facturas", el desplegable para filtrar por empresa (que
+  obligaba a abrir la lista entera y buscar con la vista) pasa a ser un campo de texto: se escribe
+  el nombre (o parte de él) y la lista se va acortando sola, sin distinguir mayúsculas de
+  minúsculas — mucho más rápido cuando hay muchas empresas dadas de alta.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

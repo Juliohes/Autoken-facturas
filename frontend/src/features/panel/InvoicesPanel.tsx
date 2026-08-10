@@ -4,7 +4,16 @@
 // "Ver" muestra la foto original vía la API (no una URL firmada de MinIO — inalcanzable desde el
 // navegador en el despliegue real, ver `useInvoiceImage`). Los tramos de IVA se editan en su
 // propia ventana (`TaxLinesModal`, un conjunto se guarda entero, no campo a campo).
-import { useState } from 'react'
+//
+// Columnas redimensionables (ratón o dedo) y ordenables por cabecera, estilo Excel (2026-08-10, a
+// petición de Julio, ninguna depende del botón "Editar" de arriba). El ordenado es en memoria
+// sobre las filas ya cargadas (`panel.data.pages`, S3.1 pagina por cursor): al pulsar "Cargar más"
+// las páginas nuevas se re-ordenan junto a las ya visibles, no se pierden. TanStack Table (mismo
+// motivo que `CompaniesPanel`: solo gestiona ancho/orden vía `getHeaderGroups`, el cuerpo lo sigue
+// pintando `InvoiceTableRow` tal cual) sustituye al mecanismo casero anterior porque el
+// redimensionado casero solo escuchaba al ratón.
+import { getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table'
+import { useMemo, useState } from 'react'
 
 import {
   formatCurrency,
@@ -12,8 +21,11 @@ import {
   fromAmountInputValue,
   toAmountInputValue,
 } from '../../shared/format'
+import { DataTableTh } from '../../shared/DataTableTh'
 import { ScrollableTable } from '../../shared/ScrollableTable'
+import { usePersistedTableState } from '../../shared/usePersistedTableState'
 import { useCompanyOptions } from '../companies/useCompanyOptions'
+import { CompanyFilterCombobox } from './CompanyFilterCombobox'
 import { InvoiceImageModal } from './InvoiceImageModal'
 import { TaxLinesModal } from './TaxLinesModal'
 import { useEditInvoice } from './useEditInvoice'
@@ -34,6 +46,33 @@ function cleanFilters(raw: PanelFilters): PanelFilters {
   return Object.fromEntries(
     Object.entries(raw).filter(([, value]) => value !== undefined && value !== ''),
   ) as PanelFilters
+}
+
+// Etiquetas legibles de cada columna ordenable/redimensionable (para el `aria-label` del asa de
+// arrastre; "Tramos IVA"/"Ver" no son columnas de dato, van fuera de este mapa). Anchos por
+// defecto (px) en la definición de columnas de más abajo, persistidos por navegador (mismo patrón
+// que `CompaniesPanel`).
+const HEADER_LABELS: Record<string, string> = {
+  company_name: 'Empresa',
+  company_cif: 'CIF empresa',
+  counterparty_name: 'Proveedor',
+  counterparty_tax_id: 'CIF',
+  issue_date: 'Fecha',
+  net_amount: 'Base',
+  tax_amount: 'IVA',
+  total_amount: 'Total',
+  irpf_amount: 'IRPF',
+  uploaded_at: 'Subida',
+}
+
+/** `net_amount`/`tax_amount`/`total_amount`/`irpf_amount` llegan como texto decimal ("100.00",
+ * nunca con coma — la coma es solo de presentación en el input). `parseFloat` basta para comparar
+ * numéricamente al ordenar; `null`/vacío quedan fuera de la comparación (el hook los manda al
+ * final). */
+function parseAmount(value: string | null): number | null {
+  if (value === null) return null
+  const n = Number.parseFloat(value)
+  return Number.isNaN(n) ? null : n
 }
 
 interface Props {
@@ -67,7 +106,100 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
 
   const handleExport = () => exportInvoices.mutate(filters)
 
-  const rows = panel.data?.pages.flatMap((page) => page.items) ?? []
+  const rows = useMemo(() => panel.data?.pages.flatMap((page) => page.items) ?? [], [panel.data])
+  const {
+    columnSizing,
+    onColumnSizingChange,
+    columnSizingInfo,
+    onColumnSizingInfoChange,
+    sorting,
+    setSorting,
+  } = usePersistedTableState('invoices-panel-column-widths')
+
+  // `?? undefined` en los campos que pueden ser `null` (contraparte, fecha, importes): con
+  // `sortUndefined: 'last'` TanStack los manda siempre al final al ordenar, en cualquier dirección.
+  const columns = useMemo<ColumnDef<InvoiceRow, unknown>[]>(
+    () => [
+      { id: 'company_name', header: 'Empresa', accessorFn: (r) => r.company_name, size: 140, minSize: 32 },
+      { id: 'company_cif', header: 'CIF empresa', accessorFn: (r) => r.company_cif, size: 100, minSize: 32 },
+      {
+        id: 'counterparty_name',
+        header: 'Proveedor',
+        accessorFn: (r) => r.counterparty_name ?? undefined,
+        size: 160,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'counterparty_tax_id',
+        header: 'CIF',
+        accessorFn: (r) => r.counterparty_tax_id ?? undefined,
+        size: 100,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'issue_date',
+        header: 'Fecha',
+        accessorFn: (r) => r.issue_date ?? undefined,
+        size: 90,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'net_amount',
+        header: 'Base',
+        accessorFn: (r) => parseAmount(r.net_amount) ?? undefined,
+        size: 90,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'tax_amount',
+        header: 'IVA',
+        accessorFn: (r) => parseAmount(r.tax_amount) ?? undefined,
+        size: 90,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'total_amount',
+        header: 'Total',
+        accessorFn: (r) => parseAmount(r.total_amount) ?? undefined,
+        size: 90,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'irpf_amount',
+        header: 'IRPF',
+        accessorFn: (r) => parseAmount(r.irpf_amount) ?? undefined,
+        size: 90,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      { id: 'tax_lines', header: 'Tramos IVA', size: 110, enableSorting: false, enableResizing: false },
+      { id: 'uploaded_at', header: 'Subida', accessorFn: (r) => r.uploaded_at, size: 130, minSize: 32 },
+      { id: 'view', header: 'Ver', size: 64, enableSorting: false, enableResizing: false },
+    ],
+    [],
+  )
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    state: { columnSizing, columnSizingInfo, sorting },
+    onColumnSizingChange,
+    onColumnSizingInfoChange,
+    onSortingChange: setSorting,
+    columnResizeMode: 'onChange',
+    // Primer clic siempre ascendente, sin importar el tipo de dato (ver mismo comentario en
+    // `CompaniesPanel`).
+    sortDescFirst: false,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
+  const sortedRows = table.getRowModel().rows.map((r) => r.original)
 
   return (
     <section className="mx-auto max-w-5xl space-y-4 p-6 text-slate-100">
@@ -127,21 +259,11 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
             ))}
           </select>
         </label>
-        <label className="flex flex-col text-sm text-slate-300">
-          Empresa
-          <select
-            value={rawFilters.company_id ?? ''}
-            onChange={(e) => set({ company_id: e.target.value })}
-            className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
-          >
-            <option value="">Todas</option>
-            {(companies.data ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <CompanyFilterCombobox
+          options={companies.data ?? []}
+          value={rawFilters.company_id ?? ''}
+          onChange={(companyId) => set({ company_id: companyId })}
+        />
       </div>
 
       <button
@@ -179,27 +301,25 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
           )}
           <ScrollableTable>
             <table
-              className="w-full whitespace-nowrap text-left text-sm"
+              className="whitespace-nowrap text-left text-sm"
+              style={{ tableLayout: 'fixed', width: table.getTotalSize() }}
               data-testid="invoices-table"
             >
               <thead className="text-slate-400">
-                <tr>
-                  <th className="p-2">Empresa</th>
-                  <th className="p-2">CIF empresa</th>
-                  <th className="p-2">Proveedor</th>
-                  <th className="p-2">CIF</th>
-                  <th className="p-2">Fecha</th>
-                  <th className="p-2">Base</th>
-                  <th className="p-2">IVA</th>
-                  <th className="p-2">Total</th>
-                  <th className="p-2">IRPF</th>
-                  <th className="p-2">Tramos IVA</th>
-                  <th className="p-2">Subida</th>
-                  <th className="p-2">Ver</th>
-                </tr>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <DataTableTh
+                        key={header.id}
+                        header={header}
+                        label={HEADER_LABELS[header.id] ?? ''}
+                      />
+                    ))}
+                  </tr>
+                ))}
               </thead>
               <tbody className="divide-y divide-slate-700">
-                {rows.map((row) => (
+                {sortedRows.map((row) => (
                   <InvoiceTableRow
                     key={row.id}
                     row={row}
@@ -329,9 +449,9 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
       {/* Empresa CLIENTE del tenant (quién sube la factura): fija, nunca editable aquí — no es un
           dato del documento, es a quién pertenece (2026-08-01, hallazgo de Julio: el panel solo
           mostraba el proveedor/contraparte, nunca la propia empresa). */}
-      <td className="p-2">{row.company_name}</td>
-      <td className="p-2">{row.company_cif}</td>
-      <td className="p-2">
+      <td className="truncate p-2">{row.company_name}</td>
+      <td className="truncate p-2">{row.company_cif}</td>
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -343,7 +463,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           (row.counterparty_name ?? '—')
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -355,7 +475,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           (row.counterparty_tax_id ?? '—')
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -368,7 +488,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           (row.issue_date ?? '—')
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -381,7 +501,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           formatCurrency(row.net_amount)
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -394,7 +514,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           formatCurrency(row.tax_amount)
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -407,7 +527,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           formatCurrency(row.total_amount)
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -420,13 +540,13 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           formatCurrency(row.irpf_amount)
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         <button type="button" onClick={onOpenTaxLines} className="text-emerald-400 underline">
           {taxLinesLabel}
         </button>
       </td>
-      <td className="p-2">{formatDateTime(row.uploaded_at)}</td>
-      <td className="p-2">
+      <td className="truncate p-2">{formatDateTime(row.uploaded_at)}</td>
+      <td className="truncate p-2">
         <button
           type="button"
           onClick={() => onView(row.uploaded_file_id)}

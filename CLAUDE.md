@@ -759,6 +759,137 @@
   cada interacción: edición celda a celda, selección múltiple, confirmación, cancelación, fallo
   409 de una empresa con usuarios, arrastrar una columna y que sobreviva a una recarga simulada).
   268 tests de frontend, todos en verde, tsc/eslint limpios.
+- **Diagnóstico "no veo los últimos cambios" + ordenar tablas por cabecera y redimensionar
+  columnas en Facturas (10/08/2026)**: Julio reportó que `setex.autoken.es`/`ilex.autoken.es`/
+  `panel-staging.autoken.es` no mostraban el cambio de S6.4 recién desplegado. Verificado en
+  directo (no en teoría): el servidor ya servía el bundle correcto en los tres dominios (mismo
+  hash JS); la causa era la caché del Service Worker de la PWA (`registerType: 'autoUpdate'`,
+  actualización silenciosa sin aviso al usuario, solo se aplica del todo a partir de la recarga
+  *siguiente* a la que detecta el cambio) — sin código que tocar, solo hacía falta una segunda
+  recarga o reabrir la app instalada. A continuación, petición directa de Julio: poder mover el
+  ancho de las columnas sin depender de "Editar" (ya no dependía, pero el asa de 6px era difícil
+  de agarrar/encontrar — ensanchada a 8px con fondo tenue permanente) y ordenar cualquiera de las
+  dos tablas grandes (Empresas, Facturas) pulsando la cabecera, como en Excel (ascendente ->
+  descendente -> orden original al tercer clic, nulos siempre al final). Nuevo
+  `shared/useColumnSort.ts` (hook genérico, en memoria) + `ResizableTh` ganó soporte opcional de
+  orden (botón + flecha ▲/▼, sin romper su único uso previo). El panel de Facturas NO tenía ningún
+  redimensionado de columnas hasta ahora (solo lo tenía Empresas desde S6.4): se añadió a la vez
+  que el orden, reutilizando `useResizableColumns`/`ResizableTh` tal cual. El orden es en memoria
+  sobre las filas ya cargadas (Facturas pagina por cursor, S3.1); al pulsar "Cargar más" las
+  páginas nuevas se reordenan junto a las visibles — decisión de diseño explícita, no una
+  limitación oculta: los importes/nombres de contraparte viven cifrados (S5.2, pgcrypto) y no
+  admiten `ORDER BY` en SQL sin descifrar fila a fila, así que un orden verdaderamente global entre
+  páginas exigiría traer todo el histórico de golpe, deshaciendo la paginación. 6 tests nuevos
+  (orden ascendente/descendente/original, orden numérico correcto en columnas de importe/contador,
+  asa de redimensionar presente sin pulsar "Editar") en `CompaniesPanel.test.tsx`/
+  `InvoicesPanel.test.tsx`. 274 tests de frontend, todos en verde, tsc/eslint limpios. Desplegado y
+  verificado en directo en los tres dominios reales (bundle nuevo confirmado por hash).
+- **Hallazgo real tras el punto anterior: el redimensionado no funcionaba en táctil (10/08/2026)**:
+  Julio insistió en que seguía sin poder mover columnas "fácilmente sin entrar en Editar" tras el
+  cambio de arriba. Regla del plan ("reproducir de extremo a extremo, lo más cerca posible de cómo
+  lo vería el usuario final, antes de tocar código"): en vez de asumir, se reprodujo con Playwright
+  contra la app real desplegada. Con ratón (Chromium desktop) el arrastre SÍ funcionaba
+  (160px -> 240px, confirmado). Emulando un dispositivo táctil (iPhone 13, gestos
+  `Input.dispatchTouchEvent` reales vía CDP, no `mousedown` sintético) el arrastre NO hacía nada
+  (160px -> 160px): `useResizableColumns`/`ResizableTh` solo escuchaban `mousedown`/`mousemove`/
+  `mouseup`, que un móvil/tablet no dispara. Causa raíz real, no solo el asa pequeña del punto
+  anterior. Corregido con `startResizeTouch` (pareja de `startResize`, mismos `widths`/persistencia
+  en `localStorage`) + `onTouchStart` en `ResizableTh` + `touch-none` en el asa (evita que el gesto
+  también haga hacer scroll de la página). Reverificado con el mismo dispositivo táctil emulado
+  contra la app ya redesplegada: 160px -> 220px. 2 tests de comportamiento nuevos (`fireEvent.
+  touchStart/touchMove/touchEnd`) en `CompaniesPanel.test.tsx`/`InvoicesPanel.test.tsx`. 276 tests
+  de frontend, todos en verde, tsc/eslint limpios. Desplegado y reverificado en los tres dominios
+  reales.
+- **Migración a TanStack Table en las 9 tablas de la app + hallazgo real de React (10/08/2026)**:
+  Julio, tras el arreglo táctil de arriba, insistió en que el redimensionado seguía sin funcionar
+  en su PC y pidió una tabla "mucho más interactiva, como un Excel de verdad", para TODAS las
+  tablas de TODAS las URL, no solo Empresas/Facturas — investigado en profundidad, no parcheado.
+  Inventario completo (agente Explore): 9 tablas en 4 pantallas más allá de las dos ya conocidas —
+  `PlatformTenants` (tenants + métricas), `PendingRegistrations`, `OcrRanking`, `PlatformLab`
+  (facturas del tenant + correcciones de Lectura 3 + comparativa de modelos), ninguna con
+  orden/redimensionado hasta ahora. Decisión técnica (mía, no una pregunta de dominio a Julio,
+  spec CLAUDE.md §"decisiones técnicas"): sustituir el mecanismo casero (`useColumnSort`/
+  `useResizableColumns`/`ResizableTh`, ya borrados) por `@tanstack/react-table` en las 9 —
+  `header.getResizeHandler()` de la librería sirve tanto para `onMouseDown` como `onTouchStart` con
+  una única función mantenida por ellos, no por nosotros; nuevos `shared/usePersistedTableState.ts`
+  (envoltorio con persistencia en `localStorage`, solo del ancho) + `shared/DataTableTh.tsx`
+  (cabecera compartida) reutilizados en las 9 tablas, cada pantalla sigue pintando su `<tbody>` tal
+  cual (sin tocar la edición de celdas existente).
+
+  **Hallazgo real de React durante la implementación, no solo de la librería**: un test nuevo de
+  arrastre táctil fallaba SOLO cuando el panel se montaba una segunda vez en la misma sesión de
+  test (nunca en aislado) — reproducido y diagnosticado paso a paso (no descartado como "flaky"):
+  el asa de TanStack calcula el nuevo ancho con un efecto colateral entre dos actualizaciones de
+  estado seguidas (`columnSizingInfo` calcula el delta y deja el resultado en una variable
+  compartida; `columnSizing` lo lee justo después). Con esas dos piezas en `useState` SEPARADOS,
+  React no garantiza procesarlas en el mismo orden en que se llamaron — se vio fallar el segundo
+  montaje del componente en la misma sesión, nunca el primero. Corregido combinando ambas en un
+  ÚNICO `useState` (fuerza el orden exacto de aplicación). Documentado en el propio código
+  (`usePersistedTableState.ts`) para que no se repita si se toca este hook en el futuro.
+
+  Verificado en real, dos veces (antes y después del hallazgo de React) contra la app ya
+  desplegada, con Playwright: ratón en escritorio (160px -> 240px) y dedo en un iPhone emulado vía
+  CDP (160px -> 220px), ambos sin pulsar "Editar". 15 tests de comportamiento nuevos (orden +
+  redimensionado, ratón y dedo) repartidos en `CompaniesPanel.test.tsx`, `InvoicesPanel.test.tsx`,
+  `PlatformTenants.test.tsx`, `OcrRanking.test.tsx` y `PlatformLab.test.tsx`. 285 tests de frontend,
+  todos en verde, tsc/eslint limpios. Desplegado y verificado en los tres dominios reales.
+- **Causa raíz REAL del "no puedo mover columnas" — encontrada tras 3 reportes seguidos de Julio
+  (10/08/2026)**: pese a los dos arreglos anteriores (soporte táctil + migración a TanStack),
+  Julio seguía sin poder redimensionar en su PC (Chrome/Edge, ya descartada la caché de la PWA
+  probando en incógnito). Diagnóstico en dos pasos: (1) su propia descripción -- "el cursor cambia
+  pero no se mueve" -- descartaba un fallo del gesto en sí; (2) reproducido con datos REALES
+  (nombres de empresa largos, no los cortos "Zeta SL" usados hasta ahora en las pruebas) contra la
+  app desplegada, midiendo directamente el DOM: con `table-layout: fixed` puesto pero SIN un ancho
+  total explícito en el `<table>` (se quedaba en `width: auto`), Chrome **ignoraba por completo**
+  los anchos de columna declarados en cuanto una celda tenía contenido largo -- una columna de
+  160px se renderizaba a 401px, sin relación con el valor guardado en el estado. El asa de
+  arrastre, posicionada según el ancho REAL (401px), quedaba lejos de donde el ojo situaba la raya
+  entre columnas (calculada mentalmente a partir del ancho declarado) -- de ahí "el cursor cambia
+  pero no se mueve": el clic sí caía sobre el asa, pero el arrastre resultante era invisible
+  porque el contenido largo seguía forzando el mismo ancho pase lo que pase. Con datos cortos
+  (como en todas las pruebas anteriores) el bug nunca se manifestaba, porque el ancho "auto" del
+  navegador coincidía por casualidad con el declarado. Explica también por qué "Editar" se veía
+  más condensado: un `<input>` no fuerza el ancho de columna por su contenido, un texto plano sin
+  recortar sí.
+
+  Aislado el mecanismo exacto inyectando CSS de prueba en vivo contra el sitio real (sin
+  redesplegar en cada intento): dar al `<table>` un ancho total explícito (`width:
+  table.getTotalSize()`, método que TanStack Table ya expone) hace que las 9 columnas coincidan
+  EXACTAS con lo declarado. Aplicado en las 9 tablas de la app junto con `overflow-hidden`+
+  `text-overflow: ellipsis` (clase `truncate`) en todas las celdas de datos, para que el contenido
+  largo se recorte con "…" en vez de desbordar. Verificado en real con los mismos datos largos que
+  reproducían el fallo: 160px de ancho exacto para la columna, arrastre completo (20 movimientos
+  graduales, no un solo salto) de 160px a 240px sin quedarse a medias. 1 test de regresión nuevo
+  (comprueba que el `<table>` sigue llevando el ancho explícito, ya que jsdom no hace layout real
+  y no puede verificar el efecto visual por sí solo). 286 tests de frontend, todos en verde,
+  tsc/eslint limpios. Desplegado y verificado en los tres dominios reales.
+- **Orden por defecto en Empresas + combobox buscable en Facturas (10/08/2026)**: dos peticiones
+  nuevas de Julio, para todos los tenants/admins por igual (sin nada tenant-específico, cambios en
+  los componentes compartidos que ya usa cada asesoría).
+  - **Empresas**: por defecto, sin pulsar nada, la lista se ordena por "Última factura" descendente
+    (la empresa que subió la factura más reciente, arriba); las que no han subido nunca (`null`)
+    van al final, sin un criterio concreto entre ellas (spec de Julio: "me da igual el orden").
+    `usePersistedTableState` gana un parámetro `defaultSorting` opcional (vacío por defecto en las
+    otras 8 tablas, que no lo necesitan) — sigue siendo un punto de partida, no un candado: un clic
+    en cualquier cabecera lo sustituye, igual que en Excel. El orden no se guarda entre sesiones
+    (nunca se guardó, mismo criterio que antes de esta tarea).
+  - **Facturas**: el filtro "Empresa" pasa de un `<select>` nativo (había que desplegar y hacer
+    scroll) a un combobox propio (`CompanyFilterCombobox.tsx`, sin librería nueva): un campo de
+    texto que filtra la lista mientras se escribe (sin distinguir mayúsculas/minúsculas), con
+    "Todas" siempre arriba del todo para limpiar el filtro. El filtro real que viaja a la API sigue
+    siendo el `company_id`, no el texto escrito — verificado con un test dedicado
+    (`CompanyFilterCombobox.test.tsx`, 8 casos: filtrar, sin coincidencias, seleccionar con clic o
+    con Enter, Escape descarta sin fijar nada, perder el foco sin elegir vuelve al valor ya
+    filtrado). Un test existente (`AppRoutes.test.tsx`, "Ver facturas" desde una empresa concreta)
+    esperaba el id crudo en el campo — corregido para esperar el nombre visible, que es la mejora
+    real: se ve "Cliente SL", no "c1".
+
+  De paso, arreglado un test intermitente preexistente y ajeno a esta tarea (`App.test.tsx`, C7
+  revisado): fallaba ~1 de cada 2 veces por una carrera entre el efecto que pone el título de la
+  pestaña y el que pinta el logo (comprobaba el logo con `getByRole` justo después de esperar solo
+  al título, sin esperar también al logo) — cambiado a `findByRole` (con reintento), verificado en
+  verde 5 veces seguidas. 295 tests de frontend, todos en verde, tsc/eslint limpios. Desplegado y
+  verificado en los tres dominios reales.
 
 ---
 

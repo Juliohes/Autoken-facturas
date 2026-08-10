@@ -8,13 +8,21 @@
 // CUALQUIER fila a la vez (mismo patrón ya usado en `InvoicesPanel`); "Borrar" activa un modo de
 // selección (columna de casillas, solo visible en ese modo) con borrado múltiple tras un aviso
 // emergente de confirmación. El historial de ediciones se retira del todo por ahora (decisión de
-// Julio). Las columnas se pueden arrastrar para cambiar su ancho, estilo Excel, recordado en este
-// navegador (`useResizableColumns`).
-import { useState, type FormEvent } from 'react'
+// Julio).
+//
+// Columnas redimensionables (ratón o dedo) y ordenables pulsando la cabecera, ninguna depende del
+// botón "Editar" (2026-08-09/10, hallazgos de Julio). 2026-08-10: sustituido el mecanismo casero
+// (`useColumnSort`/`useResizableColumns`) por TanStack Table -- solo para gestionar el ANCHO y el
+// ORDEN de columna (`getHeaderGroups`), el cuerpo de la tabla lo sigue pintando `CompanyTableRow`
+// tal cual, sin cambios. Motivo: el redimensionado casero solo escuchaba al ratón y hubo que
+// parchearlo a mano para el dedo; `header.getResizeHandler()` de TanStack ya soporta ambos con una
+// única función mantenida por la librería, no por nosotros.
+import { getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table'
+import { useMemo, useState, type FormEvent } from 'react'
 
-import { ResizableTh } from '../../shared/ResizableTh'
+import { DataTableTh } from '../../shared/DataTableTh'
 import { ScrollableTable } from '../../shared/ScrollableTable'
-import { useResizableColumns } from '../../shared/useResizableColumns'
+import { usePersistedTableState } from '../../shared/usePersistedTableState'
 import { CompanyTableRow } from './CompanyTableRow'
 import { ConfirmDeleteCompaniesDialog } from './ConfirmDeleteCompaniesDialog'
 import { PendingRegistrations } from './PendingRegistrations'
@@ -23,7 +31,7 @@ import { useCompaniesPanel } from './useCompaniesPanel'
 import { useCreateCompany } from './useCreateCompany'
 import { useDeleteCompany } from './useDeleteCompany'
 import { useUpdateCompany } from './useUpdateCompany'
-import type { CompanyUpdate } from './types'
+import type { CompanyRow, CompanyUpdate } from './types'
 
 interface Props {
   /** Navega al panel de facturas (S3.1) filtrado por esta empresa. Sin app-shell aún: el llamante
@@ -33,17 +41,22 @@ interface Props {
 
 const EMPTY_FORM = { name: '', cif: '', notes: '' }
 
-// Notas muy estrecha por defecto (a petición explícita de Julio); el resto, ajustado para caber
-// sin desperdiciar ancho en la mayoría de pantallas — todas arrastrables desde ahí en adelante.
-const DEFAULT_COLUMN_WIDTHS = {
-  name: 160,
-  cif: 110,
-  status: 90,
-  notes: 70,
-  users: 70,
-  invoices: 70,
-  lastInvoice: 100,
-  createdAt: 100,
+// Orden por defecto (2026-08-10, a petición de Julio): la empresa que subió la factura más
+// reciente arriba del todo; el resto (sin actividad reciente, o ninguna) sin un orden concreto que
+// le importe a nadie -- `sortUndefined: 'last'` (definido en `columns` más abajo) ya las manda al
+// final sin más criterio. Sigue siendo un punto de partida, no un candado: un clic en cualquier
+// cabecera lo sustituye por ese orden, igual que en Excel.
+const DEFAULT_SORTING = [{ id: 'lastInvoice', desc: true }]
+
+const HEADER_LABELS: Record<string, string> = {
+  name: 'Nombre',
+  cif: 'CIF',
+  status: 'Estado',
+  notes: 'Notas',
+  users: 'Usuarios',
+  invoices: 'Facturas',
+  lastInvoice: 'Última factura',
+  createdAt: 'Alta',
 }
 
 export function CompaniesPanel({ onViewInvoices }: Props) {
@@ -51,10 +64,6 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
   const createCompany = useCreateCompany()
   const updateCompany = useUpdateCompany()
   const deleteCompany = useDeleteCompany()
-  const { widths, startResize } = useResizableColumns(
-    'companies-panel-column-widths',
-    DEFAULT_COLUMN_WIDTHS,
-  )
   const [form, setForm] = useState(EMPTY_FORM)
   const [editing, setEditing] = useState(false)
   const [deleteMode, setDeleteMode] = useState(false)
@@ -63,7 +72,80 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkError, setBulkError] = useState<string | null>(null)
 
-  const rows = companies.data ?? []
+  const rows = useMemo(() => companies.data ?? [], [companies.data])
+  const {
+    columnSizing,
+    onColumnSizingChange,
+    columnSizingInfo,
+    onColumnSizingInfoChange,
+    sorting,
+    setSorting,
+  } = usePersistedTableState('companies-panel-column-widths', DEFAULT_SORTING)
+
+  // Notas muy estrecha por defecto (a petición explícita de Julio); el resto, ajustado para caber
+  // sin desperdiciar ancho en la mayoría de pantallas — todas arrastrables desde ahí en adelante.
+  // `notes`/`lastInvoice` pueden ser `null`: `?? undefined` para que TanStack los mande siempre al
+  // final al ordenar (`sortUndefined: 'last''), sin importar la dirección.
+  const columns = useMemo<ColumnDef<CompanyRow, unknown>[]>(
+    () => [
+      ...(deleteMode
+        ? [{ id: 'select', header: '', size: 32, enableSorting: false, enableResizing: false }]
+        : []),
+      { id: 'name', header: 'Nombre', accessorFn: (r) => r.name, size: 160, minSize: 32 },
+      { id: 'cif', header: 'CIF', accessorFn: (r) => r.cif, size: 110, minSize: 32 },
+      { id: 'status', header: 'Estado', accessorFn: (r) => r.status, size: 90, minSize: 32 },
+      {
+        id: 'notes',
+        header: 'Notas',
+        accessorFn: (r) => r.notes ?? undefined,
+        size: 70,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      { id: 'users', header: 'Usuarios', accessorFn: (r) => r.user_count, size: 70, minSize: 32 },
+      {
+        id: 'invoices',
+        header: 'Facturas',
+        accessorFn: (r) => r.invoice_count,
+        size: 70,
+        minSize: 32,
+      },
+      {
+        id: 'lastInvoice',
+        header: 'Última factura',
+        accessorFn: (r) => r.last_invoice_at ?? undefined,
+        size: 100,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'createdAt',
+        header: 'Alta',
+        accessorFn: (r) => r.created_at,
+        size: 100,
+        minSize: 32,
+      },
+      { id: 'actions', header: '', size: 96, enableSorting: false, enableResizing: false },
+    ],
+    [deleteMode],
+  )
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    state: { columnSizing, columnSizingInfo, sorting },
+    onColumnSizingChange,
+    onColumnSizingInfoChange,
+    onSortingChange: setSorting,
+    columnResizeMode: 'onChange',
+    // Primer clic siempre ascendente, sin importar el tipo de dato (TanStack, por defecto, ordena
+    // números/fechas descendente al primer clic — no es lo que hace un Excel real: "Ordenar de A a
+    // Z" siempre empieza ascendente, sea texto o número).
+    sortDescFirst: false,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
+  const sortedRows = table.getRowModel().rows.map((r) => r.original)
 
   const handleCreate = (e: FormEvent) => {
     e.preventDefault()
@@ -226,51 +308,31 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
 
       {!companies.isLoading && !companies.isError && rows.length > 0 && (
         <ScrollableTable>
+          {/* `width: table.getTotalSize()` (2026-08-10, causa raíz real del reporte de Julio "no
+              puedo mover las columnas"): `table-layout: fixed` por sí solo NO basta si el
+              `<table>` se queda en `width: auto` -- verificado en el navegador real, no en teoría:
+              con un nombre de empresa largo, Chrome ignoraba los anchos de columna declarados
+              (160px se renderizaba como 401px) pese al `table-layout: fixed`, y el asa de
+              arrastre quedaba fuera de donde el ojo la esperaba. Dándole al `<table>` un ancho
+              total explícito (la suma de todas las columnas, que TanStack ya calcula) los 9
+              anchos declarados pasan a cumplirse EXACTOS. El mismo arreglo se aplica en las otras
+              8 tablas de la app. */}
           <table
             className="whitespace-nowrap text-left text-sm"
-            style={{ tableLayout: 'fixed' }}
+            style={{ tableLayout: 'fixed', width: table.getTotalSize() }}
             data-testid="companies-table"
           >
             <thead className="text-slate-400">
-              <tr>
-                {deleteMode && <th className="p-2" style={{ width: 32 }} />}
-                <ResizableTh label="Nombre" width={widths.name} onResizeStart={startResize('name')} />
-                <ResizableTh label="CIF" width={widths.cif} onResizeStart={startResize('cif')} />
-                <ResizableTh
-                  label="Estado"
-                  width={widths.status}
-                  onResizeStart={startResize('status')}
-                />
-                <ResizableTh
-                  label="Notas"
-                  width={widths.notes}
-                  onResizeStart={startResize('notes')}
-                />
-                <ResizableTh
-                  label="Usuarios"
-                  width={widths.users}
-                  onResizeStart={startResize('users')}
-                />
-                <ResizableTh
-                  label="Facturas"
-                  width={widths.invoices}
-                  onResizeStart={startResize('invoices')}
-                />
-                <ResizableTh
-                  label="Última factura"
-                  width={widths.lastInvoice}
-                  onResizeStart={startResize('lastInvoice')}
-                />
-                <ResizableTh
-                  label="Alta"
-                  width={widths.createdAt}
-                  onResizeStart={startResize('createdAt')}
-                />
-                <th className="p-2" style={{ width: 96 }} />
-              </tr>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <DataTableTh key={header.id} header={header} label={HEADER_LABELS[header.id] ?? ''} />
+                  ))}
+                </tr>
+              ))}
             </thead>
             <tbody className="divide-y divide-slate-700">
-              {rows.map((company) => (
+              {sortedRows.map((company) => (
                 <CompanyTableRow
                   key={company.id}
                   company={company}

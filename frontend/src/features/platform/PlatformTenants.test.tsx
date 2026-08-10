@@ -2,7 +2,7 @@
 // está mockeado: se inyectan las respuestas de `platform/tenants` de cada escenario (sin
 // navegador ni backend reales).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
@@ -543,5 +543,68 @@ describe('PlatformTenants — ciclo de vida (S4.7)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Hace falta exportar el tenant antes de poder borrarlo',
     )
+  })
+})
+
+describe('PlatformTenants — columnas redimensionables/ordenables (2026-08-10)', () => {
+  it('pulsar la cabecera "Nombre" de la tabla de tenants ordena alfabéticamente', async () => {
+    mockRoutes([
+      makeTenant({ id: 't1', slug: 'zeta', name: 'Zeta SL' }),
+      makeTenant({ id: 't2', slug: 'alfa', name: 'Alfa SL' }),
+    ])
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    await user.click(within(screen.getByTestId('tenants-table')).getByRole('button', { name: 'Nombre' }))
+
+    const names = screen
+      .getAllByTestId('tenant-row')
+      .map((row) => within(row).getAllByRole('cell')[1].textContent)
+    expect(names).toEqual(['Alfa SL', 'Zeta SL'])
+  })
+
+  it('la columna "Subdominio" de la tabla de tenants se puede redimensionar arrastrando', async () => {
+    mockRoutes([makeTenant({ id: 't1', slug: 'nueva' })])
+    renderPanel()
+    await screen.findAllByTestId('tenant-row')
+
+    const handle = within(screen.getByTestId('tenants-table')).getByRole('separator', {
+      name: 'Redimensionar columna Subdominio',
+    })
+    const header = within(screen.getByTestId('tenants-table'))
+      .getByRole('button', { name: 'Subdominio' })
+      .closest('th') as HTMLElement
+    const startWidth = Number(header.style.width.replace('px', ''))
+
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseMove(document, { clientX: 140 })
+    fireEvent.mouseUp(document, { clientX: 140 })
+
+    expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 40)
+  })
+
+  it('pulsar la cabecera "Facturas totales" de la tabla de métricas ordena por valor numérico', async () => {
+    mockRoutes(
+      [],
+      [
+        makeMetric({ tenant_id: 'm1', slug: 'a', invoices_total_count: 9 }),
+        makeMetric({ tenant_id: 'm2', slug: 'b', invoices_total_count: 20 }),
+        makeMetric({ tenant_id: 'm3', slug: 'c', invoices_total_count: 3 }),
+      ],
+    )
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('tenant-metrics-row')
+
+    await user.click(
+      within(screen.getByTestId('tenant-metrics-table')).getByRole('button', { name: 'Facturas totales' }),
+    )
+
+    const slugs = screen
+      .getAllByTestId('tenant-metrics-row')
+      .map((row) => within(row).getAllByRole('cell')[0].textContent)
+    // Orden numérico correcto (3, 9, 20): un orden como texto habría puesto "20" antes que "3".
+    expect(slugs).toEqual(['c', 'a', 'b'])
   })
 })
