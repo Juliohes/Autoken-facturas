@@ -41,6 +41,13 @@ interface Props {
 
 const EMPTY_FORM = { name: '', cif: '', notes: '' }
 
+// Orden por defecto (2026-08-10, a petición de Julio): la empresa que subió la factura más
+// reciente arriba del todo; el resto (sin actividad reciente, o ninguna) sin un orden concreto que
+// le importe a nadie -- `sortUndefined: 'last'` (definido en `columns` más abajo) ya las manda al
+// final sin más criterio. Sigue siendo un punto de partida, no un candado: un clic en cualquier
+// cabecera lo sustituye por ese orden, igual que en Excel.
+const DEFAULT_SORTING = [{ id: 'lastInvoice', desc: true }]
+
 const HEADER_LABELS: Record<string, string> = {
   name: 'Nombre',
   cif: 'CIF',
@@ -73,7 +80,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
     onColumnSizingInfoChange,
     sorting,
     setSorting,
-  } = usePersistedTableState('companies-panel-column-widths')
+  } = usePersistedTableState('companies-panel-column-widths', DEFAULT_SORTING)
 
   // Notas muy estrecha por defecto (a petición explícita de Julio); el resto, ajustado para caber
   // sin desperdiciar ancho en la mayoría de pantallas — todas arrastrables desde ahí en adelante.

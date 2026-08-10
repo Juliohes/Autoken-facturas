@@ -580,4 +580,27 @@ describe('CompaniesPanel (S3.4)', () => {
     const table = screen.getByTestId('companies-table')
     expect(Number(table.style.width.replace('px', ''))).toBeGreaterThan(0)
   })
+
+  it('2026-08-10: por defecto ordena por "Última factura", la más reciente arriba, sin pulsar nada', async () => {
+    mockRoutes({
+      companies: [
+        makeCompany({ id: 'c1', name: 'Sin factura nunca', last_invoice_at: null }),
+        makeCompany({ id: 'c2', name: 'Factura antigua', last_invoice_at: '2026-01-01T00:00:00Z' }),
+        makeCompany({ id: 'c3', name: 'Factura más reciente', last_invoice_at: '2026-08-01T00:00:00Z' }),
+      ],
+    })
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    // La que subió la última factura, la primera -- sin pulsar ninguna cabecera. Las que no han
+    // subido nunca (null) van al final, en cualquier orden entre ellas (spec: "me da igual").
+    const names = screen
+      .getAllByTestId('company-row')
+      .map((row) => within(row).getAllByRole('cell')[0].textContent)
+    expect(names).toEqual(['Factura más reciente', 'Factura antigua', 'Sin factura nunca'])
+
+    // La cabecera ya muestra la flecha de "descendente" sin que nadie la haya pulsado.
+    const header = screen.getByRole('button', { name: 'Última factura' }).closest('th') as HTMLElement
+    expect(header).toHaveAttribute('aria-sort', 'descending')
+  })
 })

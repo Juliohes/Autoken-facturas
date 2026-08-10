@@ -863,6 +863,33 @@
   (comprueba que el `<table>` sigue llevando el ancho explícito, ya que jsdom no hace layout real
   y no puede verificar el efecto visual por sí solo). 286 tests de frontend, todos en verde,
   tsc/eslint limpios. Desplegado y verificado en los tres dominios reales.
+- **Orden por defecto en Empresas + combobox buscable en Facturas (10/08/2026)**: dos peticiones
+  nuevas de Julio, para todos los tenants/admins por igual (sin nada tenant-específico, cambios en
+  los componentes compartidos que ya usa cada asesoría).
+  - **Empresas**: por defecto, sin pulsar nada, la lista se ordena por "Última factura" descendente
+    (la empresa que subió la factura más reciente, arriba); las que no han subido nunca (`null`)
+    van al final, sin un criterio concreto entre ellas (spec de Julio: "me da igual el orden").
+    `usePersistedTableState` gana un parámetro `defaultSorting` opcional (vacío por defecto en las
+    otras 8 tablas, que no lo necesitan) — sigue siendo un punto de partida, no un candado: un clic
+    en cualquier cabecera lo sustituye, igual que en Excel. El orden no se guarda entre sesiones
+    (nunca se guardó, mismo criterio que antes de esta tarea).
+  - **Facturas**: el filtro "Empresa" pasa de un `<select>` nativo (había que desplegar y hacer
+    scroll) a un combobox propio (`CompanyFilterCombobox.tsx`, sin librería nueva): un campo de
+    texto que filtra la lista mientras se escribe (sin distinguir mayúsculas/minúsculas), con
+    "Todas" siempre arriba del todo para limpiar el filtro. El filtro real que viaja a la API sigue
+    siendo el `company_id`, no el texto escrito — verificado con un test dedicado
+    (`CompanyFilterCombobox.test.tsx`, 8 casos: filtrar, sin coincidencias, seleccionar con clic o
+    con Enter, Escape descarta sin fijar nada, perder el foco sin elegir vuelve al valor ya
+    filtrado). Un test existente (`AppRoutes.test.tsx`, "Ver facturas" desde una empresa concreta)
+    esperaba el id crudo en el campo — corregido para esperar el nombre visible, que es la mejora
+    real: se ve "Cliente SL", no "c1".
+
+  De paso, arreglado un test intermitente preexistente y ajeno a esta tarea (`App.test.tsx`, C7
+  revisado): fallaba ~1 de cada 2 veces por una carrera entre el efecto que pone el título de la
+  pestaña y el que pinta el logo (comprobaba el logo con `getByRole` justo después de esperar solo
+  al título, sin esperar también al logo) — cambiado a `findByRole` (con reintento), verificado en
+  verde 5 veces seguidas. 295 tests de frontend, todos en verde, tsc/eslint limpios. Desplegado y
+  verificado en los tres dominios reales.
 
 ---
 

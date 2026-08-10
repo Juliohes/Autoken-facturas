@@ -116,8 +116,11 @@ describe('App (S4.2/S4.3 theming runtime + S4.9 C14)', () => {
     mockRoutes(makeTenant())
     renderApp()
 
+    // `findByRole` (no `getByRole`): el título y el logo se aplican en efectos separados, no
+    // sincronizados entre sí -- comprobado ambos con `waitFor`/`findByRole` en vez de asumir que
+    // uno implica el otro evita un test intermitente (hallazgo real: fallaba ~1 de cada 2 veces).
     await waitFor(() => expect(document.title).toBe(DEFAULT_APP_NAME))
-    expect(screen.getByRole('img')).toHaveAttribute('src', DEFAULT_LOGO_URL)
+    expect(await screen.findByRole('img')).toHaveAttribute('src', DEFAULT_LOGO_URL)
   })
 
   it('S4.3 C5: con favicon (aunque sea el único campo de branding), inyecta el link', async () => {

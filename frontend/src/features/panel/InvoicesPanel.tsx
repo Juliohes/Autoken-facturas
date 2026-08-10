@@ -25,6 +25,7 @@ import { DataTableTh } from '../../shared/DataTableTh'
 import { ScrollableTable } from '../../shared/ScrollableTable'
 import { usePersistedTableState } from '../../shared/usePersistedTableState'
 import { useCompanyOptions } from '../companies/useCompanyOptions'
+import { CompanyFilterCombobox } from './CompanyFilterCombobox'
 import { InvoiceImageModal } from './InvoiceImageModal'
 import { TaxLinesModal } from './TaxLinesModal'
 import { useEditInvoice } from './useEditInvoice'
@@ -258,21 +259,11 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
             ))}
           </select>
         </label>
-        <label className="flex flex-col text-sm text-slate-300">
-          Empresa
-          <select
-            value={rawFilters.company_id ?? ''}
-            onChange={(e) => set({ company_id: e.target.value })}
-            className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
-          >
-            <option value="">Todas</option>
-            {(companies.data ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <CompanyFilterCombobox
+          options={companies.data ?? []}
+          value={rawFilters.company_id ?? ''}
+          onChange={(companyId) => set({ company_id: companyId })}
+        />
       </div>
 
       <button

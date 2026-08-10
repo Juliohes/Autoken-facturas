@@ -7,8 +7,8 @@
 // mantenida por la librería, no por nosotros) y trae el ordenado ya integrado.
 //
 // El ancho de columna se recuerda entre sesiones (mismo criterio que antes, `localStorage` por
-// tabla); el orden NO se recuerda (vuelve siempre al orden de llegada al recargar), igual que el
-// hook casero anterior.
+// tabla); el orden NO se recuerda (vuelve siempre al `defaultSorting` de la tabla al recargar,
+// nunca a lo último que el usuario dejara elegido), igual que el hook casero anterior.
 //
 // `columnSizing`/`columnSizingInfo` viven en UN SOLO `useState` (no dos aparte), a propósito
 // (hallazgo real, reproducido con un test): el asa de arrastre de TanStack calcula el nuevo ancho
@@ -51,11 +51,11 @@ interface State {
   sorting: SortingState
 }
 
-export function usePersistedTableState(storageKey: string) {
+export function usePersistedTableState(storageKey: string, defaultSorting: SortingState = []) {
   const [state, setState] = useState<State>(() => ({
     columnSizing: readStoredWidths(storageKey),
     columnSizingInfo: DEFAULT_SIZING_INFO,
-    sorting: [],
+    sorting: defaultSorting,
   }))
 
   const onColumnSizingChange: OnChangeFn<ColumnSizingState> = (updater) => {

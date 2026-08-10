@@ -248,7 +248,10 @@ describe('AppRoutes (S4.9)', () => {
     await user.click(await screen.findByRole('button', { name: 'Ver facturas' }))
 
     expect(await screen.findByRole('heading', { name: 'Panel de facturas' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Empresa')).toHaveValue('c1')
+    // El combobox muestra el NOMBRE de la empresa (2026-08-10, buscable escribiendo), no el id
+    // crudo que llevaba el `<select>` anterior -- el filtro real que viaja a la API sigue siendo
+    // el id (`company_id=c1`), verificado aparte en `CompanyFilterCombobox.test.tsx`.
+    expect(screen.getByLabelText('Empresa')).toHaveValue('Cliente SL')
   })
 
   it('C13: cerrar sesión desde el menú vuelve a login', async () => {

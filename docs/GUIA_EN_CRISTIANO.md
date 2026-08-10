@@ -994,6 +994,16 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   los mismos nombres largos que causaban el fallo, contra la aplicación real ya desplegada: ahora
   la columna mide exactamente lo que debe medir y el arrastre funciona de principio a fin.
 
+- **La empresa con la factura más reciente, siempre arriba + buscar empresa escribiendo
+  (10/08/2026)**: dos peticiones nuevas de Julio, para todas las asesorías por igual. (1) La
+  pantalla "Empresas" ahora empieza siempre ordenada con la empresa que subió la última factura
+  arriba del todo, sin tener que pulsar nada — las que nunca han subido ninguna van al final, sin
+  que importe el orden entre ellas. Sigue pudiéndose cambiar pulsando cualquier otra cabecera,
+  como siempre. (2) En el panel de "Facturas", el desplegable para filtrar por empresa (que
+  obligaba a abrir la lista entera y buscar con la vista) pasa a ser un campo de texto: se escribe
+  el nombre (o parte de él) y la lista se va acortando sola, sin distinguir mayúsculas de
+  minúsculas — mucho más rápido cuando hay muchas empresas dadas de alta.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
