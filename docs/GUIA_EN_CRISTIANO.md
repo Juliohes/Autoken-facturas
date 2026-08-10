@@ -941,6 +941,16 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   de que hay una versión nueva (recargar la página dos veces, o cerrar y reabrir la app instalada,
   lo soluciona).
 
+- **El arrastre de columnas no funcionaba de verdad en el móvil (10/08/2026)**: Julio insistió en
+  que seguía sin poder mover las columnas "fácilmente sin entrar en Editar" después del cambio de
+  arriba. En vez de suponer, se probó la aplicación real con un simulador de pantalla táctil (como
+  si fuera un dedo tocando un móvil, no un ratón) — y ahí apareció el fallo de verdad: el código
+  solo sabía escuchar al ratón (agarrar, mover, soltar), y un móvil o una tablet no usan ratón, así
+  que el arrastre con el dedo no hacía absolutamente nada, por muy grande que fuera el asa. Se
+  añadió el mismo mecanismo pero para gestos con el dedo, se comprobó de nuevo con el mismo
+  simulador táctil sobre la aplicación ya desplegada (antes: 160px se quedaban en 160px; después:
+  160px pasan a 220px al arrastrar) y se confirmó que ya funciona en las dos tablas.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

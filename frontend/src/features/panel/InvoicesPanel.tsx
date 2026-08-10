@@ -102,7 +102,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
 
   const handleExport = () => exportInvoices.mutate(filters)
 
-  const { widths, startResize } = useResizableColumns(
+  const { widths, startResize, startResizeTouch } = useResizableColumns(
     'invoices-panel-column-widths',
     DEFAULT_COLUMN_WIDTHS,
   )
@@ -240,6 +240,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
                     label="Empresa"
                     width={widths.company_name}
                     onResizeStart={startResize('company_name')}
+                    onResizeTouchStart={startResizeTouch('company_name')}
                     sortDirection={directionFor('company_name')}
                     onSortClick={() => toggleSort('company_name')}
                   />
@@ -247,6 +248,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
                     label="CIF empresa"
                     width={widths.company_cif}
                     onResizeStart={startResize('company_cif')}
+                    onResizeTouchStart={startResizeTouch('company_cif')}
                     sortDirection={directionFor('company_cif')}
                     onSortClick={() => toggleSort('company_cif')}
                   />
@@ -254,6 +256,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
                     label="Proveedor"
                     width={widths.counterparty_name}
                     onResizeStart={startResize('counterparty_name')}
+                    onResizeTouchStart={startResizeTouch('counterparty_name')}
                     sortDirection={directionFor('counterparty_name')}
                     onSortClick={() => toggleSort('counterparty_name')}
                   />
@@ -261,6 +264,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
                     label="CIF"
                     width={widths.counterparty_tax_id}
                     onResizeStart={startResize('counterparty_tax_id')}
+                    onResizeTouchStart={startResizeTouch('counterparty_tax_id')}
                     sortDirection={directionFor('counterparty_tax_id')}
                     onSortClick={() => toggleSort('counterparty_tax_id')}
                   />
@@ -268,6 +272,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
                     label="Fecha"
                     width={widths.issue_date}
                     onResizeStart={startResize('issue_date')}
+                    onResizeTouchStart={startResizeTouch('issue_date')}
                     sortDirection={directionFor('issue_date')}
                     onSortClick={() => toggleSort('issue_date')}
                   />
@@ -275,6 +280,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
                     label="Base"
                     width={widths.net_amount}
                     onResizeStart={startResize('net_amount')}
+                    onResizeTouchStart={startResizeTouch('net_amount')}
                     sortDirection={directionFor('net_amount')}
                     onSortClick={() => toggleSort('net_amount')}
                   />
@@ -282,6 +288,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
                     label="IVA"
                     width={widths.tax_amount}
                     onResizeStart={startResize('tax_amount')}
+                    onResizeTouchStart={startResizeTouch('tax_amount')}
                     sortDirection={directionFor('tax_amount')}
                     onSortClick={() => toggleSort('tax_amount')}
                   />
@@ -289,6 +296,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
                     label="Total"
                     width={widths.total_amount}
                     onResizeStart={startResize('total_amount')}
+                    onResizeTouchStart={startResizeTouch('total_amount')}
                     sortDirection={directionFor('total_amount')}
                     onSortClick={() => toggleSort('total_amount')}
                   />
@@ -296,6 +304,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
                     label="IRPF"
                     width={widths.irpf_amount}
                     onResizeStart={startResize('irpf_amount')}
+                    onResizeTouchStart={startResizeTouch('irpf_amount')}
                     sortDirection={directionFor('irpf_amount')}
                     onSortClick={() => toggleSort('irpf_amount')}
                   />
@@ -306,6 +315,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
                     label="Subida"
                     width={widths.uploaded_at}
                     onResizeStart={startResize('uploaded_at')}
+                    onResizeTouchStart={startResizeTouch('uploaded_at')}
                     sortDirection={directionFor('uploaded_at')}
                     onSortClick={() => toggleSort('uploaded_at')}
                   />

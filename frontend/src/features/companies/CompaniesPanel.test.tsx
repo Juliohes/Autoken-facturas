@@ -452,6 +452,25 @@ describe('CompaniesPanel (S3.4)', () => {
     unmount()
   })
 
+  it('2026-08-10: arrastrar el asa con el dedo (táctil) también cambia el ancho de la columna', async () => {
+    // Reproduce el hallazgo real de Julio ("no puedo mover las columnas fácilmente"): en un
+    // móvil/tablet no hay ratón, así que el asa tiene que responder también a gestos táctiles, no
+    // solo a `mousedown`/`mousemove`/`mouseup`.
+    mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    const handle = screen.getByRole('separator', { name: 'Redimensionar columna Nombre' })
+    const header = screen.getByText('Nombre', { selector: 'th span' }).closest('th') as HTMLElement
+    const startWidth = Number(header.style.width.replace('px', ''))
+
+    fireEvent.touchStart(handle, { touches: [{ clientX: 100 }] })
+    fireEvent.touchMove(document, { touches: [{ clientX: 160 }] })
+    fireEvent.touchEnd(document)
+
+    expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 60)
+  })
+
   it('2026-08-09: el asa de arrastre está siempre disponible, sin tener que pulsar "Editar" antes', async () => {
     mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
     renderPanel()

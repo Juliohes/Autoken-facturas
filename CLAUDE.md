@@ -784,6 +784,22 @@
   asa de redimensionar presente sin pulsar "Editar") en `CompaniesPanel.test.tsx`/
   `InvoicesPanel.test.tsx`. 274 tests de frontend, todos en verde, tsc/eslint limpios. Desplegado y
   verificado en directo en los tres dominios reales (bundle nuevo confirmado por hash).
+- **Hallazgo real tras el punto anterior: el redimensionado no funcionaba en táctil (10/08/2026)**:
+  Julio insistió en que seguía sin poder mover columnas "fácilmente sin entrar en Editar" tras el
+  cambio de arriba. Regla del plan ("reproducir de extremo a extremo, lo más cerca posible de cómo
+  lo vería el usuario final, antes de tocar código"): en vez de asumir, se reprodujo con Playwright
+  contra la app real desplegada. Con ratón (Chromium desktop) el arrastre SÍ funcionaba
+  (160px -> 240px, confirmado). Emulando un dispositivo táctil (iPhone 13, gestos
+  `Input.dispatchTouchEvent` reales vía CDP, no `mousedown` sintético) el arrastre NO hacía nada
+  (160px -> 160px): `useResizableColumns`/`ResizableTh` solo escuchaban `mousedown`/`mousemove`/
+  `mouseup`, que un móvil/tablet no dispara. Causa raíz real, no solo el asa pequeña del punto
+  anterior. Corregido con `startResizeTouch` (pareja de `startResize`, mismos `widths`/persistencia
+  en `localStorage`) + `onTouchStart` en `ResizableTh` + `touch-none` en el asa (evita que el gesto
+  también haga hacer scroll de la página). Reverificado con el mismo dispositivo táctil emulado
+  contra la app ya redesplegada: 160px -> 220px. 2 tests de comportamiento nuevos (`fireEvent.
+  touchStart/touchMove/touchEnd`) en `CompaniesPanel.test.tsx`/`InvoicesPanel.test.tsx`. 276 tests
+  de frontend, todos en verde, tsc/eslint limpios. Desplegado y reverificado en los tres dominios
+  reales.
 
 ---
 

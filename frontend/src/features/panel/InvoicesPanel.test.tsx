@@ -422,6 +422,22 @@ describe('InvoicesPanel (S3.1)', () => {
     expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 50)
   })
 
+  it('2026-08-10: arrastrar el asa con el dedo (táctil) también cambia el ancho de la columna', async () => {
+    mockRoutes()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+
+    const handle = screen.getByRole('separator', { name: 'Redimensionar columna Empresa' })
+    const header = screen.getByRole('button', { name: 'Empresa' }).closest('th') as HTMLElement
+    const startWidth = Number(header.style.width.replace('px', ''))
+
+    fireEvent.touchStart(handle, { touches: [{ clientX: 100 }] })
+    fireEvent.touchMove(document, { touches: [{ clientX: 140 }] })
+    fireEvent.touchEnd(document)
+
+    expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 40)
+  })
+
   it('2026-08-10: pulsar la cabecera "Empresa" ordena las filas alfabéticamente, como en Excel', async () => {
     mockRoutes({
       panel: makePage([

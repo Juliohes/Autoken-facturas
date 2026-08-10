@@ -56,7 +56,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
   const createCompany = useCreateCompany()
   const updateCompany = useUpdateCompany()
   const deleteCompany = useDeleteCompany()
-  const { widths, startResize } = useResizableColumns(
+  const { widths, startResize, startResizeTouch } = useResizableColumns(
     'companies-panel-column-widths',
     DEFAULT_COLUMN_WIDTHS,
   )
@@ -253,6 +253,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
                   label="Nombre"
                   width={widths.name}
                   onResizeStart={startResize('name')}
+                  onResizeTouchStart={startResizeTouch('name')}
                   sortDirection={directionFor('name')}
                   onSortClick={() => toggleSort('name')}
                 />
@@ -260,6 +261,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
                   label="CIF"
                   width={widths.cif}
                   onResizeStart={startResize('cif')}
+                  onResizeTouchStart={startResizeTouch('cif')}
                   sortDirection={directionFor('cif')}
                   onSortClick={() => toggleSort('cif')}
                 />
@@ -267,6 +269,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
                   label="Estado"
                   width={widths.status}
                   onResizeStart={startResize('status')}
+                  onResizeTouchStart={startResizeTouch('status')}
                   sortDirection={directionFor('status')}
                   onSortClick={() => toggleSort('status')}
                 />
@@ -274,6 +277,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
                   label="Notas"
                   width={widths.notes}
                   onResizeStart={startResize('notes')}
+                  onResizeTouchStart={startResizeTouch('notes')}
                   sortDirection={directionFor('notes')}
                   onSortClick={() => toggleSort('notes')}
                 />
@@ -281,6 +285,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
                   label="Usuarios"
                   width={widths.users}
                   onResizeStart={startResize('users')}
+                  onResizeTouchStart={startResizeTouch('users')}
                   sortDirection={directionFor('users')}
                   onSortClick={() => toggleSort('users')}
                 />
@@ -288,6 +293,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
                   label="Facturas"
                   width={widths.invoices}
                   onResizeStart={startResize('invoices')}
+                  onResizeTouchStart={startResizeTouch('invoices')}
                   sortDirection={directionFor('invoices')}
                   onSortClick={() => toggleSort('invoices')}
                 />
@@ -295,6 +301,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
                   label="Última factura"
                   width={widths.lastInvoice}
                   onResizeStart={startResize('lastInvoice')}
+                  onResizeTouchStart={startResizeTouch('lastInvoice')}
                   sortDirection={directionFor('lastInvoice')}
                   onSortClick={() => toggleSort('lastInvoice')}
                 />
@@ -302,6 +309,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
                   label="Alta"
                   width={widths.createdAt}
                   onResizeStart={startResize('createdAt')}
+                  onResizeTouchStart={startResizeTouch('createdAt')}
                   sortDirection={directionFor('createdAt')}
                   onSortClick={() => toggleSort('createdAt')}
                 />

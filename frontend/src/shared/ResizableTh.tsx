@@ -2,19 +2,31 @@
 // `useResizableColumns`. Presentación pura: no sabe de dónde viene el ancho ni dónde se guarda.
 //
 // Ordenar al pulsar la cabecera (2026-08-10, `useColumnSort`) es opcional: sin `onSortClick` la
-// etiqueta es texto plano, como antes. Asa de arrastre ensanchada (6px -> 8px) y con un fondo
+// etiqueta es texto plano, como antes. Asa de arrastre ensanchada (6px -> 10px) y con un fondo
 // tenue permanente, no solo al pasar el ratón (hallazgo de Julio: costaba encontrarla/agarrarla).
+//
+// `onResizeTouchStart` (2026-08-10, hallazgo real reproducido con un dispositivo táctil: el asa
+// solo escuchaba el ratón, así que en un móvil/tablet el arrastre no hacía nada) — `touch-none`
+// evita que el gesto también haga scroll de la página mientras se arrastra.
 import type { SortDirection } from './useColumnSort'
 
 interface Props {
   label: string
   width: number
   onResizeStart: (e: React.MouseEvent) => void
+  onResizeTouchStart: (e: React.TouchEvent) => void
   sortDirection?: SortDirection | null
   onSortClick?: () => void
 }
 
-export function ResizableTh({ label, width, onResizeStart, sortDirection, onSortClick }: Props) {
+export function ResizableTh({
+  label,
+  width,
+  onResizeStart,
+  onResizeTouchStart,
+  sortDirection,
+  onSortClick,
+}: Props) {
   return (
     <th
       className="relative p-2 pr-4"
@@ -48,7 +60,8 @@ export function ResizableTh({ label, width, onResizeStart, sortDirection, onSort
         aria-orientation="vertical"
         aria-label={`Redimensionar columna ${label}`}
         onMouseDown={onResizeStart}
-        className="absolute right-0 top-0 h-full w-2 cursor-col-resize select-none rounded-sm bg-slate-500/20 hover:bg-emerald-500/60 active:bg-emerald-500/80"
+        onTouchStart={onResizeTouchStart}
+        className="absolute right-0 top-0 h-full w-2.5 touch-none cursor-col-resize select-none rounded-sm bg-slate-500/20 hover:bg-emerald-500/60 active:bg-emerald-500/80"
       />
     </th>
   )
