@@ -800,6 +800,39 @@
   touchStart/touchMove/touchEnd`) en `CompaniesPanel.test.tsx`/`InvoicesPanel.test.tsx`. 276 tests
   de frontend, todos en verde, tsc/eslint limpios. Desplegado y reverificado en los tres dominios
   reales.
+- **Migración a TanStack Table en las 9 tablas de la app + hallazgo real de React (10/08/2026)**:
+  Julio, tras el arreglo táctil de arriba, insistió en que el redimensionado seguía sin funcionar
+  en su PC y pidió una tabla "mucho más interactiva, como un Excel de verdad", para TODAS las
+  tablas de TODAS las URL, no solo Empresas/Facturas — investigado en profundidad, no parcheado.
+  Inventario completo (agente Explore): 9 tablas en 4 pantallas más allá de las dos ya conocidas —
+  `PlatformTenants` (tenants + métricas), `PendingRegistrations`, `OcrRanking`, `PlatformLab`
+  (facturas del tenant + correcciones de Lectura 3 + comparativa de modelos), ninguna con
+  orden/redimensionado hasta ahora. Decisión técnica (mía, no una pregunta de dominio a Julio,
+  spec CLAUDE.md §"decisiones técnicas"): sustituir el mecanismo casero (`useColumnSort`/
+  `useResizableColumns`/`ResizableTh`, ya borrados) por `@tanstack/react-table` en las 9 —
+  `header.getResizeHandler()` de la librería sirve tanto para `onMouseDown` como `onTouchStart` con
+  una única función mantenida por ellos, no por nosotros; nuevos `shared/usePersistedTableState.ts`
+  (envoltorio con persistencia en `localStorage`, solo del ancho) + `shared/DataTableTh.tsx`
+  (cabecera compartida) reutilizados en las 9 tablas, cada pantalla sigue pintando su `<tbody>` tal
+  cual (sin tocar la edición de celdas existente).
+
+  **Hallazgo real de React durante la implementación, no solo de la librería**: un test nuevo de
+  arrastre táctil fallaba SOLO cuando el panel se montaba una segunda vez en la misma sesión de
+  test (nunca en aislado) — reproducido y diagnosticado paso a paso (no descartado como "flaky"):
+  el asa de TanStack calcula el nuevo ancho con un efecto colateral entre dos actualizaciones de
+  estado seguidas (`columnSizingInfo` calcula el delta y deja el resultado en una variable
+  compartida; `columnSizing` lo lee justo después). Con esas dos piezas en `useState` SEPARADOS,
+  React no garantiza procesarlas en el mismo orden en que se llamaron — se vio fallar el segundo
+  montaje del componente en la misma sesión, nunca el primero. Corregido combinando ambas en un
+  ÚNICO `useState` (fuerza el orden exacto de aplicación). Documentado en el propio código
+  (`usePersistedTableState.ts`) para que no se repita si se toca este hook en el futuro.
+
+  Verificado en real, dos veces (antes y después del hallazgo de React) contra la app ya
+  desplegada, con Playwright: ratón en escritorio (160px -> 240px) y dedo en un iPhone emulado vía
+  CDP (160px -> 220px), ambos sin pulsar "Editar". 15 tests de comportamiento nuevos (orden +
+  redimensionado, ratón y dedo) repartidos en `CompaniesPanel.test.tsx`, `InvoicesPanel.test.tsx`,
+  `PlatformTenants.test.tsx`, `OcrRanking.test.tsx` y `PlatformLab.test.tsx`. 285 tests de frontend,
+  todos en verde, tsc/eslint limpios. Desplegado y verificado en los tres dominios reales.
 
 ---
 

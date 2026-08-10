@@ -5,12 +5,15 @@
 // navegador en el despliegue real, ver `useInvoiceImage`). Los tramos de IVA se editan en su
 // propia ventana (`TaxLinesModal`, un conjunto se guarda entero, no campo a campo).
 //
-// Columnas redimensionables y ordenables por cabecera, estilo Excel (2026-08-10, a petición de
-// Julio, mismo mecanismo que ya usa `CompaniesPanel` desde S6.4: `useResizableColumns`/
-// `useColumnSort`, ninguno de los dos depende del botón "Editar" de arriba). El ordenado es en
-// memoria sobre las filas ya cargadas (`panel.data.pages`, S3.1 pagina por cursor): al pulsar
-// "Cargar más" las páginas nuevas se re-ordenan junto a las ya visibles, no se pierden.
-import { useState } from 'react'
+// Columnas redimensionables (ratón o dedo) y ordenables por cabecera, estilo Excel (2026-08-10, a
+// petición de Julio, ninguna depende del botón "Editar" de arriba). El ordenado es en memoria
+// sobre las filas ya cargadas (`panel.data.pages`, S3.1 pagina por cursor): al pulsar "Cargar más"
+// las páginas nuevas se re-ordenan junto a las ya visibles, no se pierden. TanStack Table (mismo
+// motivo que `CompaniesPanel`: solo gestiona ancho/orden vía `getHeaderGroups`, el cuerpo lo sigue
+// pintando `InvoiceTableRow` tal cual) sustituye al mecanismo casero anterior porque el
+// redimensionado casero solo escuchaba al ratón.
+import { getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table'
+import { useMemo, useState } from 'react'
 
 import {
   formatCurrency,
@@ -18,10 +21,9 @@ import {
   fromAmountInputValue,
   toAmountInputValue,
 } from '../../shared/format'
-import { ResizableTh } from '../../shared/ResizableTh'
+import { DataTableTh } from '../../shared/DataTableTh'
 import { ScrollableTable } from '../../shared/ScrollableTable'
-import { useColumnSort } from '../../shared/useColumnSort'
-import { useResizableColumns } from '../../shared/useResizableColumns'
+import { usePersistedTableState } from '../../shared/usePersistedTableState'
 import { useCompanyOptions } from '../companies/useCompanyOptions'
 import { InvoiceImageModal } from './InvoiceImageModal'
 import { TaxLinesModal } from './TaxLinesModal'
@@ -45,20 +47,21 @@ function cleanFilters(raw: PanelFilters): PanelFilters {
   ) as PanelFilters
 }
 
-// Anchos de columna por defecto (px), arrastrables desde ahí en adelante y persistidos por
-// navegador (mismo patrón que `CompaniesPanel`). "Tramos IVA" y "Ver" no son columnas de dato
-// (abren una ventana / un botón): ancho fijo, sin asa de arrastre ni orden.
-const DEFAULT_COLUMN_WIDTHS = {
-  company_name: 140,
-  company_cif: 100,
-  counterparty_name: 160,
-  counterparty_tax_id: 100,
-  issue_date: 90,
-  net_amount: 90,
-  tax_amount: 90,
-  total_amount: 90,
-  irpf_amount: 90,
-  uploaded_at: 130,
+// Etiquetas legibles de cada columna ordenable/redimensionable (para el `aria-label` del asa de
+// arrastre; "Tramos IVA"/"Ver" no son columnas de dato, van fuera de este mapa). Anchos por
+// defecto (px) en la definición de columnas de más abajo, persistidos por navegador (mismo patrón
+// que `CompaniesPanel`).
+const HEADER_LABELS: Record<string, string> = {
+  company_name: 'Empresa',
+  company_cif: 'CIF empresa',
+  counterparty_name: 'Proveedor',
+  counterparty_tax_id: 'CIF',
+  issue_date: 'Fecha',
+  net_amount: 'Base',
+  tax_amount: 'IVA',
+  total_amount: 'Total',
+  irpf_amount: 'IRPF',
+  uploaded_at: 'Subida',
 }
 
 /** `net_amount`/`tax_amount`/`total_amount`/`irpf_amount` llegan como texto decimal ("100.00",
@@ -102,23 +105,100 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
 
   const handleExport = () => exportInvoices.mutate(filters)
 
-  const { widths, startResize, startResizeTouch } = useResizableColumns(
-    'invoices-panel-column-widths',
-    DEFAULT_COLUMN_WIDTHS,
+  const rows = useMemo(() => panel.data?.pages.flatMap((page) => page.items) ?? [], [panel.data])
+  const {
+    columnSizing,
+    onColumnSizingChange,
+    columnSizingInfo,
+    onColumnSizingInfoChange,
+    sorting,
+    setSorting,
+  } = usePersistedTableState('invoices-panel-column-widths')
+
+  // `?? undefined` en los campos que pueden ser `null` (contraparte, fecha, importes): con
+  // `sortUndefined: 'last'` TanStack los manda siempre al final al ordenar, en cualquier dirección.
+  const columns = useMemo<ColumnDef<InvoiceRow, unknown>[]>(
+    () => [
+      { id: 'company_name', header: 'Empresa', accessorFn: (r) => r.company_name, size: 140, minSize: 32 },
+      { id: 'company_cif', header: 'CIF empresa', accessorFn: (r) => r.company_cif, size: 100, minSize: 32 },
+      {
+        id: 'counterparty_name',
+        header: 'Proveedor',
+        accessorFn: (r) => r.counterparty_name ?? undefined,
+        size: 160,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'counterparty_tax_id',
+        header: 'CIF',
+        accessorFn: (r) => r.counterparty_tax_id ?? undefined,
+        size: 100,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'issue_date',
+        header: 'Fecha',
+        accessorFn: (r) => r.issue_date ?? undefined,
+        size: 90,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'net_amount',
+        header: 'Base',
+        accessorFn: (r) => parseAmount(r.net_amount) ?? undefined,
+        size: 90,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'tax_amount',
+        header: 'IVA',
+        accessorFn: (r) => parseAmount(r.tax_amount) ?? undefined,
+        size: 90,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'total_amount',
+        header: 'Total',
+        accessorFn: (r) => parseAmount(r.total_amount) ?? undefined,
+        size: 90,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      {
+        id: 'irpf_amount',
+        header: 'IRPF',
+        accessorFn: (r) => parseAmount(r.irpf_amount) ?? undefined,
+        size: 90,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+      { id: 'tax_lines', header: 'Tramos IVA', size: 110, enableSorting: false, enableResizing: false },
+      { id: 'uploaded_at', header: 'Subida', accessorFn: (r) => r.uploaded_at, size: 130, minSize: 32 },
+      { id: 'view', header: 'Ver', size: 64, enableSorting: false, enableResizing: false },
+    ],
+    [],
   )
-  const rows = panel.data?.pages.flatMap((page) => page.items) ?? []
-  const { sorted: sortedRows, directionFor, toggle: toggleSort } = useColumnSort(rows, {
-    company_name: (r) => r.company_name,
-    company_cif: (r) => r.company_cif,
-    counterparty_name: (r) => r.counterparty_name,
-    counterparty_tax_id: (r) => r.counterparty_tax_id,
-    issue_date: (r) => r.issue_date,
-    net_amount: (r) => parseAmount(r.net_amount),
-    tax_amount: (r) => parseAmount(r.tax_amount),
-    total_amount: (r) => parseAmount(r.total_amount),
-    irpf_amount: (r) => parseAmount(r.irpf_amount),
-    uploaded_at: (r) => r.uploaded_at,
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    state: { columnSizing, columnSizingInfo, sorting },
+    onColumnSizingChange,
+    onColumnSizingInfoChange,
+    onSortingChange: setSorting,
+    columnResizeMode: 'onChange',
+    // Primer clic siempre ascendente, sin importar el tipo de dato (ver mismo comentario en
+    // `CompaniesPanel`).
+    sortDescFirst: false,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   })
+  const sortedRows = table.getRowModel().rows.map((r) => r.original)
 
   return (
     <section className="mx-auto max-w-5xl space-y-4 p-6 text-slate-100">
@@ -235,94 +315,17 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
               data-testid="invoices-table"
             >
               <thead className="text-slate-400">
-                <tr>
-                  <ResizableTh
-                    label="Empresa"
-                    width={widths.company_name}
-                    onResizeStart={startResize('company_name')}
-                    onResizeTouchStart={startResizeTouch('company_name')}
-                    sortDirection={directionFor('company_name')}
-                    onSortClick={() => toggleSort('company_name')}
-                  />
-                  <ResizableTh
-                    label="CIF empresa"
-                    width={widths.company_cif}
-                    onResizeStart={startResize('company_cif')}
-                    onResizeTouchStart={startResizeTouch('company_cif')}
-                    sortDirection={directionFor('company_cif')}
-                    onSortClick={() => toggleSort('company_cif')}
-                  />
-                  <ResizableTh
-                    label="Proveedor"
-                    width={widths.counterparty_name}
-                    onResizeStart={startResize('counterparty_name')}
-                    onResizeTouchStart={startResizeTouch('counterparty_name')}
-                    sortDirection={directionFor('counterparty_name')}
-                    onSortClick={() => toggleSort('counterparty_name')}
-                  />
-                  <ResizableTh
-                    label="CIF"
-                    width={widths.counterparty_tax_id}
-                    onResizeStart={startResize('counterparty_tax_id')}
-                    onResizeTouchStart={startResizeTouch('counterparty_tax_id')}
-                    sortDirection={directionFor('counterparty_tax_id')}
-                    onSortClick={() => toggleSort('counterparty_tax_id')}
-                  />
-                  <ResizableTh
-                    label="Fecha"
-                    width={widths.issue_date}
-                    onResizeStart={startResize('issue_date')}
-                    onResizeTouchStart={startResizeTouch('issue_date')}
-                    sortDirection={directionFor('issue_date')}
-                    onSortClick={() => toggleSort('issue_date')}
-                  />
-                  <ResizableTh
-                    label="Base"
-                    width={widths.net_amount}
-                    onResizeStart={startResize('net_amount')}
-                    onResizeTouchStart={startResizeTouch('net_amount')}
-                    sortDirection={directionFor('net_amount')}
-                    onSortClick={() => toggleSort('net_amount')}
-                  />
-                  <ResizableTh
-                    label="IVA"
-                    width={widths.tax_amount}
-                    onResizeStart={startResize('tax_amount')}
-                    onResizeTouchStart={startResizeTouch('tax_amount')}
-                    sortDirection={directionFor('tax_amount')}
-                    onSortClick={() => toggleSort('tax_amount')}
-                  />
-                  <ResizableTh
-                    label="Total"
-                    width={widths.total_amount}
-                    onResizeStart={startResize('total_amount')}
-                    onResizeTouchStart={startResizeTouch('total_amount')}
-                    sortDirection={directionFor('total_amount')}
-                    onSortClick={() => toggleSort('total_amount')}
-                  />
-                  <ResizableTh
-                    label="IRPF"
-                    width={widths.irpf_amount}
-                    onResizeStart={startResize('irpf_amount')}
-                    onResizeTouchStart={startResizeTouch('irpf_amount')}
-                    sortDirection={directionFor('irpf_amount')}
-                    onSortClick={() => toggleSort('irpf_amount')}
-                  />
-                  <th className="p-2" style={{ width: 110 }}>
-                    Tramos IVA
-                  </th>
-                  <ResizableTh
-                    label="Subida"
-                    width={widths.uploaded_at}
-                    onResizeStart={startResize('uploaded_at')}
-                    onResizeTouchStart={startResizeTouch('uploaded_at')}
-                    sortDirection={directionFor('uploaded_at')}
-                    onSortClick={() => toggleSort('uploaded_at')}
-                  />
-                  <th className="p-2" style={{ width: 64 }}>
-                    Ver
-                  </th>
-                </tr>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <DataTableTh
+                        key={header.id}
+                        header={header}
+                        label={HEADER_LABELS[header.id] ?? ''}
+                      />
+                    ))}
+                  </tr>
+                ))}
               </thead>
               <tbody className="divide-y divide-slate-700">
                 {sortedRows.map((row) => (

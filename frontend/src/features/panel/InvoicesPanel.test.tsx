@@ -417,7 +417,8 @@ describe('InvoicesPanel (S3.1)', () => {
 
     fireEvent.mouseDown(handle, { clientX: 100 })
     fireEvent.mouseMove(document, { clientX: 150 })
-    fireEvent.mouseUp(document)
+    // El evento final lleva la posición real del cursor (ver mismo comentario en CompaniesPanel).
+    fireEvent.mouseUp(document, { clientX: 150 })
 
     expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 50)
   })

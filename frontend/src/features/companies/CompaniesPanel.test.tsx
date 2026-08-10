@@ -431,7 +431,10 @@ describe('CompaniesPanel (S3.4)', () => {
 
     fireEvent.mouseDown(handle, { clientX: 100 })
     fireEvent.mouseMove(document, { clientX: 180 })
-    fireEvent.mouseUp(document)
+    // El evento final lleva la posición real del cursor, como en un navegador de verdad — sin
+    // esto, TanStack recalcula el ancho final con `clientX: 0` (el valor por defecto de jsdom) y
+    // lo sobrescribe con un valor absurdo.
+    fireEvent.mouseUp(document, { clientX: 180 })
 
     const newWidth = Number(header.style.width.replace('px', ''))
     expect(newWidth).toBe(startWidth + 80)
@@ -532,5 +535,32 @@ describe('CompaniesPanel (S3.4)', () => {
       .map((row) => within(row).getAllByRole('cell')[0].textContent)
     // Orden numérico correcto (2, 9, 10): un orden como texto habría puesto "10" antes que "2".
     expect(namesInOrder).toEqual(['C', 'A', 'B'])
+  })
+
+  it('2026-08-10: la tabla de registros pendientes también se puede ordenar y redimensionar por cabecera', async () => {
+    mockRoutes({
+      companies: [],
+      registrations: [
+        makeRegistration({ id: 'u1', email: 'zeta@ilex.es' }),
+        makeRegistration({ id: 'u2', email: 'alfa@ilex.es' }),
+      ],
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('registration-row')
+
+    await user.click(screen.getByRole('button', { name: 'Email' }))
+    const emails = screen
+      .getAllByTestId('registration-row')
+      .map((row) => within(row).getAllByRole('cell')[0].textContent)
+    expect(emails).toEqual(['alfa@ilex.es', 'zeta@ilex.es'])
+
+    const handle = screen.getByRole('separator', { name: 'Redimensionar columna Email' })
+    const header = screen.getByRole('button', { name: 'Email' }).closest('th') as HTMLElement
+    const startWidth = Number(header.style.width.replace('px', ''))
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseMove(document, { clientX: 130 })
+    fireEvent.mouseUp(document, { clientX: 130 })
+    expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 30)
   })
 })

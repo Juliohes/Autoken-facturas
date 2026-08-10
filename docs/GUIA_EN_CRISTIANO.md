@@ -951,6 +951,30 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   simulador táctil sobre la aplicación ya desplegada (antes: 160px se quedaban en 160px; después:
   160px pasan a 220px al arrastrar) y se confirmó que ya funciona en las dos tablas.
 
+- **Todas las tablas de la aplicación, mucho más parecidas a un Excel de verdad (10/08/2026)**:
+  Julio, tras probar el arreglo del punto anterior, dijo que en su ordenador seguía sin poder
+  mover las columnas sin pulsar "Editar" primero, y pidió algo más ambicioso: que TODAS las tablas
+  de TODAS las pantallas de la aplicación (no solo Empresas y Facturas) fueran así de
+  interactivas. En vez de seguir arreglando el mecanismo casero a mano, se cambió por una pieza ya
+  hecha y probada por miles de aplicaciones (una "librería" llamada TanStack Table): mueve columnas
+  y ordena por cabecera igual que antes, pero de forma más sólida, porque el propio fabricante ya
+  se ha encargado de que funcione bien con ratón y con dedo a la vez, en vez de tener que
+  mantenerlo nosotros a mano. Se aplicó a las 9 tablas que tiene la aplicación entera: las dos ya
+  conocidas (Empresas, Facturas) y siete más que hasta ahora no se podían ni ordenar ni
+  redimensionar (la lista de asesorías y sus estadísticas en el panel de plataforma, los registros
+  pendientes de aprobación, el ranking de comparación de las IAs, y las tres tablas del
+  laboratorio de diagnóstico).
+
+  Al construirlo salió un fallo real y curioso, de los que rara vez se ven: un mismo gesto de
+  arrastre con el dedo funcionaba bien la primera vez que se abría la pantalla en una sesión, pero
+  no la segunda. Investigando a fondo (no se asumió que era "cosa del test") se encontró que el
+  motivo era una sutileza de cómo React (la tecnología con la que está hecha toda la pantalla)
+  decide en qué orden aplica dos cambios de estado seguidos cuando viven en dos sitios distintos —
+  no siempre en el orden en que se pidieron. Se corrigió juntando esos dos cambios en un único
+  sitio, forzando el orden correcto siempre. Comprobado dos veces contra la aplicación real ya
+  desplegada, con ratón en un ordenador y con un dedo en un móvil simulado, antes y después de este
+  segundo arreglo.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

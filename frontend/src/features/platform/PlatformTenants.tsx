@@ -6,16 +6,44 @@
 // todavía) + ciclo de vida (S4.7: suspender/reactivar/exportar/borrar). Las acciones por fila viven
 // en `TenantRowActions` (extraído tras la auditoría de S4.7: la celda había crecido demasiado
 // mezclando 4 flujos de mutación distintos).
-import { useState, type ChangeEvent, type FormEvent } from 'react'
+//
+// Las dos tablas (tenants + métricas) son redimensionables/ordenables (2026-08-10, "todas las
+// tablas de todas las URL"), mismo mecanismo que `CompaniesPanel`/`InvoicesPanel`.
+import { getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table'
+import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 
+import { DataTableTh } from '../../shared/DataTableTh'
 import { formatDate, formatDateTime } from '../../shared/format'
 import { ScrollableTable } from '../../shared/ScrollableTable'
+import { usePersistedTableState } from '../../shared/usePersistedTableState'
 import { MutationErrorBanner } from './MutationErrorBanner'
 import { TenantRowActions } from './TenantRowActions'
 import { useCreateTenant } from './useCreateTenant'
 import { useTenantMetrics } from './useTenantMetrics'
 import { useTenants } from './useTenants'
 import { useUploadLogo } from './useUploadLogo'
+
+type TenantRow = NonNullable<ReturnType<typeof useTenants>['data']>[number]
+type MetricsRow = NonNullable<ReturnType<typeof useTenantMetrics>['data']>[number]
+
+const TENANT_HEADER_LABELS: Record<string, string> = {
+  slug: 'Subdominio',
+  name: 'Nombre',
+  status: 'Estado',
+  is_demo: 'Demo',
+  created_at: 'Alta',
+}
+
+const METRICS_HEADER_LABELS: Record<string, string> = {
+  slug: 'Subdominio',
+  companies_count: 'Empresas',
+  users_count: 'Usuarios',
+  admins_count: 'Admins',
+  invoices_this_month: 'Facturas este mes',
+  invoices_total_count: 'Facturas totales',
+  ocr_extractions_count: 'Facturas procesadas (OCR)',
+  last_activity_at: 'Último uso',
+}
 
 const EMPTY_FORM = {
   name: '',
@@ -33,7 +61,100 @@ export function PlatformTenants() {
   const uploadLogo = useUploadLogo()
   const [form, setForm] = useState(EMPTY_FORM)
 
-  const rows = tenants.data ?? []
+  const rows = useMemo(() => tenants.data ?? [], [tenants.data])
+  const tenantsTableState = usePersistedTableState('platform-tenants-column-widths')
+  const tenantColumns = useMemo<ColumnDef<TenantRow, unknown>[]>(
+    () => [
+      { id: 'slug', header: 'Subdominio', accessorFn: (r) => r.slug, size: 140, minSize: 32 },
+      { id: 'name', header: 'Nombre', accessorFn: (r) => r.name, size: 160, minSize: 32 },
+      { id: 'status', header: 'Estado', accessorFn: (r) => r.status, size: 100, minSize: 32 },
+      { id: 'is_demo', header: 'Demo', accessorFn: (r) => (r.is_demo ? 1 : 0), size: 70, minSize: 32 },
+      { id: 'created_at', header: 'Alta', accessorFn: (r) => r.created_at, size: 110, minSize: 32 },
+      { id: 'actions', header: 'Acciones', size: 220, enableSorting: false, enableResizing: false },
+    ],
+    [],
+  )
+  const tenantsTable = useReactTable({
+    data: rows,
+    columns: tenantColumns,
+    state: {
+      columnSizing: tenantsTableState.columnSizing,
+      columnSizingInfo: tenantsTableState.columnSizingInfo,
+      sorting: tenantsTableState.sorting,
+    },
+    onColumnSizingChange: tenantsTableState.onColumnSizingChange,
+    onColumnSizingInfoChange: tenantsTableState.onColumnSizingInfoChange,
+    onSortingChange: tenantsTableState.setSorting,
+    columnResizeMode: 'onChange',
+    sortDescFirst: false,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
+  const sortedTenantRows = tenantsTable.getRowModel().rows.map((r) => r.original)
+
+  const metricsRows = useMemo(() => metrics.data ?? [], [metrics.data])
+  const metricsTableState = usePersistedTableState('platform-tenant-metrics-column-widths')
+  const metricsColumns = useMemo<ColumnDef<MetricsRow, unknown>[]>(
+    () => [
+      { id: 'slug', header: 'Subdominio', accessorFn: (r) => r.slug, size: 140, minSize: 32 },
+      {
+        id: 'companies_count',
+        header: 'Empresas',
+        accessorFn: (r) => r.companies_count,
+        size: 90,
+        minSize: 32,
+      },
+      { id: 'users_count', header: 'Usuarios', accessorFn: (r) => r.users_count, size: 90, minSize: 32 },
+      { id: 'admins_count', header: 'Admins', accessorFn: (r) => r.admins_count, size: 90, minSize: 32 },
+      {
+        id: 'invoices_this_month',
+        header: 'Facturas este mes',
+        accessorFn: (r) => r.invoices_this_month,
+        size: 140,
+        minSize: 32,
+      },
+      {
+        id: 'invoices_total_count',
+        header: 'Facturas totales',
+        accessorFn: (r) => r.invoices_total_count,
+        size: 130,
+        minSize: 32,
+      },
+      {
+        id: 'ocr_extractions_count',
+        header: 'Facturas procesadas (OCR)',
+        accessorFn: (r) => r.ocr_extractions_count,
+        size: 180,
+        minSize: 32,
+      },
+      {
+        id: 'last_activity_at',
+        header: 'Último uso',
+        accessorFn: (r) => r.last_activity_at ?? undefined,
+        size: 140,
+        minSize: 32,
+        sortUndefined: 'last',
+      },
+    ],
+    [],
+  )
+  const metricsTable = useReactTable({
+    data: metricsRows,
+    columns: metricsColumns,
+    state: {
+      columnSizing: metricsTableState.columnSizing,
+      columnSizingInfo: metricsTableState.columnSizingInfo,
+      sorting: metricsTableState.sorting,
+    },
+    onColumnSizingChange: metricsTableState.onColumnSizingChange,
+    onColumnSizingInfoChange: metricsTableState.onColumnSizingInfoChange,
+    onSortingChange: metricsTableState.setSorting,
+    columnResizeMode: 'onChange',
+    sortDescFirst: false,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
+  const sortedMetricsRows = metricsTable.getRowModel().rows.map((r) => r.original)
 
   const handleLogoFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -167,19 +288,26 @@ export function PlatformTenants() {
 
       {!tenants.isLoading && !tenants.isError && rows.length > 0 && (
         <ScrollableTable>
-          <table className="w-full whitespace-nowrap text-left text-sm" data-testid="tenants-table">
+          <table
+            className="whitespace-nowrap text-left text-sm"
+            style={{ tableLayout: 'fixed' }}
+            data-testid="tenants-table"
+          >
             <thead className="text-slate-400">
-              <tr>
-                <th className="p-2">Subdominio</th>
-                <th className="p-2">Nombre</th>
-                <th className="p-2">Estado</th>
-                <th className="p-2">Demo</th>
-                <th className="p-2">Alta</th>
-                <th className="p-2">Acciones</th>
-              </tr>
+              {tenantsTable.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <DataTableTh
+                      key={header.id}
+                      header={header}
+                      label={TENANT_HEADER_LABELS[header.id] ?? ''}
+                    />
+                  ))}
+                </tr>
+              ))}
             </thead>
             <tbody className="divide-y divide-slate-700">
-              {rows.map((tenant) => (
+              {sortedTenantRows.map((tenant) => (
                 <tr key={tenant.id} data-testid="tenant-row">
                   <td className="p-2">{tenant.slug}</td>
                   <td className="p-2">{tenant.name}</td>
@@ -210,23 +338,25 @@ export function PlatformTenants() {
         {!metrics.isLoading && !metrics.isError && (
           <ScrollableTable>
             <table
-              className="w-full whitespace-nowrap text-left text-sm"
+              className="whitespace-nowrap text-left text-sm"
+              style={{ tableLayout: 'fixed' }}
               data-testid="tenant-metrics-table"
             >
               <thead className="text-slate-400">
-                <tr>
-                  <th className="p-2">Subdominio</th>
-                  <th className="p-2">Empresas</th>
-                  <th className="p-2">Usuarios</th>
-                  <th className="p-2">Admins</th>
-                  <th className="p-2">Facturas este mes</th>
-                  <th className="p-2">Facturas totales</th>
-                  <th className="p-2">Facturas procesadas (OCR)</th>
-                  <th className="p-2">Último uso</th>
-                </tr>
+                {metricsTable.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <DataTableTh
+                        key={header.id}
+                        header={header}
+                        label={METRICS_HEADER_LABELS[header.id] ?? ''}
+                      />
+                    ))}
+                  </tr>
+                ))}
               </thead>
               <tbody className="divide-y divide-slate-700">
-                {(metrics.data ?? []).map((row) => (
+                {sortedMetricsRows.map((row) => (
                   <tr key={row.tenant_id} data-testid="tenant-metrics-row">
                     <td className="p-2">{row.slug}</td>
                     <td className="p-2">{row.companies_count}</td>

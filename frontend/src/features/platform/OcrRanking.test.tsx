@@ -1,7 +1,7 @@
 // Tests de comportamiento de `OcrRanking` (S4.8, C10/C11; 2026-08-09 "ver ejemplos concretos").
 // Cliente de API mockeado; sesión mockeada para controlar `user.is_admin_tech`.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
@@ -212,5 +212,45 @@ describe('OcrRanking (S4.8)', () => {
 
     const dialog = await screen.findByRole('dialog', { name: /mistral-ocr-4/i })
     expect(within(dialog).getByText(/todavía no hay ejemplos/i)).toBeInTheDocument()
+  })
+
+  it('2026-08-10: pulsar la cabecera "Puntuación media" ordena las filas por valor', async () => {
+    asUser(true)
+    getMock.mockResolvedValueOnce({
+      data: [
+        { engine: 'a-engine', invoices_read: 1, average_score: 2, first_place_count: 0 },
+        { engine: 'b-engine', invoices_read: 1, average_score: 9, first_place_count: 0 },
+        { engine: 'c-engine', invoices_read: 1, average_score: 5, first_place_count: 0 },
+      ],
+      error: undefined,
+    })
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByText('a-engine')
+
+    await user.click(screen.getByRole('button', { name: 'Puntuación media' }))
+
+    const engines = screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell')[0].textContent)
+    expect(engines).toEqual(['a-engine', 'c-engine', 'b-engine'])
+  })
+
+  it('2026-08-10: la columna "Motor" se puede redimensionar arrastrando, con ratón o con el dedo', async () => {
+    asUser(true)
+    getMock.mockResolvedValueOnce({
+      data: [{ engine: 'gemini-3-flash', invoices_read: 10, average_score: 4.5, first_place_count: 6 }],
+      error: undefined,
+    })
+    renderScreen()
+    await screen.findByText('gemini-3-flash')
+
+    const handle = screen.getByRole('separator', { name: 'Redimensionar columna Motor' })
+    const header = screen.getByRole('button', { name: 'Motor' }).closest('th') as HTMLElement
+    const startWidth = Number(header.style.width.replace('px', ''))
+
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseMove(document, { clientX: 150 })
+    fireEvent.mouseUp(document, { clientX: 150 })
+
+    expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 50)
   })
 })

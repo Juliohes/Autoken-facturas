@@ -2,11 +2,28 @@
 // (ya lo devuelve así el backend). Solo lectura, sin gráficas ni historial (spec §6).
 // "Ver ejemplos" (2026-08-09, a petición de Julio: "más contexto, ver ejemplos concretos, no solo
 // números") abre una ventana con hasta 5 lecturas reales de ese motor, no solo el agregado.
-import { useState } from 'react'
+//
+// Columnas redimensionables/ordenables (2026-08-10, a petición de Julio: "todas las tablas de
+// todas las URL"), mismo mecanismo que `CompaniesPanel`/`InvoicesPanel` (TanStack Table solo para
+// el ancho/orden de cabecera; el cuerpo lo sigue pintando esta pantalla tal cual).
+import { getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table'
+import { useMemo, useState } from 'react'
 
+import { DataTableTh } from '../../shared/DataTableTh'
+import { ScrollableTable } from '../../shared/ScrollableTable'
+import { usePersistedTableState } from '../../shared/usePersistedTableState'
 import { useSession } from '../session/SessionProvider'
 import { ExamplesModal } from './ExamplesModal'
 import { useOcrRanking } from './useOcrRanking'
+
+type RankingRow = NonNullable<ReturnType<typeof useOcrRanking>['data']>[number]
+
+const HEADER_LABELS: Record<string, string> = {
+  engine: 'Motor',
+  invoices_read: 'Facturas leídas',
+  average_score: 'Puntuación media',
+  first_place_count: 'Primer puesto',
+}
 
 // Asimetría de motores documentada en la spec (§0): Azure DocIntel y Mistral OCR4 NO son modelos de
 // lenguaje "promptables" (no se les puede pedir un JSON de campos); Azure mapea su propio esquema de
@@ -20,6 +37,50 @@ export function OcrRanking() {
   // Mismo criterio que PlatformSettings (S4.10, hallazgo de auditoría): evita un GET que el
   // backend rechazaría de todos modos (403) cuando el usuario no tiene el flag.
   const ranking = useOcrRanking(user?.is_admin_tech ?? false)
+  const rows = useMemo(() => ranking.data ?? [], [ranking.data])
+  const { columnSizing, onColumnSizingChange, columnSizingInfo, onColumnSizingInfoChange, sorting, setSorting } =
+    usePersistedTableState('ocr-ranking-column-widths')
+  const columns = useMemo<ColumnDef<RankingRow, unknown>[]>(
+    () => [
+      { id: 'engine', header: 'Motor', accessorFn: (r) => r.engine, size: 200, minSize: 32 },
+      {
+        id: 'invoices_read',
+        header: 'Facturas leídas',
+        accessorFn: (r) => r.invoices_read,
+        size: 130,
+        minSize: 32,
+      },
+      {
+        id: 'average_score',
+        header: 'Puntuación media',
+        accessorFn: (r) => r.average_score,
+        size: 140,
+        minSize: 32,
+      },
+      {
+        id: 'first_place_count',
+        header: 'Primer puesto',
+        accessorFn: (r) => r.first_place_count,
+        size: 120,
+        minSize: 32,
+      },
+      { id: 'examples', header: 'Ejemplos', size: 110, enableSorting: false, enableResizing: false },
+    ],
+    [],
+  )
+  const table = useReactTable({
+    data: rows,
+    columns,
+    state: { columnSizing, columnSizingInfo, sorting },
+    onColumnSizingChange,
+    onColumnSizingInfoChange,
+    onSortingChange: setSorting,
+    columnResizeMode: 'onChange',
+    sortDescFirst: false,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
+  const sortedRows = table.getRowModel().rows.map((r) => r.original)
 
   // C10: un platform_admin sin el flag nunca ve el ranking, aunque entre a la URL a mano — la
   // ruta ya está protegida por rol (app/routes.ts); esta comprobación es la del flag en sí.
@@ -57,19 +118,19 @@ export function OcrRanking() {
       )}
 
       {ranking.data && ranking.data.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
+        <ScrollableTable>
+          <table className="whitespace-nowrap text-left text-sm" style={{ tableLayout: 'fixed' }}>
             <thead>
-              <tr className="border-b border-slate-700 text-slate-400">
-                <th className="py-2 pr-4">Motor</th>
-                <th className="py-2 pr-4">Facturas leídas</th>
-                <th className="py-2 pr-4">Puntuación media</th>
-                <th className="py-2 pr-4">Primer puesto</th>
-                <th className="py-2 pr-4">Ejemplos</th>
-              </tr>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id} className="border-b border-slate-700 text-slate-400">
+                  {headerGroup.headers.map((header) => (
+                    <DataTableTh key={header.id} header={header} label={HEADER_LABELS[header.id] ?? ''} />
+                  ))}
+                </tr>
+              ))}
             </thead>
             <tbody>
-              {ranking.data.map((row) => (
+              {sortedRows.map((row) => (
                 <tr key={row.engine} className="border-b border-slate-800">
                   <td className="py-2 pr-4 font-medium">
                     {row.engine}
@@ -98,7 +159,7 @@ export function OcrRanking() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
       )}
 
       {examplesEngine && (
