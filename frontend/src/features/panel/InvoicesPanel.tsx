@@ -4,6 +4,12 @@
 // "Ver" muestra la foto original vía la API (no una URL firmada de MinIO — inalcanzable desde el
 // navegador en el despliegue real, ver `useInvoiceImage`). Los tramos de IVA se editan en su
 // propia ventana (`TaxLinesModal`, un conjunto se guarda entero, no campo a campo).
+//
+// Columnas redimensionables y ordenables por cabecera, estilo Excel (2026-08-10, a petición de
+// Julio, mismo mecanismo que ya usa `CompaniesPanel` desde S6.4: `useResizableColumns`/
+// `useColumnSort`, ninguno de los dos depende del botón "Editar" de arriba). El ordenado es en
+// memoria sobre las filas ya cargadas (`panel.data.pages`, S3.1 pagina por cursor): al pulsar
+// "Cargar más" las páginas nuevas se re-ordenan junto a las ya visibles, no se pierden.
 import { useState } from 'react'
 
 import {
@@ -12,7 +18,10 @@ import {
   fromAmountInputValue,
   toAmountInputValue,
 } from '../../shared/format'
+import { ResizableTh } from '../../shared/ResizableTh'
 import { ScrollableTable } from '../../shared/ScrollableTable'
+import { useColumnSort } from '../../shared/useColumnSort'
+import { useResizableColumns } from '../../shared/useResizableColumns'
 import { useCompanyOptions } from '../companies/useCompanyOptions'
 import { InvoiceImageModal } from './InvoiceImageModal'
 import { TaxLinesModal } from './TaxLinesModal'
@@ -34,6 +43,32 @@ function cleanFilters(raw: PanelFilters): PanelFilters {
   return Object.fromEntries(
     Object.entries(raw).filter(([, value]) => value !== undefined && value !== ''),
   ) as PanelFilters
+}
+
+// Anchos de columna por defecto (px), arrastrables desde ahí en adelante y persistidos por
+// navegador (mismo patrón que `CompaniesPanel`). "Tramos IVA" y "Ver" no son columnas de dato
+// (abren una ventana / un botón): ancho fijo, sin asa de arrastre ni orden.
+const DEFAULT_COLUMN_WIDTHS = {
+  company_name: 140,
+  company_cif: 100,
+  counterparty_name: 160,
+  counterparty_tax_id: 100,
+  issue_date: 90,
+  net_amount: 90,
+  tax_amount: 90,
+  total_amount: 90,
+  irpf_amount: 90,
+  uploaded_at: 130,
+}
+
+/** `net_amount`/`tax_amount`/`total_amount`/`irpf_amount` llegan como texto decimal ("100.00",
+ * nunca con coma — la coma es solo de presentación en el input). `parseFloat` basta para comparar
+ * numéricamente al ordenar; `null`/vacío quedan fuera de la comparación (el hook los manda al
+ * final). */
+function parseAmount(value: string | null): number | null {
+  if (value === null) return null
+  const n = Number.parseFloat(value)
+  return Number.isNaN(n) ? null : n
 }
 
 interface Props {
@@ -67,7 +102,23 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
 
   const handleExport = () => exportInvoices.mutate(filters)
 
+  const { widths, startResize } = useResizableColumns(
+    'invoices-panel-column-widths',
+    DEFAULT_COLUMN_WIDTHS,
+  )
   const rows = panel.data?.pages.flatMap((page) => page.items) ?? []
+  const { sorted: sortedRows, directionFor, toggle: toggleSort } = useColumnSort(rows, {
+    company_name: (r) => r.company_name,
+    company_cif: (r) => r.company_cif,
+    counterparty_name: (r) => r.counterparty_name,
+    counterparty_tax_id: (r) => r.counterparty_tax_id,
+    issue_date: (r) => r.issue_date,
+    net_amount: (r) => parseAmount(r.net_amount),
+    tax_amount: (r) => parseAmount(r.tax_amount),
+    total_amount: (r) => parseAmount(r.total_amount),
+    irpf_amount: (r) => parseAmount(r.irpf_amount),
+    uploaded_at: (r) => r.uploaded_at,
+  })
 
   return (
     <section className="mx-auto max-w-5xl space-y-4 p-6 text-slate-100">
@@ -179,27 +230,92 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
           )}
           <ScrollableTable>
             <table
-              className="w-full whitespace-nowrap text-left text-sm"
+              className="whitespace-nowrap text-left text-sm"
+              style={{ tableLayout: 'fixed' }}
               data-testid="invoices-table"
             >
               <thead className="text-slate-400">
                 <tr>
-                  <th className="p-2">Empresa</th>
-                  <th className="p-2">CIF empresa</th>
-                  <th className="p-2">Proveedor</th>
-                  <th className="p-2">CIF</th>
-                  <th className="p-2">Fecha</th>
-                  <th className="p-2">Base</th>
-                  <th className="p-2">IVA</th>
-                  <th className="p-2">Total</th>
-                  <th className="p-2">IRPF</th>
-                  <th className="p-2">Tramos IVA</th>
-                  <th className="p-2">Subida</th>
-                  <th className="p-2">Ver</th>
+                  <ResizableTh
+                    label="Empresa"
+                    width={widths.company_name}
+                    onResizeStart={startResize('company_name')}
+                    sortDirection={directionFor('company_name')}
+                    onSortClick={() => toggleSort('company_name')}
+                  />
+                  <ResizableTh
+                    label="CIF empresa"
+                    width={widths.company_cif}
+                    onResizeStart={startResize('company_cif')}
+                    sortDirection={directionFor('company_cif')}
+                    onSortClick={() => toggleSort('company_cif')}
+                  />
+                  <ResizableTh
+                    label="Proveedor"
+                    width={widths.counterparty_name}
+                    onResizeStart={startResize('counterparty_name')}
+                    sortDirection={directionFor('counterparty_name')}
+                    onSortClick={() => toggleSort('counterparty_name')}
+                  />
+                  <ResizableTh
+                    label="CIF"
+                    width={widths.counterparty_tax_id}
+                    onResizeStart={startResize('counterparty_tax_id')}
+                    sortDirection={directionFor('counterparty_tax_id')}
+                    onSortClick={() => toggleSort('counterparty_tax_id')}
+                  />
+                  <ResizableTh
+                    label="Fecha"
+                    width={widths.issue_date}
+                    onResizeStart={startResize('issue_date')}
+                    sortDirection={directionFor('issue_date')}
+                    onSortClick={() => toggleSort('issue_date')}
+                  />
+                  <ResizableTh
+                    label="Base"
+                    width={widths.net_amount}
+                    onResizeStart={startResize('net_amount')}
+                    sortDirection={directionFor('net_amount')}
+                    onSortClick={() => toggleSort('net_amount')}
+                  />
+                  <ResizableTh
+                    label="IVA"
+                    width={widths.tax_amount}
+                    onResizeStart={startResize('tax_amount')}
+                    sortDirection={directionFor('tax_amount')}
+                    onSortClick={() => toggleSort('tax_amount')}
+                  />
+                  <ResizableTh
+                    label="Total"
+                    width={widths.total_amount}
+                    onResizeStart={startResize('total_amount')}
+                    sortDirection={directionFor('total_amount')}
+                    onSortClick={() => toggleSort('total_amount')}
+                  />
+                  <ResizableTh
+                    label="IRPF"
+                    width={widths.irpf_amount}
+                    onResizeStart={startResize('irpf_amount')}
+                    sortDirection={directionFor('irpf_amount')}
+                    onSortClick={() => toggleSort('irpf_amount')}
+                  />
+                  <th className="p-2" style={{ width: 110 }}>
+                    Tramos IVA
+                  </th>
+                  <ResizableTh
+                    label="Subida"
+                    width={widths.uploaded_at}
+                    onResizeStart={startResize('uploaded_at')}
+                    sortDirection={directionFor('uploaded_at')}
+                    onSortClick={() => toggleSort('uploaded_at')}
+                  />
+                  <th className="p-2" style={{ width: 64 }}>
+                    Ver
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700">
-                {rows.map((row) => (
+                {sortedRows.map((row) => (
                   <InvoiceTableRow
                     key={row.id}
                     row={row}

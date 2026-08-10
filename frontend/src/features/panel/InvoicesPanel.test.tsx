@@ -2,7 +2,7 @@
 // está mockeado: se inyectan las respuestas de `reporting/invoices`, `companies`,
 // `uploads/{id}/image` y `invoices/{id}` de cada escenario (sin navegador ni backend reales).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
@@ -403,5 +403,62 @@ describe('InvoicesPanel (S3.1)', () => {
     expect(screen.queryByText(/laboratorio/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /laboratorio/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /laboratorio/i })).not.toBeInTheDocument()
+  })
+
+  it('2026-08-10: las columnas se pueden redimensionar arrastrando, sin tener que pulsar "Editar" antes', async () => {
+    mockRoutes()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+
+    // Sin pulsar "Editar": el asa ya está en el DOM y usable (mismo criterio que CompaniesPanel).
+    const handle = screen.getByRole('separator', { name: 'Redimensionar columna Empresa' })
+    const header = screen.getByRole('button', { name: 'Empresa' }).closest('th') as HTMLElement
+    const startWidth = Number(header.style.width.replace('px', ''))
+
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseMove(document, { clientX: 150 })
+    fireEvent.mouseUp(document)
+
+    expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 50)
+  })
+
+  it('2026-08-10: pulsar la cabecera "Empresa" ordena las filas alfabéticamente, como en Excel', async () => {
+    mockRoutes({
+      panel: makePage([
+        makeRow({ id: 'inv-1', company_name: 'Zeta SL' }),
+        makeRow({ id: 'inv-2', company_name: 'Alfa SL' }),
+      ]),
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+
+    const namesInOrder = () =>
+      screen.getAllByTestId('invoice-row').map((row) => within(row).getAllByRole('cell')[0].textContent)
+    expect(namesInOrder()).toEqual(['Zeta SL', 'Alfa SL'])
+
+    await user.click(screen.getByRole('button', { name: 'Empresa' }))
+    expect(namesInOrder()).toEqual(['Alfa SL', 'Zeta SL'])
+  })
+
+  it('2026-08-10: ordenar por "Total" compara importes por valor numérico, no como texto', async () => {
+    mockRoutes({
+      panel: makePage([
+        makeRow({ id: 'inv-1', company_name: 'A', total_amount: '9.00' }),
+        makeRow({ id: 'inv-2', company_name: 'B', total_amount: '10.00' }),
+        makeRow({ id: 'inv-3', company_name: 'C', total_amount: '2.00' }),
+      ]),
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('invoice-row')
+
+    await user.click(screen.getByRole('button', { name: 'Total' }))
+
+    const namesInOrder = screen
+      .getAllByTestId('invoice-row')
+      .map((row) => within(row).getAllByRole('cell')[0].textContent)
+    // Orden numérico correcto (2, 9, 10): un orden como texto habría puesto "10.00" antes que "2.00".
+    expect(namesInOrder).toEqual(['C', 'A', 'B'])
   })
 })

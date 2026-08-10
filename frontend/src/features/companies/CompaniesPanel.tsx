@@ -9,11 +9,16 @@
 // selección (columna de casillas, solo visible en ese modo) con borrado múltiple tras un aviso
 // emergente de confirmación. El historial de ediciones se retira del todo por ahora (decisión de
 // Julio). Las columnas se pueden arrastrar para cambiar su ancho, estilo Excel, recordado en este
-// navegador (`useResizableColumns`).
+// navegador (`useResizableColumns`); ninguna de las dos depende del botón "Editar" (2026-08-10,
+// hallazgo de Julio: quería mover/ordenar columnas sin tener que activarlo antes).
+//
+// Ordenar pulsando la cabecera (2026-08-10, `useColumnSort`, mismo criterio que una hoja de
+// cálculo): asciende, desciende, vuelve al orden alfabético original al tercer clic.
 import { useState, type FormEvent } from 'react'
 
 import { ResizableTh } from '../../shared/ResizableTh'
 import { ScrollableTable } from '../../shared/ScrollableTable'
+import { useColumnSort } from '../../shared/useColumnSort'
 import { useResizableColumns } from '../../shared/useResizableColumns'
 import { CompanyTableRow } from './CompanyTableRow'
 import { ConfirmDeleteCompaniesDialog } from './ConfirmDeleteCompaniesDialog'
@@ -64,6 +69,16 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
   const [bulkError, setBulkError] = useState<string | null>(null)
 
   const rows = companies.data ?? []
+  const { sorted: sortedRows, directionFor, toggle: toggleSort } = useColumnSort(rows, {
+    name: (c) => c.name,
+    cif: (c) => c.cif,
+    status: (c) => c.status,
+    notes: (c) => c.notes,
+    users: (c) => c.user_count,
+    invoices: (c) => c.invoice_count,
+    lastInvoice: (c) => c.last_invoice_at,
+    createdAt: (c) => c.created_at,
+  })
 
   const handleCreate = (e: FormEvent) => {
     e.preventDefault()
@@ -234,43 +249,67 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
             <thead className="text-slate-400">
               <tr>
                 {deleteMode && <th className="p-2" style={{ width: 32 }} />}
-                <ResizableTh label="Nombre" width={widths.name} onResizeStart={startResize('name')} />
-                <ResizableTh label="CIF" width={widths.cif} onResizeStart={startResize('cif')} />
+                <ResizableTh
+                  label="Nombre"
+                  width={widths.name}
+                  onResizeStart={startResize('name')}
+                  sortDirection={directionFor('name')}
+                  onSortClick={() => toggleSort('name')}
+                />
+                <ResizableTh
+                  label="CIF"
+                  width={widths.cif}
+                  onResizeStart={startResize('cif')}
+                  sortDirection={directionFor('cif')}
+                  onSortClick={() => toggleSort('cif')}
+                />
                 <ResizableTh
                   label="Estado"
                   width={widths.status}
                   onResizeStart={startResize('status')}
+                  sortDirection={directionFor('status')}
+                  onSortClick={() => toggleSort('status')}
                 />
                 <ResizableTh
                   label="Notas"
                   width={widths.notes}
                   onResizeStart={startResize('notes')}
+                  sortDirection={directionFor('notes')}
+                  onSortClick={() => toggleSort('notes')}
                 />
                 <ResizableTh
                   label="Usuarios"
                   width={widths.users}
                   onResizeStart={startResize('users')}
+                  sortDirection={directionFor('users')}
+                  onSortClick={() => toggleSort('users')}
                 />
                 <ResizableTh
                   label="Facturas"
                   width={widths.invoices}
                   onResizeStart={startResize('invoices')}
+                  sortDirection={directionFor('invoices')}
+                  onSortClick={() => toggleSort('invoices')}
                 />
                 <ResizableTh
                   label="Última factura"
                   width={widths.lastInvoice}
                   onResizeStart={startResize('lastInvoice')}
+                  sortDirection={directionFor('lastInvoice')}
+                  onSortClick={() => toggleSort('lastInvoice')}
                 />
                 <ResizableTh
                   label="Alta"
                   width={widths.createdAt}
                   onResizeStart={startResize('createdAt')}
+                  sortDirection={directionFor('createdAt')}
+                  onSortClick={() => toggleSort('createdAt')}
                 />
                 <th className="p-2" style={{ width: 96 }} />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
-              {rows.map((company) => (
+              {sortedRows.map((company) => (
                 <CompanyTableRow
                   key={company.id}
                   company={company}

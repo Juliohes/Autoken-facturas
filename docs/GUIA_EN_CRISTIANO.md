@@ -926,6 +926,21 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
     Excel; empiezan más estrechas que antes (la de "Notas", muy estrecha) y el ajuste que hagas se
     recuerda la próxima vez que entres desde el mismo ordenador.
 
+- **Ordenar las tablas pulsando la cabecera + columnas del panel de Facturas también
+  redimensionables (10/08/2026)**: Julio pidió, en las dos tablas grandes de la aplicación
+  ("Empresas" y "Facturas"), poder mover el ancho de las columnas sin tener que pulsar "Editar"
+  antes (ya funcionaba así en "Empresas", pero el asa para agarrar era pequeña y difícil de
+  encontrar — se ensanchó y se le puso un fondo tenue permanente para que se vea sin pasar el
+  ratón por encima) y, sobre todo, poder ordenar las filas pulsando el nombre de la columna que
+  quisiera, como en un Excel de verdad. Ahora las dos tablas funcionan así: un clic ordena de menor
+  a mayor (o alfabéticamente), otro clic lo invierte, y un tercer clic vuelve al orden normal (más
+  reciente primero). El panel de "Facturas" no tenía NINGÚN redimensionado de columnas hasta ahora
+  (solo lo tenía "Empresas"); se añadió igual, junto con el orden. Antes del cambio se comprobó que
+  el aviso de Julio de que "no veía los últimos cambios" no era un fallo de este proyecto sino de
+  la aplicación instalada en su móvil/navegador, que guarda una copia local y tarda en darse cuenta
+  de que hay una versión nueva (recargar la página dos veces, o cerrar y reabrir la app instalada,
+  lo soluciona).
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

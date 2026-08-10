@@ -451,4 +451,67 @@ describe('CompaniesPanel (S3.4)', () => {
     expect(Number(newHeader.style.width.replace('px', ''))).toBe(newWidth)
     unmount()
   })
+
+  it('2026-08-09: el asa de arrastre está siempre disponible, sin tener que pulsar "Editar" antes', async () => {
+    mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    // Sin pulsar "Editar": el asa ya está en el DOM y usable (no depende de un modo de edición).
+    expect(
+      screen.getByRole('separator', { name: 'Redimensionar columna Nombre' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument()
+  })
+
+  it('2026-08-10: pulsar la cabecera "Nombre" ordena las filas alfabéticamente, como en Excel', async () => {
+    mockRoutes({
+      companies: [
+        makeCompany({ id: 'c1', name: 'Zeta SL' }),
+        makeCompany({ id: 'c2', name: 'Alfa SL' }),
+        makeCompany({ id: 'c3', name: 'Medio SL' }),
+      ],
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    const namesInOrder = () =>
+      screen.getAllByTestId('company-row').map((row) => within(row).getAllByRole('cell')[0].textContent)
+
+    // Orden original (tal cual lo devuelve la API): sin ordenar todavía.
+    expect(namesInOrder()).toEqual(['Zeta SL', 'Alfa SL', 'Medio SL'])
+
+    const nameHeader = screen.getByRole('button', { name: 'Nombre' })
+    await user.click(nameHeader)
+    expect(namesInOrder()).toEqual(['Alfa SL', 'Medio SL', 'Zeta SL'])
+
+    await user.click(nameHeader)
+    expect(namesInOrder()).toEqual(['Zeta SL', 'Medio SL', 'Alfa SL'])
+
+    // Tercer clic: vuelve al orden original, no se queda descendente para siempre.
+    await user.click(nameHeader)
+    expect(namesInOrder()).toEqual(['Zeta SL', 'Alfa SL', 'Medio SL'])
+  })
+
+  it('2026-08-10: ordenar por una columna numérica ("Facturas") compara por valor, no como texto', async () => {
+    mockRoutes({
+      companies: [
+        makeCompany({ id: 'c1', name: 'A', invoice_count: 9 }),
+        makeCompany({ id: 'c2', name: 'B', invoice_count: 10 }),
+        makeCompany({ id: 'c3', name: 'C', invoice_count: 2 }),
+      ],
+    })
+    const user = userEvent.setup()
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    await user.click(screen.getByRole('button', { name: 'Facturas' }))
+
+    const namesInOrder = screen
+      .getAllByTestId('company-row')
+      .map((row) => within(row).getAllByRole('cell')[0].textContent)
+    // Orden numérico correcto (2, 9, 10): un orden como texto habría puesto "10" antes que "2".
+    expect(namesInOrder).toEqual(['C', 'A', 'B'])
+  })
 })

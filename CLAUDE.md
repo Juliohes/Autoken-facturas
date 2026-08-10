@@ -759,6 +759,31 @@
   cada interacción: edición celda a celda, selección múltiple, confirmación, cancelación, fallo
   409 de una empresa con usuarios, arrastrar una columna y que sobreviva a una recarga simulada).
   268 tests de frontend, todos en verde, tsc/eslint limpios.
+- **Diagnóstico "no veo los últimos cambios" + ordenar tablas por cabecera y redimensionar
+  columnas en Facturas (10/08/2026)**: Julio reportó que `setex.autoken.es`/`ilex.autoken.es`/
+  `panel-staging.autoken.es` no mostraban el cambio de S6.4 recién desplegado. Verificado en
+  directo (no en teoría): el servidor ya servía el bundle correcto en los tres dominios (mismo
+  hash JS); la causa era la caché del Service Worker de la PWA (`registerType: 'autoUpdate'`,
+  actualización silenciosa sin aviso al usuario, solo se aplica del todo a partir de la recarga
+  *siguiente* a la que detecta el cambio) — sin código que tocar, solo hacía falta una segunda
+  recarga o reabrir la app instalada. A continuación, petición directa de Julio: poder mover el
+  ancho de las columnas sin depender de "Editar" (ya no dependía, pero el asa de 6px era difícil
+  de agarrar/encontrar — ensanchada a 8px con fondo tenue permanente) y ordenar cualquiera de las
+  dos tablas grandes (Empresas, Facturas) pulsando la cabecera, como en Excel (ascendente ->
+  descendente -> orden original al tercer clic, nulos siempre al final). Nuevo
+  `shared/useColumnSort.ts` (hook genérico, en memoria) + `ResizableTh` ganó soporte opcional de
+  orden (botón + flecha ▲/▼, sin romper su único uso previo). El panel de Facturas NO tenía ningún
+  redimensionado de columnas hasta ahora (solo lo tenía Empresas desde S6.4): se añadió a la vez
+  que el orden, reutilizando `useResizableColumns`/`ResizableTh` tal cual. El orden es en memoria
+  sobre las filas ya cargadas (Facturas pagina por cursor, S3.1); al pulsar "Cargar más" las
+  páginas nuevas se reordenan junto a las visibles — decisión de diseño explícita, no una
+  limitación oculta: los importes/nombres de contraparte viven cifrados (S5.2, pgcrypto) y no
+  admiten `ORDER BY` en SQL sin descifrar fila a fila, así que un orden verdaderamente global entre
+  páginas exigiría traer todo el histórico de golpe, deshaciendo la paginación. 6 tests nuevos
+  (orden ascendente/descendente/original, orden numérico correcto en columnas de importe/contador,
+  asa de redimensionar presente sin pulsar "Editar") en `CompaniesPanel.test.tsx`/
+  `InvoicesPanel.test.tsx`. 274 tests de frontend, todos en verde, tsc/eslint limpios. Desplegado y
+  verificado en directo en los tres dominios reales (bundle nuevo confirmado por hash).
 
 ---
 
