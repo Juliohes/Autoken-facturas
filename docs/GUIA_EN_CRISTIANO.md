@@ -975,6 +975,25 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   desplegada, con ratón en un ordenador y con un dedo en un móvil simulado, antes y después de este
   segundo arreglo.
 
+- **Encontrado el motivo de verdad de "sigo sin poder mover columnas" (10/08/2026)**: Julio insistió
+  una tercera vez en que en su ordenador (con Chrome, ya descartado que fuera la caché del
+  navegador probando en una ventana de incógnito) seguía sin funcionar, y dio un dato clave: "el
+  cursor cambia pero no se mueve". Con esa pista se probó con datos de verdad — un nombre de
+  empresa largo, no los nombres cortos usados en todas las pruebas anteriores — y ahí apareció el
+  fallo real: cuando una celda tiene un texto largo, el navegador estaba **ignorando por completo**
+  el ancho de columna que la aplicación le pedía, sin avisar de ello. Con un nombre corto esto
+  nunca se notaba, por eso ni las pruebas automáticas ni las primeras comprobaciones lo habían
+  visto. Esto explicaba también otra cosa que Julio había notado: por qué las columnas se veían
+  "más juntas" al activar "Editar" (con Editar, cada celda pasa a ser una casilla de escribir, que
+  no sufre este problema del navegador).
+
+  Corregido dándole a la tabla, además de las anchuras de cada columna, un ancho TOTAL — la suma de
+  todas — algo que el navegador necesita para respetar de verdad lo que se le pide en vez de
+  decidir por su cuenta. Se aplicó a las 9 tablas de la aplicación, junto con recortar con puntos
+  suspensivos ("…") el texto que no cabe, en vez de dejarlo desbordarse sin control. Comprobado con
+  los mismos nombres largos que causaban el fallo, contra la aplicación real ya desplegada: ahora
+  la columna mide exactamente lo que debe medir y el arrastre funciona de principio a fin.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

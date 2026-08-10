@@ -563,4 +563,21 @@ describe('CompaniesPanel (S3.4)', () => {
     fireEvent.mouseUp(document, { clientX: 130 })
     expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 30)
   })
+
+  it('2026-08-10: la tabla lleva un ancho total explícito, no solo table-layout:fixed', async () => {
+    // Regresión real (reportada por Julio, reproducida en un navegador de verdad, no en jsdom):
+    // con `table-layout: fixed` pero SIN un ancho total explícito en el `<table>`, un nombre de
+    // empresa largo hacía que Chrome ignorase los anchos de columna declarados por completo (una
+    // columna de 160px se renderizaba a 401px), así que el asa de arrastre quedaba fuera de donde
+    // se veía la raya entre columnas -- "el cursor cambia pero no se mueve". jsdom no hace layout
+    // de verdad, así que este test no puede comprobar el efecto visual, pero sí que el `<table>`
+    // sigue llevando el ancho explícito que lo arregla (`table.getTotalSize()`), para que no
+    // desaparezca sin darse cuenta en un refactor futuro.
+    mockRoutes({ companies: [makeCompany({ id: 'c1' })] })
+    renderPanel()
+    await screen.findAllByTestId('company-row')
+
+    const table = screen.getByTestId('companies-table')
+    expect(Number(table.style.width.replace('px', ''))).toBeGreaterThan(0)
+  })
 })

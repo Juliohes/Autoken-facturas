@@ -311,7 +311,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
           <ScrollableTable>
             <table
               className="whitespace-nowrap text-left text-sm"
-              style={{ tableLayout: 'fixed' }}
+              style={{ tableLayout: 'fixed', width: table.getTotalSize() }}
               data-testid="invoices-table"
             >
               <thead className="text-slate-400">
@@ -458,9 +458,9 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
       {/* Empresa CLIENTE del tenant (quién sube la factura): fija, nunca editable aquí — no es un
           dato del documento, es a quién pertenece (2026-08-01, hallazgo de Julio: el panel solo
           mostraba el proveedor/contraparte, nunca la propia empresa). */}
-      <td className="p-2">{row.company_name}</td>
-      <td className="p-2">{row.company_cif}</td>
-      <td className="p-2">
+      <td className="truncate p-2">{row.company_name}</td>
+      <td className="truncate p-2">{row.company_cif}</td>
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -472,7 +472,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           (row.counterparty_name ?? '—')
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -484,7 +484,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           (row.counterparty_tax_id ?? '—')
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -497,7 +497,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           (row.issue_date ?? '—')
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -510,7 +510,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           formatCurrency(row.net_amount)
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -523,7 +523,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           formatCurrency(row.tax_amount)
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -536,7 +536,7 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           formatCurrency(row.total_amount)
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         {editing ? (
           <EditableInvoiceCell
             invoiceId={row.id}
@@ -549,13 +549,13 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
           formatCurrency(row.irpf_amount)
         )}
       </td>
-      <td className="p-2">
+      <td className="truncate p-2">
         <button type="button" onClick={onOpenTaxLines} className="text-emerald-400 underline">
           {taxLinesLabel}
         </button>
       </td>
-      <td className="p-2">{formatDateTime(row.uploaded_at)}</td>
-      <td className="p-2">
+      <td className="truncate p-2">{formatDateTime(row.uploaded_at)}</td>
+      <td className="truncate p-2">
         <button
           type="button"
           onClick={() => onView(row.uploaded_file_id)}

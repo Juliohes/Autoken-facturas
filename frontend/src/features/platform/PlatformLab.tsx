@@ -158,7 +158,7 @@ export function PlatformLab() {
 
       {tenantId && rows.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="whitespace-nowrap text-left text-sm" style={{ tableLayout: 'fixed' }}>
+          <table className="whitespace-nowrap text-left text-sm" style={{ tableLayout: 'fixed', width: table.getTotalSize() }}>
             <thead className="text-slate-400">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
@@ -175,12 +175,12 @@ export function PlatformLab() {
             <tbody className="divide-y divide-slate-800">
               {sortedRows.map((row) => (
                 <tr key={row.id} data-testid="lab-invoice-row">
-                  <td className="p-2">{row.company_name}</td>
-                  <td className="p-2">{row.counterparty_name ?? '—'}</td>
-                  <td className="p-2">{row.issue_date ?? '—'}</td>
-                  <td className="p-2">{formatCurrency(row.total_amount)}</td>
-                  <td className="p-2">{formatDateTime(row.confirmed_at)}</td>
-                  <td className="p-2">
+                  <td className="truncate p-2">{row.company_name}</td>
+                  <td className="truncate p-2">{row.counterparty_name ?? '—'}</td>
+                  <td className="truncate p-2">{row.issue_date ?? '—'}</td>
+                  <td className="truncate p-2">{formatCurrency(row.total_amount)}</td>
+                  <td className="truncate p-2">{formatDateTime(row.confirmed_at)}</td>
+                  <td className="truncate p-2">
                     <button
                       type="button"
                       onClick={() => handleView(row.uploaded_file_id)}
@@ -189,7 +189,7 @@ export function PlatformLab() {
                       Ver
                     </button>
                   </td>
-                  <td className="p-2">
+                  <td className="truncate p-2">
                     <button
                       type="button"
                       onClick={() => setLabFileId(row.uploaded_file_id)}
@@ -457,7 +457,7 @@ function LabDetailView({ detail, onClose }: LabDetailProps) {
           <TaxLinesList value={detail.reading_3.invoice.tax_lines} />
         </ul>
         {detail.reading_3.has_corrections ? (
-          <table className="whitespace-nowrap text-left text-sm" style={{ tableLayout: 'fixed' }}>
+          <table className="whitespace-nowrap text-left text-sm" style={{ tableLayout: 'fixed', width: correctionsTable.getTotalSize() }}>
             <thead className="text-slate-400">
               {correctionsTable.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
@@ -474,9 +474,9 @@ function LabDetailView({ detail, onClose }: LabDetailProps) {
             <tbody className="divide-y divide-slate-800">
               {sortedCorrections.map((c) => (
                 <tr key={c.field}>
-                  <td className="p-1">{c.field}</td>
-                  <td className="p-1">{c.ai_value ?? '—'}</td>
-                  <td className="p-1">{c.human_value ?? '—'}</td>
+                  <td className="truncate p-1">{c.field}</td>
+                  <td className="truncate p-1">{c.ai_value ?? '—'}</td>
+                  <td className="truncate p-1">{c.human_value ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -489,7 +489,7 @@ function LabDetailView({ detail, onClose }: LabDetailProps) {
       <section data-testid="lab-ranking" className="space-y-2">
         <h3 className="font-semibold text-slate-200">Comparativa de modelos</h3>
         {detail.ranking_available ? (
-          <table className="whitespace-nowrap text-left text-sm" style={{ tableLayout: 'fixed' }}>
+          <table className="whitespace-nowrap text-left text-sm" style={{ tableLayout: 'fixed', width: rankingTable.getTotalSize() }}>
             <thead className="text-slate-400">
               {rankingTable.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
@@ -506,8 +506,8 @@ function LabDetailView({ detail, onClose }: LabDetailProps) {
             <tbody className="divide-y divide-slate-800">
               {sortedRanking.map((row) => (
                 <tr key={row.engine}>
-                  <td className="p-1">{row.engine}</td>
-                  <td className="p-1">{row.score}</td>
+                  <td className="truncate p-1">{row.engine}</td>
+                  <td className="truncate p-1">{row.score}</td>
                 </tr>
               ))}
             </tbody>

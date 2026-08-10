@@ -119,7 +119,7 @@ export function OcrRanking() {
 
       {ranking.data && ranking.data.length > 0 && (
         <ScrollableTable>
-          <table className="whitespace-nowrap text-left text-sm" style={{ tableLayout: 'fixed' }}>
+          <table className="whitespace-nowrap text-left text-sm" style={{ tableLayout: 'fixed', width: table.getTotalSize() }}>
             <thead>
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id} className="border-b border-slate-700 text-slate-400">
@@ -132,7 +132,7 @@ export function OcrRanking() {
             <tbody>
               {sortedRows.map((row) => (
                 <tr key={row.engine} className="border-b border-slate-800">
-                  <td className="py-2 pr-4 font-medium">
+                  <td className="truncate py-2 pr-4 font-medium">
                     {row.engine}
                     {ENGINES_SIN_CAMPOS_PROMPTABLES.has(row.engine) && (
                       <span
@@ -143,10 +143,10 @@ export function OcrRanking() {
                       </span>
                     )}
                   </td>
-                  <td className="py-2 pr-4">{row.invoices_read}</td>
-                  <td className="py-2 pr-4">{row.average_score.toFixed(2)}</td>
-                  <td className="py-2 pr-4">{row.first_place_count}</td>
-                  <td className="py-2 pr-4">
+                  <td className="truncate py-2 pr-4">{row.invoices_read}</td>
+                  <td className="truncate py-2 pr-4">{row.average_score.toFixed(2)}</td>
+                  <td className="truncate py-2 pr-4">{row.first_place_count}</td>
+                  <td className="truncate py-2 pr-4">
                     <button
                       type="button"
                       onClick={() => setExamplesEngine(row.engine)}

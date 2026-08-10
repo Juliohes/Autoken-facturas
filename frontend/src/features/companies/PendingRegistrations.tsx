@@ -73,7 +73,7 @@ export function PendingRegistrations() {
         <div className="overflow-x-auto">
           <table
             className="whitespace-nowrap text-left text-sm"
-            style={{ tableLayout: 'fixed' }}
+            style={{ tableLayout: 'fixed', width: table.getTotalSize() }}
             data-testid="registrations-table"
           >
             <thead className="text-slate-400">
@@ -88,8 +88,8 @@ export function PendingRegistrations() {
             <tbody className="divide-y divide-slate-700">
               {sortedRows.map((r) => (
                 <tr key={r.id} data-testid="registration-row">
-                  <td className="p-2">{r.email}</td>
-                  <td className="p-2">
+                  <td className="truncate p-2">{r.email}</td>
+                  <td className="truncate p-2">
                     {r.company ?? '—'}
                     {r.joins_existing_company && (
                       <span className="ml-1 text-xs text-amber-400">(se une a empresa existente)</span>

@@ -301,9 +301,18 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
 
       {!companies.isLoading && !companies.isError && rows.length > 0 && (
         <ScrollableTable>
+          {/* `width: table.getTotalSize()` (2026-08-10, causa raíz real del reporte de Julio "no
+              puedo mover las columnas"): `table-layout: fixed` por sí solo NO basta si el
+              `<table>` se queda en `width: auto` -- verificado en el navegador real, no en teoría:
+              con un nombre de empresa largo, Chrome ignoraba los anchos de columna declarados
+              (160px se renderizaba como 401px) pese al `table-layout: fixed`, y el asa de
+              arrastre quedaba fuera de donde el ojo la esperaba. Dándole al `<table>` un ancho
+              total explícito (la suma de todas las columnas, que TanStack ya calcula) los 9
+              anchos declarados pasan a cumplirse EXACTOS. El mismo arreglo se aplica en las otras
+              8 tablas de la app. */}
           <table
             className="whitespace-nowrap text-left text-sm"
-            style={{ tableLayout: 'fixed' }}
+            style={{ tableLayout: 'fixed', width: table.getTotalSize() }}
             data-testid="companies-table"
           >
             <thead className="text-slate-400">

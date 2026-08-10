@@ -290,7 +290,7 @@ export function PlatformTenants() {
         <ScrollableTable>
           <table
             className="whitespace-nowrap text-left text-sm"
-            style={{ tableLayout: 'fixed' }}
+            style={{ tableLayout: 'fixed', width: tenantsTable.getTotalSize() }}
             data-testid="tenants-table"
           >
             <thead className="text-slate-400">
@@ -309,12 +309,12 @@ export function PlatformTenants() {
             <tbody className="divide-y divide-slate-700">
               {sortedTenantRows.map((tenant) => (
                 <tr key={tenant.id} data-testid="tenant-row">
-                  <td className="p-2">{tenant.slug}</td>
-                  <td className="p-2">{tenant.name}</td>
-                  <td className="p-2">{tenant.status === 'active' ? 'Activo' : 'Suspendido'}</td>
-                  <td className="p-2">{tenant.is_demo ? 'Sí' : 'No'}</td>
-                  <td className="p-2">{formatDate(tenant.created_at)}</td>
-                  <td className="p-2">
+                  <td className="truncate p-2">{tenant.slug}</td>
+                  <td className="truncate p-2">{tenant.name}</td>
+                  <td className="truncate p-2">{tenant.status === 'active' ? 'Activo' : 'Suspendido'}</td>
+                  <td className="truncate p-2">{tenant.is_demo ? 'Sí' : 'No'}</td>
+                  <td className="truncate p-2">{formatDate(tenant.created_at)}</td>
+                  <td className="truncate p-2">
                     <TenantRowActions tenant={tenant} />
                   </td>
                 </tr>
@@ -339,7 +339,7 @@ export function PlatformTenants() {
           <ScrollableTable>
             <table
               className="whitespace-nowrap text-left text-sm"
-              style={{ tableLayout: 'fixed' }}
+              style={{ tableLayout: 'fixed', width: metricsTable.getTotalSize() }}
               data-testid="tenant-metrics-table"
             >
               <thead className="text-slate-400">
@@ -358,14 +358,14 @@ export function PlatformTenants() {
               <tbody className="divide-y divide-slate-700">
                 {sortedMetricsRows.map((row) => (
                   <tr key={row.tenant_id} data-testid="tenant-metrics-row">
-                    <td className="p-2">{row.slug}</td>
-                    <td className="p-2">{row.companies_count}</td>
-                    <td className="p-2">{row.users_count}</td>
-                    <td className="p-2">{row.admins_count}</td>
-                    <td className="p-2">{row.invoices_this_month}</td>
-                    <td className="p-2">{row.invoices_total_count}</td>
-                    <td className="p-2">{row.ocr_extractions_count}</td>
-                    <td className="p-2">{formatDateTime(row.last_activity_at)}</td>
+                    <td className="truncate p-2">{row.slug}</td>
+                    <td className="truncate p-2">{row.companies_count}</td>
+                    <td className="truncate p-2">{row.users_count}</td>
+                    <td className="truncate p-2">{row.admins_count}</td>
+                    <td className="truncate p-2">{row.invoices_this_month}</td>
+                    <td className="truncate p-2">{row.invoices_total_count}</td>
+                    <td className="truncate p-2">{row.ocr_extractions_count}</td>
+                    <td className="truncate p-2">{formatDateTime(row.last_activity_at)}</td>
                   </tr>
                 ))}
               </tbody>

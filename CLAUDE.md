@@ -833,6 +833,36 @@
   redimensionado, ratón y dedo) repartidos en `CompaniesPanel.test.tsx`, `InvoicesPanel.test.tsx`,
   `PlatformTenants.test.tsx`, `OcrRanking.test.tsx` y `PlatformLab.test.tsx`. 285 tests de frontend,
   todos en verde, tsc/eslint limpios. Desplegado y verificado en los tres dominios reales.
+- **Causa raíz REAL del "no puedo mover columnas" — encontrada tras 3 reportes seguidos de Julio
+  (10/08/2026)**: pese a los dos arreglos anteriores (soporte táctil + migración a TanStack),
+  Julio seguía sin poder redimensionar en su PC (Chrome/Edge, ya descartada la caché de la PWA
+  probando en incógnito). Diagnóstico en dos pasos: (1) su propia descripción -- "el cursor cambia
+  pero no se mueve" -- descartaba un fallo del gesto en sí; (2) reproducido con datos REALES
+  (nombres de empresa largos, no los cortos "Zeta SL" usados hasta ahora en las pruebas) contra la
+  app desplegada, midiendo directamente el DOM: con `table-layout: fixed` puesto pero SIN un ancho
+  total explícito en el `<table>` (se quedaba en `width: auto`), Chrome **ignoraba por completo**
+  los anchos de columna declarados en cuanto una celda tenía contenido largo -- una columna de
+  160px se renderizaba a 401px, sin relación con el valor guardado en el estado. El asa de
+  arrastre, posicionada según el ancho REAL (401px), quedaba lejos de donde el ojo situaba la raya
+  entre columnas (calculada mentalmente a partir del ancho declarado) -- de ahí "el cursor cambia
+  pero no se mueve": el clic sí caía sobre el asa, pero el arrastre resultante era invisible
+  porque el contenido largo seguía forzando el mismo ancho pase lo que pase. Con datos cortos
+  (como en todas las pruebas anteriores) el bug nunca se manifestaba, porque el ancho "auto" del
+  navegador coincidía por casualidad con el declarado. Explica también por qué "Editar" se veía
+  más condensado: un `<input>` no fuerza el ancho de columna por su contenido, un texto plano sin
+  recortar sí.
+
+  Aislado el mecanismo exacto inyectando CSS de prueba en vivo contra el sitio real (sin
+  redesplegar en cada intento): dar al `<table>` un ancho total explícito (`width:
+  table.getTotalSize()`, método que TanStack Table ya expone) hace que las 9 columnas coincidan
+  EXACTAS con lo declarado. Aplicado en las 9 tablas de la app junto con `overflow-hidden`+
+  `text-overflow: ellipsis` (clase `truncate`) en todas las celdas de datos, para que el contenido
+  largo se recorte con "…" en vez de desbordar. Verificado en real con los mismos datos largos que
+  reproducían el fallo: 160px de ancho exacto para la columna, arrastre completo (20 movimientos
+  graduales, no un solo salto) de 160px a 240px sin quedarse a medias. 1 test de regresión nuevo
+  (comprueba que el `<table>` sigue llevando el ancho explícito, ya que jsdom no hace layout real
+  y no puede verificar el efecto visual por sí solo). 286 tests de frontend, todos en verde,
+  tsc/eslint limpios. Desplegado y verificado en los tres dominios reales.
 
 ---
 
