@@ -71,15 +71,29 @@ export function BenchmarkRanking() {
   const isRunning = status.data?.running ?? false
   const batch = status.data?.batch ?? null
 
-  // C13/C17: cuando el sondeo detecta que un lote que SÍ estaba corriendo ya terminó, vuelve al
-  // botón inicial y refresca el ranking (los resultados nuevos ya están guardados en ese momento).
+  // C13/C17: en cuanto el sondeo confirma que no hay ningún lote corriendo, se resetea el flag
+  // optimista `pendingStart` -- sin depender de haber visto antes `running: true` (un lote que
+  // termina/falla muy rápido, o un 409 "engánchate" cuyo `batch` ya viene `done`/`failed`, puede
+  // hacer que el PRIMER sondeo tras pulsar el botón ya devuelva `running: false`; si el reseteo
+  // dependiera de la transición true->false, `pendingStart` se quedaría atascado en `true` para
+  // siempre, mostrando "Procesando…" sin ningún progreso real). La invalidación del ranking, en
+  // cambio, SÍ necesita la transición real true->false (un lote que ya estaba corriendo terminó
+  // durante esta sesión) para no refrescar de más el primer render. Dependencia en `status.data`
+  // (el objeto entero de la query, no el booleano derivado): tras pulsar el botón se invalida y
+  // refetchea `benchmark-backfill-status` aunque el valor de `running` no cambie de un fetch al
+  // siguiente (p. ej. false -> false), y ese refetch SÍ debe disparar este efecto para no dejar
+  // `pendingStart` atascado -- un booleano igual al anterior no habría cambiado de referencia.
   useEffect(() => {
-    if (previousRunningRef.current === true && isRunning === false) {
+    if (status.data?.running === false) {
       setPendingStart(false)
-      void queryClient.invalidateQueries({ queryKey: ['benchmark-ranking'] })
+      if (previousRunningRef.current === true) {
+        void queryClient.invalidateQueries({ queryKey: ['benchmark-ranking'] })
+      }
     }
-    previousRunningRef.current = isRunning
-  }, [isRunning, queryClient])
+    if (status.data?.running !== undefined) {
+      previousRunningRef.current = status.data.running
+    }
+  }, [status.data, queryClient])
 
   const groups = useMemo(() => groupByField(ranking.data?.by_field_group ?? []), [ranking.data])
   const combinations = useMemo(() => ranking.data?.by_combination ?? [], [ranking.data])
@@ -179,8 +193,9 @@ export function BenchmarkRanking() {
               <input
                 type="number"
                 min={1}
+                step={1}
                 value={limit}
-                onChange={(e) => setLimit(Math.max(1, Number(e.target.value) || 1))}
+                onChange={(e) => setLimit(Math.max(1, Math.trunc(Number(e.target.value)) || 1))}
                 className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100"
               />
             </label>
@@ -281,7 +296,7 @@ export function BenchmarkRanking() {
                     <td className="truncate py-2 pr-4">{row.executions}</td>
                     <td className="truncate py-2 pr-4">{row.errors}</td>
                     <td className="truncate py-2 pr-4">
-                      {row.aciertos}/{row.comparables}
+                      {row.comparables === 0 ? '— (sin datos)' : `${row.aciertos}/${row.comparables}`}
                     </td>
                     <td className="truncate py-2 pr-4">
                       {row.avg_duration_ms == null ? 'N/D' : `${Math.round(row.avg_duration_ms)} ms`}
