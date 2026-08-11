@@ -7,7 +7,10 @@ reales, verdad confirmada) con el motor de dominio `ocr.benchmark.run_benchmark`
 `jobs.ocr.run_ocr`/`jobs.ocr_ranking.run_ocr_ranking` (ver sus docstrings para el incidente real de
 coste de S4.8 que este patrón evita: un test que llama a `run_ocr_benchmark_task` sin inyectar sus
 propios extractores SÍ dispara llamadas de pago reales si el entorno tiene credenciales configuradas
--- `ocr.benchmark.run_benchmark` en sí NUNCA construye motores reales por su cuenta).
+-- `ocr.benchmark.run_benchmark` en sí NUNCA construye motores reales por su cuenta). El OTRO punto
+legítimo es `jobs.ocr_benchmark_batch.run_benchmark_batch_task` (S6.7 Área C, lote retroactivo del
+panel de plataforma) -- reutiliza `_run_for_invoice` de este módulo (ver más abajo), no reimplementa
+el flujo de una factura.
 
 Este job resuelve TAMBIÉN el interruptor (`platform_settings.ocr_experiment_enabled`) y el CIF
 propio de la empresa (2026-08-11, S6.7 auditoría, hallazgo de arquitectura): `ocr.benchmark` ya no
@@ -21,11 +24,20 @@ interruptor, la verdad confirmada (la factura, ya persistida por `invoicing.serv
 CIF propio de la empresa y la ubicación del fichero; se cierra ANTES de descargar de MinIO y de
 llamar a los motores reales (I/O pesado y llamadas de pago fuera de una transacción abierta).
 
+`_run_for_invoice` (el flujo de UNA factura) y `run_ocr_benchmark_task` (la task de arq del camino
+"al confirmar") se separan a propósito (S6.7 Área C, panel de lote retroactivo): `_run_for_invoice`
+SÍ puede lanzar una excepción real (un fallo de infraestructura, p. ej. `StorageUnavailable` de un
+objeto borrado de MinIO) -- es lo que necesita `jobs.ocr_benchmark_batch.run_benchmark_batch` para
+distinguir un documento que falló (`failed_count`, C13) de uno que se procesó con normalidad, sin
+que un fallo real quede enmascarado como éxito. `run_ocr_benchmark_task` sigue siendo la única que
+nunca propaga (experimento de fondo del camino "una factura al confirmar", best-effort de verdad):
+es solo un `try/except` alrededor de `_run_for_invoice`, sin duplicar su cuerpo.
+
 Toda la tarea es un experimento de fondo (best-effort, detrás del interruptor): un fallo aquí
 (fichero borrado de MinIO, factura aún no visible por la ventana de carrera de
-encolar-antes-de-comprometer, ya tolerada en el proyecto para el job OCR principal) se registra y se
-abandona, nunca revienta el worker ni bloquea nada que ya haya terminado con éxito -- mismo criterio
-que el resto de experimentos de S2.9/S2.10/S4.8.
+encolar-antes-de-comprometer, ya tolerada en el proyecto para el job OCR principal) se registra y,
+en el camino "al confirmar", se abandona sin propagar -- nunca revienta el worker ni bloquea nada
+que ya haya terminado con éxito -- mismo criterio que el resto de experimentos de S2.9/S2.10/S4.8.
 """
 
 from __future__ import annotations
@@ -43,10 +55,11 @@ from invoice_intake import repository as intake_repo
 from invoice_intake import storage
 from invoicing import repository as invoicing_repo
 from ocr.benchmark import run_benchmark
+from ocr.extraction import InvoiceExtractor
 from ocr.ranking_engines import build_named_ranking_extractors
 from platform_admin import settings_repository
 from shared.config import get_settings
-from shared.db import tenant_session
+from shared.db import platform_session, tenant_session
 from shared.encryption import tenant_encryption_key
 
 logger = structlog.get_logger(__name__)
@@ -86,64 +99,105 @@ def _build_truth(invoice: invoicing_repo.InvoiceRecord) -> dict[str, Any]:
     }
 
 
+async def _run_for_invoice(
+    tenant_id: UUID,
+    company_id: UUID,
+    uploaded_file_id: UUID,
+    *,
+    extractors: list[tuple[str, InvoiceExtractor]],
+) -> None:
+    """Ejecuta el benchmark completo (hasta 18 combinaciones) de UNA factura ya confirmada.
+
+    SÍ puede lanzar una excepción real (a diferencia de `run_ocr_benchmark_task`, que la envuelve en
+    un `try/except` -- es un experimento de fondo del camino "una factura al confirmar", nunca debe
+    tumbar el worker). Reutilizada también por `jobs.ocr_benchmark_batch.run_benchmark_batch` (S6.7
+    Área C), que SÍ necesita distinguir un fallo real de infraestructura de un documento (para
+    `failed_count`, C13) de un éxito -- tragárselo aquí lo habría escondido de esa cuenta.
+
+    Interruptor apagado, o alguna de las 3 lecturas ya toleradas en el proyecto (ventana de carrera
+    de encolar-antes-de-comprometer, mismo guardarraíl que `jobs.ocr.run_ocr`): devuelve sin más,
+    silenciosamente -- no es un fallo real de ESTA factura, solo un estado transitorio o un coste
+    evitado a propósito, en ambos caminos (al confirmar y en el lote retroactivo).
+    """
+    settings = get_settings()
+    encryption_key = tenant_encryption_key(settings, tenant_id)
+    async with tenant_session(tenant_id, company_id) as session:
+        settings_row = await settings_repository.get_settings(session)
+        if not settings_row.ocr_experiment_enabled:
+            # Interruptor apagado (C1, spec §4): coste cero, sin descargar de MinIO ni construir
+            # ningún motor real.
+            return
+
+        invoice = await invoicing_repo.get_invoice_by_uploaded_file_id(
+            session, uploaded_file_id, encryption_key=encryption_key
+        )
+        if invoice is None:
+            # Ventana de carrera ya tolerada en el proyecto (encolar dentro de `confirm` antes de
+            # que su transacción se comprometa del todo, mismo guardarraíl que `jobs.ocr.run_ocr`
+            # ante un fichero aún no visible): se registra y se abandona.
+            logger.error(
+                "ocr_benchmark.invoice_not_found",
+                uploaded_file_id=str(uploaded_file_id),
+                tenant_id=str(tenant_id),
+            )
+            return
+        location = await intake_repo.get_file_location(session, uploaded_file_id)
+        if location is None:
+            logger.error(
+                "ocr_benchmark.file_not_found",
+                uploaded_file_id=str(uploaded_file_id),
+                tenant_id=str(tenant_id),
+            )
+            return
+        company = await companies_repo.get_company(
+            session, company_id, encryption_key=encryption_key
+        )
+        if company is None:
+            logger.error(
+                "ocr_benchmark.company_not_found",
+                company_id=str(company_id),
+                uploaded_file_id=str(uploaded_file_id),
+            )
+            return
+        truth = _build_truth(invoice)
+
+    content = await asyncio.to_thread(storage.get_object, location.bucket, location.key)
+    await run_benchmark(
+        tenant_id,
+        company_id,
+        uploaded_file_id,
+        content=content,
+        content_type=location.content_type,
+        truth=truth,
+        own_cif=company.cif,
+        ocr_experiment_enabled=True,
+        extractors=extractors,
+    )
+
+
 async def run_ocr_benchmark_task(
     ctx: dict[str, Any], tenant_id: str, company_id: str, uploaded_file_id: str
 ) -> None:
-    """Task de arq: adapta la firma `(ctx, *args)` de arq al motor de dominio `ocr.benchmark.
-    run_benchmark`. `ctx` no se usa (el job abre su propia sesión con contexto tenant), igual que
-    `jobs.worker.run_ocr_task`. Nunca propaga una excepción (experimento de fondo)."""
+    """Task de arq: adapta la firma `(ctx, *args)` de arq a `_run_for_invoice`. `ctx` no se usa (el
+    job abre su propia sesión con contexto tenant), igual que `jobs.worker.run_ocr_task`. Nunca
+    propaga una excepción (experimento de fondo).
+
+    Comprueba el interruptor (S6.7 auditoría 2026-08-11, hallazgo ALTO) ANTES de construir los 6
+    motores reales (`build_named_ranking_extractors`): antes, esa construcción ocurría siempre, con
+    el experimento encendido o apagado, dejando de ser el interruptor lo primero que se ejecuta en
+    este camino -- misma categoría de riesgo ya corregida dos veces en el proyecto (S4.8, S2.10).
+    Los constructores son perezosos (no llaman a la red en `__init__`), así que hoy es inofensivo,
+    pero la garantía real debe sostenerse por diseño, no por casualidad. `_run_for_invoice` vuelve a
+    comprobar el interruptor dentro de su propia `tenant_session` (redundante a propósito, defensa
+    en profundidad -- también protege el camino del lote retroactivo, que reutiliza
+    `_run_for_invoice` sin este chequeo previo)."""
     tid, cid, fid = UUID(tenant_id), UUID(company_id), UUID(uploaded_file_id)
     try:
-        settings = get_settings()
-        encryption_key = tenant_encryption_key(settings, tid)
-        async with tenant_session(tid, cid) as session:
+        async with platform_session() as session:
             settings_row = await settings_repository.get_settings(session)
-            if not settings_row.ocr_experiment_enabled:
-                # Interruptor apagado (C1, spec §4): coste cero, sin descargar de MinIO ni
-                # construir ningún motor real.
-                return
-
-            invoice = await invoicing_repo.get_invoice_by_uploaded_file_id(
-                session, fid, encryption_key=encryption_key
-            )
-            if invoice is None:
-                # Ventana de carrera ya tolerada en el proyecto (encolar dentro de `confirm` antes
-                # de que su transacción se comprometa del todo, mismo guardarraíl que
-                # `jobs.ocr.run_ocr` ante un fichero aún no visible): se registra y se abandona.
-                logger.error(
-                    "ocr_benchmark.invoice_not_found",
-                    uploaded_file_id=str(fid),
-                    tenant_id=str(tid),
-                )
-                return
-            location = await intake_repo.get_file_location(session, fid)
-            if location is None:
-                logger.error(
-                    "ocr_benchmark.file_not_found", uploaded_file_id=str(fid), tenant_id=str(tid)
-                )
-                return
-            company = await companies_repo.get_company(session, cid, encryption_key=encryption_key)
-            if company is None:
-                logger.error(
-                    "ocr_benchmark.company_not_found",
-                    company_id=str(cid),
-                    uploaded_file_id=str(fid),
-                )
-                return
-            truth = _build_truth(invoice)
-
-        content = await asyncio.to_thread(storage.get_object, location.bucket, location.key)
-        extractors = build_named_ranking_extractors(settings)
-        await run_benchmark(
-            tid,
-            cid,
-            fid,
-            content=content,
-            content_type=location.content_type,
-            truth=truth,
-            own_cif=company.cif,
-            ocr_experiment_enabled=True,
-            extractors=extractors,
-        )
+        if not settings_row.ocr_experiment_enabled:
+            return
+        extractors = build_named_ranking_extractors(get_settings())
+        await _run_for_invoice(tid, cid, fid, extractors=extractors)
     except Exception as exc:  # noqa: BLE001  (experimento de fondo: nunca debe tumbar al worker)
         logger.error("ocr_benchmark.task_failed", uploaded_file_id=str(fid), error=str(exc))

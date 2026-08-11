@@ -1,5 +1,5 @@
-"""Configuración del worker arq (S2.3): registra `run_ocr` (y desde S6.7, `run_ocr_benchmark_task`)
-como tasks y conecta Redis.
+"""Configuración del worker arq (S2.3): registra `run_ocr` (y desde S6.7, `run_ocr_benchmark_task` +
+`run_benchmark_batch_task`, Área C) como tasks y conecta Redis.
 
 Punto de entrada del proceso worker (`arq jobs.worker.WorkerSettings`). Comparte Postgres/MinIO con
 la API por configuración (mismas env vars). El comportamiento de cada job se prueba invocando su
@@ -20,6 +20,7 @@ from arq.connections import RedisSettings
 
 from jobs.ocr import run_ocr
 from jobs.ocr_benchmark import run_ocr_benchmark_task
+from jobs.ocr_benchmark_batch import run_benchmark_batch_task
 from shared.config import get_settings
 from shared.db import get_engine
 from shared.db_security import assert_runtime_role_cannot_bypass_rls
@@ -47,7 +48,7 @@ async def startup(ctx: dict[str, Any]) -> None:
 class WorkerSettings:
     """Ajustes que arq lee para arrancar el worker (`arq jobs.worker.WorkerSettings`)."""
 
-    functions = [run_ocr_task, run_ocr_benchmark_task]
+    functions = [run_ocr_task, run_ocr_benchmark_task, run_benchmark_batch_task]
     on_startup = startup
     queue_name = _settings.ocr_queue_name
     redis_settings = RedisSettings.from_dsn(_settings.redis_url)
