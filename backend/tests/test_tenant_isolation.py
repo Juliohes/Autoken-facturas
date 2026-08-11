@@ -87,6 +87,8 @@ _PROTECTED_ROUTES = {
     ("GET", f"{API}/platform/tenants/{{tenant_id}}/invoices"),
     ("GET", f"{API}/platform/tenants/{{tenant_id}}/invoices/{{file_id}}/lab"),
     ("GET", f"{API}/platform/tenants/{{tenant_id}}/invoices/{{file_id}}/image"),
+    ("POST", f"{API}/platform/benchmark/backfill"),
+    ("GET", f"{API}/platform/benchmark/backfill/status"),
 }
 
 
@@ -157,6 +159,8 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ("GET", f"{API}/platform/tenants/{dummy_id}/invoices", {}),
         ("GET", f"{API}/platform/tenants/{dummy_id}/invoices/{dummy_id}/lab", {}),
         ("GET", f"{API}/platform/tenants/{dummy_id}/invoices/{dummy_id}/image", {}),
+        ("POST", f"{API}/platform/benchmark/backfill", {"json": {"limit": 10}}),
+        ("GET", f"{API}/platform/benchmark/backfill/status", {}),
     ]
 
 
