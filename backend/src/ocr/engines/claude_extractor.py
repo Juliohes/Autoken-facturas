@@ -17,11 +17,11 @@ from typing import Any
 from ocr.extraction import ExtractedInvoice, InvoiceExtractionError, InvoiceExtractor
 from ocr.extraction_json import EXTRACTION_PROMPT, parse_structured_invoice
 
-__all__ = ["ClaudeInvoiceExtractor", "build_claude_extractor"]
+__all__ = ["ENGINE_NAME", "ClaudeInvoiceExtractor", "build_claude_extractor"]
 
 _VERTEX_SCOPES = ("https://www.googleapis.com/auth/cloud-platform",)
 _MAX_OUTPUT_TOKENS = 4000
-_ENGINE_NAME = "claude-vertex"
+ENGINE_NAME = "claude-vertex"
 
 _IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"})
 _SUPPORTED_CONTENT_TYPES: frozenset[str] = _IMAGE_CONTENT_TYPES | {"application/pdf"}
@@ -81,7 +81,7 @@ class ClaudeInvoiceExtractor:
 
         payload = self._text_payload(message)
         model_version = getattr(message, "model", None) or self._model
-        return parse_structured_invoice(payload, engine=_ENGINE_NAME, model=model_version)
+        return parse_structured_invoice(payload, engine=ENGINE_NAME, model=model_version)
 
     def _document_block(self, content: bytes, content_type: str) -> dict[str, Any]:
         encoded = base64.b64encode(content).decode("ascii")

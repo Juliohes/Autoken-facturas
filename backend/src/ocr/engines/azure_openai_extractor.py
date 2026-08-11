@@ -23,9 +23,9 @@ from ocr.extraction import ExtractedInvoice, InvoiceExtractionError, InvoiceExtr
 from ocr.extraction_json import EXTRACTION_PROMPT, parse_structured_invoice
 from ocr.preprocess import RasterizeError, rasterize_pdf
 
-__all__ = ["AzureOpenAIInvoiceExtractor", "build_azure_openai_extractor"]
+__all__ = ["ENGINE_NAME", "AzureOpenAIInvoiceExtractor", "build_azure_openai_extractor"]
 
-_ENGINE_NAME = "gpt-5.1"
+ENGINE_NAME = "gpt-5.1"
 _DEFAULT_TIMEOUT_S = 90.0
 _MAX_OUTPUT_TOKENS = 16000
 _REASONING_EFFORT = "low"
@@ -106,8 +106,8 @@ class AzureOpenAIInvoiceExtractor:
 
         choices = body.get("choices") or []
         text = (choices[0].get("message") or {}).get("content") if choices else None
-        model_version = body.get("model") or self._deployment or _ENGINE_NAME
-        return parse_structured_invoice(text, engine=_ENGINE_NAME, model=model_version)
+        model_version = body.get("model") or self._deployment or ENGINE_NAME
+        return parse_structured_invoice(text, engine=ENGINE_NAME, model=model_version)
 
     def _chat_completions_url(self) -> str:
         base = (self._endpoint or "").rstrip("/")
