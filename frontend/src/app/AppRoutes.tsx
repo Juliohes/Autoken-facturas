@@ -18,7 +18,7 @@ import { CompaniesPanel } from '../features/companies/CompaniesPanel'
 import { ConfirmationScreen } from '../features/confirmation/ConfirmationScreen'
 import { InvoiceHistory } from '../features/history/InvoiceHistory'
 import { InvoicesPanel } from '../features/panel/InvoicesPanel'
-import { OcrRanking } from '../features/platform/OcrRanking'
+import { BenchmarkRanking } from '../features/platform/BenchmarkRanking'
 import { PlatformLab } from '../features/platform/PlatformLab'
 import { PlatformSettings } from '../features/platform/PlatformSettings'
 import { PlatformTenants } from '../features/platform/PlatformTenants'
@@ -148,7 +148,7 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
           path={ROUTES.platformOcrRanking}
           element={
             <ProtectedRoute path={ROUTES.platformOcrRanking}>
-              <OcrRanking />
+              <BenchmarkRanking />
             </ProtectedRoute>
           }
         />

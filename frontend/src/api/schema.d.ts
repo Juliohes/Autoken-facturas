@@ -993,6 +993,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/benchmark/backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Backfill
+         * @description C10: responde de inmediato, sin esperar a que termine ni una sola combinación. C11: si ya
+         *     hay un lote `running`, responde 409 con su progreso (mismo patrón ya usado por
+         *     `invoice_intake.router` para `duplicate_of`: `JSONResponse` con cuerpo estructurado propio,
+         *     `response_model` fijado explícitamente para que FastAPI solo lo aplique al camino 200) -- el
+         *     frontend se engancha a él, nunca lo trata como un error genérico. Interruptor apagado -> 422
+         *     (S6.7 auditoría 2026-08-11, hallazgo ALTO): nunca se llega a insertar ni encolar nada.
+         */
+        post: operations["start_backfill_api_v1_platform_benchmark_backfill_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/benchmark/backfill/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Backfill Status
+         * @description C16: el lote `running` si lo hay; si no, el más reciente ya terminado; `None` si nunca se
+         *     lanzó ninguno.
+         */
+        get: operations["get_backfill_status_api_v1_platform_benchmark_backfill_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/benchmark/ranking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Benchmark Ranking */
+        get: operations["get_benchmark_ranking_api_v1_platform_benchmark_ranking_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1025,6 +1088,42 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** BackfillIn */
+        BackfillIn: {
+            /** Limit */
+            limit: number;
+        };
+        /** BackfillStartedOut */
+        BackfillStartedOut: {
+            /** Iniciado */
+            iniciado: boolean;
+            /** Total */
+            total: number;
+        };
+        /** BackfillStatusOut */
+        BackfillStatusOut: {
+            /** Running */
+            running: boolean;
+            batch: components["schemas"]["BatchStatusOut"] | null;
+        };
+        /** BatchStatusOut */
+        BatchStatusOut: {
+            /** Status */
+            status: string;
+            /** Total */
+            total: number;
+            /** Completed */
+            completed: number;
+            /** Failed Count */
+            failed_count: number;
+        };
+        /** BenchmarkRankingOut */
+        BenchmarkRankingOut: {
+            /** By Field Group */
+            by_field_group: components["schemas"]["FieldGroupRankingOut"][];
+            /** By Combination */
+            by_combination: components["schemas"]["CombinationSummaryOut"][];
+        };
         /** Body_import_companies_api_v1_companies_import_post */
         Body_import_companies_api_v1_companies_import_post: {
             /** File */
@@ -1044,6 +1143,23 @@ export interface components {
         Body_upload_logo_api_v1_platform_tenants_logo_post: {
             /** File */
             file: string;
+        };
+        /** CombinationSummaryOut */
+        CombinationSummaryOut: {
+            /** Variant */
+            variant: string;
+            /** Engine */
+            engine: string;
+            /** Executions */
+            executions: number;
+            /** Errors */
+            errors: number;
+            /** Aciertos */
+            aciertos: number;
+            /** Comparables */
+            comparables: number;
+            /** Avg Duration Ms */
+            avg_duration_ms: number | null;
         };
         /**
          * CompanyCreate
@@ -1258,6 +1374,21 @@ export interface components {
         ExportOut: {
             /** Download Url */
             download_url: string;
+        };
+        /** FieldGroupRankingOut */
+        FieldGroupRankingOut: {
+            /** Field Group */
+            field_group: string;
+            /** Variant */
+            variant: string;
+            /** Engine */
+            engine: string;
+            /** Aciertos */
+            aciertos: number;
+            /** Comparables */
+            comparables: number;
+            /** Ratio */
+            ratio: number | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3269,6 +3400,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_backfill_api_v1_platform_benchmark_backfill_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackfillIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackfillStartedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_backfill_status_api_v1_platform_benchmark_backfill_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackfillStatusOut"];
+                };
+            };
+        };
+    };
+    get_benchmark_ranking_api_v1_platform_benchmark_ranking_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkRankingOut"];
                 };
             };
         };
