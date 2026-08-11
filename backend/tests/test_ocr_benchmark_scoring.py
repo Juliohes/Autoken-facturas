@@ -152,3 +152,17 @@ def test_truth_sin_tax_lines_en_absoluto_no_es_comparable() -> None:
 
     assert score_empty.tax_lines_matched is None
     assert score_empty.comparables == 7
+
+
+def test_un_tramo_de_iva_con_nan_o_infinity_no_lanza_y_cuenta_como_fallo() -> None:
+    """Auditoría S6.7, ronda 3, hallazgo ALTO de patrones+seguridad: un motor OCR/LLM puede
+    alucinar el texto "nan"/"Infinity" en `base`/`cuota` de un tramo de IVA (JSON perfectamente
+    válido, dato de entrada no confiable). Antes de la guarda de `ocr.field_matching.
+    amounts_match_within_tolerance`, esto reventaba `score_combination` con `decimal.
+    InvalidOperation` sin capturar."""
+    reading = {**TRUTH, "tax_lines": [{"iva_pct": "21", "base": "nan", "cuota": "Infinity"}]}
+
+    score = score_combination(reading, TRUTH)  # no debe lanzar
+
+    assert score.tax_lines_matched is False
+    assert score.aciertos == 7

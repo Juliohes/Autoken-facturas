@@ -45,6 +45,7 @@ __all__ = [
     "format_value",
     "group_tax_lines_by_pct",
     "names_match",
+    "parse_decimal_text",
     "tax_ids_match",
     "tax_lines_match",
     "texts_match",
@@ -57,14 +58,23 @@ __all__ = [
 _UNAMBIGUOUS_COMMA_DECIMAL = re.compile(r"^-?\d+,\d{1,2}$")
 
 
-def _parse_decimal_text(trimmed: str) -> Decimal | None:
+def parse_decimal_text(trimmed: str) -> Decimal | None:
     """Interpreta un texto YA normalizado (separador decimal en punto) como `Decimal`, o `None` si
     no es un decimal válido -- pieza base compartida por `_parse_amount` (que añade la guarda
     anti-ambigüedad de coma de miles antes de llegar aquí) y por
     `ocr.benchmark_scoring._parse_tax_line_amount` (que reemplaza toda coma por punto sin esa
     guarda: los tramos de IVA del benchmark siempre llegan ya en texto desde `ocr.analysis`, nunca
     tecleados a mano -- S6.7 auditoría, hallazgo de SOLID, para no reimplementar este mismo
-    `try/except Decimal` dos veces)."""
+    `try/except Decimal` dos veces).
+
+    Símbolo público a propósito (sin guion bajo, en `__all__`): tiene un consumidor fuera de este
+    módulo (`ocr.benchmark_scoring`) -- auditoría S6.7, ronda 3, hallazgo de SOLID+arquitectura: un
+    nombre "privado" con un import cruzado real rompe la encapsulación sin ningún aviso de que
+    tiene un consumidor externo.
+
+    Nota: `Decimal()` acepta con éxito textos como `"nan"`/`"NaN"`/`"Infinity"` (no son un error de
+    parseo) -- el llamante es responsable de rechazar un resultado no finito ANTES de operar con él
+    (ver `amounts_match_within_tolerance`, S6.7 auditoría ronda 3, hallazgo ALTO)."""
     try:
         return Decimal(trimmed)
     except InvalidOperation:
@@ -78,12 +88,20 @@ def _parse_amount(value: str | Decimal) -> Decimal | None:
     trimmed = value.strip()
     if _UNAMBIGUOUS_COMMA_DECIMAL.match(trimmed):
         trimmed = trimmed.replace(",", ".")
-    return _parse_decimal_text(trimmed)
+    return parse_decimal_text(trimmed)
 
 
 def amounts_match(a: str | Decimal | None, b: str | Decimal | None) -> bool:
     """Dos importes coinciden si tienen el mismo valor decimal, sin importar el formato de texto
-    (coma/punto, ceros de más) -- spec C1."""
+    (coma/punto, ceros de más) -- spec C1.
+
+    Un `NaN`/`Infinity` NO necesita la misma guarda que `amounts_match_within_tolerance` (S6.7
+    auditoría, ronda 3, verificado con un test dedicado antes de decidir): esta función solo hace
+    `==`, que nunca lanza con un `Decimal` no finito (`NaN == NaN` da `False`, `Infinity ==
+    Infinity` da `True`, ninguno de los dos revienta). El único caso en que "coincidiría" sería
+    ambos lados literalmente `Infinity`, algo que nunca ocurre con datos reales de una factura
+    confirmada (la verdad nunca es infinita) -- riesgo teórico, no un bug observable, y fuera del
+    hallazgo concreto de esta ronda (que es sobre la división en la tolerancia)."""
     if a is None and b is None:
         return True
     if a is None or b is None:
@@ -100,9 +118,21 @@ def amounts_match_within_tolerance(
     """Como `amounts_match`, pero admite una diferencia relativa `<= tolerance` como acierto --
     exclusiva del benchmark de S6.7 (tramos de IVA, C7/C8), nunca usada por S6.6.
 
-    Dos valores idénticos siempre coinciden, aunque `tolerance=0` (spec S6.7 C7). Si uno de los
-    dos lados vale `0` y el otro no, nunca coinciden: un `0` no admite una diferencia "relativa"
-    (división por cero) -- solo coincide con otro `0` exacto."""
+    Dos valores idénticos siempre coinciden, aunque `tolerance=0` (spec S6.7 C7). El caso "0 vs 0"
+    ya lo resuelve esa misma igualdad exacta (`Decimal("0.00") == Decimal("0")` es `True` en
+    Python, sin importar la escala) -- no hace falta ninguna guarda aparte para "ambos son 0"
+    (auditoría S6.7, ronda 3, hallazgo de SOLID: la guarda `largest == 0` que hubo aquí antes era
+    código inalcanzable, retirada).
+
+    Un `NaN`/`Infinity` (`Decimal()` los acepta al parsear sin error, pero no son valores seguros
+    para operar) NUNCA cuenta como acierto, ni siquiera comparado consigo mismo -- mismo criterio
+    anti-alucinación que el resto del módulo (auditoría S6.7, ronda 3, hallazgo ALTO de patrones+
+    seguridad: un motor OCR/LLM puede alucinar el texto `"nan"`/`"Infinity"` en `base`/`cuota` de
+    un tramo de IVA, JSON perfectamente válido pero dato de entrada no confiable; sin esta guarda,
+    `max(abs(parsed_a), abs(parsed_b))` revienta con `decimal.InvalidOperation` en cuanto uno de
+    los dos lados es `NaN`). Por eso esta comprobación va ANTES del atajo de igualdad exacta:
+    `Decimal("Infinity") == Decimal("Infinity")` es `True` sin lanzar, y contaría como acierto por
+    "coincidir consigo mismo" si se dejara pasar."""
     if a is None and b is None:
         return True
     if a is None or b is None:
@@ -110,12 +140,11 @@ def amounts_match_within_tolerance(
     parsed_a, parsed_b = _parse_amount(a), _parse_amount(b)
     if parsed_a is None or parsed_b is None:
         return False
+    if not parsed_a.is_finite() or not parsed_b.is_finite():
+        return False
     if parsed_a == parsed_b:
         return True
-    largest = max(abs(parsed_a), abs(parsed_b))
-    if largest == 0:
-        return False
-    relative_difference = abs(parsed_a - parsed_b) / largest
+    relative_difference = abs(parsed_a - parsed_b) / max(abs(parsed_a), abs(parsed_b))
     return relative_difference <= tolerance
 
 

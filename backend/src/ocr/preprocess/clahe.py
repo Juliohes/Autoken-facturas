@@ -9,8 +9,9 @@ codificar PNG): el llamador es responsable de invocarla con `asyncio.to_thread`,
 
 A diferencia de un contraste global fijo (`enhance.py`), CLAHE reparte el realce por regiones de la
 imagen -- penaliza mucho menos las sombras, decisivo en fotos de móvil con luz desigual. Pillow no
-ofrece CLAHE nativo; se usa `cv2.createCLAHE` (`opencv-python-headless`, ya dependencia del
-backend), aplicado solo al canal de luminancia (espacio LAB: L = luminancia, A/B = color) para no
+ofrece CLAHE nativo; se usa `cv2.createCLAHE` (`opencv-python-headless`, nueva dependencia de esta
+tarea -- ver `pyproject.toml`), aplicado solo al canal de luminancia (espacio LAB: L = luminancia,
+A/B = color) para no
 distorsionar el color -- práctica estándar de CLAHE sobre imágenes en color. Se genera SIEMPRE a
 partir del fichero original, nunca de una versión ya reducida (mismo motivo que `enhance.py`:
 reducir antes de aplicar CLAHE pierde el detalle que el propio CLAHE necesita).

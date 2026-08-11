@@ -200,3 +200,55 @@ def test_s67_c8_un_tramo_con_distinto_porcentaje_nunca_coincide_aunque_los_impor
         return amounts_match_within_tolerance(a, b, tolerance=Decimal("0.02"))
 
     assert tax_lines_match(baseline, confirmed, amount_matcher=_tolerant) is False
+
+
+# --- amounts_match_within_tolerance con NaN/Infinity (S6.7 auditoría, ronda 3, hallazgo ALTO) ---
+
+
+def test_nan_en_un_lado_de_la_tolerancia_no_lanza_y_nunca_cuenta_como_acierto() -> None:
+    """`Decimal("nan")` parsea sin error (no es un fallo de formato) pero no es seguro de operar --
+    sin la guarda, `max(abs(parsed_a), abs(parsed_b))` revienta con `decimal.InvalidOperation` en
+    cuanto uno de los dos lados es `NaN`."""
+    assert amounts_match_within_tolerance("nan", "100.00", tolerance=Decimal("0.02")) is False
+    assert amounts_match_within_tolerance("100.00", "NaN", tolerance=Decimal("0.02")) is False
+
+
+def test_nan_contra_si_mismo_no_cuenta_como_acierto() -> None:
+    """Anti-alucinación: ni siquiera "coincidir consigo mismo" salva a un valor no interpretable
+    con seguridad."""
+    assert amounts_match_within_tolerance("nan", "nan", tolerance=Decimal("0.02")) is False
+
+
+def test_infinity_contra_si_mismo_no_cuenta_como_acierto() -> None:
+    """A diferencia de `NaN`, `Decimal("Infinity") == Decimal("Infinity")` da `True` sin lanzar --
+    sin la guarda de `is_finite()` ANTES del atajo de igualdad exacta, este caso colaría como
+    acierto."""
+    assert amounts_match_within_tolerance("Infinity", "Infinity", tolerance=Decimal("0.02")) is (
+        False
+    )
+
+
+def test_infinity_en_un_lado_no_lanza_y_nunca_cuenta_como_acierto() -> None:
+    assert amounts_match_within_tolerance("Infinity", "100.00", tolerance=Decimal("0.02")) is False
+    assert amounts_match_within_tolerance("-Infinity", "0.00", tolerance=Decimal("0.02")) is False
+
+
+# --- amounts_match (S6.6) con NaN/Infinity: verificado, no necesita la misma guarda -------------
+
+
+def test_amounts_match_s66_con_nan_no_lanza_y_no_cuenta_como_acierto() -> None:
+    """`amounts_match` solo hace `==` (nunca divide), que no lanza con `NaN` -- verificado aquí
+    antes de decidir que NO hace falta tocar esta función (S6.7 auditoría, ronda 3): `NaN == NaN`
+    da `False` en Python/`Decimal`, así que ni siquiera comparado consigo mismo cuenta como
+    acierto."""
+    assert amounts_match("nan", "100.00") is False
+    assert amounts_match("nan", "nan") is False
+
+
+def test_amounts_match_s66_con_infinity_no_lanza() -> None:
+    """Documentado, no corregido (fuera del hallazgo de esta ronda, spec §0): dos lados
+    literalmente "Infinity" SÍ cuentan como acierto (`Infinity == Infinity` es `True`, sin
+    lanzar) -- riesgo teórico, no observable con datos reales de una factura confirmada, que nunca
+    es infinita."""
+    assert amounts_match("Infinity", "100.00") is False
+    assert amounts_match("Infinity", "Infinity") is True

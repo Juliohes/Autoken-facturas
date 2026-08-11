@@ -25,11 +25,11 @@ from datetime import date
 from decimal import Decimal
 
 from ocr.field_matching import (
-    _parse_decimal_text,
     amounts_match,
     amounts_match_within_tolerance,
     dates_match,
     names_match,
+    parse_decimal_text,
     tax_ids_match,
     tax_lines_match,
     texts_match,
@@ -120,13 +120,14 @@ def _parse_tax_line_amount(value: object) -> Decimal | None:
     con seguridad (mismo criterio anti-alucinación que `ocr.field_matching._parse_amount`, pero sin
     su guarda de coma ambigua: aquí los tramos siempre llegan ya en texto con punto/coma simple
     desde `ocr.analysis`, nunca tecleados a mano por un humano). Reutiliza
-    `ocr.field_matching._parse_decimal_text` para el `try/except Decimal` en sí, sin reimplementarlo
-    (S6.7 auditoría, hallazgo de SOLID)."""
+    `ocr.field_matching.parse_decimal_text` para el `try/except Decimal` en sí, sin reimplementarlo
+    (S6.7 auditoría, hallazgo de SOLID -- símbolo público desde la ronda 3 de la auditoría, ya no
+    con guion bajo: tiene este consumidor externo declarado)."""
     if value is None:
         return None
     if isinstance(value, Decimal):
         return value
-    return _parse_decimal_text(str(value).strip().replace(",", "."))
+    return parse_decimal_text(str(value).strip().replace(",", "."))
 
 
 def _parse_tax_lines(
