@@ -29,7 +29,10 @@ class FieldGroupRanking:
     engine: str
     aciertos: int
     comparables: int
-    ratio: float
+    # `None` cuando `comparables == 0` (ningún dato comparable en este grupo/combinación) --
+    # nunca `0.0`, que se confundiría con "0% de acierto real" (auditoría S6.7, hallazgo MEDIO
+    # de SOLID: `ocr_benchmark_field_group_ranking()` ya no envuelve la división con `COALESCE`).
+    ratio: float | None
 
 
 @dataclass(frozen=True)

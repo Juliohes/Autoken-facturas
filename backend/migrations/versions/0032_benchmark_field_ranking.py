@@ -27,13 +27,12 @@ todos los tenants -- la agregación cruzando tenants vive aquí, nunca en una co
 (C19: además, ninguna de las dos funciones acepta ningún parámetro que dispare una llamada real a un
 proveedor de IA, son de solo lectura sobre datos ya persistidos).
 
-Decisión de diseño (no cubierta explícitamente por los tests): `ratio` cuando `comparables = 0` (un
-grupo/combinación sin ningún dato comparable, p. ej. todas las filas fallidas o sin ese campo
-comparable en absoluto) se expone como `0.0`, nunca `NULL` -- un ratio ausente forzaría al frontend a
-distinguir "0% de acierto" de "sin datos", una distinción que esta tarea no pide y que la Parte 4
-(frontend, tarea posterior) puede seguir sin resolver hoy; `COALESCE(..., 0)` en el `SELECT` final,
-la división en sí sigue protegida con `NULLIF(comparables, 0)` para no romper con una división por
-cero real.
+`ratio` cuando `comparables = 0` (un grupo/combinación sin ningún dato comparable, p. ej. todas las
+filas fallidas o sin ese campo comparable en absoluto) es `NULL`, nunca `0.0` -- mismo criterio
+anti-alucinación que el resto del proyecto: "sin datos todavía" no es lo mismo que "0% de acierto
+real" (spec §2, "campo no comparable... no puntúa a favor ni en contra"), y conflacionarlos
+impediría al consumidor (frontend, tarea posterior) distinguirlos. `NULLIF(comparables, 0)` en el
+denominador ya produce `NULL` de forma natural sin necesidad de ningún `COALESCE` que lo esconda.
 
 Revision ID: 0032_benchmark_field_ranking
 Revises: 0031_ocr_benchmark_batch_definer
@@ -123,11 +122,8 @@ def upgrade() -> None:
                 engine,
                 COUNT(*) FILTER (WHERE match IS TRUE) AS aciertos,
                 COUNT(*) FILTER (WHERE match IS NOT NULL) AS comparables,
-                COALESCE(
-                    COUNT(*) FILTER (WHERE match IS TRUE)::float
-                        / NULLIF(COUNT(*) FILTER (WHERE match IS NOT NULL), 0),
-                    0
-                ) AS ratio
+                COUNT(*) FILTER (WHERE match IS TRUE)::float
+                    / NULLIF(COUNT(*) FILTER (WHERE match IS NOT NULL), 0) AS ratio
             FROM unified
             GROUP BY field_group, variant, engine
             ORDER BY field_group, ratio DESC

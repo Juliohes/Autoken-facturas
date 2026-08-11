@@ -43,7 +43,7 @@ async def _seed_file(dsns: dict[str, str], *, slug: str) -> tuple[str, str, str]
     return tenant_id, company_id, file_id
 
 
-def _fields(**overrides: bool) -> list[dict]:
+def _fields(**overrides: bool | None) -> list[dict]:
     base = {
         "counterparty_tax_id": True,
         "counterparty_name": True,
@@ -156,6 +156,48 @@ async def test_c19_el_ranking_no_dispara_ninguna_llamada_real_solo_lee_lo_ya_per
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"by_field_group": [], "by_combination": []}
+
+
+async def test_ratio_es_null_no_cero_cuando_el_grupo_no_tiene_ningun_dato_comparable(
+    authapi: Api,
+) -> None:
+    """auditoría S6.7 (SOLID, hallazgo MEDIO): un grupo sin ningún dato comparable
+    (`comparables == 0` -- p. ej. la verdad confirmada no tenía CIF de contraparte, spec C5, "campo
+    no comparable... no puntúa a favor ni en contra") debe exponer `ratio: null`, nunca `0.0` --
+    confundirlos sería lo mismo que confundir "no leído" con "leído e incorrecto". La fila en sí no
+    tiene `error` (sigue contando en `by_combination` como ejecución exitosa, comparables=6 en
+    total por los otros 6 campos)."""
+    client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed_file(dsns, slug="rk-nulo")
+    await seed_benchmark_result(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        uploaded_file_id=file_id,
+        variant="clahe",
+        engine="motor-sin-cif",
+        # `counterparty_tax_id` no comparable (verdad ausente): `match=None`, no True/False.
+        field_results=_fields(counterparty_tax_id=None),
+        tax_lines_matched=None,
+        aciertos=6,
+        comparables=6,
+    )
+    token = await _admin_tech_token(client, dsns)
+
+    resp = await client.get(_RANKING_URL, headers=_platform_auth(token))
+
+    assert resp.status_code == 200, resp.text
+    by_group = {
+        (r["field_group"], r["variant"], r["engine"]): r for r in resp.json()["by_field_group"]
+    }
+
+    cif = by_group[("CIF/NIF", "clahe", "motor-sin-cif")]
+    assert cif["comparables"] == 0
+    assert cif["ratio"] is None
+
+    importes = by_group[("Importes", "clahe", "motor-sin-cif")]
+    assert importes["comparables"] == 3
+    assert importes["ratio"] == 1.0
 
 
 async def test_c20_la_tabla_de_detalle_por_combinacion_incluye_ejecuciones_y_errores(

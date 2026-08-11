@@ -31,7 +31,9 @@ class FieldGroupRankingOut(BaseModel):
     engine: str
     aciertos: int
     comparables: int
-    ratio: float
+    # `None` cuando `comparables == 0`: sin datos todavía, distinto de "0% de acierto real"
+    # (auditoría S6.7, hallazgo MEDIO de SOLID).
+    ratio: float | None
 
 
 class CombinationSummaryOut(BaseModel):
