@@ -22,9 +22,9 @@ from typing import Any
 
 from ocr.extraction import ExtractedInvoice, InvoiceExtractionError, InvoiceExtractor
 
-__all__ = ["MistralInvoiceExtractor", "build_mistral_extractor"]
+__all__ = ["ENGINE_NAME", "MistralInvoiceExtractor", "build_mistral_extractor"]
 
-_ENGINE_NAME = "mistral-ocr-4"
+ENGINE_NAME = "mistral-ocr-4"
 _DEFAULT_TIMEOUT_S = 60
 
 _PDF_CONTENT_TYPE = "application/pdf"
@@ -118,7 +118,7 @@ def _empty_invoice(*, model: str, raw: dict[str, Any]) -> ExtractedInvoice:
         invoice_number_confidence="baja",
         tax_lines=(),
         tax_ids=(),
-        engine=_ENGINE_NAME,
+        engine=ENGINE_NAME,
         model=model,
         raw=raw,
     )

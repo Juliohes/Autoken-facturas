@@ -52,6 +52,7 @@ def serialize_reading(invoice: ExtractedInvoice, analysis: InvoiceAnalysis) -> d
         "net_amount": str(invoice.net_amount) if invoice.net_amount is not None else None,
         "tax_amount": str(invoice.tax_amount) if invoice.tax_amount is not None else None,
         "tax_lines": serialize_tax_lines(invoice),
+        "invoice_number": invoice.invoice_number,
         "counterparty_tax_id": analysis.counterparty_tax_id,
         "counterparty_name": analysis.counterparty_name,
         "own_tax_id_present": analysis.own_tax_id_present,

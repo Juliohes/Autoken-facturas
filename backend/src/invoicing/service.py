@@ -36,6 +36,7 @@ from invoicing.corrections import (
     TaxLineFields,
     diff_corrections,
 )
+from jobs import queue
 from ocr import repository as ocr_repo
 from ocr.repository import ExtractionRecord
 from ocr.verification import TaxLine, check_invoice_totals
@@ -508,6 +509,13 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
         command.counterparty_name or "",
         settings=settings,
         session=identity.session,
+    )
+
+    # Benchmark real de variante x motor (S6.7, C1): dispara en segundo plano, sin bloquear esta
+    # respuesta -- mismo criterio best-effort que el encolado del OCR en la subida (S2.3). La
+    # verdad contra la que se puntúa es justo la factura que se acaba de confirmar.
+    await queue.enqueue_ocr_benchmark(
+        str(identity.tenant_id), str(file_ctx.company_id), str(file_id)
     )
     return invoice_id
 

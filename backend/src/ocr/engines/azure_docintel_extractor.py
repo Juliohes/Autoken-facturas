@@ -35,9 +35,9 @@ from ocr.extraction import (
     InvoiceExtractor,
 )
 
-__all__ = ["AzureDocIntelInvoiceExtractor", "build_azure_docintel_extractor"]
+__all__ = ["ENGINE_NAME", "AzureDocIntelInvoiceExtractor", "build_azure_docintel_extractor"]
 
-_ENGINE_NAME = "azure-docintel"
+ENGINE_NAME = "azure-docintel"
 _INVOICE_MODEL = "prebuilt-invoice"
 
 _SUPPORTED_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp", "application/pdf"})
@@ -135,7 +135,7 @@ class AzureDocIntelInvoiceExtractor:
             invoice_number_confidence=self._confidence(fields.get("InvoiceId")),
             tax_lines=(),  # `Items` de Azure no es un desglose de IVA por tipo (ver docstring).
             tax_ids=tax_ids,
-            engine=_ENGINE_NAME,
+            engine=ENGINE_NAME,
             model=model_version,
             raw={"model_id": model_version},
         )

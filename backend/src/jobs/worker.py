@@ -1,9 +1,11 @@
-"""Configuración del worker arq (S2.3): registra `run_ocr` como task y conecta Redis.
+"""Configuración del worker arq (S2.3): registra `run_ocr` (y desde S6.7, `run_ocr_benchmark_task`)
+como tasks y conecta Redis.
 
 Punto de entrada del proceso worker (`arq jobs.worker.WorkerSettings`). Comparte Postgres/MinIO con
-la API por configuración (mismas env vars). El comportamiento del OCR se prueba invocando
-`jobs.ocr.run_ocr` directamente; aquí solo se cablea el runtime de arq (verificado por el smoke test
-`tests/test_ocr_worker_wiring.py`, no un arq real en CI).
+la API por configuración (mismas env vars). El comportamiento de cada job se prueba invocando su
+función de dominio directamente (`jobs.ocr.run_ocr`, `ocr.benchmark.run_benchmark`); aquí solo se
+cablea el runtime de arq (verificado por el smoke test `tests/test_ocr_worker_wiring.py`, no un arq
+real en CI).
 
 Guardarraíl ADR-0014: al arrancar, el worker comprueba que su rol de conexión NO puede saltarse la
 RLS (igual que el lifespan de la API en `main.py`). El worker escribe fijando el contexto de tenant
@@ -17,6 +19,7 @@ from typing import Any
 from arq.connections import RedisSettings
 
 from jobs.ocr import run_ocr
+from jobs.ocr_benchmark import run_ocr_benchmark_task
 from shared.config import get_settings
 from shared.db import get_engine
 from shared.db_security import assert_runtime_role_cannot_bypass_rls
@@ -44,7 +47,7 @@ async def startup(ctx: dict[str, Any]) -> None:
 class WorkerSettings:
     """Ajustes que arq lee para arrancar el worker (`arq jobs.worker.WorkerSettings`)."""
 
-    functions = [run_ocr_task]
+    functions = [run_ocr_task, run_ocr_benchmark_task]
     on_startup = startup
     queue_name = _settings.ocr_queue_name
     redis_settings = RedisSettings.from_dsn(_settings.redis_url)

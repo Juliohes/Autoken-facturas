@@ -135,6 +135,64 @@ class OcrComparisonRun(Base):
     )
 
 
+class OcrBenchmarkResult(Base):
+    """Fila de una combinación (variante, motor) del benchmark real S6.7: `ocr_benchmark_results`.
+
+    El esquema aquí debe coincidir con la migración 0029 (el guard `alembic check` de CI detecta la
+    deriva ORM<->migración -- 2026-08-11, S6.7 auditoría, hallazgo CRÍTICO: esta clase faltaba desde
+    la migración 0029, igual patrón que `OcrRankingEntry`/`OcrComparisonRun`). Una fila vigente por
+    `(uploaded_file_id, variant, engine)` (UNIQUE, idempotencia del reprocesado, C4).
+
+    A diferencia de `OcrComparisonRun`/`OcrRankingEntry` (fuera de alcance de S5.2, CIF/nombre de
+    contraparte en claro dentro del JSONB), esta tabla los cifra desde el día 1 (C23, ADR-0018):
+    dos columnas `bytea` dedicadas, fuera del JSONB `reading` (que solo lleva fechas, importes,
+    tramos de IVA y número de factura). El ORM nunca lee/escribe esas dos columnas directamente
+    (SQL crudo en `ocr.benchmark_repository`, mismo patrón que `OcrExtraction`).
+    """
+
+    __tablename__ = "ocr_benchmark_results"
+    __table_args__ = (
+        UniqueConstraint(
+            "uploaded_file_id",
+            "variant",
+            "engine",
+            name="ocr_benchmark_results_file_variant_engine_unique",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    uploaded_file_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("uploaded_files.id", ondelete="CASCADE"), nullable=False
+    )
+    variant: Mapped[str] = mapped_column(Text, nullable=False)
+    engine: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Cifrados desde el día 1 (C23, `pgp_sym_encrypt`); el ORM nunca los lee/escribe directamente.
+    counterparty_tax_id: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
+    counterparty_name: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
+    reading: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    field_results: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
+    tax_lines_matched: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    aciertos: Mapped[int] = mapped_column(Integer, nullable=False)
+    comparables: Mapped[int] = mapped_column(Integer, nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class OcrRankingEntry(Base):
     """Lectura de UN motor candidato sobre UNA factura, para el ranking multi-modelo (S4.8).
 
