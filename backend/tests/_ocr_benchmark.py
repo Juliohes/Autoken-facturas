@@ -79,6 +79,71 @@ async def fetch_benchmark_results_raw(dsns: dict[str, str], *, file_id: str) -> 
         await conn.close()
 
 
+async def seed_benchmark_result(
+    dsns: dict[str, str],
+    *,
+    tenant_id: str,
+    company_id: str,
+    uploaded_file_id: str,
+    variant: str,
+    engine: str,
+    model: str = "modelo-test",
+    field_results: list[dict] | None = None,
+    tax_lines_matched: bool | None = True,
+    aciertos: int = 8,
+    comparables: int = 8,
+    error: str | None = None,
+    duration_ms: int | None = 100,
+    counterparty_tax_id: str | None = "B12345678",
+    counterparty_name: str | None = "Proveedor SA",
+) -> None:
+    """Inserta directamente una fila de `ocr_benchmark_results` (superusuario) -- para probar la
+    agregación por grupo de campo/combinación (S6.7 Área D, C18-C20) sin depender de motores reales.
+    `field_results` por defecto: los 7 campos escalares, todos acierto -- pásalo explícito para
+    controlar el desglose por grupo en un test concreto."""
+    if field_results is None:
+        field_results = [
+            {"field": f, "match": True}
+            for f in (
+                "counterparty_tax_id",
+                "counterparty_name",
+                "invoice_number",
+                "issue_date",
+                "total_amount",
+                "net_amount",
+                "tax_amount",
+            )
+        ]
+    key = _encryption_key_for(tenant_id)
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        await conn.execute(
+            "INSERT INTO ocr_benchmark_results "
+            "(tenant_id, company_id, uploaded_file_id, variant, engine, model, "
+            " counterparty_tax_id, counterparty_name, reading, field_results, tax_lines_matched, "
+            " aciertos, comparables, error, duration_ms) "
+            "VALUES ($1,$2,$3,$4,$5,$6,pgp_sym_encrypt($7,$14),pgp_sym_encrypt($8,$14),"
+            " '{}'::jsonb, $9::jsonb, $10, $11, $12, $13, $15)",
+            tenant_id,
+            company_id,
+            uploaded_file_id,
+            variant,
+            engine,
+            model,
+            counterparty_tax_id,
+            counterparty_name,
+            json.dumps(field_results),
+            tax_lines_matched,
+            aciertos,
+            comparables,
+            error,
+            key,
+            duration_ms,
+        )
+    finally:
+        await conn.close()
+
+
 async def count_benchmark_results(dsns: dict[str, str], *, file_id: str) -> int:
     conn = await asyncpg.connect(dsns["admin"])
     try:
