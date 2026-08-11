@@ -75,8 +75,15 @@ const LAB_DETAIL = {
   },
   reading_3: {
     invoice: { total_amount: '121.00' },
-    corrections: [],
-    has_corrections: false,
+    field_comparison: [
+      { field: 'total_amount', column_2: '121.00', column_3: '121.00', match: true },
+      { field: 'invoice_number', column_2: null, column_3: null, match: null },
+    ],
+    tax_lines_comparison: {
+      column_2: [{ iva_pct: '21', base: '100.00', cuota: '21.00' }],
+      column_3: [{ iva_pct: '21', base: '100.00', cuota: '21.00' }],
+      match: true,
+    },
   },
   ranking: [],
   ranking_available: false,
@@ -130,7 +137,7 @@ describe('PlatformLab (S6.2)', () => {
     expect(within(tr).getByRole('button', { name: 'Laboratorio' })).toBeInTheDocument()
   })
 
-  it('C11/C13: el detalle del laboratorio muestra "sin correcciones" y "sin comparativa" cuando no las hay', async () => {
+  it('S6.6 C11/S6.2 C13: la tabla unificada se pinta siempre (sin mensaje "sin correcciones" aparte) y la comparativa sigue avisando cuando no hay datos', async () => {
     asUser(true)
     getMock.mockImplementation((path: string) => {
       if (path.includes('/platform/tenants') && !path.includes('/invoices')) {
@@ -153,14 +160,64 @@ describe('PlatformLab (S6.2)', () => {
     await user.click(await screen.findByRole('button', { name: 'Laboratorio' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Laboratorio de esta factura' })
+    // La tabla unificada muestra el campo con acierto (total_amount) y también "Tramos de IVA".
     await waitFor(() => {
-      expect(within(dialog).getByText(/sin correcciones/i)).toBeInTheDocument()
+      expect(within(dialog).getByText('Total')).toBeInTheDocument()
     })
+    expect(within(dialog).getByText('Tramos de IVA')).toBeInTheDocument()
+    expect(within(dialog).queryByText(/sin correcciones/i)).not.toBeInTheDocument()
     expect(within(dialog).getByText(/sin datos de comparativa/i)).toBeInTheDocument()
     // Las 3 lecturas están presentes (aunque sea con datos mínimos del mock).
     expect(within(dialog).getByTestId('lab-reading-1')).toBeInTheDocument()
     expect(within(dialog).getByTestId('lab-reading-2')).toBeInTheDocument()
     expect(within(dialog).getByTestId('lab-reading-3')).toBeInTheDocument()
+  })
+
+  it('S6.6 C6-C8: el badge de acierto es verde si coincide, rojo si no, gris si no es comparable', async () => {
+    asUser(true)
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/platform/tenants') && !path.includes('/invoices')) {
+        return Promise.resolve({ data: TENANTS, error: undefined })
+      }
+      if (path.includes('/lab')) {
+        return Promise.resolve({
+          data: {
+            ...LAB_DETAIL,
+            reading_3: {
+              invoice: { total_amount: '199.00' },
+              field_comparison: [
+                { field: 'total_amount', column_2: '121.00', column_3: '199.00', match: false },
+                { field: 'issue_date', column_2: '2026-05-10', column_3: '2026-05-10', match: true },
+                { field: 'invoice_number', column_2: null, column_3: null, match: null },
+              ],
+              tax_lines_comparison: LAB_DETAIL.reading_3.tax_lines_comparison,
+            },
+          },
+          error: undefined,
+        })
+      }
+      if (path.includes('/invoices')) {
+        return Promise.resolve({ data: [INVOICE_ROW], error: undefined })
+      }
+      return Promise.resolve({ data: {}, error: undefined })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+
+    const select = await screen.findByLabelText(/tenant/i)
+    await screen.findByRole('option', { name: 'ILEX Asesoría' })
+    await user.selectOptions(select, 't-ilex')
+    await user.click(await screen.findByRole('button', { name: 'Laboratorio' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Laboratorio de esta factura' })
+    await within(dialog).findAllByLabelText('fallo')
+    expect(within(dialog).getAllByLabelText('fallo')).toHaveLength(1)
+    expect(within(dialog).getAllByLabelText('acierto').length).toBeGreaterThanOrEqual(1)
+    expect(within(dialog).getAllByLabelText('no comparable')).toHaveLength(1)
+    // El campo corregido lleva un fondo distinto (C7: "el ojo va solo a lo que falló").
+    const totalCells = within(dialog).getAllByText('Total')
+    const totalRow = totalCells[totalCells.length - 1].closest('tr') as HTMLElement
+    expect(totalRow.className).toContain('bg-red-950')
   })
 
   it('el laboratorio se abre en una ventana emergente, no debajo de la tabla, y se puede cerrar', async () => {
@@ -272,7 +329,7 @@ describe('PlatformLab (S6.2)', () => {
     expect(Number(header.style.width.replace('px', ''))).toBe(startWidth + 50)
   })
 
-  it('2026-08-10: la tabla de correcciones (Lectura 3) del laboratorio se puede ordenar por cabecera', async () => {
+  it('2026-08-10: la tabla unificada (Lectura 3) del laboratorio se puede ordenar por cabecera', async () => {
     asUser(true)
     getMock.mockImplementation((path: string) => {
       if (path.includes('/platform/tenants') && !path.includes('/invoices')) {
@@ -284,11 +341,11 @@ describe('PlatformLab (S6.2)', () => {
             ...LAB_DETAIL,
             reading_3: {
               invoice: { total_amount: '121.00' },
-              has_corrections: true,
-              corrections: [
-                { field: 'zeta_field', ai_value: 'a', human_value: 'b' },
-                { field: 'alfa_field', ai_value: 'c', human_value: 'd' },
+              field_comparison: [
+                { field: 'zeta_field', column_2: 'a', column_3: 'b', match: false },
+                { field: 'alfa_field', column_2: 'c', column_3: 'd', match: true },
               ],
+              tax_lines_comparison: { column_2: [], column_3: [], match: true },
             },
           },
           error: undefined,
@@ -312,7 +369,8 @@ describe('PlatformLab (S6.2)', () => {
 
     const rows = within(dialog).getAllByRole('row').filter((r) => within(r).queryAllByRole('cell').length > 0)
     const fields = rows.map((row) => within(row).getAllByRole('cell')[0].textContent)
-    expect(fields).toEqual(['alfa_field', 'zeta_field'])
+    // "Tramos de IVA" es una fila manual, siempre al final, ajena al orden de los campos (C9).
+    expect(fields).toEqual(['alfa_field', 'zeta_field', 'Tramos de IVA'])
   })
 
   it('2026-08-10: la comparativa de modelos se puede ordenar por puntuación', async () => {

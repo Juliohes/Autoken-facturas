@@ -15,7 +15,7 @@ import { formatCurrency, formatDateTime } from '../../shared/format'
 import { usePersistedTableState } from '../../shared/usePersistedTableState'
 import { InvoiceImageModal } from '../panel/InvoiceImageModal'
 import { useSession } from '../session/SessionProvider'
-import type { LabDetail, LabInvoiceRow, RankingEntry, Reading3Correction } from './labTypes'
+import type { FieldComparison, LabDetail, LabInvoiceRow, RankingEntry, TaxLineDict } from './labTypes'
 import { useInvoiceLab } from './useInvoiceLab'
 import { useTenantInvoiceImage } from './useTenantInvoiceImage'
 import { useTenantInvoices } from './useTenantInvoices'
@@ -290,10 +290,24 @@ function LabDetailModal({ detail, onClose }: LabDetailProps) {
   )
 }
 
-const CORRECTIONS_HEADER_LABELS: Record<string, string> = {
+// S6.6 Área B: nombres de dominio (`invoicing`) traducidos a etiqueta legible. Un campo sin
+// etiqueta (no debería ocurrir con los 7 campos reales del backend, spec C10) cae a su propio
+// nombre — igual de criterio que el resto de tablas del proyecto (`INVOICE_HEADER_LABELS`).
+const FIELD_LABELS: Record<string, string> = {
+  counterparty_tax_id: 'CIF contraparte',
+  counterparty_name: 'Nombre contraparte',
+  invoice_number: 'Número de factura',
+  issue_date: 'Fecha',
+  net_amount: 'Base imponible',
+  tax_amount: 'Cuota IVA',
+  total_amount: 'Total',
+}
+
+const FIELD_COMPARISON_HEADER_LABELS: Record<string, string> = {
   field: 'Campo',
-  ai_value: 'Leído por la IA',
-  human_value: 'Guardado por el humano',
+  column_2: 'Decidió el sistema',
+  column_3: 'Confirmado',
+  match: 'Acierto',
 }
 
 const RANKING_HEADER_LABELS: Record<string, string> = {
@@ -301,47 +315,79 @@ const RANKING_HEADER_LABELS: Record<string, string> = {
   score: 'Puntuación',
 }
 
+/** Badge de acierto (S6.6 C6-C8): verde si coinciden, rojo si no, gris neutro si no es comparable
+ * (columna 3 nula) — nunca rojo ni verde sin una verdad confirmada con la que comparar. */
+function MatchBadge({ match }: { match: boolean | null }) {
+  if (match === null) {
+    return (
+      <span className="text-slate-500" aria-label="no comparable">
+        —
+      </span>
+    )
+  }
+  return match ? (
+    <span className="text-emerald-400" aria-label="acierto">
+      ✓✓
+    </span>
+  ) : (
+    <span className="text-red-400" aria-label="fallo">
+      ✗
+    </span>
+  )
+}
+
+function formatTaxLineDicts(lines: TaxLineDict[]): string {
+  if (lines.length === 0) return 'sin tramos'
+  return lines.map((l) => `${l.iva_pct}%: base ${l.base}, cuota ${l.cuota}`).join('; ')
+}
+
+function matchSortKey(match: boolean | null): string {
+  if (match === null) return 'b-neutro'
+  return match ? 'a-acierto' : 'c-fallo'
+}
+
 function LabDetailView({ detail, onClose }: LabDetailProps) {
-  const correctionsState = usePersistedTableState('lab-corrections-column-widths')
-  const correctionsColumns = useMemo<ColumnDef<Reading3Correction, unknown>[]>(
+  const fieldComparisonState = usePersistedTableState('lab-field-comparison-column-widths')
+  const fieldComparisonColumns = useMemo<ColumnDef<FieldComparison, unknown>[]>(
     () => [
-      { id: 'field', header: 'Campo', accessorFn: (r) => r.field, size: 120, minSize: 32 },
+      { id: 'field', header: 'Campo', accessorFn: (r) => FIELD_LABELS[r.field] ?? r.field, size: 150, minSize: 32 },
       {
-        id: 'ai_value',
-        header: 'Leído por la IA',
-        accessorFn: (r) => r.ai_value ?? undefined,
-        size: 140,
+        id: 'column_2',
+        header: 'Decidió el sistema',
+        accessorFn: (r) => r.column_2 ?? undefined,
+        size: 150,
         minSize: 32,
         sortUndefined: 'last',
       },
       {
-        id: 'human_value',
-        header: 'Guardado por el humano',
-        accessorFn: (r) => r.human_value ?? undefined,
-        size: 160,
+        id: 'column_3',
+        header: 'Confirmado',
+        accessorFn: (r) => r.column_3 ?? undefined,
+        size: 150,
         minSize: 32,
         sortUndefined: 'last',
       },
+      { id: 'match', header: 'Acierto', accessorFn: (r) => matchSortKey(r.match), size: 90, minSize: 32 },
     ],
     [],
   )
-  const correctionsTable = useReactTable({
-    data: detail.reading_3.corrections,
-    columns: correctionsColumns,
+  const fieldComparisonTable = useReactTable({
+    data: detail.reading_3.field_comparison,
+    columns: fieldComparisonColumns,
     state: {
-      columnSizing: correctionsState.columnSizing,
-      columnSizingInfo: correctionsState.columnSizingInfo,
-      sorting: correctionsState.sorting,
+      columnSizing: fieldComparisonState.columnSizing,
+      columnSizingInfo: fieldComparisonState.columnSizingInfo,
+      sorting: fieldComparisonState.sorting,
     },
-    onColumnSizingChange: correctionsState.onColumnSizingChange,
-    onColumnSizingInfoChange: correctionsState.onColumnSizingInfoChange,
-    onSortingChange: correctionsState.setSorting,
+    onColumnSizingChange: fieldComparisonState.onColumnSizingChange,
+    onColumnSizingInfoChange: fieldComparisonState.onColumnSizingInfoChange,
+    onSortingChange: fieldComparisonState.setSorting,
     columnResizeMode: 'onChange',
     sortDescFirst: false,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   })
-  const sortedCorrections = correctionsTable.getRowModel().rows.map((r) => r.original)
+  const sortedFieldComparison = fieldComparisonTable.getRowModel().rows.map((r) => r.original)
 
   const rankingState = usePersistedTableState('lab-ranking-column-widths')
   const rankingColumns = useMemo<ColumnDef<RankingEntry, unknown>[]>(
@@ -456,34 +502,57 @@ function LabDetailView({ detail, onClose }: LabDetailProps) {
           ))}
           <TaxLinesList value={detail.reading_3.invoice.tax_lines} />
         </ul>
-        {detail.reading_3.has_corrections ? (
-          <table className="whitespace-nowrap text-left text-sm" style={{ tableLayout: 'fixed', width: correctionsTable.getTotalSize() }}>
-            <thead className="text-slate-400">
-              {correctionsTable.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <DataTableTh
-                      key={header.id}
-                      header={header}
-                      label={CORRECTIONS_HEADER_LABELS[header.id] ?? ''}
-                    />
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {sortedCorrections.map((c) => (
-                <tr key={c.field}>
-                  <td className="truncate p-1">{c.field}</td>
-                  <td className="truncate p-1">{c.ai_value ?? '—'}</td>
-                  <td className="truncate p-1">{c.human_value ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="text-slate-400">Sin correcciones: el humano confirmó tal cual lo leyó la IA.</p>
-        )}
+        {/* S6.6 C10/C11: la tabla se pinta SIEMPRE, con los 7 campos + tramos de IVA, tenga o no
+            correcciones — el propio contenido (todo verde) ya comunica "sin correcciones" con más
+            detalle que el mensaje aparte que tenía S6.2. */}
+        <table
+          className="whitespace-nowrap text-left text-sm"
+          style={{ tableLayout: 'fixed', width: fieldComparisonTable.getTotalSize() }}
+        >
+          <thead className="text-slate-400">
+            {fieldComparisonTable.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <DataTableTh
+                    key={header.id}
+                    header={header}
+                    label={FIELD_COMPARISON_HEADER_LABELS[header.id] ?? ''}
+                  />
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody className="divide-y divide-slate-800">
+            {sortedFieldComparison.map((f) => (
+              <tr key={f.field} className={f.match === false ? 'bg-red-950/40' : undefined}>
+                <td className="truncate p-1">{FIELD_LABELS[f.field] ?? f.field}</td>
+                <td className="truncate p-1">{f.column_2 ?? '—'}</td>
+                <td className="truncate p-1">{f.column_3 ?? '—'}</td>
+                <td className="truncate p-1">
+                  <MatchBadge match={f.match} />
+                </td>
+              </tr>
+            ))}
+            {/* S6.6 C9: tramos de IVA, fila manual (no encaja en el bucle de campos escalares de
+                arriba, no participa del orden de la tabla). */}
+            <tr
+              className={
+                detail.reading_3.tax_lines_comparison.match === false ? 'bg-red-950/40' : undefined
+              }
+            >
+              <td className="truncate p-1">Tramos de IVA</td>
+              <td className="truncate p-1">
+                {formatTaxLineDicts(detail.reading_3.tax_lines_comparison.column_2)}
+              </td>
+              <td className="truncate p-1">
+                {formatTaxLineDicts(detail.reading_3.tax_lines_comparison.column_3)}
+              </td>
+              <td className="truncate p-1">
+                <MatchBadge match={detail.reading_3.tax_lines_comparison.match} />
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section data-testid="lab-ranking" className="space-y-2">

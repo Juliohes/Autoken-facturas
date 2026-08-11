@@ -291,11 +291,15 @@ def _balance_ok(
     return check_invoice_totals(lines, total, irpf_cuota=irpf or Decimal(0)).valid
 
 
-def _extraction_tax_lines(extraction: ExtractionRecord) -> list[TaxLine]:
+def extraction_tax_lines(extraction: ExtractionRecord) -> list[TaxLine]:
     """Construye los `TaxLine` del cuadre desde la extracción (`[{base, rate, cuota}]`).
 
     Un tramo con algún importe ausente se descarta (no se puede cuadrar lo que no se leyó); si eso
     deja la lista vacía, el cuadre no es comprobable (`None`).
+
+    Pública (2026-08-10, S6.6): reutilizada tal cual por `platform_admin.lab_service` para la
+    columna 2 ("Lectura 1") de la fila de tramos de IVA del laboratorio -- mismo parseo que ya usa
+    esta función para el cuadre y para el diff de confirmación, sin una segunda copia.
     """
     lines: list[TaxLine] = []
     for raw in extraction.tax_lines:
@@ -344,7 +348,7 @@ async def build_review_data(
     )
 
     warnings: list[str] = []
-    if _balance_ok(_extraction_tax_lines(extraction), extraction.total_amount) is False:
+    if _balance_ok(extraction_tax_lines(extraction), extraction.total_amount) is False:
         warnings.append("descuadre")
     if not extraction.own_tax_id_present:
         warnings.append("cif_propio_ausente")
@@ -544,7 +548,7 @@ def _lines_from_raw(
     raw: list[tuple[Decimal | None, Decimal | None, Decimal | None]],
 ) -> list[TaxLine]:
     """`TaxLine` completos desde las tuplas crudas de `repository.InvoiceRecord`; descarta
-    incompletos (igual criterio que `_extraction_tax_lines`/`_command_tax_lines`)."""
+    incompletos (igual criterio que `extraction_tax_lines`/`_command_tax_lines`)."""
     lines: list[TaxLine] = []
     for iva_pct, base, cuota in raw:
         if iva_pct is None or base is None or cuota is None:
@@ -795,7 +799,7 @@ def _diff(extraction: ExtractionRecord, command: ConfirmCommand) -> list[Correct
         counterparty_tax_id=extraction.counterparty_tax_id,
         counterparty_name=extraction.counterparty_name,
         invoice_number=extraction.invoice_number,
-        tax_lines=_tax_line_fields(_extraction_tax_lines(extraction)),
+        tax_lines=_tax_line_fields(extraction_tax_lines(extraction)),
     )
     confirmed = ConfirmedFields(
         issue_date=command.issue_date,

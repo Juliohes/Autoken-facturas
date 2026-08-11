@@ -68,7 +68,7 @@ class InvoiceRecord:
 
     `tax_lines` en bruto (tuplas `(iva_pct, base, cuota)`, como `insert_tax_lines`): el repositorio
     no conoce el tipo `ocr.verification.TaxLine` (es del contexto `ocr`); esa conversión es del
-    servicio, igual que ya hace con los tramos de la extracción OCR (`_extraction_tax_lines`).
+    servicio, igual que ya hace con los tramos de la extracción OCR (`extraction_tax_lines`).
 
     `uploaded_file_id`/`direction`/`invoice_number`/`is_test`/`balance_ok`/`status`/`confirmed_by`/
     `confirmed_at` (S6.2): `edit_invoice`/`get_invoice` no los necesitaban hasta ahora, pero
