@@ -2096,6 +2096,91 @@
           }
         }
       }
+    },
+    "/api/v1/platform/benchmark/backfill": {
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Start Backfill",
+        "description": "C10: responde de inmediato, sin esperar a que termine ni una sola combinaci\u00f3n. C11: si ya\nhay un lote `running`, responde 409 con su progreso (mismo patr\u00f3n ya usado por\n`invoice_intake.router` para `duplicate_of`: `JSONResponse` con cuerpo estructurado propio,\n`response_model` fijado expl\u00edcitamente para que FastAPI solo lo aplique al camino 200) -- el\nfrontend se engancha a \u00e9l, nunca lo trata como un error gen\u00e9rico. Interruptor apagado -> 422\n(S6.7 auditor\u00eda 2026-08-11, hallazgo ALTO): nunca se llega a insertar ni encolar nada.",
+        "operationId": "start_backfill_api_v1_platform_benchmark_backfill_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackfillIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillStartedOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/benchmark/backfill/status": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Get Backfill Status",
+        "description": "C16: el lote `running` si lo hay; si no, el m\u00e1s reciente ya terminado; `None` si nunca se\nlanz\u00f3 ninguno.",
+        "operationId": "get_backfill_status_api_v1_platform_benchmark_backfill_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillStatusOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/benchmark/ranking": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Get Benchmark Ranking",
+        "operationId": "get_benchmark_ranking_api_v1_platform_benchmark_ranking_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkRankingOut"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2152,6 +2237,114 @@
         "title": "ApprovalResponse",
         "description": "Respuesta de la aprobaci\u00f3n de un registro."
       },
+      "BackfillIn": {
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "limit"
+        ],
+        "title": "BackfillIn"
+      },
+      "BackfillStartedOut": {
+        "properties": {
+          "iniciado": {
+            "type": "boolean",
+            "title": "Iniciado"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "iniciado",
+          "total"
+        ],
+        "title": "BackfillStartedOut"
+      },
+      "BackfillStatusOut": {
+        "properties": {
+          "running": {
+            "type": "boolean",
+            "title": "Running"
+          },
+          "batch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BatchStatusOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "running",
+          "batch"
+        ],
+        "title": "BackfillStatusOut"
+      },
+      "BatchStatusOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "completed": {
+            "type": "integer",
+            "title": "Completed"
+          },
+          "failed_count": {
+            "type": "integer",
+            "title": "Failed Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "total",
+          "completed",
+          "failed_count"
+        ],
+        "title": "BatchStatusOut"
+      },
+      "BenchmarkRankingOut": {
+        "properties": {
+          "by_field_group": {
+            "items": {
+              "$ref": "#/components/schemas/FieldGroupRankingOut"
+            },
+            "type": "array",
+            "title": "By Field Group"
+          },
+          "by_combination": {
+            "items": {
+              "$ref": "#/components/schemas/CombinationSummaryOut"
+            },
+            "type": "array",
+            "title": "By Combination"
+          }
+        },
+        "type": "object",
+        "required": [
+          "by_field_group",
+          "by_combination"
+        ],
+        "title": "BenchmarkRankingOut"
+      },
       "Body_import_companies_api_v1_companies_import_post": {
         "properties": {
           "file": {
@@ -2199,6 +2392,56 @@
           "file"
         ],
         "title": "Body_upload_logo_api_v1_platform_tenants_logo_post"
+      },
+      "CombinationSummaryOut": {
+        "properties": {
+          "variant": {
+            "type": "string",
+            "title": "Variant"
+          },
+          "engine": {
+            "type": "string",
+            "title": "Engine"
+          },
+          "executions": {
+            "type": "integer",
+            "title": "Executions"
+          },
+          "errors": {
+            "type": "integer",
+            "title": "Errors"
+          },
+          "aciertos": {
+            "type": "integer",
+            "title": "Aciertos"
+          },
+          "comparables": {
+            "type": "integer",
+            "title": "Comparables"
+          },
+          "avg_duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Duration Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "variant",
+          "engine",
+          "executions",
+          "errors",
+          "aciertos",
+          "comparables",
+          "avg_duration_ms"
+        ],
+        "title": "CombinationSummaryOut"
       },
       "CompanyCreate": {
         "properties": {
@@ -2724,6 +2967,51 @@
         ],
         "title": "ExportOut",
         "description": "Respuesta de `POST /platform/tenants/{tenant_id}/export` (S4.7)."
+      },
+      "FieldGroupRankingOut": {
+        "properties": {
+          "field_group": {
+            "type": "string",
+            "title": "Field Group"
+          },
+          "variant": {
+            "type": "string",
+            "title": "Variant"
+          },
+          "engine": {
+            "type": "string",
+            "title": "Engine"
+          },
+          "aciertos": {
+            "type": "integer",
+            "title": "Aciertos"
+          },
+          "comparables": {
+            "type": "integer",
+            "title": "Comparables"
+          },
+          "ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ratio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field_group",
+          "variant",
+          "engine",
+          "aciertos",
+          "comparables",
+          "ratio"
+        ],
+        "title": "FieldGroupRankingOut"
       },
       "HTTPValidationError": {
         "properties": {
