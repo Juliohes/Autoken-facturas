@@ -203,4 +203,37 @@ describe('BenchmarkRanking (S6.7)', () => {
     ).length
     expect(rankingCallsAfter).toBeGreaterThan(rankingCallsBefore)
   })
+
+  it('no se queda atascado en "Procesando…" si el sondeo ya viene done en el primer refetch tras pulsar (sin pasar nunca por running:true)', async () => {
+    asUser(true)
+    let statusCall = 0
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/benchmark/ranking')) {
+        return Promise.resolve({ data: RANKING, error: undefined })
+      }
+      if (path.includes('/benchmark/backfill/status')) {
+        statusCall += 1
+        // La primera consulta (al montar) devuelve idle para que se vea el botón. El refetch que
+        // dispara `onSuccess` del POST devuelve directamente `done` -- nunca pasa por `running:
+        // true` en ningún sondeo intermedio (lote que termina/falla muy rápido, o 409 con el batch
+        // ya resuelto).
+        return Promise.resolve({
+          data: statusCall === 1 ? STATUS_IDLE : STATUS_DONE,
+          error: undefined,
+        })
+      }
+      return Promise.resolve({ data: {}, error: undefined })
+    })
+    postMock.mockResolvedValue({ data: { iniciado: true, total: 10 }, error: undefined })
+    const user = userEvent.setup()
+    renderScreen()
+
+    const button = await screen.findByRole('button', { name: /Últimas/i })
+    await user.click(button)
+
+    // Vuelve al botón inicial en cuanto el sondeo confirma `running: false`, sin quedarse clavado
+    // en "Procesando…" a la espera de una transición true->false que nunca ocurrió.
+    await screen.findByRole('button', { name: /Últimas/i })
+    expect(screen.queryByText(/procesando/i)).not.toBeInTheDocument()
+  })
 })
