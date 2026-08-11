@@ -18,8 +18,16 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from ocr.field_matching import (
+    amounts_match,
+    dates_match,
+    format_value,
+    group_tax_lines_by_pct,
+    names_match,
+    tax_ids_match,
+    texts_match,
+)
 from shared.diffing import Correction as Correction
-from shared.tax_id import normalize_tax_id
 
 # `Correction` vivía aquí; movida a `shared.diffing` (2026-08-01) para que `companies` pueda
 # reutilizarla sin invertir la dirección de dependencias (`invoicing -> companies`). Re-exportada
@@ -64,30 +72,6 @@ class BaselineFields:
     tax_lines: tuple[TaxLineFields, ...] = ()
 
 
-def _norm_name(value: str | None) -> str | None:
-    """Normaliza un nombre para comparar: sin espacios sobrantes (colapsa y recorta)."""
-    if value is None:
-        return None
-    return " ".join(value.split())
-
-
-def _norm_cif(value: str | None) -> str | None:
-    """Normaliza un CIF para comparar (mayúsculas, sin separadores); vacío -> None."""
-    if value is None:
-        return None
-    canonical = normalize_tax_id(value)
-    return canonical or None
-
-
-def _text(value: object | None) -> str | None:
-    """Representación textual estable de un valor para `ai_value`/`human_value`."""
-    if value is None:
-        return None
-    if isinstance(value, date):
-        return value.isoformat()
-    return str(value)
-
-
 def diff_corrections(baseline: BaselineFields, confirmed: ConfirmedFields) -> list[Correction]:
     """Devuelve una `Correction` por campo cuyo valor confirmado difiere del baseline del OCR.
 
@@ -98,21 +82,23 @@ def diff_corrections(baseline: BaselineFields, confirmed: ConfirmedFields) -> li
     corrections: list[Correction] = []
 
     def add(field: str, ai: object | None, human: object | None) -> None:
-        corrections.append(Correction(field=field, ai_value=_text(ai), human_value=_text(human)))
+        corrections.append(
+            Correction(field=field, ai_value=format_value(ai), human_value=format_value(human))
+        )
 
-    if baseline.issue_date != confirmed.issue_date:
+    if not dates_match(baseline.issue_date, confirmed.issue_date):
         add("issue_date", baseline.issue_date, confirmed.issue_date)
-    if baseline.net_amount != confirmed.net_amount:
+    if not amounts_match(baseline.net_amount, confirmed.net_amount):
         add("net_amount", baseline.net_amount, confirmed.net_amount)
-    if baseline.tax_amount != confirmed.tax_amount:
+    if not amounts_match(baseline.tax_amount, confirmed.tax_amount):
         add("tax_amount", baseline.tax_amount, confirmed.tax_amount)
-    if baseline.total_amount != confirmed.total_amount:
+    if not amounts_match(baseline.total_amount, confirmed.total_amount):
         add("total_amount", baseline.total_amount, confirmed.total_amount)
-    if _norm_cif(baseline.counterparty_tax_id) != _norm_cif(confirmed.counterparty_tax_id):
+    if not tax_ids_match(baseline.counterparty_tax_id, confirmed.counterparty_tax_id):
         add("counterparty_tax_id", baseline.counterparty_tax_id, confirmed.counterparty_tax_id)
-    if _norm_name(baseline.counterparty_name) != _norm_name(confirmed.counterparty_name):
+    if not names_match(baseline.counterparty_name, confirmed.counterparty_name):
         add("counterparty_name", baseline.counterparty_name, confirmed.counterparty_name)
-    if baseline.invoice_number != confirmed.invoice_number:  # spec: S6.1 C5
+    if not texts_match(baseline.invoice_number, confirmed.invoice_number):  # spec: S6.1 C5
         add("invoice_number", baseline.invoice_number, confirmed.invoice_number)
 
     _diff_tax_lines(baseline.tax_lines, confirmed.tax_lines, add)
@@ -138,12 +124,10 @@ def _diff_tax_lines(
     Un tramo presente solo en la confirmación es un alta (ai `None`); solo en el OCR, una baja
     (human `None`). El nombre del campo lleva el tipo de IVA: `tax_line[21].base`.
     """
-    by_pct_base: dict[Decimal, tuple[Decimal | None, Decimal | None]] = {
-        line.iva_pct: (line.base, line.cuota) for line in baseline
-    }
-    by_pct_conf: dict[Decimal, tuple[Decimal | None, Decimal | None]] = {
-        line.iva_pct: (line.base, line.cuota) for line in confirmed
-    }
+    by_pct_base = group_tax_lines_by_pct((line.iva_pct, line.base, line.cuota) for line in baseline)
+    by_pct_conf = group_tax_lines_by_pct(
+        (line.iva_pct, line.base, line.cuota) for line in confirmed
+    )
     for pct in sorted(set(by_pct_base) | set(by_pct_conf)):
         label = _pct_label(pct)
         base_ai, cuota_ai = by_pct_base.get(pct, (None, None))

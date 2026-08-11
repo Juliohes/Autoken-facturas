@@ -1004,6 +1004,39 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   el nombre (o parte de él) y la lista se va acortando sola, sin distinguir mayúsculas de
   minúsculas — mucho más rápido cuando hay muchas empresas dadas de alta.
 
+- **S6.6 — el Laboratorio dice claramente dónde falló la IA, no solo qué se corrigió (11/08/2026)**:
+  Julio entregó un documento de otra aplicación suya como referencia y pidió adaptar su idea al
+  Laboratorio de diagnóstico (la pantalla, solo para los "tech" de plataforma, que compara cómo se
+  leyó cada factura). Antes, para saber "¿en qué campo se equivocó el sistema?" había que leer una
+  lista de diferencias aparte, y esa lista solo aparecía si algo había cambiado. Ahora hay una única
+  tabla, siempre visible, con TODOS los datos de la factura (CIF y nombre del proveedor, número de
+  factura, fecha, base, IVA, total, y los tramos de IVA aparte) y, para cada uno, dos columnas —
+  "qué decidió el sistema" antes de guardar y "qué se confirmó" — más un aviso de un vistazo: un
+  visto verde si coinciden, una cruz roja si no, o un guion gris cuando no hay nada con qué
+  comparar (por ejemplo, un número de factura que nunca llegó a leerse). Si no hubo ningún cambio,
+  la tabla entera sale en verde, en vez de mostrar antes un aviso aparte de "sin correcciones".
+
+  La parte más delicada, encontrada pensando en los casos raros ANTES de programar (como manda la
+  regla del proyecto): "qué decidió el sistema" no puede sacarse simplemente del dato que hay HOY
+  guardado, porque una factura ya confirmada se puede editar más adelante (por ejemplo, semanas
+  después, si alguien se da cuenta de un error). Si se hubiera sacado de ahí, un campo editado
+  mucho después habría aparecido en VERDE, como si el sistema lo hubiera leído bien desde el
+  principio — una mentira sutil pero real. Se corrigió reconstruyendo siempre esa columna a partir
+  de la primera lectura de la IA (que nunca cambia), no del dato actual. Julio aprobó este arreglo
+  al presentárselo antes de escribir el primer test, tal y como pide el proceso del proyecto.
+
+  Por dentro, se creó también una única "función árbitro" reutilizable (¿coinciden dos importes?,
+  ¿dos fechas?, ¿dos CIF?, ¿dos nombres?) que antes vivía duplicada sin que nadie se hubiera dado
+  cuenta: una copia se usaba solo para calcular qué corregir al confirmar una factura, y el
+  Laboratorio iba a necesitar la misma lógica para pintar los avisos verdes/rojos. A partir de
+  ahora hay un solo sitio que decide "esto es lo mismo o no", reutilizado en los dos lugares — así,
+  si algún día se afina ese criterio, se afina en un único sitio, no en dos que podrían acabar
+  divergiendo sin que nadie se entere. Tres auditorías independientes revisaron el cambio (ninguna
+  encontró fallos de seguridad ni de aislamiento entre asesorías); sí encontraron y se corrigieron
+  varios detalles de limpieza de código (por ejemplo, dos trozos de lógica casi idénticos para
+  comparar tramos de IVA que se unificaron en uno solo). 795 pruebas automáticas del backend y 296
+  del frontend, todas en verde.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

@@ -21,17 +21,37 @@ export interface Reading1 {
  * (S2.4) — reutilizado tal cual, no reinventado (la spec C8 lo exige explícitamente). */
 export type Reading2 = ReviewResponse
 
-export interface Reading3Correction {
+/** Fila de la tabla unificada (S6.6 Área B/C): columna 2 ("decidió el sistema", reconstruida desde
+ * `ocr_corrections` o, si no hay fila, desde la Lectura 1 — nunca desde la columna 3) vs columna 3
+ * ("confirmado humano"). `match=null` cuando la columna 3 es `null` (campo no comparable, C8):
+ * badge neutro, nunca rojo ni verde. */
+export interface FieldComparison {
   field: string
-  ai_value: string | null
-  human_value: string | null
+  column_2: string | null
+  column_3: string | null
+  match: boolean | null
 }
 
-/** Lectura 3 (guardado final, spec C10/C11): la factura confirmada + el diff de correcciones. */
+export interface TaxLineDict {
+  iva_pct: string
+  base: string
+  cuota: string
+}
+
+/** Tramos de IVA (S6.6 C9): fila manual, no encaja en el bucle de campos escalares — un badge que
+ * compara el conjunto completo (rojo si cualquier tramo difiere o si el número de tramos difiere). */
+export interface TaxLinesComparison {
+  column_2: TaxLineDict[]
+  column_3: TaxLineDict[]
+  match: boolean
+}
+
+/** Lectura 3 (guardado final, spec S6.6 C10/C11): la factura confirmada + la tabla unificada
+ * campo a campo (sustituye a la vieja lista de correcciones de S6.2, que solo listaba diferencias). */
 export interface Reading3 {
   invoice: Record<string, unknown>
-  corrections: Reading3Correction[]
-  has_corrections: boolean
+  field_comparison: FieldComparison[]
+  tax_lines_comparison: TaxLinesComparison
 }
 
 export interface RankingEntry {

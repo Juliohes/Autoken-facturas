@@ -1,6 +1,6 @@
-"""Endpoints HTTP del laboratorio OCR (S6.2, spec docs/specs/S6.2-laboratorio-ocr-admin-tech.md):
-`GET /api/v1/platform/tenants/{tenant_id}/invoices` y
-`GET /api/v1/platform/tenants/{tenant_id}/invoices/{file_id}/lab`.
+"""Endpoints HTTP del laboratorio OCR (S6.2, spec docs/specs/S6.2-laboratorio-ocr-admin-tech.md, +
+S6.6, spec docs/specs/S6.6-laboratorio-comparacion-honesta.md, Áreas B-E): `GET /api/v1/platform/
+tenants/{tenant_id}/invoices` y `GET /api/v1/platform/tenants/{tenant_id}/invoices/{file_id}/lab`.
 
 Capa HTTP fina: autentica y autoriza (`require_admin_tech()`, S4.10, mismo patrón que
 `ranking_router`/`settings_router` — un `platform_admin` sin el flag recibe 403, C1) y traduce el
@@ -121,13 +121,25 @@ def _reading_2_out(reading_2: ReviewData | None) -> dict[str, object] | None:
 
 
 def _reading_3_out(reading_3: lab_service.Reading3) -> dict[str, object]:
+    """Tabla unificada de comparación honesta (S6.6, spec C4-C11): sustituye a `corrections`/
+    `has_corrections` de S6.2 por un badge por cada uno de los 7 campos escalares más la fila
+    manual de tramos de IVA."""
     return {
         "invoice": reading_3.invoice,
-        "corrections": [
-            {"field": c.field, "ai_value": c.ai_value, "human_value": c.human_value}
-            for c in reading_3.corrections
+        "field_comparison": [
+            {
+                "field": row.field,
+                "column_2": row.column_2,
+                "column_3": row.column_3,
+                "match": row.match,
+            }
+            for row in reading_3.field_comparison
         ],
-        "has_corrections": reading_3.has_corrections,
+        "tax_lines_comparison": {
+            "column_2": reading_3.tax_lines_comparison.column_2,
+            "column_3": reading_3.tax_lines_comparison.column_3,
+            "match": reading_3.tax_lines_comparison.match,
+        },
     }
 
 

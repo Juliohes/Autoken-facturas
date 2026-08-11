@@ -13,6 +13,7 @@ tabla nueva). Solo lectura: no persiste nada, no reabre la posibilidad de confir
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -27,6 +28,15 @@ from invoicing import repository as invoicing_repository
 from invoicing import service as invoicing_service
 from ocr import ranking_repository
 from ocr import repository as ocr_repository
+from ocr.field_matching import (
+    amounts_match,
+    dates_match,
+    format_value,
+    names_match,
+    tax_ids_match,
+    tax_lines_match,
+    texts_match,
+)
 from platform_admin import repository as platform_repository
 from platform_admin import service as platform_service
 from reporting import repository as reporting_repository
@@ -40,7 +50,8 @@ __all__ = [
     "LabResult",
     "Reading1",
     "Reading3",
-    "Reading3Correction",
+    "Reading3FieldComparison",
+    "Reading3TaxLinesComparison",
     "get_invoice_image",
     "get_invoice_lab",
     "list_tenant_invoices",
@@ -68,25 +79,43 @@ class Reading1:
 
 
 @dataclass(frozen=True)
-class Reading3Correction:
-    """Una corrección humana de la Lectura 3 (spec C10): campo, valor de la IA, valor humano."""
+class Reading3FieldComparison:
+    """Una fila de la tabla unificada (S6.6, spec §3 Área B/C, C4-C8): columna 2 ("decidió el
+    sistema", reconstruida desde `ocr_corrections`/Lectura 1, spec §0.1) frente a columna 3
+    ("confirmado humano"), con su badge de acierto.
+
+    `match` es `None` cuando la columna 3 no es comparable (`null`, spec C8) -- nunca rojo ni verde
+    en ese caso. Sustituye a `Reading3Correction`/`has_corrections` de S6.2 (spec C11): la tabla
+    ahora muestra TODOS los campos, no solo los que difieren.
+    """
 
     field: str
-    ai_value: str | None
-    human_value: str | None
+    column_2: str | None
+    column_3: str | None
+    match: bool | None
+
+
+@dataclass(frozen=True)
+class Reading3TaxLinesComparison:
+    """Fila especial de tramos de IVA (S6.6, spec C9): no encaja en el bucle de campos escalares
+    (N tramos, no 1 valor) -- columna 2/3 serializadas tramo a tramo (tasa+base+cuota como texto) y
+    un único badge para el conjunto (rojo si cualquier tramo difiere o si el número de tramos
+    difiere, verde si son idénticos)."""
+
+    column_2: list[dict[str, str]]
+    column_3: list[dict[str, str]]
+    match: bool
 
 
 @dataclass(frozen=True)
 class Reading3:
-    """Lectura 3 (guardado final, spec C10/C11): la factura confirmada + el diff de correcciones.
-
-    `has_corrections` explícito (no una lista vacía muda, spec C11): distingue "sin correcciones"
-    de un futuro error de carga que dejara la lista vacía por otro motivo.
-    """
+    """Lectura 3 (guardado final, spec C10/C11): la factura confirmada + la tabla unificada de
+    comparación honesta (S6.6): un badge por cada uno de los 7 campos escalares de dominio más la
+    fila manual de tramos de IVA."""
 
     invoice: dict[str, object]
-    corrections: list[Reading3Correction]
-    has_corrections: bool
+    field_comparison: list[Reading3FieldComparison]
+    tax_lines_comparison: Reading3TaxLinesComparison
 
 
 @dataclass(frozen=True)
@@ -151,6 +180,109 @@ def _invoice_dict(invoice: invoicing_repository.InvoiceRecord) -> dict[str, obje
             for iva_pct, base, cuota in invoice.tax_lines
         ],
     }
+
+
+# Los 7 campos escalares de dominio comparados por la tabla unificada (S6.6, spec C10), cada uno
+# junto a su único criterio de "coinciden" (spec §4): el nombre de cada campo coincide EXACTAMENTE
+# con el atributo homónimo de `ExtractionRecord`/`InvoiceRecord` (columna 2 y columna 3
+# respectivamente), lo que permite leerlos con `getattr` sin un mapeo propio por campo. Una única
+# tupla de pares en vez de dos estructuras paralelas (lista de campos + dict de matchers, hallazgo
+# de auditoría SOLID 2026-08-11): con dos estructuras, olvidar sincronizar una de las dos al añadir
+# un campo nuevo solo se detecta con un `KeyError` en runtime, nunca con mypy.
+_SCALAR_FIELD_MATCHERS: tuple[tuple[str, Callable[[str | None, str | None], bool]], ...] = (
+    ("counterparty_tax_id", tax_ids_match),
+    ("counterparty_name", names_match),
+    ("invoice_number", texts_match),
+    ("issue_date", dates_match),
+    ("net_amount", amounts_match),
+    ("tax_amount", amounts_match),
+    ("total_amount", amounts_match),
+)
+
+
+def _column_2_scalar(
+    field: str,
+    extraction: ocr_repository.ExtractionRecord | None,
+    corrections_by_field: dict[str, invoicing_repository.CorrectionEntry],
+) -> str | None:
+    """Columna 2 -- "decidió el sistema" (spec §0.1, C4/C5): si hay fila en `ocr_corrections` para
+    este campo, su `ai_value` ya guardado al confirmar; si no, el valor de la Lectura 1 (NUNCA la
+    columna 3), formateado con el mismo criterio que `ocr_corrections` (`format_value`).
+
+    `extraction` puede ser `None` solo en el caso teórico sin fila de extracción persistida (spec
+    §5): sin Lectura 1 de la que partir, la columna 2 sin corrección queda en `None` (nunca se
+    inventa un valor, anti-alucinación).
+    """
+    correction = corrections_by_field.get(field)
+    if correction is not None:
+        return correction.ai_value
+    if extraction is None:
+        return None
+    return format_value(getattr(extraction, field))
+
+
+def _column_3_scalar(field: str, invoice: invoicing_repository.InvoiceRecord) -> str | None:
+    """Columna 3 -- "confirmado humano" (Lectura 3): el valor YA persistido en `invoices` hoy
+    (incluye ediciones posteriores vía `invoice_edits`, S3.3), mismo formato que la columna 2."""
+    return format_value(getattr(invoice, field))
+
+
+def _build_field_comparison(
+    extraction: ocr_repository.ExtractionRecord | None,
+    invoice: invoicing_repository.InvoiceRecord,
+    corrections: list[invoicing_repository.CorrectionEntry],
+) -> list[Reading3FieldComparison]:
+    """Tabla unificada de la Lectura 3 (S6.6, spec Área B/C, C4-C8): un badge por cada uno de los 7
+    campos escalares, siempre los 7 (spec C10), no solo los que difieren."""
+    corrections_by_field = {c.field: c for c in corrections}
+    rows: list[Reading3FieldComparison] = []
+    for field, matcher in _SCALAR_FIELD_MATCHERS:
+        column_2 = _column_2_scalar(field, extraction, corrections_by_field)
+        column_3 = _column_3_scalar(field, invoice)
+        # Campo no comparable (columna 3 nula, spec C8): badge neutro, nunca se llama al matcher.
+        match = matcher(column_2, column_3) if column_3 is not None else None
+        rows.append(
+            Reading3FieldComparison(field=field, column_2=column_2, column_3=column_3, match=match)
+        )
+    return rows
+
+
+_TaxLineTuple = tuple[Decimal | None, Decimal | None, Decimal | None]
+
+
+def _tax_line_dicts(lines: list[_TaxLineTuple]) -> list[dict[str, str]]:
+    """Serializa tramos (tasa, base, cuota) como texto para la fila manual de IVA (spec C9)."""
+    return [
+        {
+            "iva_pct": format_value(iva_pct) or "",
+            "base": format_value(base) or "",
+            "cuota": format_value(cuota) or "",
+        }
+        for iva_pct, base, cuota in lines
+    ]
+
+
+def _build_tax_lines_comparison(
+    extraction: ocr_repository.ExtractionRecord | None,
+    invoice: invoicing_repository.InvoiceRecord,
+) -> Reading3TaxLinesComparison:
+    """Fila especial de tramos de IVA (S6.6, spec C9): columna 2 = tramos de la Lectura 1
+    (`invoicing_service.extraction_tax_lines`, mismo parseo que ya usa el cuadre y el diff de
+    confirmación); columna 3 = tramos de la factura confirmada."""
+    baseline: list[_TaxLineTuple] = (
+        [
+            (line.iva_pct, line.base, line.cuota)
+            for line in invoicing_service.extraction_tax_lines(extraction)
+        ]
+        if extraction is not None
+        else []
+    )
+    confirmed = invoice.tax_lines
+    return Reading3TaxLinesComparison(
+        column_2=_tax_line_dicts(baseline),
+        column_3=_tax_line_dicts(confirmed),
+        match=tax_lines_match(baseline, confirmed),
+    )
 
 
 async def _existing_tenant_or_raise(session: AsyncSession, tenant_id: UUID) -> None:
@@ -221,15 +353,8 @@ async def get_invoice_lab(session: AsyncSession, tenant_id: UUID, file_id: UUID)
         corrections = await invoicing_repository.list_corrections(ts, file_id)
         reading_3 = Reading3(
             invoice=_invoice_dict(invoice),
-            corrections=[
-                Reading3Correction(
-                    field=correction.field,
-                    ai_value=correction.ai_value,
-                    human_value=correction.human_value,
-                )
-                for correction in corrections
-            ],
-            has_corrections=bool(corrections),
+            field_comparison=_build_field_comparison(extraction, invoice, corrections),
+            tax_lines_comparison=_build_tax_lines_comparison(extraction, invoice),
         )
 
         ranking = await ranking_repository.list_ranking_entries(ts, file_id)
