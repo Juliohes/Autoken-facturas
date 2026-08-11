@@ -1,10 +1,10 @@
-"""Tests de comportamiento S6.6 Área A: módulo de comparación tipada compartido, spec
-docs/specs/S6.6-laboratorio-comparacion-honesta.md, C1-C2 + casos límite del brainstorming de TDD.
+"""Tests de comportamiento S6.6 Área A (docs/specs/S6.6-laboratorio-comparacion-honesta.md, C1-C2) +
+S6.7 C7/C8 (docs/specs/S6.7-benchmark-real-motor-variante.md, tolerancia del 2% en tramos de IVA,
+exclusiva del benchmark -- S6.6 sigue usando igualdad exacta en todos sus criterios).
 
 Unit puro (sin red, sin Postgres): el comportamiento es de una función de dominio (spec §5 de la
 skill tdd-behavior), reutilizada por `invoicing.corrections` (C3, verificado por regresión sobre su
-propia suite, no aquí) y por el benchmark de S6.7. `ocr.field_matching` todavía no existe -- fase
-roja.
+propia suite, no aquí) y por el benchmark de S6.7.
 """
 
 from __future__ import annotations
@@ -14,9 +14,11 @@ from decimal import Decimal
 
 from ocr.field_matching import (
     amounts_match,
+    amounts_match_within_tolerance,
     dates_match,
     names_match,
     tax_ids_match,
+    tax_lines_match,
     texts_match,
 )
 
@@ -133,3 +135,68 @@ def test_texts_match_es_comparacion_exacta_sin_normalizar() -> None:
     assert texts_match("F-2026-001", "F-2026-001") is True
     assert texts_match("F-2026-001", "f-2026-001") is False
     assert texts_match(" F-2026-001", "F-2026-001") is False
+
+
+# --- amounts_match_within_tolerance (S6.7 C7, exclusiva del benchmark, nunca de S6.6) -----------
+
+
+def test_s67_c7_un_importe_dentro_del_2_por_ciento_cuenta_como_acierto() -> None:
+    """spec: S6.7 C7 -- 100,50 vs 100,00 es un 0,5% de diferencia, dentro del 2% de tolerancia."""
+    assert amounts_match_within_tolerance("100,50", "100.00", tolerance=Decimal("0.02")) is True
+
+
+def test_un_importe_justo_en_el_borde_del_2_por_ciento_cuenta_como_acierto() -> None:
+    assert amounts_match_within_tolerance("102.00", "100.00", tolerance=Decimal("0.02")) is True
+
+
+def test_un_importe_por_encima_del_2_por_ciento_no_cuenta_como_acierto() -> None:
+    assert amounts_match_within_tolerance("103.00", "100.00", tolerance=Decimal("0.02")) is False
+
+
+def test_valor_identico_siempre_cuenta_aunque_la_tolerancia_sea_cero() -> None:
+    assert amounts_match_within_tolerance("100.00", "100.00", tolerance=Decimal("0")) is True
+
+
+def test_ambos_lados_ausentes_no_es_un_fallo_con_tolerancia() -> None:
+    assert amounts_match_within_tolerance(None, None, tolerance=Decimal("0.02")) is True
+
+
+def test_un_lado_ausente_con_tolerancia_no_coincide() -> None:
+    assert amounts_match_within_tolerance(None, "100.00", tolerance=Decimal("0.02")) is False
+
+
+def test_contra_un_importe_confirmado_de_cero_no_hay_tolerancia_relativa_posible() -> None:
+    """0 no admite un % relativo (división por cero) -- solo coincide si el otro lado es TAMBIÉN
+    cero exacto, nunca por "estar cerca" de cero."""
+    assert amounts_match_within_tolerance("0.50", "0.00", tolerance=Decimal("0.02")) is False
+    assert amounts_match_within_tolerance("0.00", "0.00", tolerance=Decimal("0.02")) is True
+
+
+# --- tax_lines_match con un comparador de importes distinto (S6.7 C7/C8) -------------------------
+
+
+def test_s67_c7_tax_lines_match_admite_un_comparador_de_importes_con_tolerancia() -> None:
+    """spec: S6.7 C7 -- mismo algoritmo de emparejamiento por `iva_pct` que S6.6 (sin duplicarlo),
+    solo cambia CÓMO se comparan los importes dentro del tramo ya emparejado."""
+    baseline = [(Decimal("21"), Decimal("100.50"), Decimal("21.00"))]
+    confirmed = [(Decimal("21"), Decimal("100.00"), Decimal("21.00"))]
+
+    def _tolerant(a: Decimal | None, b: Decimal | None) -> bool:
+        return amounts_match_within_tolerance(a, b, tolerance=Decimal("0.02"))
+
+    assert tax_lines_match(baseline, confirmed) is False  # S6.6 por defecto: exacto, sin tolerancia
+    assert tax_lines_match(baseline, confirmed, amount_matcher=_tolerant) is True
+
+
+def test_s67_c8_un_tramo_con_distinto_porcentaje_nunca_coincide_aunque_los_importes_cuadren() -> (
+    None
+):  # noqa: E501
+    """spec: S6.7 C8 -- la tolerancia SOLO se aplica a base/cuota de un tramo ya emparejado por
+    `iva_pct` exacto; un tramo al 10% nunca "coincide" con uno al 21%, con o sin tolerancia."""
+    baseline = [(Decimal("10"), Decimal("100.00"), Decimal("10.00"))]
+    confirmed = [(Decimal("21"), Decimal("100.00"), Decimal("21.00"))]
+
+    def _tolerant(a: Decimal | None, b: Decimal | None) -> bool:
+        return amounts_match_within_tolerance(a, b, tolerance=Decimal("0.02"))
+
+    assert tax_lines_match(baseline, confirmed, amount_matcher=_tolerant) is False

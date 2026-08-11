@@ -16,12 +16,23 @@ Contrato común a las 5 funciones (spec §4, invariantes):
   fecha con formato inválido, una coma ambigua de miles) NUNCA cuenta como acierto, ni siquiera
   comparado contra la misma basura repetida -- anti-alucinación, nunca se arriesga una conversión a
   ciegas.
+
+Modo adicional, exclusivo de S6.7 (spec docs/specs/S6.7-benchmark-real-motor-variante.md, C7/C8):
+`amounts_match_within_tolerance` + el parámetro `amount_matcher` de `tax_lines_match` permiten una
+coincidencia CON tolerancia relativa (el benchmark de motores necesita distinguir "ruido de lectura
+aceptable" de "fallo real" en `base`/`cuota` de un tramo de IVA). Es un modo opt-in: por defecto
+`tax_lines_match` sigue exigiendo igualdad EXACTA (`amounts_match`), el contrato de S6.6 no cambia
+para ningún llamante existente. `ocr.benchmark_scoring` es hoy el único consumidor de la tolerancia
+(auditoría S6.7, hallazgo de arquitectura: se decidió mantenerla aquí -- junto al resto de
+comparadores del mismo campo, en vez de trasladarla a `benchmark_scoring` -- por ser más simple
+dado que `tax_lines_match` ya vive en este módulo y la tolerancia es solo un parámetro más de su
+firma, sin ningún import cruzado nuevo).
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -29,6 +40,7 @@ from shared.tax_id import normalize_tax_id
 
 __all__ = [
     "amounts_match",
+    "amounts_match_within_tolerance",
     "dates_match",
     "format_value",
     "group_tax_lines_by_pct",
@@ -45,6 +57,20 @@ __all__ = [
 _UNAMBIGUOUS_COMMA_DECIMAL = re.compile(r"^-?\d+,\d{1,2}$")
 
 
+def _parse_decimal_text(trimmed: str) -> Decimal | None:
+    """Interpreta un texto YA normalizado (separador decimal en punto) como `Decimal`, o `None` si
+    no es un decimal válido -- pieza base compartida por `_parse_amount` (que añade la guarda
+    anti-ambigüedad de coma de miles antes de llegar aquí) y por
+    `ocr.benchmark_scoring._parse_tax_line_amount` (que reemplaza toda coma por punto sin esa
+    guarda: los tramos de IVA del benchmark siempre llegan ya en texto desde `ocr.analysis`, nunca
+    tecleados a mano -- S6.7 auditoría, hallazgo de SOLID, para no reimplementar este mismo
+    `try/except Decimal` dos veces)."""
+    try:
+        return Decimal(trimmed)
+    except InvalidOperation:
+        return None
+
+
 def _parse_amount(value: str | Decimal) -> Decimal | None:
     """Interpreta un importe como `Decimal`, o `None` si no se puede hacer con seguridad."""
     if isinstance(value, Decimal):
@@ -52,10 +78,7 @@ def _parse_amount(value: str | Decimal) -> Decimal | None:
     trimmed = value.strip()
     if _UNAMBIGUOUS_COMMA_DECIMAL.match(trimmed):
         trimmed = trimmed.replace(",", ".")
-    try:
-        return Decimal(trimmed)
-    except InvalidOperation:
-        return None
+    return _parse_decimal_text(trimmed)
 
 
 def amounts_match(a: str | Decimal | None, b: str | Decimal | None) -> bool:
@@ -69,6 +92,31 @@ def amounts_match(a: str | Decimal | None, b: str | Decimal | None) -> bool:
     if parsed_a is None or parsed_b is None:
         return False
     return parsed_a == parsed_b
+
+
+def amounts_match_within_tolerance(
+    a: str | Decimal | None, b: str | Decimal | None, *, tolerance: Decimal
+) -> bool:
+    """Como `amounts_match`, pero admite una diferencia relativa `<= tolerance` como acierto --
+    exclusiva del benchmark de S6.7 (tramos de IVA, C7/C8), nunca usada por S6.6.
+
+    Dos valores idénticos siempre coinciden, aunque `tolerance=0` (spec S6.7 C7). Si uno de los
+    dos lados vale `0` y el otro no, nunca coinciden: un `0` no admite una diferencia "relativa"
+    (división por cero) -- solo coincide con otro `0` exacto."""
+    if a is None and b is None:
+        return True
+    if a is None or b is None:
+        return False
+    parsed_a, parsed_b = _parse_amount(a), _parse_amount(b)
+    if parsed_a is None or parsed_b is None:
+        return False
+    if parsed_a == parsed_b:
+        return True
+    largest = max(abs(parsed_a), abs(parsed_b))
+    if largest == 0:
+        return False
+    relative_difference = abs(parsed_a - parsed_b) / largest
+    return relative_difference <= tolerance
 
 
 def _parse_date(value: str | date) -> date | None:
@@ -164,10 +212,17 @@ def group_tax_lines_by_pct[PctT](
 def tax_lines_match[PctT](
     baseline: Iterable[tuple[PctT, Decimal | None, Decimal | None]],
     confirmed: Iterable[tuple[PctT, Decimal | None, Decimal | None]],
+    *,
+    amount_matcher: Callable[[Decimal | None, Decimal | None], bool] = amounts_match,
 ) -> bool:
     """El conjunto de tramos de IVA coincide -- spec S6.6 C9: mismo número de tramos, mismos tipos
-    de IVA presentes, y `base`/`cuota` coinciden por valor (`amounts_match`, no `==` crudo de
-    `Decimal`) tramo a tramo."""
+    de IVA presentes, y `base`/`cuota` coinciden por valor (`amounts_match` por defecto, no `==`
+    crudo de `Decimal`) tramo a tramo.
+
+    `amount_matcher` permite sustituir la comparación de `base`/`cuota` (p. ej. por
+    `amounts_match_within_tolerance` con un 2% de margen, S6.7 C7) sin duplicar el algoritmo de
+    emparejamiento por `iva_pct` -- la tasa/porcentaje sigue exigiendo coincidencia EXACTA por
+    clave del `dict`, nunca pasa por `amount_matcher` (S6.7 C8)."""
     baseline_lines = list(baseline)
     confirmed_lines = list(confirmed)
     if len(baseline_lines) != len(confirmed_lines):
@@ -177,7 +232,7 @@ def tax_lines_match[PctT](
     if set(by_pct_baseline) != set(by_pct_confirmed):
         return False
     return all(
-        amounts_match(by_pct_baseline[pct][0], by_pct_confirmed[pct][0])
-        and amounts_match(by_pct_baseline[pct][1], by_pct_confirmed[pct][1])
+        amount_matcher(by_pct_baseline[pct][0], by_pct_confirmed[pct][0])
+        and amount_matcher(by_pct_baseline[pct][1], by_pct_confirmed[pct][1])
         for pct in by_pct_baseline
     )
