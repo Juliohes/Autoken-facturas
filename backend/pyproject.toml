@@ -52,6 +52,10 @@ dependencies = [
     # (`GET /metrics`, scrapeadas por el Prometheus de `infrastructure/`, visualizadas en Grafana).
     "sentry-sdk[fastapi]>=2.0",
     "prometheus-client>=0.21",
+    # Variante de preprocesado CLAHE del benchmark S6.7 (`ocr/preprocess/clahe.py`): Pillow no
+    # ofrece CLAHE nativo. `-headless` (sin dependencias de GUI/X11) es el paquete correcto para un
+    # backend sin pantalla, mismo criterio que el resto de imágenes Docker del proyecto.
+    "opencv-python-headless>=4.10",
 ]
 
 [project.optional-dependencies]
