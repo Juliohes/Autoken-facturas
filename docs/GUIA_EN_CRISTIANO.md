@@ -1054,8 +1054,7 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   Se cifran con una llave distinta para cada asesoría, igual que las facturas reales. La migración
   transforma el histórico existente sin perderlo. El Laboratorio usa el benchmark real por campo y
   el ranking general de ejemplos no devuelve nunca esos datos. Se verificó el cifrado nuevo, la
-  migración desde el esquema viejo y el Laboratorio con PostgreSQL real. Queda pendiente que Julio autorice ejecutar el lote real sobre
-  el histórico de Setex, porque cada factura genera 18 llamadas de pago a proveedores de IA.
+   migración desde el esquema viejo y el Laboratorio con PostgreSQL real.
 
   Antes de cerrar se revisaron situaciones de concurrencia, es decir, cuando dos acciones ocurren
   casi a la vez. Ahora el lote guarda su lista cerrada de facturas desde el instante en que se pulsa
@@ -1078,7 +1077,20 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   marcha para siempre. Los errores técnicos de una IA se guardan con una etiqueta segura, sin copiar
   posibles respuestas, instrucciones o secretos del proveedor. También se incluyeron los seis datos
   cifrados de los experimentos antiguos en el cambio periódico de llaves. Todo se comprobó contra
-  Postgres y Redis reales, además de los controles automáticos de estilo y tipos.
+   Postgres y Redis reales, además de los controles automáticos de estilo y tipos.
+
+- **Primera ejecución real del banco de pruebas en Setex (12/08/2026):** Julio autorizó probar las
+  29 facturas ya confirmadas de Setex. Se hicieron las 18 pruebas previstas por factura y se guardó
+  el resultado de cada una: **522 resultados en total**. Cinco lectores respondieron sus 87 intentos
+  cada uno. Claude no tenía cuota disponible en Google y sus 87 intentos quedaron guardados
+  honestamente como "no pudo leer", no se rellenaron con resultados de otro lector ni se inventaron.
+
+  En esta primera muestra, Gemini Flash con la imagen realzada fue el mejor resultado global: acertó
+  175 de 191 datos que se podían comparar (91,62%). No significa todavía que vaya a ganar siempre:
+  por ejemplo, Azure acertó todas las fechas de esta muestra y Gemini Flash/Pro todos los tramos de
+  IVA que sí tenían un tramo confirmado. Ninguna de esas 29 facturas tenía número de factura
+  confirmado, por lo que todavía no hay una comparación honesta para ese dato. Todo se puede ver en
+  el menú técnico, en **Ranking OCR**, y al abrir una factura en el Laboratorio.
 
 ## 5. Qué queda por delante
 

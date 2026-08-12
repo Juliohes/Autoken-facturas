@@ -685,16 +685,19 @@
   verde, ruff/mypy/eslint/tsc limpios. Frontend: nueva ruta `/plataforma/laboratorio` +
   entrada de menú "Laboratorio" (visible solo con `is_admin_tech`, mismo patrón que Ajustes/Ranking
   OCR).
-- **S6.7 (benchmark real motor × variante) cerrado localmente (12/08/2026)**: 3 variantes de
+- **S6.7 (benchmark real motor × variante) desplegado y ejecutado en Setex (12/08/2026)**: 3 variantes de
   imagen (`original`/`enhanced`/`clahe`) × 6 motores, 18 lecturas por factura confirmada, puntuadas
   contra `invoices` confirmadas campo a campo. Panel admin-tech con ganadores por grupo, detalle,
   lote retroactivo persistente y `pg_advisory_lock`. C24 completo: migración 0033 cifra y elimina de
   JSONB el CIF/nombre de `ocr_comparison_runs`/`ocr_ranking_entries`; escrituras nuevas y el
   Laboratorio adaptados para cifrar/descifrar siempre dentro del tenant. Verificado: 40 tests
-  focalizados contra Postgres/Redis reales, migración desde 0032 y `alembic check`; frontend 304
-  tests+tsc+build. Pendiente de autorización explícita de Julio: desplegar y lanzar como máximo las
-  29 facturas reales de Setex (hasta 522 llamadas de pago); Claude Vertex seguía limitado por cuota
-  el 09/08/2026.
+   focalizados contra Postgres/Redis reales, migración desde 0032 y `alembic check`; frontend 304
+   tests+tsc+build. PR #152 mergeada con CI completa verde; API/worker/frontend desplegados y
+   migraciones 0029-0035 aplicadas. Lote real autorizado: snapshot de 29 facturas de Setex, 29/29
+   completadas, 0 documentos fallidos, 522 filas persistidas. Cinco motores devolvieron 435 lecturas
+   reales; Claude Vertex dejó sus 87 `engine_failed` reales por cuota, sin sustitución ni invención.
+   Verificado después: PII ausente del JSONB y cifrado en columnas. Resultado inicial: mejor global
+   Gemini Flash enhanced, 175/191 (91,62%); ver plan §11.12 para desglose por campo y empates.
   **Refuerzo de auditoría posterior resuelto antes de publicar:** el benchmark se encola post-commit;
   el ranking legado deja de ejecutarse automáticamente; 18 filas se persisten también con motores
   sin credenciales; C24 entra en rotación de clave y los errores de proveedores no guardan/loguean
