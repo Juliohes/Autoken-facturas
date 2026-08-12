@@ -52,7 +52,6 @@ async def test_c1_factura_legible_pasa_a_ocr_done(authapi: Api) -> None:
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted()),
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -83,7 +82,6 @@ async def test_c1b_confidences_indexadas_por_el_mismo_nombre_que_los_campos(auth
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted()),  # lectura limpia, confianza alta en todo
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -121,7 +119,6 @@ async def test_s6_1_c1_numero_de_factura_extraido_con_confianza(authapi: Api) ->
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted(invoice_number="F-2026-001")),
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -142,7 +139,6 @@ async def test_s6_1_c2_numero_de_factura_no_legible_queda_null(authapi: Api) -> 
         extractor=make_extractor(
             build_extracted(invoice_number=None, invoice_number_confidence="baja")
         ),
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -164,7 +160,6 @@ async def test_s6_1_c3_numero_de_factura_dudoso_enruta_a_revision(authapi: Api) 
         extractor=make_extractor(
             build_extracted(invoice_number="F-2026-001", invoice_number_confidence="baja")
         ),
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -185,7 +180,6 @@ async def test_s6_1_c25_base_imponible_e_iva_con_confianza_propia(authapi: Api) 
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted()),  # lectura limpia, confianza alta en todo
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -206,7 +200,6 @@ async def test_s6_1_c26_base_imponible_no_legible_queda_null(authapi: Api) -> No
         extractor=make_extractor(
             build_extracted(net=None, tax=None, net_confidence="baja", tax_confidence="baja")
         ),
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -227,7 +220,6 @@ async def test_s6_1_c27_base_imponible_dudosa_enruta_a_revision(authapi: Api) ->
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted(net_confidence="baja")),
-        ranking_extractors=[],
     )
 
     assert (await fetch_extraction(dsns, file_id=file_id))["status"] == "needs_review"
@@ -244,7 +236,6 @@ async def test_s6_1_c27b_iva_total_dudoso_enruta_a_revision(authapi: Api) -> Non
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted(tax_confidence="baja")),
-        ranking_extractors=[],
     )
 
     assert (await fetch_extraction(dsns, file_id=file_id))["status"] == "needs_review"
@@ -260,7 +251,6 @@ async def test_c2_campo_no_legible_se_queda_null_no_inventado(authapi: Api) -> N
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted(counterparty_cif=None)),
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -282,7 +272,6 @@ async def test_c3_contraparte_es_el_cif_que_no_es_el_propio(authapi: Api) -> Non
         extractor=make_extractor(
             build_extracted(own_cif=OWN_CIF, counterparty_cif=COUNTERPARTY_CIF)
         ),
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -299,7 +288,6 @@ async def test_c4_cif_propio_ausente_se_marca(authapi: Api) -> None:
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted(own_cif=None)),
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -318,7 +306,6 @@ async def test_c5_cif_contraparte_invalido_se_marca_sin_corregir(authapi: Api) -
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted(counterparty_cif=INVALID_COUNTERPARTY_CIF)),
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -336,7 +323,6 @@ async def test_c6_descuadre_aritmetico_se_marca(authapi: Api) -> None:
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted(total=Decimal("999.00"))),
-        ranking_extractors=[],
     )
 
     assert (await fetch_extraction(dsns, file_id=file_id))["status"] == "needs_review"
@@ -353,7 +339,6 @@ async def test_c7_confianza_media_enruta_a_revision(authapi: Api) -> None:
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted(counterparty_conf="media")),
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -371,7 +356,6 @@ async def test_c8_identidad_propia_no_se_puntua(authapi: Api) -> None:
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted(own_cif=OWN_CIF, own_name="Nombre Equivocado SL")),
-        ranking_extractors=[],
     )
 
     row = await fetch_extraction(dsns, file_id=file_id)
@@ -393,7 +377,6 @@ async def test_c9_extraccion_aislada_por_tenant_y_empresa(authapi: Api) -> None:
             company_id=cid,
             file_id=fid,
             extractor=make_extractor(build_extracted()),
-            ranking_extractors=[],
         )
 
     # Bajo el rol runtime en contexto de ilex/su empresa: ve la suya y NO la de otra.
@@ -415,7 +398,6 @@ async def test_c10_reprocesar_no_duplica(authapi: Api) -> None:
             company_id=company_id,
             file_id=file_id,
             extractor=make_extractor(build_extracted()),
-            ranking_extractors=[],
         )
 
     assert await count_extractions(dsns, file_id=file_id) == 1
@@ -433,7 +415,6 @@ async def test_c11_fallo_del_motor_deja_ocr_failed_sin_extraccion(authapi: Api) 
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(error=InvoiceExtractionError("proveedor caído (test)")),
-        ranking_extractors=[],
     )
 
     assert await file_status(dsns, file_id=file_id) == "ocr_failed"

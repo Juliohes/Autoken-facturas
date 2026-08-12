@@ -104,4 +104,12 @@ ENCRYPTED_COLUMNS: dict[str, dict[str, bool]] = {
     "counterparties": {"cif": True, "name": False},
     "invoices": {"counterparty_tax_id": True, "counterparty_name": False},
     "ocr_extractions": {"counterparty_tax_id": False, "counterparty_name": False},
+    "ocr_comparison_runs": {
+        "original_counterparty_tax_id": False,
+        "original_counterparty_name": False,
+        "enhanced_counterparty_tax_id": False,
+        "enhanced_counterparty_name": False,
+    },
+    "ocr_ranking_entries": {"counterparty_tax_id": False, "counterparty_name": False},
+    "ocr_benchmark_results": {"counterparty_tax_id": False, "counterparty_name": False},
 }

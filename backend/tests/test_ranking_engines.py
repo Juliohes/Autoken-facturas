@@ -6,9 +6,12 @@ error visible. Módulo puro (construcción de extractores, sin llamar a ningún 
 
 from __future__ import annotations
 
+import pytest
+
 from ocr.ranking_engines import (
     build_additional_ranking_extractors,
     build_default_ranking_extractor,
+    build_named_ranking_extractors,
     build_ranking_extractors,
 )
 from shared.config import Settings
@@ -64,3 +67,22 @@ def test_default_y_adicionales_juntos_igualan_a_build_ranking_extractors() -> No
     assert combined_names == all_names
     assert default is not None
     assert type(default).__name__ == "GeminiInvoiceExtractor"
+
+
+async def test_s6_7_el_benchmark_conserva_los_seis_motores_sin_credenciales() -> None:
+    """Una configuración ausente debe dejar seis resultados de error, no sesgar el benchmark."""
+    from ocr.extraction import InvoiceExtractionError
+
+    extractors = build_named_ranking_extractors(Settings(_env_file=None))  # type: ignore[call-arg]
+
+    assert [name for name, _ in extractors] == [
+        "gemini-3-flash",
+        "gemini-3-pro",
+        "claude-vertex",
+        "gpt-5.1",
+        "azure-docintel",
+        "mistral-ocr-4",
+    ]
+    for _, extractor in extractors:
+        with pytest.raises(InvoiceExtractionError, match="engine_unavailable"):
+            await extractor.extract(b"no hay llamada", "image/jpeg")

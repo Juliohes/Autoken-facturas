@@ -17,7 +17,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-__all__ = ["BatchRun", "get_latest", "get_running", "insert_running"]
+__all__ = ["BatchRun", "get_by_id", "get_latest", "get_running", "list_candidates", "start"]
 
 
 @dataclass(frozen=True)
@@ -51,11 +51,28 @@ async def get_latest(session: AsyncSession) -> BatchRun | None:
     return _to_batch_run(row) if row is not None else None
 
 
-async def insert_running(session: AsyncSession, *, total: int) -> BatchRun:
-    """Inserta un lote nuevo en estado `running` con `total` ya fijado (C10)."""
+async def get_by_id(session: AsyncSession, batch_run_id: str) -> BatchRun | None:
+    """Lee un lote tras tomar el candado para ignorar redeliveries ya cerrados."""
+    row = (
+        await session.execute(text("SELECT * FROM get_batch_run(:id)"), {"id": batch_run_id})
+    ).first()
+    return _to_batch_run(row) if row is not None else None
+
+
+async def start(session: AsyncSession, *, limit: int) -> tuple[bool, BatchRun]:
+    """Crea el lote y su snapshot de candidatos atómicamente, o devuelve el lote en curso."""
     row = (
         await session.execute(
-            text("SELECT * FROM insert_running_batch_run(:total)"), {"total": total}
+            text("SELECT * FROM start_benchmark_batch(:limit)"), {"limit": limit}
         )
     ).one()
-    return _to_batch_run(row)
+    return row.started, _to_batch_run(row)
+
+
+async def list_candidates(session: AsyncSession, batch_run_id: str) -> list[tuple[str, str, str]]:
+    rows = (
+        await session.execute(
+            text("SELECT * FROM get_benchmark_batch_candidates(:id)"), {"id": batch_run_id}
+        )
+    ).all()
+    return [(str(row.tenant_id), str(row.company_id), str(row.uploaded_file_id)) for row in rows]

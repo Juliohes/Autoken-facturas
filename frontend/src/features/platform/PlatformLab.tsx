@@ -15,7 +15,7 @@ import { formatCurrency, formatDateTime } from '../../shared/format'
 import { usePersistedTableState } from '../../shared/usePersistedTableState'
 import { InvoiceImageModal } from '../panel/InvoiceImageModal'
 import { useSession } from '../session/SessionProvider'
-import type { FieldComparison, LabDetail, LabInvoiceRow, RankingEntry, TaxLineDict } from './labTypes'
+import type { BenchmarkEntry, FieldComparison, LabDetail, LabInvoiceRow, TaxLineDict } from './labTypes'
 import { useInvoiceLab } from './useInvoiceLab'
 import { useTenantInvoiceImage } from './useTenantInvoiceImage'
 import { useTenantInvoices } from './useTenantInvoices'
@@ -311,8 +311,9 @@ const FIELD_COMPARISON_HEADER_LABELS: Record<string, string> = {
 }
 
 const RANKING_HEADER_LABELS: Record<string, string> = {
+  variant: 'Variante',
   engine: 'Motor',
-  score: 'Puntuación',
+  results: 'Acierto por campo',
 }
 
 /** Badge de acierto (S6.6 C6-C8): verde si coinciden, rojo si no, gris neutro si no es comparable
@@ -390,10 +391,17 @@ function LabDetailView({ detail, onClose }: LabDetailProps) {
   const sortedFieldComparison = fieldComparisonTable.getRowModel().rows.map((r) => r.original)
 
   const rankingState = usePersistedTableState('lab-ranking-column-widths')
-  const rankingColumns = useMemo<ColumnDef<RankingEntry, unknown>[]>(
+  const rankingColumns = useMemo<ColumnDef<BenchmarkEntry, unknown>[]>(
     () => [
+      { id: 'variant', header: 'Variante', accessorFn: (r) => r.variant, size: 100, minSize: 32 },
       { id: 'engine', header: 'Motor', accessorFn: (r) => r.engine, size: 160, minSize: 32 },
-      { id: 'score', header: 'Puntuación', accessorFn: (r) => r.score, size: 100, minSize: 32 },
+      {
+        id: 'results',
+        header: 'Acierto por campo',
+        accessorFn: (r) => r.field_results.map((result) => `${result.field}:${result.match}`).join(','),
+        size: 280,
+        minSize: 32,
+      },
     ],
     [],
   )
@@ -556,7 +564,7 @@ function LabDetailView({ detail, onClose }: LabDetailProps) {
       </section>
 
       <section data-testid="lab-ranking" className="space-y-2">
-        <h3 className="font-semibold text-slate-200">Comparativa de modelos</h3>
+        <h3 className="font-semibold text-slate-200">Comparativa real de variantes y modelos</h3>
         {detail.ranking_available ? (
           <table className="whitespace-nowrap text-left text-sm" style={{ tableLayout: 'fixed', width: rankingTable.getTotalSize() }}>
             <thead className="text-slate-400">
@@ -574,9 +582,17 @@ function LabDetailView({ detail, onClose }: LabDetailProps) {
             </thead>
             <tbody className="divide-y divide-slate-800">
               {sortedRanking.map((row) => (
-                <tr key={row.engine}>
+                <tr key={`${row.variant}-${row.engine}`}>
+                  <td className="truncate p-1">{row.variant}</td>
                   <td className="truncate p-1">{row.engine}</td>
-                  <td className="truncate p-1">{row.score}</td>
+                  <td className="truncate p-1">
+                    {[...row.field_results, { field: 'tax_lines', match: row.tax_lines_matched }].map((result) => (
+                      <span key={result.field} className="mr-2 inline-flex gap-1">
+                        {FIELD_LABELS[result.field] ?? (result.field === 'tax_lines' ? 'Tramos IVA' : result.field)}
+                        <MatchBadge match={result.match} />
+                      </span>
+                    ))}
+                  </td>
                 </tr>
               ))}
             </tbody>

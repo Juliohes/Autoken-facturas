@@ -67,6 +67,28 @@ async def test_c12_el_candado_real_protege_aunque_el_409_falle(authapi: Api) -> 
         await conn2.close()
 
 
+async def test_s6_7_el_arranque_atomico_solo_crea_un_lote_bajo_carrera_real(authapi: Api) -> None:
+    """Dos transacciones reales no pueden pasar a la vez el antiguo get_running + insert."""
+    import asyncio
+
+    _client, dsns = authapi
+    conn1 = await asyncpg.connect(dsns["admin"])
+    conn2 = await asyncpg.connect(dsns["admin"])
+    try:
+        first, second = await asyncio.gather(
+            conn1.fetchrow("SELECT * FROM start_benchmark_batch(10)"),
+            conn2.fetchrow("SELECT * FROM start_benchmark_batch(10)"),
+        )
+        assert sorted((first["started"], second["started"])) == [False, True]
+        count = await conn1.fetchval(
+            "SELECT count(*) FROM ocr_benchmark_batch_runs WHERE status = 'running'"
+        )
+        assert count == 1
+    finally:
+        await conn1.close()
+        await conn2.close()
+
+
 async def test_c13_un_documento_fallido_tambien_avanza_completed_sin_bloquear_el_resto(
     authapi: Api,
 ) -> None:
@@ -118,6 +140,51 @@ async def test_c13_un_documento_fallido_tambien_avanza_completed_sin_bloquear_el
     assert batch["completed"] == 2, batch
     assert batch["failed_count"] == 1, batch
     assert batch["status"] == "done", batch
+
+
+async def test_s6_7_un_redelivery_de_lote_cerrado_no_repite_el_trabajo_ni_el_progreso(
+    authapi: Api, monkeypatch
+) -> None:
+    """ARQ puede repetir un mensaje tras una caída: un lote ya terminado se ignora antes de llamar
+    a ningún motor, por lo que no vuelve a generar gasto ni deja completed por encima de total."""
+    from jobs import ocr_benchmark_batch
+
+    _client, dsns = authapi
+    batch_run_id = await _seed_batch_run(dsns, total=1)
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        await conn.execute(
+            "UPDATE ocr_benchmark_batch_runs SET status = 'done', completed = 1 WHERE id = $1",
+            batch_run_id,
+        )
+    finally:
+        await conn.close()
+
+    async def must_not_run(_batch_run_id: str, _settings: object) -> None:
+        raise AssertionError("un lote cerrado no debe volver a llamar a proveedores")
+
+    monkeypatch.setattr(ocr_benchmark_batch, "_discover_and_run", must_not_run)
+    await ocr_benchmark_batch.run_benchmark_batch_task({}, batch_run_id)
+
+    batch = await _fetch_batch_run(dsns, batch_run_id=batch_run_id)
+    assert batch["status"] == "done"
+    assert batch["completed"] == batch["total"] == 1
+
+
+async def test_s6_7_el_progreso_no_avanza_tras_cerrar_el_lote(authapi: Api) -> None:
+    """La función SQL es una segunda defensa: incluso una llamada tardía no altera x/N."""
+    _client, dsns = authapi
+    batch_run_id = await _seed_batch_run(dsns, total=1)
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        await conn.execute("SELECT finish_batch_run($1, 'done')", batch_run_id)
+        await conn.execute("SELECT advance_batch_run_progress($1, true)", batch_run_id)
+    finally:
+        await conn.close()
+
+    batch = await _fetch_batch_run(dsns, batch_run_id=batch_run_id)
+    assert batch["completed"] == 0
+    assert batch["failed_count"] == 0
 
 
 def _perfect_invoice():

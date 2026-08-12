@@ -172,6 +172,7 @@ async def _run_for_invoice(
         own_cif=company.cif,
         ocr_experiment_enabled=True,
         extractors=extractors,
+        raise_on_orchestration_error=True,
     )
 
 
@@ -199,5 +200,5 @@ async def run_ocr_benchmark_task(
             return
         extractors = build_named_ranking_extractors(get_settings())
         await _run_for_invoice(tid, cid, fid, extractors=extractors)
-    except Exception as exc:  # noqa: BLE001  (experimento de fondo: nunca debe tumbar al worker)
-        logger.error("ocr_benchmark.task_failed", uploaded_file_id=str(fid), error=str(exc))
+    except Exception:  # noqa: BLE001  (experimento de fondo: nunca debe tumbar al worker)
+        logger.error("ocr_benchmark.task_failed", uploaded_file_id=str(fid))

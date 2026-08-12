@@ -626,3 +626,52 @@ proveedores en un instante.
 Azure DocIntel, Azure OpenAI gpt-5.1, Gemini 3 Flash/Pro, Claude Vertex, Mistral OCR4). El backfill sobre las
 facturas ya existentes multiplica esto por el volumen histórico. Julio es consciente y lo quiere así por unos
 días — el interruptor existe precisamente para no dejarlo así de forma indefinida.
+
+### 11.12 S6.7 — Benchmark real motor × variante (cerrado localmente, 2026-08-12)
+
+- **Construido:** benchmark sobre facturas confirmadas, separado del pipeline productivo (ADR-0016):
+  3 variantes (`original`, `enhanced`, `clahe`) × 6 motores, 18 combinaciones por factura. Puntúa
+  contra `invoices` ya confirmadas, campo a campo, reutilizando S6.6 y tolerancia del 2% solo dentro
+  de importes de tramos IVA. Los seis motores de una variante corren en paralelo; las variantes y
+  facturas, en secuencia. Una caída se persiste como fallo aislado sin abortar las demás.
+- **Panel admin-tech:** agregado por grupo de campo y detalle por combinación, únicamente desde los
+  resultados persistidos (nunca llama a IA al consultar). Lote retroactivo limitado a 30, progreso
+  persistido en Postgres, `pg_advisory_lock` real y endpoints HTTP que permiten engancharse al lote
+  ya existente tras doble clic, otra pestaña o recarga.
+- **Seguridad, C24 cerrado:** migración `0033_encrypt_ocr_experiment_pii` cifra CIF/nombre de
+  contraparte de `ocr_comparison_runs` y `ocr_ranking_entries`, los retira de sus JSONB en la misma
+  actualización y actualiza las escrituras nuevas. El Laboratorio descifra solo bajo la
+  `tenant_session` del tenant elegido; el Laboratorio consume solo sus resultados reales por campo y
+  el endpoint transversal de ejemplos conserva su redacción defensiva y nunca devuelve esos campos.
+- **Correcciones de auditoría antes de publicar:** el benchmark se encola solo tras el commit de la
+  confirmación (antes el worker podía no ver todavía la factura); `run_ocr_ranking` legado deja de
+  ejecutarse automáticamente, evitando coste duplicado; motores sin credenciales producen sus 3
+  filas de error seguras (18 combinaciones siempre, sin reintentos caros eternos); la rotación de
+  clave cubre las 6 columnas C24; y ningún error de extractor/migración vuelca el mensaje no
+  confiable o parámetros de cifrado a logs/BD. El lote retroactivo se endureció con 0034: una función
+  SQL atómica crea un único `running` y su snapshot de candidatos, el job se encola post-commit y
+  procesa solo ese snapshot; el snapshot lleva RLS `FORCE` fail-closed aunque solo lo lean funciones
+  `SECURITY DEFINER` de plataforma. El Laboratorio consulta exclusivamente benchmark real por campo,
+  nunca el ranking histórico de autoconsistencia.
+- **Verificación:** 40 tests focalizados verdes contra PostgreSQL y Redis reales, incluido un test
+  que crea una BD con el esquema 0032, siembra el histórico en claro y aplica 0033. `alembic check`
+  verde desde una base migrada a `head`. Frontend: 304 tests, `tsc` y build verdes. El lint de
+  frontend solo mantiene un warning preexistente de Fast Refresh en `SessionProvider.tsx`.
+- **Pendiente con autorización explícita de Julio:** desplegar la migración y lanzar el lote real,
+  como máximo 29 facturas confirmadas de Setex. Genera hasta 522 llamadas de pago (29 × 18); revisar
+  antes la cuota de Claude en Vertex, que estaba agotada el 09/08/2026. No se ejecuta automáticamente.
+- **Reauditoría bloqueante corregida (12/08/2026, sin desplegar ni lanzar coste real):** el fan-out
+  de `jobs/ocr.py` deja de ejecutar `run_ocr_ranking` (código S4.8 conservado, pero fuera del camino
+  vivo); `build_named_ranking_extractors` conserva los seis motores aunque falte configuración con
+  un extractor local indisponible, que persiste `engine_failed` sin llamada externa; el benchmark no
+  persiste ni registra `str(exc)` de adaptadores no confiables. `hide_parameters=True` se aplica
+  también al engine de Alembic. El inventario de `jobs/key_rotation.py` añade las cuatro columnas de
+  `ocr_comparison_runs` y las dos de `ocr_ranking_entries`, verificadas en Postgres real.
+- **Lote S6.7 reforzado:** migración `0034_benchmark_batch_snapshot` crea un snapshot de candidatos
+  y funciones `SECURITY DEFINER` de mínimo privilegio. `start_benchmark_batch` toma un advisory
+  transaction lock, detecta/retorna el lote `running` y crea snapshot+total atómicamente, cerrando
+  la carrera `get_running`+`insert`; el worker procesa exclusivamente ese snapshot. El encolado se
+  difiere a `after_commit`; si falla la infraestructura de cola se marca el lote `failed`, igual que
+  los fallos de conexión/candado/orquestación del worker. OpenAPI declara el contrato 409. Pruebas
+  focalizadas: 68 verdes contra Postgres/Redis reales, `ruff` y `mypy` verdes; queda el warning
+  conocido deprecado de `arq`/redis durante los tests.

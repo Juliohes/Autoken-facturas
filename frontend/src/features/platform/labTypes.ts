@@ -54,11 +54,11 @@ export interface Reading3 {
   tax_lines_comparison: TaxLinesComparison
 }
 
-export interface RankingEntry {
+export interface BenchmarkEntry {
+  variant: string
   engine: string
-  model: string
-  reading: Record<string, unknown>
-  score: number
+  field_results: { field: string; match: boolean | null }[]
+  tax_lines_matched: boolean | null
 }
 
 /** Respuesta completa de `GET .../invoices/{file_id}/lab` (spec §3, área B-E). */
@@ -66,6 +66,6 @@ export interface LabDetail {
   reading_1: Reading1 | null
   reading_2: Reading2 | null
   reading_3: Reading3
-  ranking: RankingEntry[]
+  ranking: BenchmarkEntry[]
   ranking_available: boolean
 }

@@ -17,7 +17,6 @@ from tests._ocr import (
     count_ranking_entries,
     make_extractor,
     real_jpeg_bytes,
-    run_ocr,
     seed_uploaded_file,
     set_ocr_experiment_enabled,
 )
@@ -51,18 +50,19 @@ async def test_c12_lista_los_ficheros_sin_ninguna_entrada_de_ranking(authapi: Ap
         dsns, slug="rkbf-ya-rankeado", status="ocr_done", content=real_jpeg_bytes()
     )
 
-    # `rkbf-ya-rankeado` ya tiene una entrada de ranking vigente: no debe reaparecer como candidato.
-    # Se genera con un motor de ranking DOBLE inyectado explícitamente (nunca `ranking_extractors`
-    # en blanco ni omitido: con el interruptor encendido y sin lista explícita, `run_ocr_ranking`
-    # construiría los motores reales desde la config — este entorno de desarrollo SÍ tiene
-    # credenciales reales configuradas, así que omitirlo dispararía llamadas de pago reales).
+    # S6.7 retira el ranking del fan-out de `run_ocr`, pero conserva el job legado: se invoca
+    # explícitamente para sembrar una fila ya rankeada sin llamar a un proveedor real.
+    from jobs.ocr_ranking import run_ocr_ranking
+
     await set_ocr_experiment_enabled(dsns, True)
-    await run_ocr(
-        tenant_id=tenant_ya,
-        company_id=c_ya,
-        file_id=f_ya,
-        extractor=make_extractor(build_extracted()),
-        ranking_extractors=[make_extractor(build_extracted(engine="gemini-3-flash"))],
+    await run_ocr_ranking(
+        tenant_ya,
+        c_ya,
+        f_ya,
+        content=real_jpeg_bytes(),
+        content_type="image/jpeg",
+        own_cif=OWN_CIF,
+        extractors=[make_extractor(build_extracted())],
     )
     await set_ocr_experiment_enabled(dsns, False)
     assert await count_ranking_entries(dsns, file_id=f_ya) >= 1

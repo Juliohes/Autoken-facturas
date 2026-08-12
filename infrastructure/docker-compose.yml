@@ -182,6 +182,9 @@ services:
     profiles: ["tools"]
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_ADMIN_USER:-postgres}:${POSTGRES_ADMIN_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-autoken}
+      # La 0033 cifra histórico por tenant. No se monta el `.env` entero: esta es la única clave de
+      # aplicación que Alembic necesita para derivar las claves de cifrado correctas.
+      DB_ENCRYPTION_MASTER_KEY: ${DB_ENCRYPTION_MASTER_KEY:?define DB_ENCRYPTION_MASTER_KEY in .env}
     command: ["alembic", "upgrade", "head"]
     depends_on:
       postgres:

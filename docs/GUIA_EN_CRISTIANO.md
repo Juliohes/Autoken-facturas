@@ -1033,9 +1033,52 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   si algún día se afina ese criterio, se afina en un único sitio, no en dos que podrían acabar
   divergiendo sin que nadie se entere. Tres auditorías independientes revisaron el cambio (ninguna
   encontró fallos de seguridad ni de aislamiento entre asesorías); sí encontraron y se corrigieron
-  varios detalles de limpieza de código (por ejemplo, dos trozos de lógica casi idénticos para
-  comparar tramos de IVA que se unificaron en uno solo). 795 pruebas automáticas del backend y 296
-  del frontend, todas en verde.
+   varios detalles de limpieza de código (por ejemplo, dos trozos de lógica casi idénticos para
+   comparar tramos de IVA que se unificaron en uno solo). 795 pruebas automáticas del backend y 296
+   del frontend, todas en verde.
+
+- **S6.7 — banco de pruebas real para elegir la mejor IA y la mejor imagen (12/08/2026)**: se
+  construyó un laboratorio que prueba cada factura ya confirmada con las 3 maneras de preparar su
+  imagen (original, realce normal y realce local CLAHE) y con los 6 lectores de IA. Son 18 pruebas
+  por factura. Cada lectura se compara contra los datos que una persona dejó confirmados, así que el
+  ranking ya no mide si una IA parece coherente consigo misma, sino si acertó de verdad el CIF, el
+  nombre, el número, la fecha, los importes y los tramos de IVA.
+
+  El panel técnico permite ver qué combinación gana en cada grupo de datos, el detalle de todas las
+  combinaciones, y lanzar un lote limitado de las últimas facturas. Enseña el avance aunque se
+  recargue la página y no permite que dos personas disparen dos lotes caros a la vez. Un fallo de un
+  lector o de una factura no bloquea a los demás ni deja el avance congelado.
+
+  También se cerró una protección pendiente desde tareas anteriores: los CIF y nombres de proveedor
+  que guardaban los experimentos antiguos ya no quedan legibles dentro de los resultados de prueba.
+  Se cifran con una llave distinta para cada asesoría, igual que las facturas reales. La migración
+  transforma el histórico existente sin perderlo. El Laboratorio usa el benchmark real por campo y
+  el ranking general de ejemplos no devuelve nunca esos datos. Se verificó el cifrado nuevo, la
+  migración desde el esquema viejo y el Laboratorio con PostgreSQL real. Queda pendiente que Julio autorice ejecutar el lote real sobre
+  el histórico de Setex, porque cada factura genera 18 llamadas de pago a proveedores de IA.
+
+  Antes de cerrar se revisaron situaciones de concurrencia, es decir, cuando dos acciones ocurren
+  casi a la vez. Ahora el lote guarda su lista cerrada de facturas desde el instante en que se pulsa
+  el botón, no una lista que pueda cambiar mientras espera al worker. Dos clics simultáneos solo
+  crean un lote. También se quitó el lector de ranking antiguo del camino automático, para no pagar
+  dos experimentos distintos sobre la misma factura, y si falta la configuración de un lector queda
+  anotado como fallo sin repetir eternamente los que sí están disponibles.
+
+- **Refuerzo de seguridad y fiabilidad del banco de pruebas S6.7 (12/08/2026)**: antes de lanzar
+  dinero real, se corrigieron los bloqueos detectados en una segunda revisión. El lector normal de
+  facturas ya no dispara el ranking antiguo por detrás: ese ranking queda guardado como historial,
+  pero el banco nuevo solo se ejecuta al confirmar una factura, cuando existe una respuesta humana
+  con la que compararlo. Si falta la configuración de una de las seis IAs, no desaparece de la
+  comparación: queda anotada como "no disponible", sin llamar a Internet ni inventar un resultado.
+
+  El botón del lote ahora guarda una lista exacta de las facturas que eligió en ese instante y la
+  entrega al trabajador después de que la base de datos haya confirmado el cambio. Dos clics a la
+  vez no pueden crear dos listas caras: la propia base de datos deja pasar solo una. Si falla la
+  cola que avisa al trabajador, el panel muestra el lote como fallido en vez de fingir que sigue en
+  marcha para siempre. Los errores técnicos de una IA se guardan con una etiqueta segura, sin copiar
+  posibles respuestas, instrucciones o secretos del proveedor. También se incluyeron los seis datos
+  cifrados de los experimentos antiguos en el cambio periódico de llaves. Todo se comprobó contra
+  Postgres y Redis reales, además de los controles automáticos de estilo y tipos.
 
 ## 5. Qué queda por delante
 

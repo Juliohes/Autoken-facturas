@@ -20,6 +20,8 @@ llamador.
 
 from __future__ import annotations
 
+import pytest
+
 from tests._dbtest import seed_company, seed_tenant, seed_user
 from tests._ocr import (
     OWN_CIF,
@@ -175,6 +177,126 @@ async def test_c2_un_motor_caido_en_una_variante_no_impide_que_los_demas_termine
     ok = [r for r in results if r["engine"] == "gemini-3-flash"]
     assert len(ok) == 3, ok
     assert all(r["error"] is None and r["aciertos"] == 8 for r in ok)
+
+
+async def test_s6_7_el_error_persistido_no_expone_el_detalle_del_extractor(authapi: Api) -> None:
+    """Un adaptador no confiable no puede escribir su excepción en BD ni en el contrato del lote."""
+    from ocr.benchmark import run_benchmark
+
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns, slug="bm-safe-error")
+    secret = "respuesta externa no confiable con secreto"
+
+    await run_benchmark(
+        tenant_id,
+        company_id,
+        file_id,
+        content=real_jpeg_bytes(),
+        content_type="image/jpeg",
+        truth=_truth(),
+        own_cif=OWN_CIF,
+        ocr_experiment_enabled=True,
+        extractors=[("azure-docintel", make_extractor(error=RuntimeError(secret)))],
+    )
+
+    results = await fetch_benchmark_results(dsns, file_id=file_id)
+    assert {row["error"] for row in results} == {"engine_failed"}
+    assert all(secret not in str(row) for row in results)
+
+
+async def test_s6_7_un_motor_que_agota_su_timeout_se_guarda_como_fallo_y_no_bloquea(
+    authapi: Api, monkeypatch
+) -> None:
+    """C2: un proveedor que no responde termina con una etiqueta segura, no deja el job colgado."""
+    import asyncio
+
+    from ocr import benchmark
+
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns, slug="bm-timeout")
+
+    class SlowExtractor:
+        async def extract(self, content: bytes, content_type: str):
+            del content, content_type
+            await asyncio.sleep(1)
+            raise AssertionError("el timeout debía cancelar antes esta lectura")
+
+    monkeypatch.setattr(benchmark, "_COMBINATION_TIMEOUT_SECONDS", 0.01)
+    await benchmark.run_benchmark(
+        tenant_id,
+        company_id,
+        file_id,
+        content=real_jpeg_bytes(),
+        content_type="image/jpeg",
+        truth=_truth(),
+        own_cif=OWN_CIF,
+        ocr_experiment_enabled=True,
+        extractors=[("slow", SlowExtractor())],
+    )
+
+    results = await fetch_benchmark_results(dsns, file_id=file_id)
+    assert len(results) == 3
+    assert {row["error"] for row in results} == {"engine_failed"}
+
+
+async def test_s6_7_el_lote_recibe_un_fallo_de_orquestacion(authapi: Api, monkeypatch) -> None:
+    """C13: un fallo fuera de una combinación concreta se propaga solo cuando el lote lo pide."""
+    from ocr import benchmark
+
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns, slug="bm-orchestration-failure")
+
+    async def broken_variants(_content: bytes, _content_type: str):
+        raise RuntimeError("infraestructura rota")
+
+    monkeypatch.setattr(benchmark, "_build_variants", broken_variants)
+    with pytest.raises(RuntimeError, match="infraestructura rota"):
+        await benchmark.run_benchmark(
+            tenant_id,
+            company_id,
+            file_id,
+            content=real_jpeg_bytes(),
+            content_type="image/jpeg",
+            truth=_truth(),
+            own_cif=OWN_CIF,
+            ocr_experiment_enabled=True,
+            extractors=[("gemini-3-flash", make_extractor(_reading_invoice()))],
+            raise_on_orchestration_error=True,
+        )
+
+
+async def test_s6_7_los_seis_motores_sin_credenciales_persisten_su_error(authapi: Api) -> None:
+    """Una configuración parcial no puede esconder motores del denominador del benchmark."""
+    from ocr.benchmark import run_benchmark
+    from ocr.ranking_engines import build_named_ranking_extractors
+    from shared.config import Settings
+
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns, slug="bm-unavailable-engines")
+
+    await run_benchmark(
+        tenant_id,
+        company_id,
+        file_id,
+        content=real_jpeg_bytes(),
+        content_type="image/jpeg",
+        truth=_truth(),
+        own_cif=OWN_CIF,
+        ocr_experiment_enabled=True,
+        extractors=build_named_ranking_extractors(Settings(_env_file=None)),  # type: ignore[call-arg]
+    )
+
+    results = await fetch_benchmark_results(dsns, file_id=file_id)
+    assert len(results) == 18
+    assert {row["engine"] for row in results} == {
+        "gemini-3-flash",
+        "gemini-3-pro",
+        "claude-vertex",
+        "gpt-5.1",
+        "azure-docintel",
+        "mistral-ocr-4",
+    }
+    assert {row["error"] for row in results} == {"engine_failed"}
 
 
 async def test_c4_reejecutar_el_benchmark_sobre_la_misma_factura_actualiza_no_duplica(

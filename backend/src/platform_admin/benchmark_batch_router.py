@@ -51,6 +51,10 @@ class BackfillStartedOut(BaseModel):
     total: int
 
 
+class BackfillConflictOut(BaseModel):
+    batch: BatchStatusOut
+
+
 class BackfillStatusOut(BaseModel):
     running: bool
     batch: BatchStatusOut | None
@@ -65,7 +69,12 @@ def _to_status_out(batch: BatchRun) -> BatchStatusOut:
     )
 
 
-@router.post("", status_code=200, response_model=BackfillStartedOut)
+@router.post(
+    "",
+    status_code=200,
+    response_model=BackfillStartedOut,
+    responses={409: {"model": BackfillConflictOut}},
+)
 async def start_backfill(
     body: BackfillIn, identity: AdminTech
 ) -> BackfillStartedOut | JSONResponse:

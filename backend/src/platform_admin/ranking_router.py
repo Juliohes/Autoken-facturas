@@ -52,12 +52,12 @@ async def get_ranking(identity: AdminTech) -> list[EngineRankingOut]:
     ]
 
 
-# Campos identificables de un cliente real (CIF/nombre de la contraparte) que este endpoint NUNCA
-# expone, aunque `ocr_ranking_entries.reading` los guarde en claro (S5.2 §6, decisión pendiente de
-# Julio antes de activar el experimento en producción — que ya está activo, con datos reales). El
-# resto de este router ya agrega A TRAVÉS de todos los tenants (`get_ranking`, C11 auditado); este
-# endpoint añade el mismo alcance cross-tenant pero a nivel de lectura individual, así que redacta
-# aquí lo identificable en vez de reabrir esa decisión pendiente (auditoría, hallazgo crítico).
+# Campos identificables de un cliente real (CIF/nombre de la contraparte). Desde S6.7 C24,
+# `ocr_ranking_entries.reading` YA NO los lleva en claro (se cifran aparte en columnas `bytea`
+# dedicadas antes de guardar, `ocr.ranking_repository.upsert_ranking_entry`) -- este filtro pasa a
+# ser un no-op inofensivo en la práctica, no la única defensa. Se deja como defensa en profundidad
+# (si algún día `reading` volviera a incluir esas claves por error, este endpoint seguiría sin
+# exponerlas) y como documentación viva de qué es sensible en esta respuesta.
 _REDACTED_READING_FIELDS = frozenset({"counterparty_tax_id", "counterparty_name"})
 
 

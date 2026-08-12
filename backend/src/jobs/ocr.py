@@ -10,14 +10,14 @@ La máquina de estados y la ubicación del fichero son dominio de `invoice_intak
 job las invoca desde `invoice_intake.repository`. Fallo del extractor o de la descarga: el fichero
 queda en `ocr_failed`, SIN fila de extracción, con el error registrado (nunca datos a medias).
 
-Tras el resultado principal, `run_ocr` dispara dos experimentos independientes, cada uno en su
-PROPIA transacción, separada de la principal (que ya se confirmó al llegar ahí): la comparativa
-original-vs-realzada (S2.10, `run_ocr_comparison`) y el ranking multi-modelo (S4.8,
-`jobs.ocr_ranking.run_ocr_ranking`). Cualquier fallo de cualquiera de los dos (interruptor, motor,
-persistencia) queda contenido y jamás puede tocar el resultado principal (spec S2.9/S2.10 C5,
-generalizado a S4.8). `run_ocr_comparison` es pública (no `_privada`) porque también la reutiliza
-`jobs.ocr_backfill` (backfill retroactivo, mismo paquete `jobs`, sin duplicar esta lógica ni
-invertir la dirección de dependencias jobs->ocr).
+Tras el resultado principal, `run_ocr` dispara la comparativa original-vs-realzada (S2.10,
+`run_ocr_comparison`) en su PROPIA transacción, separada de la principal (que ya se confirmó al
+llegar ahí). El ranking multi-modelo legado (S4.8) se conserva en `jobs.ocr_ranking`, pero S6.7 lo
+retiró de este fan-out: el benchmark real se encola solo al CONFIRMAR, cuando ya existe una verdad
+humana contra la que puntuar. El fallo de la comparativa queda contenido y jamás puede tocar el
+resultado principal (spec S2.9/S2.10 C5). `run_ocr_comparison` es pública porque también la
+reutiliza `jobs.ocr_backfill` (backfill retroactivo, mismo paquete `jobs`, sin duplicar esta lógica
+ni invertir la dirección de dependencias jobs->ocr).
 """
 
 from __future__ import annotations
@@ -33,7 +33,6 @@ from companies.service import tenant_encryption_key as company_encryption_key
 from invoice_intake import repository as intake_repo
 from invoice_intake import storage
 from invoice_intake.constants import FileStatus
-from jobs.ocr_ranking import run_ocr_ranking
 from ocr import comparison, comparison_repository, repository
 from ocr.analysis import STATUS_AUTO_OK, analyze_invoice
 from ocr.arbiter import reconcile
@@ -49,7 +48,6 @@ from ocr.preprocess.enhance import (
     SUPPORTED_CONTENT_TYPES,
     enhance_invoice_image,
 )
-from ocr.ranking_engines import build_additional_ranking_extractors
 from ocr.scoring import serialize_reading
 from platform_admin import settings_repository
 from shared.config import get_settings
@@ -64,26 +62,12 @@ async def run_ocr(
     uploaded_file_id: str | UUID,
     *,
     extractor: InvoiceExtractor | None = None,
-    ranking_extractors: list[InvoiceExtractor] | None = None,
 ) -> None:
     """Procesa un `uploaded_file` en `pending_ocr`: extrae, valida y decide su estado.
 
     `extractor` inyectable (los tests pasan un doble); si es `None`, usa el motor real por defecto
     (gemini-3-flash a JSON estructurado). Todo ocurre bajo el contexto de tenant/empresa (RLS).
 
-    `ranking_extractors` (S4.8) inyectable IGUAL que `extractor`, pero representa solo los motores
-    ADICIONALES al por defecto (Claude, gpt-5.1, Azure DocIntel, Mistral, Gemini Pro): la lectura
-    del motor por defecto ya se calculó arriba como `reconciled` y se reutiliza tal cual para el
-    ranking (`default_reading`), en vez de pedírsela otra vez a Gemini Flash — pedirla dos veces
-    pagaría esa llamada el doble por factura, el mismo bug de coste duplicado que ya se corrigió en
-    S2.10 (auditoría, hallazgo crítico de S4.8). Los tests SIEMPRE deben pasar una lista explícita
-    (aunque sea vacía) en vez de dejarlo en `None` cuando activen el interruptor: dejado en `None`,
-    aquí (el único punto de producción legítimo para ese fallback) se construyen los 5 motores
-    adicionales reales desde la config (incidente real durante el desarrollo de S4.8: un test con
-    el interruptor encendido llamó a `run_ocr` sin pasar `ranking_extractors` y disparó llamadas de
-    pago reales a los 6 proveedores, porque este entorno de desarrollo SÍ tiene credenciales reales
-    configuradas en el `.env`; `run_ocr_ranking` ya no tiene ningún fallback propio, ver su
-    docstring).
     """
     tid, cid, fid = UUID(str(tenant_id)), UUID(str(company_id)), UUID(str(uploaded_file_id))
     # Fan-out de extractores: hoy N=1 (una sola lectura), pero modelado como secuencia para que el
@@ -151,35 +135,15 @@ async def run_ocr(
             file_status=file_status.value,
         )
 
-    # S2.10 (original-vs-realzada) y S4.8 (ranking multi-modelo) son experimentos independientes
-    # entre sí (tablas y ejes de comparación distintos, ver docstrings de cada uno) que comparten el
-    # mismo interruptor: se lanzan en paralelo, cada uno con su propia transacción y su propio
-    # blindaje ante fallos (ninguno de los dos puede afectar al resultado principal ya confirmado).
-    await asyncio.gather(
-        run_ocr_comparison(
-            tid,
-            cid,
-            fid,
-            content=content,
-            content_type=location.content_type,
-            own_cif=company.cif,
-            extractor=extractors[0],
-            original_reading=reconciled,
-        ),
-        run_ocr_ranking(
-            tid,
-            cid,
-            fid,
-            content=content,
-            content_type=location.content_type,
-            own_cif=company.cif,
-            extractors=(
-                ranking_extractors
-                if ranking_extractors is not None
-                else build_additional_ranking_extractors(get_settings())
-            ),
-            default_reading=reconciled,
-        ),
+    await run_ocr_comparison(
+        tid,
+        cid,
+        fid,
+        content=content,
+        content_type=location.content_type,
+        own_cif=company.cif,
+        extractor=extractors[0],
+        original_reading=reconciled,
     )
 
 
@@ -241,8 +205,7 @@ async def run_ocr_comparison(
                 winner=verdict.winner,
                 engine=resolved_original.engine,
                 model=resolved_original.model,
+                encryption_key=company_encryption_key(get_settings(), tenant_id),
             )
-    except Exception as exc:  # noqa: BLE001  (experimento de fondo: nunca debe tumbar al llamador)
-        logger.error(
-            "ocr.comparison_failed", uploaded_file_id=str(uploaded_file_id), error=str(exc)
-        )
+    except Exception:  # noqa: BLE001  (experimento de fondo: nunca debe tumbar al llamador)
+        logger.error("ocr.comparison_failed", uploaded_file_id=str(uploaded_file_id))

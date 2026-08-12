@@ -9,6 +9,12 @@ motor).
 que llama a la función `SECURITY DEFINER` `ocr_ranking_summary()` (migración 0019) en vez de hacer
 un `SELECT` bajo RLS — igual que `ocr.backfill_repository.list_backfill_candidates` — y se invoca
 desde `shared.db.platform_session()` (sin contexto de tenant), nunca desde `tenant_session`.
+
+`counterparty_tax_id`/`counterparty_name` (S6.7 C24, mismo patrón ADR-0018 que
+`ocr.comparison_repository`/`ocr.benchmark_repository`) viajan cifrados con la clave del tenant en
+dos columnas `bytea` dedicadas. `encryption_key` llega ya derivada (el repositorio nunca deriva
+claves, lo hace el llamador, `jobs.ocr_ranking`). Antes de serializar `reading` a JSONB se quitan
+esas dos claves del dict: nunca deben quedar duplicadas en claro junto a la versión ya cifrada.
 """
 
 from __future__ import annotations
@@ -24,9 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 __all__ = [
     "EngineRankingExample",
     "EngineRankingSummary",
-    "RankingEntry",
     "get_engine_summary",
-    "list_ranking_entries",
     "list_ranking_examples",
     "upsert_ranking_entry",
 ]
@@ -40,11 +44,16 @@ _TENANT_FROM_CONTEXT = "NULLIF(current_setting('app.tenant_id', true), '')::uuid
 
 _UPSERT = text(
     f"INSERT INTO ocr_ranking_entries "
-    f"(tenant_id, company_id, uploaded_file_id, engine, model, reading, score) "
+    f"(tenant_id, company_id, uploaded_file_id, engine, model, reading, "
+    f" counterparty_tax_id, counterparty_name, score) "
     f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :uploaded_file_id, :engine, :model, "
-    f" CAST(:reading AS jsonb), :score) "
+    f" CAST(:reading AS jsonb), pgp_sym_encrypt(:counterparty_tax_id, :key), "
+    f" pgp_sym_encrypt(:counterparty_name, :key), :score) "
     f"ON CONFLICT (uploaded_file_id, engine) DO UPDATE SET "
-    f" model = EXCLUDED.model, reading = EXCLUDED.reading, score = EXCLUDED.score, "
+    f" model = EXCLUDED.model, reading = EXCLUDED.reading, "
+    f" counterparty_tax_id = EXCLUDED.counterparty_tax_id, "
+    f" counterparty_name = EXCLUDED.counterparty_name, "
+    f" score = EXCLUDED.score, "
     f" updated_at = now()"
 )
 
@@ -69,18 +78,6 @@ class EngineRankingExample:
     score: int
 
 
-@dataclass(frozen=True)
-class RankingEntry:
-    """Una fila de `ocr_ranking_entries` de UN fichero concreto (S6.2, laboratorio admin-tech,
-    comparativa de modelos): a diferencia de `EngineRankingSummary` (agregado A TRAVÉS de todos los
-    tenants para el panel de ranking, S4.8), esta es la lectura de un motor para una factura."""
-
-    engine: str
-    model: str
-    reading: dict[str, Any]
-    score: int
-
-
 async def upsert_ranking_entry(
     session: AsyncSession,
     *,
@@ -90,8 +87,12 @@ async def upsert_ranking_entry(
     model: str,
     reading: dict[str, Any],
     score: int,
+    encryption_key: str,
 ) -> None:
     """Inserta o reemplaza la entrada de este motor para este fichero (idempotente por motor)."""
+    stripped_reading = dict(reading)
+    counterparty_tax_id = stripped_reading.pop("counterparty_tax_id", None)
+    counterparty_name = stripped_reading.pop("counterparty_name", None)
     await session.execute(
         _UPSERT,
         {
@@ -99,30 +100,13 @@ async def upsert_ranking_entry(
             "uploaded_file_id": str(uploaded_file_id),
             "engine": engine,
             "model": model,
-            "reading": json.dumps(reading),
+            "reading": json.dumps(stripped_reading),
+            "counterparty_tax_id": counterparty_tax_id,
+            "counterparty_name": counterparty_name,
             "score": score,
+            "key": encryption_key,
         },
     )
-
-
-async def list_ranking_entries(session: AsyncSession, uploaded_file_id: UUID) -> list[RankingEntry]:
-    """Comparativa de motores de UN fichero, ordenada de mayor a menor puntuación (S6.2, laboratorio
-    admin-tech, spec C12/C13). Sesión dentro de una `tenant_session` ya abierta (RLS de dos niveles,
-    a diferencia de `get_engine_summary`, que agrega a través de todos los tenants sin RLS). Lista
-    vacía si el experimento no estaba encendido cuando se procesó esa factura (nunca un error)."""
-    rows = (
-        await session.execute(
-            text(
-                "SELECT engine, model, reading, score FROM ocr_ranking_entries "
-                "WHERE uploaded_file_id = :fid ORDER BY score DESC"
-            ),
-            {"fid": str(uploaded_file_id)},
-        )
-    ).all()
-    return [
-        RankingEntry(engine=row.engine, model=row.model, reading=dict(row.reading), score=row.score)
-        for row in rows
-    ]
 
 
 async def list_ranking_examples(session: AsyncSession, engine: str) -> list[EngineRankingExample]:

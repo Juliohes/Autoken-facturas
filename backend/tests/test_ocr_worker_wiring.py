@@ -27,12 +27,20 @@ async def _smoke_probe(ctx: dict[str, Any], key: str) -> None:
 
 async def test_worker_settings_estan_cableados() -> None:
     """`WorkerSettings` expone lo que arq lee: task registrado, guard de arranque, cola y Redis."""
-    from jobs.worker import WorkerSettings, run_ocr_task, startup
+    from jobs.worker import WorkerSettings, run_benchmark_batch_task, run_ocr_task, startup
 
     assert run_ocr_task in WorkerSettings.functions
     assert WorkerSettings.on_startup is startup  # guard ADR-0014 en el arranque del worker
     assert WorkerSettings.queue_name
     assert WorkerSettings.redis_settings is not None
+    batch = next(
+        item
+        for item in WorkerSettings.functions
+        if getattr(item, "name", None) == "run_benchmark_batch_task"
+    )
+    assert batch.coroutine is run_benchmark_batch_task
+    assert batch.timeout_s == 4 * 60 * 60
+    assert batch.max_tries == 1
 
 
 async def test_arq_encola_y_consume_contra_redis() -> None:

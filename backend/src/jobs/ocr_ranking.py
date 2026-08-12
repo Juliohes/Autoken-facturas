@@ -22,6 +22,10 @@ Así, llamar a `run_ocr_ranking` directamente (como hacen la mayoría de los tes
 llamadas de pago reales por omisión — el incidente real de S4.8 (ver docstring de
 `jobs.ocr.run_ocr`) vivía precisamente en un fallback como este, un nivel más abajo de lo que
 corresponde.
+
+`counterparty_tax_id`/`counterparty_name` (S6.7 C24) viajan cifrados con la clave del tenant (mismo
+patrón ADR-0018 que `jobs.ocr.run_ocr_comparison`): la clave se deriva UNA vez aquí (`tenant_id` ya
+disponible) y se pasa a `_persist`, nunca se rederiva por cada motor.
 """
 
 from __future__ import annotations
@@ -37,7 +41,9 @@ from ocr.analysis import analyze_invoice
 from ocr.extraction import ExtractedInvoice, InvoiceExtractor
 from ocr.scoring import score_analysis, serialize_reading
 from platform_admin import settings_repository
+from shared.config import get_settings
 from shared.db import tenant_session
+from shared.encryption import tenant_encryption_key
 
 logger = structlog.get_logger(__name__)
 
@@ -75,8 +81,17 @@ async def run_ocr_ranking(
             if not extractors and default_reading is None:
                 return
 
+            encryption_key = tenant_encryption_key(get_settings(), tenant_id)
+
             if default_reading is not None:
-                await _persist(session, company_id, uploaded_file_id, own_cif, default_reading)
+                await _persist(
+                    session,
+                    company_id,
+                    uploaded_file_id,
+                    own_cif,
+                    default_reading,
+                    encryption_key,
+                )
 
             readings = await asyncio.gather(
                 *(engine.extract(content, content_type) for engine in extractors),
@@ -87,12 +102,13 @@ async def run_ocr_ranking(
                     logger.error(
                         "ranking.engine_failed",
                         uploaded_file_id=str(uploaded_file_id),
-                        error=str(reading),
                     )
                     continue
-                await _persist(session, company_id, uploaded_file_id, own_cif, reading)
-    except Exception as exc:  # noqa: BLE001  (experimento de fondo: nunca debe tumbar al llamador)
-        logger.error("ranking.failed", uploaded_file_id=str(uploaded_file_id), error=str(exc))
+                await _persist(
+                    session, company_id, uploaded_file_id, own_cif, reading, encryption_key
+                )
+    except Exception:  # noqa: BLE001  (experimento de fondo: nunca debe tumbar al llamador)
+        logger.error("ranking.failed", uploaded_file_id=str(uploaded_file_id))
 
 
 async def _persist(
@@ -101,6 +117,7 @@ async def _persist(
     uploaded_file_id: UUID,
     own_cif: str,
     reading: ExtractedInvoice,
+    encryption_key: str,
 ) -> None:
     analysis = analyze_invoice(reading, own_cif)
     await ranking_repository.upsert_ranking_entry(
@@ -111,4 +128,5 @@ async def _persist(
         model=reading.model,
         reading=serialize_reading(reading, analysis),
         score=score_analysis(analysis),
+        encryption_key=encryption_key,
     )

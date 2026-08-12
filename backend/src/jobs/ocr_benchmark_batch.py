@@ -42,9 +42,9 @@ import structlog
 from sqlalchemy import text
 
 from jobs.ocr_benchmark import _run_for_invoice
-from ocr.benchmark_backfill_repository import list_benchmark_candidates
 from ocr.extraction import InvoiceExtractor
 from ocr.ranking_engines import build_named_ranking_extractors
+from platform_admin import benchmark_batch_repository
 from shared.config import Settings, get_settings
 from shared.db import platform_session
 from shared.pg_dsn import to_libpq_dsn
@@ -82,13 +82,12 @@ async def run_benchmark_batch(
                 UUID(uploaded_file_id),
                 extractors=extractors,
             )
-        except Exception as exc:  # noqa: BLE001  (aislamiento por documento, C2/C13)
+        except Exception:  # noqa: BLE001  (aislamiento por documento, C2/C13)
             failed = True
             logger.error(
                 "benchmark_batch.candidate_failed",
                 batch_run_id=batch_run_id,
                 uploaded_file_id=uploaded_file_id,
-                error=str(exc),
             )
         finally:
             await _advance_progress(batch_run_id, failed=failed)
@@ -128,16 +127,9 @@ async def _discover_and_run(batch_run_id: str, settings: Settings) -> None:
     y construye los motores reales UNA vez -- único punto de producción legítimo para el lote
     retroactivo (ver docstring del módulo)."""
     async with platform_session() as session:
-        row = (
-            await session.execute(text("SELECT * FROM get_batch_run(:id)"), {"id": batch_run_id})
-        ).one()
-        total = row.total
-        candidate_rows = await list_benchmark_candidates(session, total)
+        candidates = await benchmark_batch_repository.list_candidates(session, batch_run_id)
 
     extractors = build_named_ranking_extractors(settings)
-    candidates = [
-        (str(c.tenant_id), str(c.company_id), str(c.uploaded_file_id)) for c in candidate_rows
-    ]
     await run_benchmark_batch(batch_run_id, candidates=candidates, extractors=extractors)
 
 
@@ -164,21 +156,30 @@ async def run_benchmark_batch_task(ctx: dict[str, Any], batch_run_id: str) -> No
     settings = get_settings()
     try:
         conn = await asyncpg.connect(to_libpq_dsn(settings.database_url))
-    except Exception as exc:  # noqa: BLE001  (nunca deja la fila en 'running' para siempre)
-        logger.error("benchmark_batch.connect_failed", batch_run_id=batch_run_id, error=str(exc))
+    except Exception:  # noqa: BLE001  (nunca deja la fila en 'running' para siempre)
+        logger.error("benchmark_batch.connect_failed", batch_run_id=batch_run_id)
         await _mark_failed(batch_run_id)
         return
     try:
         try:
             await conn.execute("SELECT pg_advisory_lock($1)", BATCH_LOCK_KEY)
-        except Exception as exc:  # noqa: BLE001  (nunca deja la fila en 'running' para siempre)
-            logger.error("benchmark_batch.lock_failed", batch_run_id=batch_run_id, error=str(exc))
+        except Exception:  # noqa: BLE001  (nunca deja la fila en 'running' para siempre)
+            logger.error("benchmark_batch.lock_failed", batch_run_id=batch_run_id)
             await _mark_failed(batch_run_id)
             return
         try:
+            # ARQ puede redeliver un mensaje tras una caída. Una vez liberado el candado, nunca se
+            # vuelve a pagar un lote ya cerrado ni se infla su progreso.
+            async with platform_session() as session:
+                batch = await benchmark_batch_repository.get_by_id(session, batch_run_id)
+            if batch is None or batch.status != "running":
+                return
+            if batch.completed >= batch.total:
+                await _mark_done(batch_run_id)
+                return
             await _discover_and_run(batch_run_id, settings)
-        except Exception as exc:  # noqa: BLE001  (nunca deja la fila en 'running' para siempre)
-            logger.error("benchmark_batch.task_failed", batch_run_id=batch_run_id, error=str(exc))
+        except Exception:  # noqa: BLE001  (nunca deja la fila en 'running' para siempre)
+            logger.error("benchmark_batch.task_failed", batch_run_id=batch_run_id)
             await _mark_failed(batch_run_id)
         finally:
             await conn.execute("SELECT pg_advisory_unlock($1)", BATCH_LOCK_KEY)

@@ -26,7 +26,7 @@ from invoice_intake import repository as intake_repository
 from invoice_intake import storage as intake_storage
 from invoicing import repository as invoicing_repository
 from invoicing import service as invoicing_service
-from ocr import ranking_repository
+from ocr import benchmark_repository
 from ocr import repository as ocr_repository
 from ocr.field_matching import (
     amounts_match,
@@ -125,14 +125,14 @@ class LabResult:
     `reading_1`/`reading_2` son `None` solo en el caso teórico de una extracción sin fila
     persistida (spec §5: "fuera de alcance, no se contempla un fallback especial" — `raw` es
     `NOT NULL` desde S2.3, así que una factura confirmada siempre debería tener extracción).
-    `ranking_available` es `False` cuando el experimento (S4.10) no estaba encendido al procesar
-    esta factura en concreto (spec C13): no es un error, se dice explícitamente.
+    `ranking_available` es `False` cuando aún no existe benchmark real para esta factura (S6.7 C22):
+    no es un error, se dice explícitamente.
     """
 
     reading_1: Reading1 | None
     reading_2: invoicing_service.ReviewData | None
     reading_3: Reading3
-    ranking: list[ranking_repository.RankingEntry]
+    ranking: list[benchmark_repository.BenchmarkEntry]
     ranking_available: bool
 
 
@@ -357,7 +357,7 @@ async def get_invoice_lab(session: AsyncSession, tenant_id: UUID, file_id: UUID)
             tax_lines_comparison=_build_tax_lines_comparison(extraction, invoice),
         )
 
-        ranking = await ranking_repository.list_ranking_entries(ts, file_id)
+        ranking = await benchmark_repository.list_benchmark_entries(ts, file_id)
 
     return LabResult(
         reading_1=reading_1,
