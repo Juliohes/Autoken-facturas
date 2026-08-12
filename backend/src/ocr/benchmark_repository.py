@@ -43,6 +43,7 @@ class BenchmarkEntry:
     field_results: list[dict[str, Any]]
     tax_lines_matched: bool | None
 
+
 _TENANT_FROM_CONTEXT = "NULLIF(current_setting('app.tenant_id', true), '')::uuid"
 
 _UPSERT = text(
