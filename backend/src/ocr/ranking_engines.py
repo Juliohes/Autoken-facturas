@@ -1,9 +1,8 @@
 """Registro de motores candidatos del ranking multi-modelo (S4.8).
 
 Construye los 6 extractores estructurados (Gemini Flash/Pro, Claude, gpt-5.1, Azure DocIntel,
-Mistral) de forma TOLERANTE: un motor sin sus credenciales en el `.env` simplemente no se incluye
-(spec C3, sin error visible) — mismo criterio ya establecido en `ocr/engines/registry.py` para el
-bench de la Fase 1 ("cada motor sin credenciales se omite con un aviso").
+Mistral). El ranking legado omite un motor sin credenciales, pero el benchmark S6.7 conserva los
+seis mediante un extractor indisponible: así persiste el resultado de error sin hacer llamadas.
 
 Gemini Flash se separa del resto (`build_default_ranking_extractor` vs
 `build_additional_ranking_extractors`) porque `jobs/ocr.py::run_ocr` YA calcula esa lectura para
@@ -32,7 +31,7 @@ from ocr.engines.claude_extractor import build_claude_extractor
 from ocr.engines.gemini_extractor import build_default_extractor, build_gemini_pro_extractor
 from ocr.engines.mistral_extractor import ENGINE_NAME as MISTRAL_ENGINE_NAME
 from ocr.engines.mistral_extractor import build_mistral_extractor
-from ocr.extraction import InvoiceExtractionError, InvoiceExtractor
+from ocr.extraction import ExtractedInvoice, InvoiceExtractionError, InvoiceExtractor
 
 logger = structlog.get_logger(__name__)
 
@@ -65,6 +64,14 @@ _NAMED_BUILDERS: tuple[tuple[str, Callable[[Any], InvoiceExtractor]], ...] = (
     (AZURE_DOCINTEL_ENGINE_NAME, build_azure_docintel_extractor),
     (MISTRAL_ENGINE_NAME, build_mistral_extractor),
 )
+
+
+class _UnavailableBenchmarkExtractor:
+    """Representa una configuración ausente sin exponer el detalle del constructor."""
+
+    async def extract(self, content: bytes, content_type: str) -> ExtractedInvoice:
+        del content, content_type
+        raise InvoiceExtractionError("engine_unavailable")
 
 
 def build_default_ranking_extractor(settings: Any) -> InvoiceExtractor | None:
@@ -102,12 +109,14 @@ def build_named_ranking_extractors(settings: Any) -> list[tuple[str, InvoiceExtr
     """Los 6 motores CON su nombre (S6.7, `ocr.benchmark`/`jobs.ocr_benchmark`): a diferencia de
     `build_ranking_extractors` (solo usada para reconciliar la lectura por defecto, spec S4.8), el
     benchmark necesita conocer el nombre del motor AUNQUE `.extract()` falle antes de devolver
-    ningún `ExtractedInvoice.engine` (C2 -- persistir una fila de error por motor caído). Tolerante
-    igual que el resto de este módulo: un motor sin credenciales se omite sin error (spec C3)."""
+    ningún `ExtractedInvoice.engine` (C2 -- persistir una fila de error por motor caído). A
+    diferencia del ranking legado, conserva los seis motores: una credencial ausente devuelve un
+    extractor que falla localmente, sin red y con un código seguro persistible."""
     extractors: list[tuple[str, InvoiceExtractor]] = []
     for name, builder in _NAMED_BUILDERS:
         try:
             extractors.append((name, builder(settings)))
-        except InvoiceExtractionError as exc:
-            logger.warning("ranking.engine_unavailable", builder=builder.__name__, reason=str(exc))
+        except InvoiceExtractionError:
+            logger.warning("benchmark.engine_unavailable", engine=name)
+            extractors.append((name, _UnavailableBenchmarkExtractor()))
     return extractors

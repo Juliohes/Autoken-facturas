@@ -26,13 +26,22 @@ valor), no en un SQL `NULL` de verdad (la fila sin valor que exige la spec, "sin
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-__all__ = ["upsert_benchmark_result"]
+__all__ = ["BenchmarkEntry", "list_benchmark_entries", "upsert_benchmark_result"]
+
+
+@dataclass(frozen=True)
+class BenchmarkEntry:
+    variant: str
+    engine: str
+    field_results: list[dict[str, Any]]
+    tax_lines_matched: bool | None
 
 _TENANT_FROM_CONTEXT = "NULLIF(current_setting('app.tenant_id', true), '')::uuid"
 
@@ -103,3 +112,32 @@ async def upsert_benchmark_result(
             "key": encryption_key,
         },
     )
+
+
+async def list_benchmark_entries(
+    session: AsyncSession, uploaded_file_id: UUID
+) -> list[BenchmarkEntry]:
+    """Resultados reales variante x motor de una factura para el Laboratorio (S6.7 C21/C22).
+
+    No lee la lectura cruda ni los campos cifrados: el diagnóstico necesita solo el acierto por
+    campo ya calculado contra la verdad confirmada.
+    """
+    rows = (
+        await session.execute(
+            text(
+                "SELECT variant, engine, field_results, tax_lines_matched "
+                "FROM ocr_benchmark_results WHERE uploaded_file_id = :fid "
+                "ORDER BY variant, engine"
+            ),
+            {"fid": str(uploaded_file_id)},
+        )
+    ).all()
+    return [
+        BenchmarkEntry(
+            variant=row.variant,
+            engine=row.engine,
+            field_results=list(row.field_results),
+            tax_lines_matched=row.tax_lines_matched,
+        )
+        for row in rows
+    ]

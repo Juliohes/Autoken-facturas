@@ -109,12 +109,11 @@ async def run_ranking_backfill(
         try:
             await _process_candidate(candidate, extractors=extractors)
             processed += 1
-        except Exception as exc:  # noqa: BLE001  (un fichero problemático no aborta el histórico)
+        except Exception:  # noqa: BLE001  (un fichero problemático no aborta el histórico)
             failed += 1
             logger.error(
                 "ranking_backfill.candidate_failed",
                 uploaded_file_id=str(candidate.uploaded_file_id),
-                error=str(exc),
             )
         if rate_limit_seconds > 0:
             await asyncio.sleep(rate_limit_seconds)

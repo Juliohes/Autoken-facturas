@@ -685,6 +685,22 @@
   verde, ruff/mypy/eslint/tsc limpios. Frontend: nueva ruta `/plataforma/laboratorio` +
   entrada de menú "Laboratorio" (visible solo con `is_admin_tech`, mismo patrón que Ajustes/Ranking
   OCR).
+- **S6.7 (benchmark real motor × variante) cerrado localmente (12/08/2026)**: 3 variantes de
+  imagen (`original`/`enhanced`/`clahe`) × 6 motores, 18 lecturas por factura confirmada, puntuadas
+  contra `invoices` confirmadas campo a campo. Panel admin-tech con ganadores por grupo, detalle,
+  lote retroactivo persistente y `pg_advisory_lock`. C24 completo: migración 0033 cifra y elimina de
+  JSONB el CIF/nombre de `ocr_comparison_runs`/`ocr_ranking_entries`; escrituras nuevas y el
+  Laboratorio adaptados para cifrar/descifrar siempre dentro del tenant. Verificado: 40 tests
+  focalizados contra Postgres/Redis reales, migración desde 0032 y `alembic check`; frontend 304
+  tests+tsc+build. Pendiente de autorización explícita de Julio: desplegar y lanzar como máximo las
+  29 facturas reales de Setex (hasta 522 llamadas de pago); Claude Vertex seguía limitado por cuota
+  el 09/08/2026.
+  **Refuerzo de auditoría posterior resuelto antes de publicar:** el benchmark se encola post-commit;
+  el ranking legado deja de ejecutarse automáticamente; 18 filas se persisten también con motores
+  sin credenciales; C24 entra en rotación de clave y los errores de proveedores no guardan/loguean
+  texto no confiable. Migración 0034: inicio de lote atómico + snapshot persistente con RLS FORCE
+  fail-closed, encolado post-commit y worker sobre el snapshot exacto. Gate de aislamiento real
+  verde (34 tests).
 - **Activación real del interruptor + reprocesado retroactivo (09/08/2026)** — Julio activó de
   verdad `platform_settings.ocr_experiment_enabled` desde `/plataforma/ajustes` (coste recurrente
   real desde entonces para toda factura nueva) y pidió también el reprocesado retroactivo de las

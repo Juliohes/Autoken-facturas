@@ -130,21 +130,33 @@ def _parse_tax_line_amount(value: object) -> Decimal | None:
     return parse_decimal_text(str(value).strip().replace(",", "."))
 
 
+def _parse_tax_line_pct(value: object) -> Decimal | None:
+    """Normaliza la tasa de IVA a valor decimal, sin tolerancia: 21 y 21.00 son el mismo tipo
+    de IVA, mientras que 10 y 21 siguen siendo distintos (C8)."""
+    if value is None:
+        return None
+    try:
+        parsed = Decimal(str(value).strip().replace(",", "."))
+    except Exception:  # noqa: BLE001 - lectura OCR no confiable
+        return None
+    return parsed if parsed.is_finite() else None
+
+
 def _parse_tax_lines(
     tax_lines: object,
-) -> list[tuple[str | None, Decimal | None, Decimal | None]]:
+) -> list[tuple[Decimal | None, Decimal | None, Decimal | None]]:
     """Convierte `[{"iva_pct": ..., "base": ..., "cuota": ...}, ...]` al formato que espera
     `ocr.field_matching.tax_lines_match` (tuplas `(iva_pct, base, cuota)`)."""
     if not isinstance(tax_lines, list):
         return []
-    parsed: list[tuple[str | None, Decimal | None, Decimal | None]] = []
+    parsed: list[tuple[Decimal | None, Decimal | None, Decimal | None]] = []
     for line in tax_lines:
         if not isinstance(line, Mapping):
             continue
         iva_pct = line.get("iva_pct")
         parsed.append(
             (
-                str(iva_pct) if iva_pct is not None else None,
+                _parse_tax_line_pct(iva_pct),
                 _parse_tax_line_amount(line.get("base")),
                 _parse_tax_line_amount(line.get("cuota")),
             )

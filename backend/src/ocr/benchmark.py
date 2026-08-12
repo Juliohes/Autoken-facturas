@@ -77,6 +77,11 @@ logger = structlog.get_logger(__name__)
 
 __all__ = ["run_benchmark"]
 
+# Ningún proveedor puede consumir indefinidamente un worker ni provocar que ARQ reentregue el lote
+# por superar su límite global. El timeout se aplica por combinación y el resultado queda guardado
+# como `engine_failed`, igual que cualquier caída externa (C2).
+_COMBINATION_TIMEOUT_SECONDS = 120
+
 # Nombres de variante (spec §2) -- procesadas en este orden fijo, una detrás de otra (C3).
 _VARIANT_ORIGINAL = "original"
 _VARIANT_ENHANCED = "enhanced"
@@ -122,13 +127,15 @@ async def run_benchmark(
     own_cif: str,
     ocr_experiment_enabled: bool,
     extractors: list[tuple[str, InvoiceExtractor]],
+    raise_on_orchestration_error: bool = False,
 ) -> None:
     """Ejecuta las combinaciones (variante, motor) sobre una factura y persiste cada resultado.
 
     Guarda de entrada (mismo criterio que `run_ocr_ranking`): interruptor apagado o sin motores ->
     no hace nada, coste cero, sin abrir ninguna sesión de Postgres (C1 del interruptor, spec §4).
-    Nunca propaga una excepción: es un experimento de fondo, su fallo no puede afectar a nada que ya
-    haya terminado con éxito.
+    `raise_on_orchestration_error` solo lo usa el lote retroactivo: necesita contar como fallida una
+    factura cuando falla la orquestación (almacén/persistencia). Los fallos de motor y de generar
+    una variante siguen aislados en sus propias filas de resultado en ambos modos.
     """
     if not ocr_experiment_enabled or not extractors:
         return
@@ -143,8 +150,10 @@ async def run_benchmark(
                 truth=truth,
                 extractors=extractors,
             )
-    except Exception as exc:  # noqa: BLE001  (experimento de fondo: nunca debe tumbar al llamador)
-        logger.error("benchmark.failed", uploaded_file_id=str(uploaded_file_id), error=str(exc))
+    except Exception:  # noqa: BLE001  (solo el lote necesita distinguir fallo de orquestación)
+        logger.error("benchmark.failed", uploaded_file_id=str(uploaded_file_id))
+        if raise_on_orchestration_error:
+            raise
 
 
 async def _build_variants(content: bytes, content_type: str) -> list[_Variant]:
@@ -169,9 +178,9 @@ async def _build_variants(content: bytes, content_type: str) -> list[_Variant]:
             # mismo criterio que `jobs.ocr`/`jobs.ocr.run_ocr_comparison`.
             generated = await asyncio.to_thread(builder, content, content_type)
             variants.append(_Variant(name, generated, result_content_type, None))
-        except Exception as exc:  # noqa: BLE001  (preprocesado: se aísla, no aborta el benchmark)
-            logger.error("benchmark.variant_generation_failed", variant=name, error=str(exc))
-            variants.append(_Variant(name, None, None, str(exc)))
+        except Exception:  # noqa: BLE001  (preprocesado: se aísla, no aborta el benchmark)
+            logger.error("benchmark.variant_generation_failed", variant=name)
+            variants.append(_Variant(name, None, None, "variant_generation_failed"))
     return variants
 
 
@@ -259,7 +268,9 @@ async def _run_combination(
     se traduce en `error` relleno + `aciertos`/`comparables` a 0, nunca en una excepción."""
     started = time.monotonic()
     try:
-        extracted = await extractor.extract(content, content_type)
+        extracted = await asyncio.wait_for(
+            extractor.extract(content, content_type), timeout=_COMBINATION_TIMEOUT_SECONDS
+        )
         duration_ms = _elapsed_ms(started)
         analysis = analyze_invoice(extracted, own_cif)
         reading = _build_reading(extracted, analysis)
@@ -285,8 +296,10 @@ async def _run_combination(
             error=None,
             duration_ms=duration_ms,
         )
-    except Exception as exc:  # noqa: BLE001  (motor caído: se persiste el error, nunca se propaga)
-        logger.error("benchmark.engine_failed", engine=engine_name, error=str(exc))
+    except Exception:  # noqa: BLE001  (motor caído: se persiste el error, nunca se propaga)
+        # Un extractor es un adaptador externo: su excepción puede incluir prompts, respuestas o
+        # credenciales. El contrato persistible es deliberadamente un código estable y seguro.
+        logger.error("benchmark.engine_failed", engine=engine_name)
         return _CombinationResult(
             model=None,
             counterparty_tax_id=None,
@@ -296,7 +309,7 @@ async def _run_combination(
             tax_lines_matched=None,
             aciertos=0,
             comparables=0,
-            error=str(exc),
+            error="engine_failed",
             duration_ms=_elapsed_ms(started),
         )
 

@@ -13,10 +13,12 @@ lote procesa a la vez pase lo que pase en esta capa (spec §0.5).
 
 from __future__ import annotations
 
+import asyncio
+
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from jobs import queue
-from ocr.benchmark_backfill_repository import list_benchmark_candidates
 from platform_admin import benchmark_batch_repository, settings_repository
 from platform_admin.benchmark_batch_repository import BatchRun
 
@@ -49,20 +51,34 @@ async def start_backfill(session: AsyncSession, *, limit: int) -> tuple[bool, Ba
     if not settings_row.ocr_experiment_enabled:
         raise OcrExperimentDisabled()
 
-    running = await benchmark_batch_repository.get_running(session)
-    if running is not None:
-        return False, running
+    # La función SQL toma un advisory xact lock, inserta y congela los candidatos en la misma
+    # transacción. No queda ventana entre comprobar el lote y crear el siguiente.
+    started, batch = await benchmark_batch_repository.start(session, limit=min(limit, HARD_LIMIT))
+    if started:
+        _enqueue_after_commit(session, batch)
+    return started, batch
 
-    effective_limit = min(limit, HARD_LIMIT)
-    candidates = await list_benchmark_candidates(session, effective_limit)
-    total = len(candidates)
 
-    batch = await benchmark_batch_repository.insert_running(session, total=total)
-    # Best-effort (mismo criterio que `enqueue_ocr`/`enqueue_ocr_benchmark`): un fallo de
-    # infraestructura del encolado no debe impedir que la fila `running` quede registrada -- el
-    # candado/CLI puede relanzarse manualmente si el worker nunca llega a procesarla.
-    await queue.enqueue_ocr_benchmark_batch(str(batch.id))
-    return True, batch
+def _enqueue_after_commit(session: AsyncSession, batch: BatchRun) -> None:
+    """El worker solo puede leer el snapshot tras el commit de la petición HTTP."""
+
+    async def dispatch() -> None:
+        if not await queue.enqueue_ocr_benchmark_batch(str(batch.id)):
+            # La cola es infraestructura externa: una vez que falla, el panel debe ver el lote como
+            # fallido y no como un "running" perpetuo. No afecta a ningún otro lote ni motor.
+            await _mark_enqueue_failed(str(batch.id))
+
+    def after_commit(_sync_session: object) -> None:
+        asyncio.get_running_loop().create_task(dispatch())
+
+    event.listen(session.sync_session, "after_commit", after_commit, once=True)
+
+
+async def _mark_enqueue_failed(batch_run_id: str) -> None:
+    from shared.db import platform_session
+
+    async with platform_session() as session:
+        await session.execute(text("SELECT finish_batch_run(:id, 'failed')"), {"id": batch_run_id})
 
 
 async def get_status(session: AsyncSession) -> BatchRun | None:

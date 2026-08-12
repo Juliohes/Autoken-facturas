@@ -186,3 +186,128 @@ async def test_c9_rotacion_no_cruza_datos_entre_tenants(authapi: Api) -> None:
     finally:
         await conn.close()
     assert UUID(tenant_a) != UUID(tenant_b)
+
+
+async def test_s6_7_rotacion_recifra_las_seis_columnas_experimentales(authapi: Api) -> None:
+    """C24: la rotación incluye los cuatro nombres de comparison y los dos de ranking."""
+    import asyncpg
+
+    from ocr.comparison_repository import upsert_comparison_run
+    from ocr.ranking_repository import upsert_ranking_entry
+    from shared import config
+    from shared.db import tenant_session
+    from shared.encryption import derive_tenant_encryption_key
+    from tests._dbtest import seed_company, seed_tenant, seed_user
+    from tests._ocr import OWN_CIF, seed_uploaded_file
+
+    _client, dsns = authapi
+    old_master = config.get_settings().db_encryption_master_key
+    tenant_id = await seed_tenant(dsns["admin"], "rota-exp", "Rota Experimentos")
+    company_id = await seed_company(
+        dsns["admin"], tenant_id=tenant_id, name="Empresa", cif=OWN_CIF
+    )
+    user_id = await seed_user(dsns["admin"], tenant_id=tenant_id, email="rota-exp@example.test")
+    file_id = await seed_uploaded_file(
+        dsns, tenant_id=tenant_id, company_id=company_id, uploaded_by=user_id
+    )
+    old_key = derive_tenant_encryption_key(old_master, tenant_id)
+    reading = {"counterparty_tax_id": "A39031620", "counterparty_name": "Proveedor"}
+    async with tenant_session(UUID(tenant_id), UUID(company_id)) as session:
+        await upsert_comparison_run(
+            session, company_id=UUID(company_id), uploaded_file_id=UUID(file_id),
+            original_reading=reading, enhanced_reading=reading, original_score=1, enhanced_score=1,
+            winner="tie", engine="fake", model="fake", encryption_key=old_key,
+        )
+        await upsert_ranking_entry(
+            session, company_id=UUID(company_id), uploaded_file_id=UUID(file_id), engine="fake",
+            model="fake", reading=reading, score=1, encryption_key=old_key,
+        )
+
+    from jobs.key_rotation import rotate_all_tenants
+
+    await rotate_all_tenants(old_master=old_master, new_master=_NEW_MASTER_KEY)
+    new_key = derive_tenant_encryption_key(_NEW_MASTER_KEY, tenant_id)
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        row = await conn.fetchrow(
+            "SELECT pgp_sym_decrypt(original_counterparty_tax_id, $2)::text, "
+            "pgp_sym_decrypt(original_counterparty_name, $2)::text, "
+            "pgp_sym_decrypt(enhanced_counterparty_tax_id, $2)::text, "
+            "pgp_sym_decrypt(enhanced_counterparty_name, $2)::text "
+            "FROM ocr_comparison_runs WHERE uploaded_file_id = $1", file_id, new_key
+        )
+        ranking = await conn.fetchrow(
+            "SELECT pgp_sym_decrypt(counterparty_tax_id, $2)::text, "
+            "pgp_sym_decrypt(counterparty_name, $2)::text "
+            "FROM ocr_ranking_entries WHERE uploaded_file_id = $1", file_id, new_key
+        )
+    finally:
+        await conn.close()
+    assert tuple(row) == ("A39031620", "Proveedor", "A39031620", "Proveedor")
+    assert tuple(ranking) == ("A39031620", "Proveedor")
+
+
+async def test_s6_7_rotacion_recifra_los_campos_cifrados_del_benchmark(authapi: Api) -> None:
+    """C23: una clave nueva debe poder leer el PII del benchmark y la vieja no."""
+    import asyncpg
+
+    from ocr.benchmark_repository import upsert_benchmark_result
+    from shared import config
+    from shared.db import tenant_session
+    from shared.encryption import derive_tenant_encryption_key
+    from tests._dbtest import seed_company, seed_tenant, seed_user
+    from tests._ocr import OWN_CIF, seed_uploaded_file
+
+    _client, dsns = authapi
+    old_master = config.get_settings().db_encryption_master_key
+    tenant_id = await seed_tenant(dsns["admin"], "rota-benchmark", "Rota Benchmark")
+    company_id = await seed_company(
+        dsns["admin"], tenant_id=tenant_id, name="Empresa", cif=OWN_CIF
+    )
+    user_id = await seed_user(
+        dsns["admin"], tenant_id=tenant_id, email="rota-benchmark@example.test"
+    )
+    file_id = await seed_uploaded_file(
+        dsns, tenant_id=tenant_id, company_id=company_id, uploaded_by=user_id
+    )
+    old_key = derive_tenant_encryption_key(old_master, tenant_id)
+    async with tenant_session(UUID(tenant_id), UUID(company_id)) as session:
+        await upsert_benchmark_result(
+            session,
+            company_id=UUID(company_id),
+            uploaded_file_id=UUID(file_id),
+            variant="original",
+            engine="fake",
+            model="fake",
+            counterparty_tax_id="A39031620",
+            counterparty_name="Proveedor",
+            reading={},
+            field_results=[],
+            tax_lines_matched=None,
+            aciertos=0,
+            comparables=0,
+            error=None,
+            duration_ms=1,
+            encryption_key=old_key,
+        )
+
+    from jobs.key_rotation import rotate_all_tenants
+
+    await rotate_all_tenants(old_master=old_master, new_master=_NEW_MASTER_KEY)
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        row = await conn.fetchrow(
+            "SELECT counterparty_tax_id, counterparty_name FROM ocr_benchmark_results "
+            "WHERE uploaded_file_id = $1",
+            file_id,
+        )
+        new_key = derive_tenant_encryption_key(_NEW_MASTER_KEY, tenant_id)
+        assert await conn.fetchval(
+            "SELECT pgp_sym_decrypt($1::bytea, $2)::text", row["counterparty_tax_id"], new_key
+        ) == "A39031620"
+        with pytest.raises(asyncpg.PostgresError):
+            await conn.fetchval(
+                "SELECT pgp_sym_decrypt($1::bytea, $2)::text", row["counterparty_tax_id"], old_key
+            )
+    finally:
+        await conn.close()

@@ -70,6 +70,16 @@ def test_c7_un_tramo_de_iva_con_medio_por_ciento_de_diferencia_cuenta_como_acier
     assert score.aciertos == 8
 
 
+def test_c8_la_tasa_de_iva_usa_igualdad_numerica_exacta_no_el_formato() -> None:
+    """21 y 21,00 son el mismo tipo de IVA; C8 exige valor, no escala decimal."""
+    reading = {**TRUTH, "tax_lines": [{"iva_pct": "21", "base": "100.00", "cuota": "21.00"}]}
+    truth = {**TRUTH, "tax_lines": [{"iva_pct": "21,00", "base": "100.00", "cuota": "21.00"}]}
+
+    score = score_combination(reading, truth)
+
+    assert score.tax_lines_matched is True
+
+
 def test_c7_un_tramo_de_iva_por_encima_del_2_por_ciento_no_cuenta_como_acierto() -> None:
     reading = {**TRUTH, "tax_lines": [{"iva_pct": "21", "base": "103.00", "cuota": "21.00"}]}
 

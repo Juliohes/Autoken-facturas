@@ -7,10 +7,10 @@ tenancy (0001).
 
 Una fila vigente por `uploaded_file_id` (UNIQUE): reprocesar hace upsert, no duplica (idempotencia).
 
-`OcrComparisonRun`/`OcrRankingEntry` (S2.10/S4.8) quedan FUERA del alcance de S5.2: sus columnas
-`reading`/`original_reading`/`enhanced_reading` (JSONB) pueden llevar el CIF/nombre de contraparte
-en claro dentro del blob serializado. Detrás de `platform_settings.ocr_experiment_enabled` (apagado
-por defecto); ver seguimiento en el cierre de S5.2 antes de activar el experimento en producción.
+`OcrComparisonRun`/`OcrRankingEntry` (S2.10/S4.8) cifran desde S6.7 C24 el CIF/nombre de contraparte
+en columnas `bytea` dedicadas (mismo patrón ADR-0018 que `OcrBenchmarkResult`), fuera del JSONB
+`reading`/`original_reading`/`enhanced_reading` (que ya no los lleva, ver migración 0033). Detrás de
+`platform_settings.ocr_experiment_enabled` (apagado por defecto).
 """
 
 from __future__ import annotations
@@ -122,6 +122,12 @@ class OcrComparisonRun(Base):
     )
     original_reading: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     enhanced_reading: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    # Cifrados desde S6.7 C24 (`pgp_sym_encrypt`), fuera del JSONB de arriba; el ORM nunca los
+    # lee/escribe directamente (SQL crudo en `ocr.comparison_repository`).
+    original_counterparty_tax_id: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
+    original_counterparty_name: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
+    enhanced_counterparty_tax_id: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
+    enhanced_counterparty_name: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
     original_score: Mapped[int] = mapped_column(Integer, nullable=False)
     enhanced_score: Mapped[int] = mapped_column(Integer, nullable=False)
     winner: Mapped[str] = mapped_column(Text, nullable=False)
@@ -224,6 +230,10 @@ class OcrRankingEntry(Base):
     engine: Mapped[str] = mapped_column(Text, nullable=False)
     model: Mapped[str] = mapped_column(Text, nullable=False)
     reading: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    # Cifrados desde S6.7 C24 (`pgp_sym_encrypt`), fuera del JSONB de arriba; el ORM nunca los
+    # lee/escribe directamente (SQL crudo en `ocr.ranking_repository`).
+    counterparty_tax_id: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
+    counterparty_name: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
     score: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

@@ -51,7 +51,6 @@ async def test_c1_interruptor_apagado_no_genera_entradas_de_ranking(authapi: Api
         company_id=company_id,
         file_id=file_id,
         extractor=make_extractor(build_extracted()),
-        ranking_extractors=[],
     )
 
     assert await count_ranking_entries(dsns, file_id=file_id) == 0
@@ -157,10 +156,8 @@ async def test_c9_aislamiento_por_tenant(authapi: Api) -> None:
     assert await ranking_entries_visible_as_tenant(dsns, tenant_id=tenant_b) == 0
 
 
-async def test_c2_motor_por_defecto_no_se_llama_dos_veces_por_factura(authapi: Api) -> None:
-    """Regresión (auditoría, hallazgo crítico): la lectura del motor por defecto (Gemini Flash) ya
-    la calcula `run_ocr` para el resultado principal — el ranking debe reutilizarla, nunca volver a
-    llamar a ese motor, o el coste real por factura se duplicaría."""
+async def test_s6_7_el_ocr_principal_no_dispara_el_ranking_legado(authapi: Api) -> None:
+    """S6.7 conserva el código legado, pero lo retira del fan-out del OCR principal."""
     _client, dsns = authapi
     await set_ocr_experiment_enabled(dsns, True)
     tenant_id, company_id, file_id = await _seed(dsns, slug="rk-c2-nodup")
@@ -172,13 +169,7 @@ async def test_c2_motor_por_defecto_no_se_llama_dos_veces_por_factura(authapi: A
         company_id=company_id,
         file_id=file_id,
         extractor=default_extractor,
-        ranking_extractors=[
-            make_extractor(build_extracted(engine="claude-vertex", model="claude-x"))
-        ],
     )
 
-    assert default_extractor.calls == 1  # una vez para el resultado principal, ninguna más
-
-    entries = await fetch_ranking_entries(dsns, file_id=file_id)
-    engines = {e["engine"] for e in entries}
-    assert engines == {"gemini-3-flash", "claude-vertex"}
+    assert default_extractor.calls == 1
+    assert await count_ranking_entries(dsns, file_id=file_id) == 0

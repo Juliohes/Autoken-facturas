@@ -7,8 +7,8 @@ no la toca directamente (siempre a través de las funciones `SECURITY DEFINER`
 
 `OcrBenchmarkBatchRun` (S6.7 Área C, migración 0030): progreso persistido del lote retroactivo del
 benchmark real -- SIN `tenant_id`/RLS (no guarda ningún dato de tenant, solo el progreso agregado
-de un lote lanzado por un `admin-tech`); se lee/escribe directamente con `identity.session`
-(`platform_admin/benchmark_batch_repository.py`), nunca por una función `SECURITY DEFINER`.
+de un lote lanzado por un `admin-tech`); se lee/escribe a través de funciones `SECURITY DEFINER`
+(`platform_admin/benchmark_batch_repository.py`).
 
 Ambos modelos existen solo para que el esquema declarado coincida con el de su migración (guard de
 deriva ORM<->migración, CI) -- ningún repositorio los usa como ORM de escritura habitual (SQL/
@@ -20,7 +20,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Integer, Text, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,3 +61,18 @@ class OcrBenchmarkBatchRun(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OcrBenchmarkBatchCandidate(Base):
+    """Snapshot inmutable de los documentos elegidos al crear un lote S6.7."""
+
+    __tablename__ = "ocr_benchmark_batch_candidates"
+
+    batch_run_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("ocr_benchmark_batch_runs.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    uploaded_file_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    company_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)

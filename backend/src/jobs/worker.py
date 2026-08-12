@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from arq import func
 from arq.connections import RedisSettings
 
 from jobs.ocr import run_ocr
@@ -48,7 +49,14 @@ async def startup(ctx: dict[str, Any]) -> None:
 class WorkerSettings:
     """Ajustes que arq lee para arrancar el worker (`arq jobs.worker.WorkerSettings`)."""
 
-    functions = [run_ocr_task, run_ocr_benchmark_task, run_benchmark_batch_task]
+    functions = [
+        run_ocr_task,
+        run_ocr_benchmark_task,
+        # Un lote autorizado puede tardar más que el timeout por defecto de ARQ (5 min): 30
+        # facturas x 18 lecturas. Un solo intento automático evita reejecutar y volver a cobrar un
+        # lote parcial; cualquier relanzamiento posterior queda explícito y visible en el panel.
+        func(run_benchmark_batch_task, timeout=4 * 60 * 60, max_tries=1),
+    ]
     on_startup = startup
     queue_name = _settings.ocr_queue_name
     redis_settings = RedisSettings.from_dsn(_settings.redis_url)

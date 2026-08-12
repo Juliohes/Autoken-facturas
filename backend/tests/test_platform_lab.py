@@ -18,7 +18,7 @@ from tests._auth import USER_PASSWORD_HASH
 from tests._dbtest import seed_company, seed_tenant, seed_user
 from tests._intake import JPEG, JPEG_CT, token_for
 from tests._invoicing import auth, confirm_body, confirm_url, seed_confirmable, seed_invoice
-from tests._ocr import seed_ranking_entry
+from tests._ocr_benchmark import seed_benchmark_result
 from tests._platform import platform_token, seed_platform_admin
 
 Api = tuple[httpx.AsyncClient, dict[str, str]]
@@ -464,40 +464,48 @@ async def test_c11_sin_ninguna_correccion_toda_la_tabla_sale_en_verde(authapi: A
 # --- Área E: comparativa de modelos -----------------------------------------------------------
 
 
-async def test_c12_comparativa_con_experimento_encendido_muestra_una_fila_por_motor(
+async def test_c21_comparativa_con_benchmark_muestra_una_fila_por_combinacion(
     authapi: Api,
 ) -> None:
-    """spec: S6.2 C12 — con `ocr_ranking_entries` sembradas, la comparativa las muestra ordenadas
-    de mayor a menor puntuación."""
+    """spec: S6.7 C21 — con benchmark persistido, muestra los aciertos reales de cada combinación,
+    no el ranking histórico de autoconsistencia."""
     client, dsns = authapi
     s = await _seed_confirmed_invoice(dsns, client)
-    await seed_ranking_entry(
+    await seed_benchmark_result(
         dsns,
         tenant_id=s["tenant_id"],
         company_id=s["company_id"],
         uploaded_file_id=s["file_id"],
+        variant="clahe",
         engine="gemini-3-flash",
-        score=90,
+        field_results=[{"field": "total_amount", "match": True}],
+        tax_lines_matched=False,
     )
-    await seed_ranking_entry(
+    await seed_benchmark_result(
         dsns,
         tenant_id=s["tenant_id"],
         company_id=s["company_id"],
         uploaded_file_id=s["file_id"],
+        variant="original",
         engine="mistral-ocr-4",
-        score=10,
+        field_results=[{"field": "total_amount", "match": False}],
+        tax_lines_matched=None,
     )
     token = await _admin_tech_token(client, dsns)
 
     resp = await client.get(_lab_url(s["tenant_id"], s["file_id"]), headers=_platform_auth(token))
 
     ranking = resp.json()["ranking"]
-    assert [row["engine"] for row in ranking] == ["gemini-3-flash", "mistral-ocr-4"]
-    assert ranking[0]["score"] == 90
+    assert [(row["variant"], row["engine"]) for row in ranking] == [
+        ("clahe", "gemini-3-flash"),
+        ("original", "mistral-ocr-4"),
+    ]
+    assert ranking[0]["field_results"] == [{"field": "total_amount", "match": True}]
+    assert ranking[0]["tax_lines_matched"] is False
 
 
 async def test_c13_comparativa_sin_experimento_encendido_lo_dice_explicito(authapi: Api) -> None:
-    """spec: S6.2 C13 — sin filas de `ocr_ranking_entries` (experimento apagado en su día), la
+    """spec: S6.7 C22 — sin filas de `ocr_benchmark_results` (experimento apagado en su día), la
     comparativa lo indica claramente, no un hueco vacío indistinguible de un error."""
     client, dsns = authapi
     s = await _seed_confirmed_invoice(dsns, client)

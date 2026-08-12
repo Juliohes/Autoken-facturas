@@ -10,6 +10,7 @@ descuadre aritmético AVISA pero no bloquea (regla 5).
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -511,13 +512,29 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
         session=identity.session,
     )
 
-    # Benchmark real de variante x motor (S6.7, C1): dispara en segundo plano, sin bloquear esta
-    # respuesta -- mismo criterio best-effort que el encolado del OCR en la subida (S2.3). La
-    # verdad contra la que se puntúa es justo la factura que se acaba de confirmar.
-    await queue.enqueue_ocr_benchmark(
-        str(identity.tenant_id), str(file_ctx.company_id), str(file_id)
+    _enqueue_benchmark_after_commit(
+        identity.session, identity.tenant_id, file_ctx.company_id, file_id
     )
     return invoice_id
+
+
+def _enqueue_benchmark_after_commit(
+    session: AsyncSession, tenant_id: UUID, company_id: UUID, file_id: UUID
+) -> None:
+    """Encola el benchmark solo tras confirmar la factura (S6.7 C1).
+
+    El worker debe poder leer la verdad confirmada. Hacerlo dentro de `confirm` dejaba una carrera
+    real: podía consumir el trabajo antes del commit y abandonar al no encontrar la factura.
+    """
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+
+    def _enqueue(_sync_session: Session) -> None:
+        asyncio.get_running_loop().create_task(
+            queue.enqueue_ocr_benchmark(str(tenant_id), str(company_id), str(file_id))
+        )
+
+    event.listen(session.sync_session, "after_commit", _enqueue, once=True)
 
 
 async def history(identity: AuthContext) -> list[HistoryItem]:

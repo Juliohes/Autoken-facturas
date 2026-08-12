@@ -39,6 +39,20 @@ docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.y
 Solo entonces `api`/`worker` arrancan correctamente (si no, el guard `assert_runtime_role_cannot_
 bypass_rls`, ADR-0014, aborta el arranque — es la protección funcionando, no un bug).
 
+### Migración 0033: cifrado del histórico experimental OCR
+
+La migración `0033_encrypt_ocr_experiment_pii` cifra el CIF y nombre de contraparte almacenados en
+experimentos anteriores. API y worker deben estar detenidos: una imagen antigua volvería a escribir
+esos campos dentro del JSONB en claro.
+
+1. `docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml stop api worker`
+2. Ejecutar `docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml --profile tools run --rm migrate`.
+3. Levantar solo las imágenes nuevas con `docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml up -d api worker`.
+
+`migrate` recibe explícitamente `DB_ENCRYPTION_MASTER_KEY`, sin montar el `.env` completo, para
+derivar exactamente las mismas claves por tenant que usará la aplicación. La migración bloquea ambas
+tablas durante el backfill; no reanudar una imagen anterior tras aplicarla.
+
 ## Acceder a Grafana/Prometheus/Alertmanager (solo por túnel SSH, nunca públicos)
 
 Estos tres puertos están en `127.0.0.1` de la VPS a propósito (sin autenticación propia salvo

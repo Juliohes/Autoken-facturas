@@ -210,23 +210,15 @@ def make_comparison_extractor(*, original, enhanced, error_on: str | None = None
     return _ComparisonExtractor()
 
 
-async def run_ocr(
-    *, tenant_id: str, company_id: str, file_id: str, extractor, ranking_extractors
-) -> None:
+async def run_ocr(*, tenant_id: str, company_id: str, file_id: str, extractor) -> None:
     """Invoca el job del worker directamente (import perezoso; sin arq corriendo).
 
-    `ranking_extractors` es OBLIGATORIO (sin default): pásalo siempre explícito, aunque sea `[]`.
-    Dejarlo con un default en `None` fue precisamente el incidente real durante el desarrollo de
-    S4.8 — un test con el interruptor encendido llamó a `run_ocr` sin pasarlo y `run_ocr` construyó
-    los motores reales desde la config, disparando llamadas de pago de verdad en un entorno con
-    credenciales reales configuradas (ver docstring de `jobs.ocr.run_ocr`). Quitarle el default aquí
-    obliga a cada test a decidir explícitamente qué motores usar.
+    S6.7 retiró el ranking legado del fan-out del OCR principal: este helper solo necesita el
+    extractor de producción inyectado.
     """
     from jobs.ocr import run_ocr as _run
 
-    await _run(
-        tenant_id, company_id, file_id, extractor=extractor, ranking_extractors=ranking_extractors
-    )
+    await _run(tenant_id, company_id, file_id, extractor=extractor)
 
 
 async def set_ocr_experiment_enabled(dsns: dict[str, str], enabled: bool) -> None:
@@ -371,21 +363,36 @@ async def seed_ranking_entry(
     """Inserta directamente una fila de `ocr_ranking_entries` (superusuario), como recomienda la
     spec S4.8 §7 para probar la agregación del panel (C11) sin depender de motores reales.
     `reading` por defecto vacío (compatibilidad); pásalo para probar los "ejemplos concretos" que
-    consume el panel de plataforma (2026-08-09, a petición de Julio)."""
+    consume el panel de plataforma (2026-08-09, a petición de Julio). S6.7 C24 mantiene CIF/nombre
+    fuera del JSONB y cifrados, igual que el camino real de escritura."""
+    from shared.config import get_settings
+    from shared.encryption import derive_tenant_encryption_key
+
+    reading = dict(reading or {})
+    counterparty_tax_id = reading.pop("counterparty_tax_id", None)
+    counterparty_name = reading.pop("counterparty_name", None)
+    encryption_key = derive_tenant_encryption_key(
+        get_settings().db_encryption_master_key, tenant_id
+    )
     conn = await asyncpg.connect(dsns["admin"])
     try:
         await conn.execute(
             "INSERT INTO ocr_ranking_entries "
-            "(tenant_id, company_id, uploaded_file_id, engine, model, reading, score) "
-            "VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7) "
+            "(tenant_id, company_id, uploaded_file_id, engine, model, reading, "
+            "counterparty_tax_id, counterparty_name, score) "
+            "VALUES ($1,$2,$3,$4,$5,$6::jsonb,pgp_sym_encrypt($7,$9),pgp_sym_encrypt($8,$9),$10) "
             "ON CONFLICT (uploaded_file_id, engine) DO UPDATE SET score = EXCLUDED.score, "
-            "reading = EXCLUDED.reading",
+            "reading = EXCLUDED.reading, counterparty_tax_id = EXCLUDED.counterparty_tax_id, "
+            "counterparty_name = EXCLUDED.counterparty_name",
             tenant_id,
             company_id,
             uploaded_file_id,
             engine,
             model,
-            json.dumps(reading or {}),
+            json.dumps(reading),
+            counterparty_tax_id,
+            counterparty_name,
+            encryption_key,
             score,
         )
     finally:

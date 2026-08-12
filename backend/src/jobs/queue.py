@@ -37,7 +37,7 @@ _OCR_BENCHMARK_BATCH_TASK = "run_benchmark_batch_task"
 _ENQUEUE_INFRA_ERRORS = (ImportError, RedisError, OSError, asyncio.TimeoutError)
 
 
-async def _enqueue(task_name: str, log_event: str, *args: str, identifier: str) -> None:
+async def _enqueue(task_name: str, log_event: str, *args: str, identifier: str) -> bool:
     """Encola `task_name(*args)` en la cola del worker (best-effort): crea el pool, encola, cierra
     el pool. Compartido por `enqueue_ocr`/`enqueue_ocr_benchmark`/`enqueue_ocr_benchmark_batch`
     (2026-08-11, S6.7 auditoría/Área C, hallazgo de SOLID/DRY -- las tres funciones tenían el mismo
@@ -64,6 +64,8 @@ async def _enqueue(task_name: str, log_event: str, *args: str, identifier: str) 
             await pool.aclose()
     except _ENQUEUE_INFRA_ERRORS as exc:  # best-effort: el llamador no depende del worker
         logger.error(log_event, identifier=identifier, error=str(exc))
+        return False
+    return True
 
 
 async def enqueue_ocr(
@@ -102,7 +104,7 @@ async def enqueue_ocr_benchmark(
     )
 
 
-async def enqueue_ocr_benchmark_batch(batch_run_id: str) -> None:
+async def enqueue_ocr_benchmark_batch(batch_run_id: str) -> bool:
     """Encola `run_benchmark_batch_task(batch_run_id)` (S6.7 Área C, C10), best-effort.
 
     Mismo criterio que `enqueue_ocr`/`enqueue_ocr_benchmark`: un fallo de infraestructura del
@@ -110,7 +112,7 @@ async def enqueue_ocr_benchmark_batch(batch_run_id: str) -> None:
     `ocr_benchmark_batch_runs` (`platform_admin.benchmark_batch_service.start_backfill`), el panel
     puede reintentarse manualmente si el worker nunca llega a procesarla.
     """
-    await _enqueue(
+    return await _enqueue(
         _OCR_BENCHMARK_BATCH_TASK,
         "ocr_benchmark_batch.enqueue_failed",
         batch_run_id,

@@ -141,6 +141,58 @@ async def test_c11_un_lote_ya_corriendo_da_409_con_el_progreso_actual(authapi: A
     assert body["batch"]["status"] == "running"
 
 
+async def test_s6_7_el_lote_persiste_el_snapshot_y_no_redescubre_candidatos(authapi: Api) -> None:
+    """El conjunto procesable queda fijado al pulsar el botón, no cuando despierte el worker."""
+    from platform_admin import benchmark_batch_repository
+    from shared.db import platform_session
+
+    client, dsns = authapi
+    tenant_id = await seed_tenant(dsns["admin"], "bm-snapshot", "BM Snapshot")
+    company_id = await seed_company(
+        dsns["admin"], tenant_id=tenant_id, name="Mi Empresa", cif="B00000099"
+    )
+    await seed_invoice(dsns, tenant_id=tenant_id, company_id=company_id)
+    await set_ocr_experiment_enabled(dsns, True)
+    token = await _admin_tech_token(client, dsns)
+
+    resp = await client.post(_BACKFILL_URL, headers=_platform_auth(token), json={"limit": 10})
+
+    assert resp.status_code == 200, resp.text
+    async with platform_session() as session:
+        running = await benchmark_batch_repository.get_running(session)
+        assert running is not None
+        candidates = await benchmark_batch_repository.list_candidates(session, str(running.id))
+    assert len(candidates) == 1
+    assert candidates[0][:2] == (tenant_id, company_id)
+
+
+async def test_s6_7_si_falla_el_encolado_el_lote_visible_pasa_a_failed(
+    authapi: Api, monkeypatch
+) -> None:
+    """El fallo de orquestación posterior al commit no deja un lote fantasma en `running`."""
+    import asyncio
+
+    from jobs import queue
+
+    client, dsns = authapi
+    await set_ocr_experiment_enabled(dsns, True)
+    token = await _admin_tech_token(client, dsns)
+
+    async def enqueue_failed(_batch_run_id: str) -> bool:
+        return False
+
+    monkeypatch.setattr(queue, "enqueue_ocr_benchmark_batch", enqueue_failed)
+    resp = await client.post(_BACKFILL_URL, headers=_platform_auth(token), json={"limit": 10})
+    assert resp.status_code == 200, resp.text
+
+    for _ in range(20):
+        status = await client.get(_STATUS_URL, headers=_platform_auth(token))
+        if status.json()["batch"]["status"] == "failed":
+            break
+        await asyncio.sleep(0.01)
+    assert status.json()["batch"]["status"] == "failed"
+
+
 async def test_interruptor_apagado_da_422_y_no_crea_ninguna_fila(authapi: Api) -> None:
     """S6.7 auditoría 2026-08-11, hallazgo ALTO: con el interruptor apagado (spec §4, "solo corre
     bajo el interruptor explícito"), el `POST` no debe insertar ninguna fila en

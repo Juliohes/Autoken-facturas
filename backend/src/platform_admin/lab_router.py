@@ -174,7 +174,12 @@ async def get_invoice_lab(identity: AdminTech, tenant_id: UUID, file_id: UUID) -
         "reading_2": _reading_2_out(result.reading_2),
         "reading_3": _reading_3_out(result.reading_3),
         "ranking": [
-            {"engine": row.engine, "model": row.model, "reading": row.reading, "score": row.score}
+            {
+                "variant": row.variant,
+                "engine": row.engine,
+                "field_results": row.field_results,
+                "tax_lines_matched": row.tax_lines_matched,
+            }
             for row in result.ranking
         ],
         "ranking_available": result.ranking_available,

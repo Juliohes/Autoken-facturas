@@ -77,7 +77,8 @@ async def _decrypts_with(session: AsyncSession, table: str, column: str, key: st
     vuelve a nombrar la tabla/columna (evita repetir el `SELECT ... FROM` y, con él, el riesgo de
     escribirlo sin la cláusula `FROM`, un bug real que este módulo tuvo durante su desarrollo).
     """
-    row = (await session.execute(text(f"SELECT {column} FROM {table} LIMIT 1"))).first()  # noqa: S608
+    query = f"SELECT {column} FROM {table} WHERE {column} IS NOT NULL LIMIT 1"  # noqa: S608
+    row = (await session.execute(text(query))).first()
     if row is None:
         return None
     try:
@@ -99,10 +100,10 @@ async def _is_already_rotated(session: AsyncSession, new_master: str, tenant_id:
     una tabla vacía cuando otra con datos podría no estarlo)."""
     new_key = derive_tenant_encryption_key(new_master, str(tenant_id))
     for table, columns in ENCRYPTED_COLUMNS.items():
-        first_column = next(iter(columns))
-        result = await _decrypts_with(session, table, first_column, new_key)
-        if result is False:
-            return False
+        for column in columns:
+            result = await _decrypts_with(session, table, column, new_key)
+            if result is False:
+                return False
     return True
 
 

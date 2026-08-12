@@ -252,7 +252,7 @@ describe('PlatformLab (S6.2)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('la comparativa con filas las muestra ordenadas, no el mensaje de "sin datos"', async () => {
+  it('S6.7 C21: la comparativa muestra el acierto real por variante y motor, no el ranking histórico', async () => {
     asUser(true)
     getMock.mockImplementation((path: string) => {
       if (path.includes('/platform/tenants') && !path.includes('/invoices')) {
@@ -263,8 +263,18 @@ describe('PlatformLab (S6.2)', () => {
           data: {
             ...LAB_DETAIL,
             ranking: [
-              { engine: 'gemini-3-flash', model: 'x', reading: {}, score: 90 },
-              { engine: 'mistral-ocr-4', model: 'y', reading: {}, score: 10 },
+              {
+                variant: 'clahe',
+                engine: 'gemini-3-flash',
+                field_results: [{ field: 'total_amount', match: true }],
+                tax_lines_matched: false,
+              },
+              {
+                variant: 'original',
+                engine: 'mistral-ocr-4',
+                field_results: [{ field: 'total_amount', match: false }],
+                tax_lines_matched: null,
+              },
             ],
             ranking_available: true,
           },
@@ -286,6 +296,9 @@ describe('PlatformLab (S6.2)', () => {
 
     expect(await screen.findByText('gemini-3-flash')).toBeInTheDocument()
     expect(screen.getByText('mistral-ocr-4')).toBeInTheDocument()
+    expect(screen.getByText('clahe')).toBeInTheDocument()
+    expect(screen.getByText('original')).toBeInTheDocument()
+    expect(screen.getAllByText('Tramos IVA')).toHaveLength(2)
     expect(screen.queryByText(/sin datos de comparativa/i)).not.toBeInTheDocument()
   })
 
@@ -373,7 +386,7 @@ describe('PlatformLab (S6.2)', () => {
     expect(fields).toEqual(['alfa_field', 'zeta_field', 'Tramos de IVA'])
   })
 
-  it('2026-08-10: la comparativa de modelos se puede ordenar por puntuación', async () => {
+  it('2026-08-10: la comparativa de benchmark se puede ordenar por motor', async () => {
     asUser(true)
     getMock.mockImplementation((path: string) => {
       if (path.includes('/platform/tenants') && !path.includes('/invoices')) {
@@ -384,8 +397,8 @@ describe('PlatformLab (S6.2)', () => {
           data: {
             ...LAB_DETAIL,
             ranking: [
-              { engine: 'b-engine', model: 'y', reading: {}, score: 9 },
-              { engine: 'a-engine', model: 'x', reading: {}, score: 2 },
+              { variant: 'original', engine: 'b-engine', field_results: [], tax_lines_matched: null },
+              { variant: 'clahe', engine: 'a-engine', field_results: [], tax_lines_matched: null },
             ],
             ranking_available: true,
           },
@@ -407,7 +420,7 @@ describe('PlatformLab (S6.2)', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Laboratorio de esta factura' })
     await screen.findByText('b-engine')
-    await user.click(within(dialog).getByRole('button', { name: 'Puntuación' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Motor' }))
 
     const engines = screen.getAllByText(/-engine$/).map((el) => el.textContent)
     expect(engines).toEqual(['a-engine', 'b-engine'])
