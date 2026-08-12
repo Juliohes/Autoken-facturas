@@ -62,9 +62,7 @@ async def get_by_id(session: AsyncSession, batch_run_id: str) -> BatchRun | None
 async def start(session: AsyncSession, *, limit: int) -> tuple[bool, BatchRun]:
     """Crea el lote y su snapshot de candidatos atómicamente, o devuelve el lote en curso."""
     row = (
-        await session.execute(
-            text("SELECT * FROM start_benchmark_batch(:limit)"), {"limit": limit}
-        )
+        await session.execute(text("SELECT * FROM start_benchmark_batch(:limit)"), {"limit": limit})
     ).one()
     return row.started, _to_batch_run(row)
 
