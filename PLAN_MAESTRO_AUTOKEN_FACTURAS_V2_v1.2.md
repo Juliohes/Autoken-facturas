@@ -627,7 +627,7 @@ Azure DocIntel, Azure OpenAI gpt-5.1, Gemini 3 Flash/Pro, Claude Vertex, Mistral
 facturas ya existentes multiplica esto por el volumen histórico. Julio es consciente y lo quiere así por unos
 días — el interruptor existe precisamente para no dejarlo así de forma indefinida.
 
-### 11.12 S6.7 — Benchmark real motor × variante (cerrado localmente, 2026-08-12)
+### 11.12 S6.7 — Benchmark real motor × variante (desplegado y ejecutado en Setex, 2026-08-12)
 
 - **Construido:** benchmark sobre facturas confirmadas, separado del pipeline productivo (ADR-0016):
   3 variantes (`original`, `enhanced`, `clahe`) × 6 motores, 18 combinaciones por factura. Puntúa
@@ -657,9 +657,25 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
   que crea una BD con el esquema 0032, siembra el histórico en claro y aplica 0033. `alembic check`
   verde desde una base migrada a `head`. Frontend: 304 tests, `tsc` y build verdes. El lint de
   frontend solo mantiene un warning preexistente de Fast Refresh en `SessionProvider.tsx`.
-- **Pendiente con autorización explícita de Julio:** desplegar la migración y lanzar el lote real,
-  como máximo 29 facturas confirmadas de Setex. Genera hasta 522 llamadas de pago (29 × 18); revisar
-  antes la cuota de Claude en Vertex, que estaba agotada el 09/08/2026. No se ejecuta automáticamente.
+- **Despliegue y lote real autorizados por Julio (12/08/2026):** PR #152 fusionada a `develop` con
+  CI completa verde. API/worker/frontend reconstruidos y migraciones 0029-0035 aplicadas con
+  API+worker detenidos durante el cifrado C24. El lote `d6a9f187-527b-4c35-be93-64f83503c741` tomó
+  un snapshot de las 29 facturas confirmadas de Setex y terminó `done` (29/29, 0 documentos
+  fallidos) en 27 minutos. Persistió las 522 combinaciones esperadas: 435 lecturas reales correctas
+  de disponibilidad (5 motores × 3 variantes × 29) y 87 `engine_failed` de Claude Vertex (las tres
+  variantes de las 29 facturas), sin inventar ni sustituir esas lecturas por otra IA. La cuota de
+  Claude sigue siendo el bloqueo externo conocido. Comprobación posterior: las 522 filas existen;
+  ningún `reading` JSONB contiene claves de CIF/nombre de contraparte y los valores leídos están en
+  las columnas cifradas correspondientes. El panel admin-tech ya muestra el resultado en
+  `/plataforma/ranking-ocr` y el Laboratorio lo muestra por factura.
+- **Resultado real inicial, no extrapolable aún fuera de estas 29 facturas:** Gemini Flash
+  `enhanced` obtuvo 91,62% global (175/191), el mejor agregado de las 18 combinaciones; por campo,
+  CIF/NIF 89,66% (Flash `original`/`enhanced`, empate), fecha 100% (Azure en las tres variantes y
+  Flash `enhanced`, empate), importes 98,84% (Flash/Pro/gpt-5.1 `enhanced`, empate), nombre 58,62%
+  (Flash `original`/`enhanced`, empate) y tramos IVA 100% (Flash/Pro en las tres variantes,
+  empate). Número de factura queda sin ratio porque ninguna de las 29 verdades confirmadas tenía ese
+  campo. Mistral devolvió 87 respuestas de disponibilidad pero 0 aciertos estructurados, como prevé
+  su API OCR sin extracción de campos.
 - **Reauditoría bloqueante corregida (12/08/2026, sin desplegar ni lanzar coste real):** el fan-out
   de `jobs/ocr.py` deja de ejecutar `run_ocr_ranking` (código S4.8 conservado, pero fuera del camino
   vivo); `build_named_ranking_extractors` conserva los seis motores aunque falte configuración con
