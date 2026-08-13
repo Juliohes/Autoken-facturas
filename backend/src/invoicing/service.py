@@ -87,12 +87,34 @@ class AlreadyConfirmed(InvoicingError):
     """Ya hay una factura para ese fichero (una factura por fichero) (-> 409)."""
 
 
-class CounterpartyBlocked(InvoicingError):
+class StructuredInvoicingError(InvoicingError):
+    """Error de dominio que expone un contrato estructurado y actualizable para la pantalla."""
+
+    def as_detail(self) -> dict[str, object]:
+        raise NotImplementedError
+
+
+class CounterpartyBlocked(StructuredInvoicingError):
     """El CIF de contraparte reverificado es inválido/inexistente: bloquea el guardado (-> 422)."""
 
+    def __init__(self, verdict: CounterpartyVerdict) -> None:
+        self.verdict = verdict
 
-class OwnTaxIdMissing(InvoicingError):
+    def as_detail(self) -> dict[str, object]:
+        reason = _counterparty_reason(self.verdict)
+        assert reason is not None
+        return {
+            "code": reason,
+            "counterparty_verdict": _verdict_dict(self.verdict),
+            "blocking_reasons": [reason],
+        }
+
+
+class OwnTaxIdMissing(StructuredInvoicingError):
     """El CIF propio no aparece y el actor no es admin: bloquea el guardado (-> 422)."""
+
+    def as_detail(self) -> dict[str, object]:
+        return {"code": REASON_OWN_TAX_ID_MISSING, "blocking_reasons": [REASON_OWN_TAX_ID_MISSING]}
 
 
 class ResponsibilityNotAccepted(InvoicingError):
@@ -141,6 +163,7 @@ class ConfirmCommand:
     irpf_amount: Decimal | None
     tax_lines: list[ConfirmTaxLine]
     responsibility_accepted: bool
+    own_tax_id_exception_accepted: bool
     is_test: bool
     invoice_number: str | None = None
 
@@ -156,6 +179,14 @@ class ReviewData:
     warnings: list[str]
     # Motivos por los que el servidor bloquearía el guardado (mismas guardas que `confirm`): la
     # pantalla deshabilita el botón si NO está vacía. Lista vacía = confirmable (S2.4 §2, C13).
+    blocking_reasons: list[str]
+
+
+@dataclass(frozen=True)
+class DraftCounterpartyVerdict:
+    """Veredicto del CIF/nombre escrito ahora, sin efectos de persistencia (S6.10 C6)."""
+
+    counterparty_verdict: dict[str, object]
     blocking_reasons: list[str]
 
 
@@ -236,13 +267,20 @@ async def _verify_counterparty_or_raise(
     """
     verdict = await verify_counterparty(tenant_id, tax_id, name)
     if _counterparty_reason(verdict) is not None:
-        raise CounterpartyBlocked
+        raise CounterpartyBlocked(verdict)
     return verdict
 
 
 def _own_tax_id_blocks(own_tax_id_present: bool, role: str) -> bool:
     """El CIF propio ausente bloquea, salvo que el actor sea admin (regla 2, C6)."""
     return not own_tax_id_present and not _is_admin(role)
+
+
+def _own_tax_id_exception_blocks(
+    own_tax_id_present: bool, role: str, exception_accepted: bool
+) -> bool:
+    """Un `user` solo puede confirmar el CIF propio ausente tras aceptarlo explícitamente."""
+    return _own_tax_id_blocks(own_tax_id_present, role) and not exception_accepted
 
 
 def _blocking_reasons(
@@ -398,6 +436,28 @@ async def review(identity: AuthContext, file_id: UUID) -> ReviewData:
     )
 
 
+async def draft_counterparty_verdict(
+    identity: AuthContext,
+    file_id: UUID,
+    counterparty_tax_id: str | None,
+    counterparty_name: str | None,
+) -> DraftCounterpartyVerdict:
+    """Devuelve la validación del borrador actual sin reutilizar el veredicto del OCR (S6.10 C6)."""
+    file_ctx = await _load_file(identity, file_id)
+    if file_ctx.status not in _CONFIRMABLE_STATES:
+        if file_ctx.status == FileStatus.PENDING_OCR.value:
+            raise PendingOcr
+        raise NotConfirmable
+    ocr_key = tenant_encryption_key(get_settings(), identity.tenant_id)
+    if await ocr_repo.get_extraction(identity.session, file_id, encryption_key=ocr_key) is None:
+        raise NotConfirmable
+    verdict = await verify_counterparty(identity.tenant_id, counterparty_tax_id, counterparty_name)
+    return DraftCounterpartyVerdict(
+        counterparty_verdict=_verdict_dict(verdict),
+        blocking_reasons=[reason] if (reason := _counterparty_reason(verdict)) is not None else [],
+    )
+
+
 async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand) -> UUID:
     """Confirma un fichero: persiste la factura, tramos, correcciones, snapshot y transición (201).
 
@@ -421,7 +481,9 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
     # Guardas locales baratas y deterministas ANTES de la reverificación (que puede tocar red L3):
     # un usuario que no acepta la responsabilidad o sin el CIF propio no dispara lookups externos.
     # CIF propio ausente bloquea, salvo admin (regla 2, C4). Mismo predicado que `blocking_reasons`.
-    if _own_tax_id_blocks(extraction.own_tax_id_present, identity.role):
+    if _own_tax_id_exception_blocks(
+        extraction.own_tax_id_present, identity.role, command.own_tax_id_exception_accepted
+    ):
         raise OwnTaxIdMissing
     # Sin aceptar la responsabilidad no hay factura (regla 8, C5).
     if not command.responsibility_accepted:
@@ -437,9 +499,21 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
 
     # `is_test` solo lo puede marcar un admin; si lo envía un `user`, se ignora (queda false, C11).
     is_test = command.is_test and _is_admin(identity.role)
+    own_tax_id_missing = not extraction.own_tax_id_present
+    own_tax_id_exception_confirmed = (
+        own_tax_id_missing
+        and identity.role == Role.USER.value
+        and command.own_tax_id_exception_accepted
+    )
 
     corrections = _diff(extraction, command)
-    snapshot = _snapshot(command, verdict, balance_ok)
+    snapshot = _snapshot(
+        command,
+        verdict,
+        balance_ok,
+        own_tax_id_missing=own_tax_id_missing,
+        own_tax_id_exception_confirmed=own_tax_id_exception_confirmed,
+    )
     settings = get_settings()
     encryption_key = tenant_encryption_key(settings, identity.tenant_id)
     tax_id_idx = tenant_tax_id_blind_index(
@@ -467,6 +541,8 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
             irpf_amount=command.irpf_amount,
             is_test=is_test,
             balance_ok=balance_ok,
+            own_tax_id_missing=own_tax_id_missing,
+            own_tax_id_exception_confirmed=own_tax_id_exception_confirmed,
             snapshot=snapshot,
             confirmed_by=identity.user_id,
             encryption_key=encryption_key,
@@ -847,7 +923,12 @@ def _tax_line_fields(lines: list[TaxLine]) -> tuple[TaxLineFields, ...]:
 
 
 def _snapshot(
-    command: ConfirmCommand, verdict: CounterpartyVerdict, balance_ok: bool | None
+    command: ConfirmCommand,
+    verdict: CounterpartyVerdict,
+    balance_ok: bool | None,
+    *,
+    own_tax_id_missing: bool,
+    own_tax_id_exception_confirmed: bool,
 ) -> dict[str, object]:
     """Snapshot append-only de lo confirmado (datos + aceptación) para la traza (audit_log)."""
     return {
@@ -866,6 +947,8 @@ def _snapshot(
             for line in command.tax_lines
         ],
         "responsibility_accepted": command.responsibility_accepted,
+        "own_tax_id_missing": own_tax_id_missing,
+        "own_tax_id_exception_accepted": own_tax_id_exception_confirmed,
         "balance_ok": balance_ok,
     }
 

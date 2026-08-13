@@ -77,6 +77,7 @@ class InvoiceRow:
     confirmed_by: UUID
     uploaded_file_id: UUID
     uploaded_at: datetime
+    own_tax_id_missing: bool
     tax_lines: list[TaxLineRow]
 
 
@@ -103,6 +104,7 @@ class ExportRow:
     tax_lines: list[TaxLineRow]
     uploaded_at: datetime
     confirmed_by_email: str
+    own_tax_id_missing: bool
 
 
 @dataclass(frozen=True)
@@ -130,6 +132,7 @@ class Filters:
     confirmed_by: UUID | None = None
     cif_status: str | None = None
     company_id: UUID | None = None
+    own_tax_id_missing: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -166,6 +169,9 @@ def _build_where(filters: Filters, cursor: Cursor | None) -> tuple[str, dict[str
     if filters.company_id is not None:
         conditions.append("i.company_id = :company_id")
         params["company_id"] = str(filters.company_id)
+    if filters.own_tax_id_missing is not None:
+        conditions.append("i.own_tax_id_missing = :own_tax_id_missing")
+        params["own_tax_id_missing"] = filters.own_tax_id_missing
     if cursor is not None:
         conditions.append("(i.confirmed_at, i.id) < (:cursor_confirmed_at, :cursor_id)")
         params["cursor_confirmed_at"] = cursor.confirmed_at
@@ -197,7 +203,7 @@ async def list_invoices(
                 " pgp_sym_decrypt(i.counterparty_name, :key)::text AS counterparty_name, "
                 " i.counterparty_cif_status, i.net_amount, i.tax_amount, "
                 " i.total_amount, i.irpf_amount, i.confirmed_at, i.confirmed_by, "
-                " i.uploaded_file_id, uf.created_at AS uploaded_at "
+                " i.uploaded_file_id, uf.created_at AS uploaded_at, i.own_tax_id_missing "
                 "FROM invoices i "
                 "JOIN uploaded_files uf ON uf.id = i.uploaded_file_id "
                 "JOIN companies c ON c.id = i.company_id "
@@ -228,6 +234,7 @@ async def list_invoices(
             confirmed_by=row.confirmed_by,
             uploaded_file_id=row.uploaded_file_id,
             uploaded_at=row.uploaded_at,
+            own_tax_id_missing=row.own_tax_id_missing,
             tax_lines=tax_lines_by_invoice.get(row.id, []),
         )
         for row in rows
@@ -260,7 +267,7 @@ async def list_all(
                 " pgp_sym_decrypt(i.counterparty_name, :key)::text AS counterparty_name, "
                 " i.counterparty_cif_status, i.net_amount, i.tax_amount, "
                 " i.total_amount, i.irpf_amount, i.confirmed_at, i.confirmed_by, "
-                " i.uploaded_file_id, uf.created_at AS uploaded_at "
+                " i.uploaded_file_id, uf.created_at AS uploaded_at, i.own_tax_id_missing "
                 "FROM invoices i "
                 "JOIN uploaded_files uf ON uf.id = i.uploaded_file_id "
                 "JOIN companies c ON c.id = i.company_id "
@@ -293,6 +300,7 @@ async def list_all(
             confirmed_by=row.confirmed_by,
             uploaded_file_id=row.uploaded_file_id,
             uploaded_at=row.uploaded_at,
+            own_tax_id_missing=row.own_tax_id_missing,
             tax_lines=tax_lines_by_invoice.get(row.id, []),
         )
         for row in rows
@@ -319,7 +327,7 @@ async def list_for_export(
                 " pgp_sym_decrypt(i.counterparty_name, :key)::text AS counterparty_name, "
                 " i.counterparty_cif_status, i.net_amount, i.tax_amount, "
                 " i.total_amount, i.irpf_amount, uf.created_at AS uploaded_at, "
-                " u.email AS confirmed_by_email "
+                " u.email AS confirmed_by_email, i.own_tax_id_missing "
                 "FROM invoices i "
                 "JOIN uploaded_files uf ON uf.id = i.uploaded_file_id "
                 "JOIN companies c ON c.id = i.company_id "
@@ -349,6 +357,7 @@ async def list_for_export(
             tax_lines=tax_lines_by_invoice.get(row.id, []),
             uploaded_at=row.uploaded_at,
             confirmed_by_email=row.confirmed_by_email,
+            own_tax_id_missing=row.own_tax_id_missing,
         )
         for row in rows
     ]

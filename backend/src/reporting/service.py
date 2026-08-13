@@ -48,6 +48,7 @@ class PanelFilters:
     confirmed_by: UUID | None = None
     cif_status: str | None = None
     company_id: UUID | None = None
+    own_tax_id_missing: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,7 @@ class InvoiceItem:
     confirmed_by: UUID
     uploaded_file_id: UUID
     uploaded_at: datetime
+    own_tax_id_missing: bool
 
 
 @dataclass(frozen=True)
@@ -113,6 +115,7 @@ class ExportItem:
     tax_lines: list[TaxLineItem]
     uploaded_at: datetime
     confirmed_by_email: str
+    own_tax_id_missing: bool
 
 
 @dataclass(frozen=True)
@@ -177,6 +180,7 @@ def _repo_filters(tenant_id: UUID, filters: PanelFilters) -> repository.Filters:
         confirmed_by=filters.confirmed_by,
         cif_status=filters.cif_status,
         company_id=filters.company_id,
+        own_tax_id_missing=filters.own_tax_id_missing,
     )
 
 
@@ -201,6 +205,7 @@ def _to_item(row: repository.InvoiceRow) -> InvoiceItem:
         confirmed_by=row.confirmed_by,
         uploaded_file_id=row.uploaded_file_id,
         uploaded_at=row.uploaded_at,
+        own_tax_id_missing=row.own_tax_id_missing,
     )
 
 
@@ -220,6 +225,7 @@ def _to_export_item(row: repository.ExportRow) -> ExportItem:
         ],
         uploaded_at=row.uploaded_at,
         confirmed_by_email=row.confirmed_by_email,
+        own_tax_id_missing=row.own_tax_id_missing,
     )
 
 

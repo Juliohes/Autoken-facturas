@@ -92,14 +92,23 @@ async def test_c3_cif_contraparte_invalido_bloquea_en_servidor(authapi: Api) -> 
     assert await count_invoices(dsns, file_id=s["file_id"]) == 0
 
 
-async def test_c4_cif_propio_ausente_bloquea_salvo_admin(authapi: Api) -> None:
-    """C4: CIF propio ausente -> 422 para empleado; 201 para admin (excepción, regla 2)."""
+async def test_c4_cif_propio_ausente_exige_confirmacion_excepcional_al_empleado(
+    authapi: Api,
+) -> None:
+    """S6.10 C10/C11: el usuario necesita aceptar la excepción; el admin no."""
     client, dsns = authapi
     empleado = await seed_confirmable(dsns, client, slug="ilex", own_present=False)
     r_user = await client.post(
         confirm_url(empleado["file_id"]), headers=auth(empleado["token"]), json=confirm_body()
     )
     assert r_user.status_code == 422, r_user.text
+
+    accepted = await client.post(
+        confirm_url(empleado["file_id"]),
+        headers=auth(empleado["token"]),
+        json={**confirm_body(), "own_tax_id_exception_accepted": True},
+    )
+    assert accepted.status_code == 201, accepted.text
 
     admin = await seed_confirmable(
         dsns, client, slug="otra", email="admin@otra.es", role="tenant_admin", own_present=False

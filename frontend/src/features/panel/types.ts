@@ -2,7 +2,10 @@
 import type { components } from '../../api/schema'
 
 /** Una fila del panel: una factura confirmada (spec §2). */
-export type InvoiceRow = components['schemas']['InvoiceRowOut']
+export type InvoiceRow = components['schemas']['InvoiceRowOut'] & {
+  /** Snapshot de S6.10: la factura se confirmó sin detectar el CIF de su empresa destino. */
+  own_tax_id_missing?: boolean
+}
 
 /** Respuesta completa de `GET /reporting/invoices`: una página (spec §2). */
 export type PanelPage = components['schemas']['PanelOut']
@@ -23,4 +26,5 @@ export interface PanelFilters {
   confirmed_by?: string
   cif_status?: string
   company_id?: string
+  own_tax_id_missing?: boolean
 }

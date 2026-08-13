@@ -15,7 +15,6 @@ import { fileToJpegBlob } from './normalizeToJpeg'
 import { processCapturedFrame } from './processCapture'
 import type { Direction } from './types'
 import { useCameraStream } from './useCameraStream'
-import { useFrameAnalysisLoop } from './useFrameAnalysisLoop'
 import { useUploadCapture } from './useUploadCapture'
 
 interface Props {
@@ -27,13 +26,10 @@ export function CaptureScreen({ onUploaded }: Props) {
   const role = user?.role
   const camera = useCameraStream()
   const videoRef = useRef<HTMLVideoElement>(null)
-  // Los píxeles de la captura en curso (origen cámara) viven en un ref, no en el estado del
-  // reducer: son datos pesados que no aportan nada a la decisión pura de `captureLoop.ts` y
-  // romperían sus comparaciones `toEqual` en los tests. Se rellena en el MISMO callback que
-  // despacha la acción correspondiente (auto-captura y captura manual), nunca después — así nunca
-  // queda desincronizado con la fase del reducer (hallazgo de auditoría: antes solo se rellenaba en
-  // la captura manual, dejando la auto-captura sin foto que procesar).
+  // Los píxeles de la captura en curso viven fuera del reducer: son pesados y no forman parte de su
+  // decisión pura. El contador descarta resultados asíncronos de una captura anterior.
   const capturedFrameRef = useRef<ImageData | null>(null)
+  const captureOperationRef = useRef(0)
 
   const [captureState, dispatch] = useReducer(captureReducer, INITIAL_CAPTURE_STATE)
   const [direction, setDirection] = useState<Direction>('recibida')
@@ -46,12 +42,6 @@ export function CaptureScreen({ onUploaded }: Props) {
 
   const companies = useCompanyOptions({ enabled: role === 'tenant_admin' })
   const upload = useUploadCapture()
-
-  const liveAnalysisActive = camera.status === 'active' && captureState.phase === 'live'
-  useFrameAnalysisLoop(videoRef, liveAnalysisActive, (analysis, frame) => {
-    capturedFrameRef.current = frame
-    dispatch({ type: 'frame_analyzed', analysis })
-  })
 
   useEffect(() => {
     setVideoReady(false)
@@ -69,11 +59,16 @@ export function CaptureScreen({ onUploaded }: Props) {
   useEffect(() => {
     if (captureState.phase !== 'captured' || !capturedFrameRef.current) return
     const frame = capturedFrameRef.current
+    const operation = captureOperationRef.current
     setProcessing(true)
     setReviewBlob(null)
     void processCapturedFrame(frame, captureState.corners)
-      .then(setReviewBlob)
-      .finally(() => setProcessing(false))
+      .then((blob) => {
+        if (captureOperationRef.current === operation) setReviewBlob(blob)
+      })
+      .finally(() => {
+        if (captureOperationRef.current === operation) setProcessing(false)
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [captureState])
 
@@ -98,19 +93,30 @@ export function CaptureScreen({ onUploaded }: Props) {
       setVideoReady(false)
       return
     }
+    const operation = captureOperationRef.current + 1
+    captureOperationRef.current = operation
     setCaptureError(null)
+    setProcessing(true)
     capturedFrameRef.current = frame
+    camera.close()
     const analysis = await analyzeFrame(frame)
+    if (captureOperationRef.current !== operation) return
     dispatch({ type: 'manual_capture', analysis })
   }
 
   const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
+    // Elegir un archivo sustituye la cámara igual que tomar una foto: nunca se mantiene un stream
+    // encendido detrás de la revisión, aunque el selector se haya abierto desde el overlay.
+    camera.close()
+    const operation = captureOperationRef.current + 1
+    captureOperationRef.current = operation
     setCaptureError(null)
     setProcessing(true)
     try {
       const blob = await fileToJpegBlob(file)
+      if (captureOperationRef.current !== operation) return
       capturedFrameRef.current = null
       setReviewBlob(blob)
       dispatch({ type: 'manual_capture', analysis: null })
@@ -125,6 +131,8 @@ export function CaptureScreen({ onUploaded }: Props) {
   }
 
   const handleRetake = () => {
+    camera.close()
+    captureOperationRef.current += 1
     capturedFrameRef.current = null
     setReviewBlob(null)
     setCaptureError(null)
@@ -175,7 +183,7 @@ export function CaptureScreen({ onUploaded }: Props) {
   // "Tomar foto") — este abre el selector de ficheros del dispositivo (galería/archivos).
   const FilePickerButton = (
     <label className="flex cursor-pointer items-center justify-center rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100 hover:bg-slate-800">
-      📁 Subir archivo
+      Subir archivo
       <input
         type="file"
         aria-label="Elige o toma una foto"
@@ -315,60 +323,76 @@ export function CaptureScreen({ onUploaded }: Props) {
         </p>
       )}
 
-      {camera.status === 'requesting' && (
-        <div className="space-y-3">
-          <p className="text-slate-400">Pidiendo acceso a la cámara…</p>
-          {FilePickerButton}
-        </div>
-      )}
+      {processing && camera.status === 'idle' && <p className="text-slate-400">Preparando foto...</p>}
 
-      {camera.status === 'active' && (
-        <div className="space-y-3">
-          <div className="rounded-lg border-4 border-emerald-500/50 p-1">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              onLoadedData={markVideoReady}
-              onLoadedMetadata={markVideoReady}
-              className="w-full rounded"
-            />
-          </div>
+      {!processing && camera.status === 'idle' && (
+        <div className="flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => void handleManualCapture()}
-            disabled={!videoReady}
-            className="w-full rounded-md bg-emerald-600 px-4 py-4 text-lg font-semibold text-white disabled:opacity-40"
+            onClick={camera.open}
+            className="rounded-md bg-emerald-600 px-4 py-3 text-base font-semibold text-white"
           >
-            {videoReady ? 'Tomar foto' : 'Preparando cámara…'}
+            Abrir cámara
           </button>
-          {!videoReady && camera.canRetry && (
-            <button
-              type="button"
-              onClick={camera.retry}
-              className="rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100 hover:bg-slate-800"
-            >
-              Reintentar cámara
-            </button>
-          )}
           {FilePickerButton}
         </div>
       )}
 
-      {camera.status === 'unavailable' && (
-        <div className="space-y-3">
-          {CameraProblem}
-          {camera.canRetry && (
-            <button
-              type="button"
-              onClick={camera.retry}
-              className="rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100 hover:bg-slate-800"
-            >
-              Reintentar cámara
-            </button>
-          )}
-          {FilePickerButton}
+      {camera.status !== 'idle' && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Cámara para capturar factura"
+          className="fixed inset-0 z-50 flex min-h-screen flex-col bg-slate-950 p-4 text-slate-100"
+        >
+          <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-4">
+            {camera.status === 'requesting' && <p className="text-center text-slate-300">Pidiendo acceso a la cámara…</p>}
+            {camera.status === 'active' && (
+              <div className="relative mx-auto w-full max-w-xl overflow-hidden rounded-lg bg-black">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  onLoadedData={markVideoReady}
+                  onLoadedMetadata={markVideoReady}
+                  className="max-h-[70vh] w-full object-contain"
+                />
+                <div
+                  data-testid="camera-guide-frame"
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-1/2 top-1/2 h-[72vh] max-w-[78vw] -translate-x-1/2 -translate-y-1/2 aspect-[1/1.414] rounded border-4 border-emerald-400 shadow-[0_0_0_9999px_rgb(0_0_0_/_0.35)]"
+                />
+              </div>
+            )}
+            {camera.status === 'unavailable' && CameraProblem}
+            <div className="mx-auto flex w-full max-w-xl flex-wrap gap-3">
+              {camera.status === 'active' && (
+                <button
+                  type="button"
+                  onClick={() => void handleManualCapture()}
+                  disabled={!videoReady}
+                  className="flex-1 rounded-md bg-emerald-600 px-4 py-4 text-lg font-semibold text-white disabled:opacity-40"
+                >
+                  {videoReady ? 'Tomar foto' : 'Preparando cámara…'}
+                </button>
+              )}
+              {camera.status === 'active' && !videoReady && camera.canRetry && (
+                <button type="button" onClick={camera.retry} className="rounded-md border border-slate-600 px-4 py-3 font-medium">
+                  Reintentar cámara
+                </button>
+              )}
+              {camera.status !== 'active' && camera.canRetry && (
+                <button type="button" onClick={camera.retry} className="rounded-md border border-slate-600 px-4 py-3 font-medium">
+                  Reintentar cámara
+                </button>
+              )}
+              {FilePickerButton}
+              <button type="button" onClick={camera.close} className="rounded-md border border-slate-600 px-4 py-3 font-medium">
+                Cerrar cámara
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

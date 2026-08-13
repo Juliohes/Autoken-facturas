@@ -25,6 +25,7 @@ _HEADERS = [
     "IRPF",
     "Tramos IVA",
     "Confirmado por",
+    "Revisar CIF propio",
 ]
 
 
@@ -106,6 +107,7 @@ def build_export_workbook(items: list[ExportItem]) -> bytes:
                 _text_cell(_format_amount(item.irpf_amount)),
                 _text_cell(_tax_lines_cell(item)),
                 _text_cell(item.confirmed_by_email),
+                "Sí" if item.own_tax_id_missing else "",
             ]
         )
 

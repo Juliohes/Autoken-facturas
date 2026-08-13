@@ -16,18 +16,17 @@ export function renderVerdict(verdict: CounterpartyVerdict): RenderedVerdict {
       // valid + nombre que casa -> verde; valid + nombre que no casa -> aviso con
       // la razón social oficial (C3).
       if (verdict.name_match === false) {
-        const official = verdict.official_name ?? 'la registrada oficialmente'
         return {
           tone: 'warn',
-          message: `El nombre no coincide con la razón social oficial: ${official}`,
+          message: 'El nombre no coincide con el registrado.',
         }
       }
       return { tone: 'ok', message: 'CIF de contraparte verificado' }
     case 'invalid':
-      return { tone: 'error', message: 'CIF de contraparte inválido' }
+      return { tone: 'error', message: 'El CIF de la contraparte no es válido.' }
     case 'not_found':
-      return { tone: 'error', message: 'CIF de contraparte no encontrado' }
+      return { tone: 'error', message: 'No encontramos ese CIF. Revísalo.' }
     case 'unverified':
-      return { tone: 'warn', message: 'No se pudo verificar el CIF: revisar manual' }
+      return { tone: 'warn', message: 'No se pudo verificar el CIF. Revísalo antes de guardar.' }
   }
 }

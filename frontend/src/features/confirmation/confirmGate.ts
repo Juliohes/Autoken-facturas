@@ -9,6 +9,8 @@ export interface ConfirmGateInput {
   responsibilityAccepted: boolean
   /** `POST confirm` en vuelo: se deshabilita para evitar doble envío (§5). */
   submitting: boolean
+  /** Un user solo puede continuar sin CIF propio si acepta expresamente esa excepción. */
+  ownTaxIdExceptionAccepted?: boolean
 }
 
 /**
@@ -16,8 +18,11 @@ export interface ConfirmGateInput {
  * está aceptada y no hay un envío en curso.
  */
 export function isConfirmEnabled(input: ConfirmGateInput): boolean {
+  const effectiveReasons = input.ownTaxIdExceptionAccepted
+    ? input.blockingReasons.filter((reason) => reason !== 'own_tax_id_missing')
+    : input.blockingReasons
   return (
-    input.blockingReasons.length === 0 &&
+    effectiveReasons.length === 0 &&
     input.responsibilityAccepted &&
     !input.submitting
   )

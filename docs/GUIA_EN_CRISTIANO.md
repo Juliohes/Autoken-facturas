@@ -1125,8 +1125,26 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
 - **Arreglo urgente al subir fotos (13/08/2026):** una foto hecha desde el móvil no fallaba por la cámara;
   llegaba correctamente al servidor, pero el antivirus que debe revisarla antes de guardarla se había parado.
   La aplicación hizo lo correcto: rechazó la subida en lugar de almacenar un archivo sin revisar. Se reinició
-  el antivirus y se comprobó desde la propia aplicación que vuelve a analizar archivos. Además, ahora si ese
-  proceso se cae de nuevo el servidor lo detecta y lo reinicia solo tras varias comprobaciones fallidas.
+   el antivirus y se comprobó desde la propia aplicación que vuelve a analizar archivos. Además, ahora si ese
+   proceso se cae de nuevo el servidor lo detecta y lo reinicia solo tras varias comprobaciones fallidas.
+
+- **Fotos manuales y comprobación de CIF sin bloqueos falsos (13/08/2026):** la aplicación ya no hace fotos
+  por su cuenta. La persona entra, pulsa "Abrir cámara" y ve la cámara ocupando toda la pantalla, con un marco
+  grande y vertical como una hoja para acercar bien la factura. Solo al pulsar "Tomar foto" se guarda esa
+  imagen para revisarla. Al cerrar, repetir o elegir un archivo, la cámara se apaga de verdad para no dejar el
+  piloto encendido ni mezclar dos fotos.
+
+  La empresa ya aportó su razón social y CIF al registrarse. Ese es el número conocido que la app busca en la
+  factura, no un número que la IA pueda inventar. Si no aparece, el usuario puede confirmar claramente que la
+  factura es de su empresa y la asesoría verá después una marca "Revisar CIF propio" en su panel y Excel.
+  Esa marca se guarda como un hecho de la confirmación, para que una relectura futura de la IA no cambie la
+  historia.
+
+  También se solucionó el bloqueo injusto al corregir un CIF de proveedor: ahora la pantalla vuelve a comprobar
+  el CIF que la persona acaba de escribir y actualiza el mensaje. Aunque el navegador diga que es válido, el
+  servidor lo revisa otra vez justo antes de guardar. Así se corrige el error de la IA sin abrir un agujero de
+  seguridad. Pasaron las pruebas de aislamiento entre asesorías, 10 pruebas backend nuevas contra bases reales
+  y las 320 pruebas del frontend. Queda probar físicamente la cámara en Android y iPhone.
 
 ## 5. Qué queda por delante
 

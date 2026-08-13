@@ -61,6 +61,7 @@ class InvoiceRowOut(BaseModel):
     confirmed_by: UUID
     uploaded_file_id: UUID
     uploaded_at: datetime
+    own_tax_id_missing: bool
 
 
 class PanelOut(BaseModel):
@@ -78,6 +79,7 @@ def _filters_from_query(
     confirmed_by: UUID | None,
     cif_status: str | None,
     company_id: UUID | None,
+    own_tax_id_missing: bool | None,
 ) -> service.PanelFilters:
     """Tipa los filtros de la query string a `PanelFilters` (compartido por panel y export)."""
     return service.PanelFilters(
@@ -87,6 +89,7 @@ def _filters_from_query(
         confirmed_by=confirmed_by,
         cif_status=cif_status,
         company_id=company_id,
+        own_tax_id_missing=own_tax_id_missing,
     )
 
 
@@ -133,6 +136,7 @@ async def list_invoices(
     confirmed_by: UUID | None = None,
     cif_status: str | None = None,
     company_id: UUID | None = None,
+    own_tax_id_missing: bool | None = None,
     cursor: str | None = None,
 ) -> PanelOut:
     """Facturas confirmadas de la asesoría, filtradas y paginadas (S3.1). Ver spec S3.1.
@@ -147,6 +151,7 @@ async def list_invoices(
         confirmed_by=confirmed_by,
         cif_status=cif_status,
         company_id=company_id,
+        own_tax_id_missing=own_tax_id_missing,
     )
     try:
         page = await service.list_invoices(identity, filters, cursor)
@@ -179,6 +184,7 @@ async def list_invoices(
                 confirmed_by=row.confirmed_by,
                 uploaded_file_id=row.uploaded_file_id,
                 uploaded_at=row.uploaded_at,
+                own_tax_id_missing=row.own_tax_id_missing,
             )
             for row in page.items
         ],
@@ -195,6 +201,7 @@ async def export_invoices(
     confirmed_by: UUID | None = None,
     cif_status: str | None = None,
     company_id: UUID | None = None,
+    own_tax_id_missing: bool | None = None,
 ) -> Response:
     """Excel con todas las facturas que casan los filtros, sin paginar (S3.2). Ver spec S3.2.
 
@@ -207,6 +214,7 @@ async def export_invoices(
         confirmed_by=confirmed_by,
         cif_status=cif_status,
         company_id=company_id,
+        own_tax_id_missing=own_tax_id_missing,
     )
     try:
         items = await service.export_invoices(identity, filters)

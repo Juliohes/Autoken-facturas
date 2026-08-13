@@ -491,6 +491,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/uploads/{file_id}/counterparty-verdict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft Counterparty Verdict
+         * @description Valida el CIF/nombre que se está editando, sin guardar una factura (S6.10 C6).
+         */
+        post: operations["draft_counterparty_verdict_api_v1_uploads__file_id__counterparty_verdict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/uploads/{file_id}/confirm": {
         parameters: {
             query?: never;
@@ -1088,6 +1108,10 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** BackfillConflictOut */
+        BackfillConflictOut: {
+            batch: components["schemas"]["BatchStatusOut"];
+        };
         /** BackfillIn */
         BackfillIn: {
             /** Limit */
@@ -1298,10 +1322,27 @@ export interface components {
              */
             responsibility_accepted: boolean;
             /**
+             * Own Tax Id Exception Accepted
+             * @default false
+             */
+            own_tax_id_exception_accepted: boolean;
+            /**
              * Is Test
              * @default false
              */
             is_test: boolean;
+        };
+        /** CounterpartyVerdictOut */
+        CounterpartyVerdictOut: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "valid" | "invalid" | "not_found" | "unverified";
+            /** Name Match */
+            name_match: boolean | null;
+            /** Official Name */
+            official_name: string | null;
         };
         /**
          * CustomDomainIn
@@ -1329,6 +1370,22 @@ export interface components {
             url: string;
             /** Expires In */
             expires_in: number;
+        };
+        /**
+         * DraftCounterpartyVerdictIn
+         * @description Valores actuales del formulario para validar antes de confirmar (S6.10).
+         */
+        DraftCounterpartyVerdictIn: {
+            /** Counterparty Tax Id */
+            counterparty_tax_id?: string | null;
+            /** Counterparty Name */
+            counterparty_name?: string | null;
+        };
+        /** DraftCounterpartyVerdictOut */
+        DraftCounterpartyVerdictOut: {
+            counterparty_verdict: components["schemas"]["CounterpartyVerdictOut"];
+            /** Blocking Reasons */
+            blocking_reasons: string[];
         };
         /**
          * DuplicateRowOut
@@ -1601,6 +1658,8 @@ export interface components {
              * Format: date-time
              */
             uploaded_at: string;
+            /** Own Tax Id Missing */
+            own_tax_id_missing: boolean;
         };
         /**
          * LabInvoiceRowOut
@@ -2640,6 +2699,41 @@ export interface operations {
             };
         };
     };
+    draft_counterparty_verdict_api_v1_uploads__file_id__counterparty_verdict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftCounterpartyVerdictIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftCounterpartyVerdictOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     confirm_upload_api_v1_uploads__file_id__confirm_post: {
         parameters: {
             query?: never;
@@ -2812,6 +2906,7 @@ export interface operations {
                 confirmed_by?: string | null;
                 cif_status?: string | null;
                 company_id?: string | null;
+                own_tax_id_missing?: boolean | null;
                 cursor?: string | null;
             };
             header?: never;
@@ -2849,6 +2944,7 @@ export interface operations {
                 confirmed_by?: string | null;
                 cif_status?: string | null;
                 company_id?: string | null;
+                own_tax_id_missing?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -3424,6 +3520,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BackfillStartedOut"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackfillConflictOut"];
                 };
             };
             /** @description Validation Error */

@@ -37,6 +37,7 @@ function makeRow(over: Partial<InvoiceRow> = {}): InvoiceRow {
     confirmed_by: 'user-1',
     uploaded_file_id: 'file-1',
     uploaded_at: '2026-07-20T09:00:00Z',
+    own_tax_id_missing: false,
     ...over,
   }
 }
@@ -389,6 +390,19 @@ describe('InvoicesPanel (S3.1)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo cargar/i)
     expect(screen.queryByTestId('invoices-table')).not.toBeInTheDocument()
+  })
+
+  it('S6.10 C12: muestra y filtra las facturas que requieren revisar el CIF propio', async () => {
+    mockRoutes({ panel: makePage([makeRow({ own_tax_id_missing: true }), makeRow({ id: 'inv-2' })]) })
+    const user = userEvent.setup()
+    renderPanel()
+
+    expect(await screen.findByText('Revisar CIF propio')).toBeInTheDocument()
+    await user.click(screen.getByLabelText('Revisar CIF propio'))
+    await waitFor(() => expect(getMock).toHaveBeenCalledWith(
+      '/api/v1/reporting/invoices',
+      expect.objectContaining({ params: expect.objectContaining({ query: expect.objectContaining({ own_tax_id_missing: true }) }) }),
+    ))
   })
 
   it('S6.2 C3: el panel del tenant nunca muestra un botón/enlace "Laboratorio" (vive solo en plataforma)', async () => {

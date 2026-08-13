@@ -264,6 +264,14 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
           value={rawFilters.company_id ?? ''}
           onChange={(companyId) => set({ company_id: companyId })}
         />
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={rawFilters.own_tax_id_missing ?? false}
+            onChange={(event) => set({ own_tax_id_missing: event.target.checked || undefined })}
+          />
+          Revisar CIF propio
+        </label>
       </div>
 
       <button
@@ -449,7 +457,14 @@ function InvoiceTableRow({ row, editing, onView, onOpenTaxLines }: RowProps) {
       {/* Empresa CLIENTE del tenant (quién sube la factura): fija, nunca editable aquí — no es un
           dato del documento, es a quién pertenece (2026-08-01, hallazgo de Julio: el panel solo
           mostraba el proveedor/contraparte, nunca la propia empresa). */}
-      <td className="truncate p-2">{row.company_name}</td>
+      <td className="truncate p-2">
+        <div>{row.company_name}</div>
+        {row.own_tax_id_missing && (
+          <span className="mt-1 inline-block rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-semibold text-amber-200">
+            Revisar CIF propio
+          </span>
+        )}
+      </td>
       <td className="truncate p-2">{row.company_cif}</td>
       <td className="truncate p-2">
         {editing ? (

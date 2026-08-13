@@ -10,14 +10,14 @@ describe('renderVerdict', () => {
     ).toEqual({ tone: 'ok', message: expect.stringMatching(/verificado/i) })
   })
 
-  it('valid + name_match=false -> aviso con la razón social oficial', () => {
+  it('S6.10 C13: valid + name_match=false muestra el mensaje breve definido', () => {
     const rendered = renderVerdict({
       status: 'valid',
       name_match: false,
       official_name: 'ACME SL',
     })
     expect(rendered.tone).toBe('warn')
-    expect(rendered.message).toContain('ACME SL')
+    expect(rendered.message).toBe('El nombre no coincide con el registrado.')
   })
 
   it('invalid y not_found -> rojo', () => {
@@ -29,9 +29,9 @@ describe('renderVerdict', () => {
     ).toBe('error')
   })
 
-  it('unverified -> aviso revisar manual', () => {
+  it('S6.10 C13: unverified muestra el mensaje breve definido', () => {
     const rendered = renderVerdict({ status: 'unverified', name_match: null, official_name: null })
     expect(rendered.tone).toBe('warn')
-    expect(rendered.message).toMatch(/revisar manual/i)
+    expect(rendered.message).toBe('No se pudo verificar el CIF. Revísalo antes de guardar.')
   })
 })
