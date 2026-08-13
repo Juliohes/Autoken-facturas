@@ -21,6 +21,24 @@ cd /opt/app-facturas/infrastructure
 docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
+### Antivirus no disponible al subir una factura
+
+La subida se bloquea intencionadamente si ClamAV no puede escanear el fichero: nunca se desactiva el
+antivirus ni se acepta una foto sin analizar. Comprueba primero:
+
+```bash
+docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml ps clamav
+docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml exec clamav clamdcheck.sh
+```
+
+El healthcheck reinicia automáticamente el contenedor tras tres fallos consecutivos de `clamd`. Si
+continúa fallando, revisa sus logs antes de reiniciarlo manualmente:
+
+```bash
+docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml logs --tail=200 clamav
+docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml restart clamav
+```
+
 ### Primera vez en una base de datos nueva (o tras borrar el volumen)
 
 El superusuario admin (`POSTGRES_ADMIN_USER`/`POSTGRES_ADMIN_PASSWORD`) y el rol runtime

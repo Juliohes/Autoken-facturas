@@ -161,11 +161,31 @@ services:
   clamav:
     image: clamav/clamav:stable
     healthcheck:
-      test: ["CMD", "clamdcheck.sh"]
+      # La imagen oficial mantiene PID 1 vivo con `tail` aunque `clamd` muera: Docker marca el
+      # healthcheck como unhealthy, pero no reinicia por ese estado. Tras tres fallos consecutivos
+      # terminamos el contenedor para que `restart: unless-stopped` lo recupere. Mientras tanto la
+      # API sigue fail-closed y no acepta ningún fichero sin antivirus.
+      test:
+        - CMD-SHELL
+        - >-
+          uptime=$$(awk '{print int($$1)}' /proc/uptime);
+          started=$$(awk '{print $$22}' /proc/1/stat);
+          hz=$$(getconf CLK_TCK);
+          age=$$((uptime - started / hz));
+          [ "$$age" -lt 600 ] && clamdcheck.sh >/dev/null 2>&1 && exit 0;
+          [ "$$age" -lt 600 ] && exit 1;
+          clamdcheck.sh >/dev/null 2>&1 && rm -f /tmp/clamd-health-failures && exit 0;
+          failures=$$(cat /tmp/clamd-health-failures 2>/dev/null || true);
+          failures=$${failures:-0}; failures=$$((failures + 1));
+          printf '%s' "$$failures" >/tmp/clamd-health-failures;
+          [ "$$failures" -lt 3 ] || kill -TERM 1; exit 1
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 120s
+      # Cargar las firmas reales puede durar varios minutos en una VPS tras recrear el contenedor.
+      # Durante ese arranque no contamos fallos para no reiniciar el propio proceso antes de que abra
+      # el socket; el contador de arriba actúa normalmente una vez superado este margen.
+      start_period: 10m
     restart: unless-stopped
 
   # Herramientas de despliegue (perfil `tools`, NUNCA arrancan con `docker compose up`; se invocan
