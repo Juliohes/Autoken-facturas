@@ -200,6 +200,18 @@ describe('CaptureScreen (S2.2)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('S6.9 C4: si el stream no entrega dimensiones, permite reintentar sin ocultar el selector de archivo', async () => {
+    const retry = vi.fn()
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, retry })
+    renderScreen(vi.fn(), false)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Reintentar cámara' }))
+
+    expect(retry).toHaveBeenCalledOnce()
+    expect(screen.getByLabelText(/elige o toma una foto/i)).toBeInTheDocument()
+  })
+
   it('S6.9 C4: sin cámara, ofrece reintentar además del selector de archivo', () => {
     useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null, canRetry: true, unavailableReason: 'unavailable', retry: vi.fn() })
     renderScreen()

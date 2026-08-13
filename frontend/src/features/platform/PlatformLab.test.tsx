@@ -477,5 +477,6 @@ describe('PlatformLab (S6.2)', () => {
     expect(screen.getByRole('columnheader', { name: 'original' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'enhanced' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'clahe' })).toBeInTheDocument()
+    expect(screen.getByTestId('lab-ranking-scroll')).toHaveClass('overflow-x-auto')
   })
 })
