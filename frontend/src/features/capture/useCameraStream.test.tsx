@@ -1,0 +1,82 @@
+// Comportamiento de recuperación de cámara S6.9. jsdom no tiene hardware, por eso se prueba el
+// contrato observable de getUserMedia y la liberación de tracks con streams simulados.
+import { act, render, screen, waitFor } from '@testing-library/react'
+import { useEffect } from 'react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { useCameraStream, type CameraStreamState } from './useCameraStream'
+
+function CameraProbe({ onChange }: { onChange: (state: CameraStreamState) => void }) {
+  const camera = useCameraStream()
+  useEffect(() => onChange(camera), [camera, onChange])
+  return <p>{camera.status}</p>
+}
+
+function fakeStream() {
+  const track = {
+    stop: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }
+  return { stream: { getTracks: () => [track] } as unknown as MediaStream, track }
+}
+
+describe('useCameraStream (S6.9)', () => {
+  const getUserMedia = vi.fn()
+
+  beforeEach(() => {
+    getUserMedia.mockReset()
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia },
+    })
+  })
+
+  it('C1: si la trasera exacta no existe, solicita una cámara de vídeo compatible', async () => {
+    const { stream } = fakeStream()
+    getUserMedia.mockRejectedValueOnce(new DOMException('sin trasera', 'OverconstrainedError'))
+    getUserMedia.mockResolvedValueOnce(stream)
+    render(<CameraProbe onChange={() => undefined} />)
+
+    await waitFor(() => expect(screen.getByText('active')).toBeInTheDocument())
+    expect(getUserMedia).toHaveBeenNthCalledWith(1, {
+      video: { facingMode: { exact: 'environment' } },
+      audio: false,
+    })
+    expect(getUserMedia).toHaveBeenNthCalledWith(2, { video: true, audio: false })
+  })
+
+  it('C1: si el navegador informa que no hay lente trasera, prueba una cámara compatible', async () => {
+    const { stream } = fakeStream()
+    getUserMedia.mockRejectedValueOnce(new DOMException('sin trasera', 'NotFoundError'))
+    getUserMedia.mockResolvedValueOnce(stream)
+    render(<CameraProbe onChange={() => undefined} />)
+
+    await waitFor(() => expect(screen.getByText('active')).toBeInTheDocument())
+    expect(getUserMedia).toHaveBeenNthCalledWith(2, { video: true, audio: false })
+  })
+
+  it('C7: si se deniega el permiso, no abre una segunda solicitud y ofrece recuperación', async () => {
+    getUserMedia.mockRejectedValueOnce(new DOMException('denegado', 'NotAllowedError'))
+    const states: CameraStreamState[] = []
+    render(<CameraProbe onChange={(state) => { states.push(state) }} />)
+
+    await waitFor(() => expect(states.at(-1)?.status).toBe('unavailable'))
+    expect(getUserMedia).toHaveBeenCalledOnce()
+    expect(states.at(-1)?.canRetry).toBe(true)
+  })
+
+  it('C5: reintentar detiene el stream anterior antes de solicitar otro', async () => {
+    const first = fakeStream()
+    const second = fakeStream()
+    getUserMedia.mockResolvedValueOnce(first.stream).mockResolvedValueOnce(second.stream)
+    let camera: CameraStreamState | null = null
+    render(<CameraProbe onChange={(state) => { camera = state }} />)
+
+    await waitFor(() => expect(camera?.status).toBe('active'))
+    await act(async () => camera?.retry())
+
+    expect(first.track.stop).toHaveBeenCalledOnce()
+    await waitFor(() => expect(camera?.stream).toBe(second.stream))
+  })
+})

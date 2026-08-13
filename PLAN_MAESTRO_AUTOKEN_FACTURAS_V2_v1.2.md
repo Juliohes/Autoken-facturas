@@ -691,3 +691,25 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
   los fallos de conexión/candado/orquestación del worker. OpenAPI declara el contrato 409. Pruebas
   focalizadas: 68 verdes contra Postgres/Redis reales, `ruff` y `mypy` verdes; queda el warning
   conocido deprecado de `arq`/redis durante los tests.
+
+### 11.13 S6.8 + S6.9 — Laboratorio completo y captura de cámara fiable (implementado localmente, 2026-08-13)
+
+- **S6.8 Laboratorio:** el detalle de una factura deja de ser una barra lateral superpuesta. Desde el
+  resumen se abre una vista completa que conserva el tenant elegido al volver; permite alternar foto,
+  Lecturas 1/2/3 y comparativa IA sin mezclar tablas. El resumen consume exclusivamente el endpoint
+  agregado ya existente de S6.7: tarjetas de ganadores por grupo de campo, filtro por campo y cuadrícula
+  motor × variante. Los grupos sin verdad confirmada muestran "sin datos comparables" y los fallos de
+  proveedor se mantienen explícitos, nunca convertidos en 0% ni sustituidos. No hay endpoints, OCR,
+  persistencia ni exposición transversal nueva de PII. El detalle conserva el aislamiento existente de
+  `tenant_session` y carga la foto solo bajo demanda a través del endpoint S6.2 ya autorizado.
+- **S6.9 Captura:** la cámara trasera pasa a ser preferencia, no requisito: si no existe lente trasera
+  se prueba una cámara de vídeo compatible; si el permiso se deniega, no se abre una segunda solicitud
+  automática. "Tomar foto" queda deshabilitado como "Preparando cámara..." hasta que el vídeo entrega
+  dimensiones reales, evitando procesar frames vacíos. Cuando no hay vista previa se mantiene el selector
+  de archivo y se ofrece "Reintentar cámara" cuando el navegador lo soporta; el reintento libera el stream
+  anterior antes de solicitar otro y se ignora mientras una solicitud ya está en curso.
+- **Verificación local:** 37 pruebas focalizadas (Laboratorio y cámara), 314 pruebas completas de frontend,
+  `tsc` y build de producción en verde. El lint conserva únicamente el warning preexistente de Fast Refresh
+  en `SessionProvider.tsx`. El build conserva el aviso conocido por el chunk perezoso de OpenCV. Falta la
+  verificación manual obligatoria en Android y iPhone reales: permiso concedido/denegado, sin lente trasera,
+  reintento y segunda apertura tras volver a la app.

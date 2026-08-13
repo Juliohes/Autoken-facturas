@@ -1092,6 +1092,29 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   confirmado, por lo que todavía no hay una comparación honesta para ese dato. Todo se puede ver en
   el menú técnico, en **Ranking OCR**, y al abrir una factura en el Laboratorio.
 
+- **Laboratorio más cómodo y cámara más fiable (13/08/2026):** el Laboratorio técnico ya no abre una
+  ventanita estrecha para estudiar una factura. Ahora se abre como una pantalla completa, con un botón
+  claro para volver al resumen sin perder la asesoría que se estaba mirando. Dentro se puede cambiar entre
+  la foto original, lo que leyó la IA, lo que decidió el sistema, lo que acabó confirmando la persona y la
+  comparación entre IAs.
+
+  Arriba del Laboratorio hay también un resumen de verdad: enseña qué combinación de lector e imagen ha
+  acertado más para cada tipo de dato y permite filtrar, por ejemplo, solo CIF o solo importes. Si todavía
+  no existe una respuesta humana con la que comparar, dice "sin datos comparables" en vez de pintar un
+  engañoso 0%. Si una IA falló porque no tenía cuota, se ve ese fallo tal cual, sin esconderlo ni rellenarlo
+  con otra IA. Consultar esta pantalla no vuelve a leer facturas ni genera gasto: solo muestra resultados
+  que ya estaban guardados.
+
+  También se reforzó la cámara al subir una factura desde el móvil. La app intenta usar primero la cámara
+  trasera, pero si el teléfono o el ordenador solo tiene otra cámara, la acepta en vez de bloquear al
+  usuario. El botón de hacer foto espera a que haya una imagen real lista, para no fallar si se pulsa muy
+  rápido. Si la cámara falla o se deniega el permiso, sigue estando el botón para subir un archivo y aparece
+  una opción para reintentar. Antes de pedir otra cámara se cierra la anterior, para que no queden dos
+  cámaras encendidas a la vez. Las comprobaciones automáticas están en verde; aún falta probarlo con un
+  Android y un iPhone reales, porque un servidor no puede imitar de verdad los permisos y cámaras físicas.
+  Pasaron las 314 comprobaciones automáticas de la parte visual y de comportamiento de la aplicación antes de
+  dejar el cambio listo para revisión.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
