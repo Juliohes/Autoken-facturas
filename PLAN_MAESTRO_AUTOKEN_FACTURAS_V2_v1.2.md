@@ -713,3 +713,16 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
   en `SessionProvider.tsx`. El build conserva el aviso conocido por el chunk perezoso de OpenCV. Falta la
   verificación manual obligatoria en Android y iPhone reales: permiso concedido/denegado, sin lente trasera,
   reintento y segunda apertura tras volver a la app.
+
+### 11.14 Hotfix de subida — autorecuperación de ClamAV (2026-08-13)
+
+- **Incidente real:** una subida real desde la cámara recibió `POST /uploads -> 503`. Diagnóstico en el
+  despliegue: MinIO/API sanos; `clamav` estaba `unhealthy` y `clamdcheck.sh` devolvía "Unable to contact
+  server". La imagen oficial mantenía vivo el contenedor mediante `tail` aunque el proceso `clamd` hubiera
+  muerto, por lo que `restart: unless-stopped` no actuaba solo por marcarse `unhealthy`. El fail-closed de
+  intake funcionó correctamente: no se guardó ningún fichero sin análisis antivirus.
+- **Corrección:** healthcheck con contador local: tras tres fallos consecutivos termina PID 1 para que Docker
+  reinicie el contenedor. Durante la ventana de recuperación, la API sigue devolviendo 503 y no degrada a un
+  escaneo opcional. El arranque inicial recibe una gracia de diez minutos para cargar la base de firmas antes
+  de activar el contador. Reinicio manual aplicado al incidente y verificado con `clamdcheck.sh` + un escaneo
+  real desde el contenedor de API. Runbook actualizado.
