@@ -60,6 +60,10 @@ def _refresh_key(ip: str) -> str:
     return f"refresh:fail:{ip}"
 
 
+def _counterparty_draft_key(tenant_id: str, user_id: str) -> str:
+    return f"counterparty:draft:{tenant_id}:{user_id}"
+
+
 async def _at_or_above(redis: aioredis.Redis, key: str, threshold: int) -> bool:
     """True si el contador de `key` ya alcanzó o superó `threshold` dentro de su ventana vigente."""
     count = await redis.get(key)
@@ -134,3 +138,11 @@ async def reset_refresh(redis: aioredis.Redis, ip: str) -> None:
     que fallos benignos ajenos (cookies caducadas de otros usuarios en una IP compartida) se
     acumulen indefinidamente contra quien sí consigue refrescar con normalidad."""
     await redis.delete(_refresh_key(ip))
+
+
+async def draft_counterparty_attempt_exceeds(
+    redis: aioredis.Redis, tenant_id: str, user_id: str, *, max_attempts: int, window_seconds: int
+) -> bool:
+    """Limita la consulta de borrador por identidad, sin castigar a otros usuarios del tenant."""
+    count = await _record_hit(redis, _counterparty_draft_key(tenant_id, user_id), window_seconds)
+    return count > max_attempts

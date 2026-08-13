@@ -851,6 +851,60 @@
         }
       }
     },
+    "/api/v1/uploads/{file_id}/counterparty-verdict": {
+      "post": {
+        "tags": [
+          "invoicing"
+        ],
+        "summary": "Draft Counterparty Verdict",
+        "description": "Valida el CIF/nombre que se est\u00e1 editando, sin guardar una factura (S6.10 C6).",
+        "operationId": "draft_counterparty_verdict_api_v1_uploads__file_id__counterparty_verdict_post",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftCounterpartyVerdictIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftCounterpartyVerdictOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/uploads/{file_id}/confirm": {
       "post": {
         "tags": [
@@ -1189,6 +1243,22 @@
             }
           },
           {
+            "name": "own_tax_id_missing",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Own Tax Id Missing"
+            }
+          },
+          {
             "name": "cursor",
             "in": "query",
             "required": false,
@@ -1336,6 +1406,22 @@
                 }
               ],
               "title": "Company Id"
+            }
+          },
+          {
+            "name": "own_tax_id_missing",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Own Tax Id Missing"
             }
           }
         ],
@@ -2126,6 +2212,16 @@
               }
             }
           },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillConflictOut"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2236,6 +2332,18 @@
         ],
         "title": "ApprovalResponse",
         "description": "Respuesta de la aprobaci\u00f3n de un registro."
+      },
+      "BackfillConflictOut": {
+        "properties": {
+          "batch": {
+            "$ref": "#/components/schemas/BatchStatusOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch"
+        ],
+        "title": "BackfillConflictOut"
       },
       "BackfillIn": {
         "properties": {
@@ -2813,6 +2921,11 @@
             "title": "Responsibility Accepted",
             "default": false
           },
+          "own_tax_id_exception_accepted": {
+            "type": "boolean",
+            "title": "Own Tax Id Exception Accepted",
+            "default": false
+          },
           "is_test": {
             "type": "boolean",
             "title": "Is Test",
@@ -2825,6 +2938,49 @@
         ],
         "title": "ConfirmIn",
         "description": "Cuerpo de la confirmaci\u00f3n (S2.5): datos confirmados por el humano."
+      },
+      "CounterpartyVerdictOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "valid",
+              "invalid",
+              "not_found",
+              "unverified"
+            ],
+            "title": "Status"
+          },
+          "name_match": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Match"
+          },
+          "official_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Official Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "name_match",
+          "official_name"
+        ],
+        "title": "CounterpartyVerdictOut"
       },
       "CustomDomainIn": {
         "properties": {
@@ -2876,6 +3032,55 @@
         ],
         "title": "DownloadUrlOut",
         "description": "URL firmada de descarga de un fichero (respuesta 200, S2.7)."
+      },
+      "DraftCounterpartyVerdictIn": {
+        "properties": {
+          "counterparty_tax_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Tax Id"
+          },
+          "counterparty_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Name"
+          }
+        },
+        "type": "object",
+        "title": "DraftCounterpartyVerdictIn",
+        "description": "Valores actuales del formulario para validar antes de confirmar (S6.10)."
+      },
+      "DraftCounterpartyVerdictOut": {
+        "properties": {
+          "counterparty_verdict": {
+            "$ref": "#/components/schemas/CounterpartyVerdictOut"
+          },
+          "blocking_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocking Reasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "counterparty_verdict",
+          "blocking_reasons"
+        ],
+        "title": "DraftCounterpartyVerdictOut"
       },
       "DuplicateRowOut": {
         "properties": {
@@ -3630,6 +3835,10 @@
             "type": "string",
             "format": "date-time",
             "title": "Uploaded At"
+          },
+          "own_tax_id_missing": {
+            "type": "boolean",
+            "title": "Own Tax Id Missing"
           }
         },
         "type": "object",
@@ -3650,7 +3859,8 @@
           "confirmed_at",
           "confirmed_by",
           "uploaded_file_id",
-          "uploaded_at"
+          "uploaded_at",
+          "own_tax_id_missing"
         ],
         "title": "InvoiceRowOut",
         "description": "Una fila del panel de facturas (spec \u00a72/\u00a73 C8)."

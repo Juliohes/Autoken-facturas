@@ -3,7 +3,25 @@
 import { useMutation } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
-import type { ConfirmBody } from './types'
+import type { ConfirmBody, CounterpartyVerdict } from './types'
+
+export class ConfirmRejectedError extends Error {
+  constructor(
+    message: string,
+    readonly counterpartyVerdict?: CounterpartyVerdict,
+    readonly blockingReasons?: string[],
+  ) {
+    super(message)
+  }
+}
+
+function structuredDetail(error: unknown): { counterparty_verdict?: CounterpartyVerdict; blocking_reasons?: string[] } | null {
+  if (!error || typeof error !== 'object' || !('detail' in error)) return null
+  const detail = (error as { detail: unknown }).detail
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return null
+  const value = detail as { counterparty_verdict?: CounterpartyVerdict; blocking_reasons?: string[] }
+  return value.counterparty_verdict || value.blocking_reasons ? value : null
+}
 
 /** Extrae un mensaje legible del cuerpo de error del backend (FastAPI `detail`). */
 export function readableConfirmError(error: unknown): string {
@@ -23,7 +41,7 @@ export function readableConfirmError(error: unknown): string {
 }
 
 export function useConfirm(fileId: string) {
-  return useMutation<{ id: string }, Error, ConfirmBody>({
+  return useMutation<{ id: string }, ConfirmRejectedError, ConfirmBody>({
     mutationFn: async (body: ConfirmBody) => {
       const { data, error } = await api.POST('/api/v1/uploads/{file_id}/confirm', {
         params: { path: { file_id: fileId } },
@@ -31,7 +49,12 @@ export function useConfirm(fileId: string) {
       })
       // El servidor reimpone las guardas (C12): un 4xx llega como `error`; se
       // traduce a un mensaje legible y se lanza para no navegar a éxito.
-      if (error || !data) throw new Error(readableConfirmError(error))
+      if (error || !data) {
+        const detail = structuredDetail(error)
+        throw new ConfirmRejectedError(
+          readableConfirmError(error), detail?.counterparty_verdict, detail?.blocking_reasons,
+        )
+      }
       return data as unknown as { id: string }
     },
   })

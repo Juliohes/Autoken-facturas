@@ -74,6 +74,7 @@ export function formStateToConfirmBody(
   options: {
     direction: ConfirmBody['direction']
     responsibilityAccepted: boolean
+    ownTaxIdExceptionAccepted?: boolean
     isTest?: boolean
   },
 ): ConfirmBody {
@@ -93,6 +94,7 @@ export function formStateToConfirmBody(
       cuota: fromAmountInputValue(line.cuota),
     })),
     responsibility_accepted: options.responsibilityAccepted,
+    own_tax_id_exception_accepted: options.ownTaxIdExceptionAccepted ?? false,
     is_test: options.isTest ?? false,
   }
 }

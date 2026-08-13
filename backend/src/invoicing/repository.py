@@ -92,6 +92,8 @@ class InvoiceRecord:
     irpf_amount: Decimal | None
     is_test: bool
     balance_ok: bool | None
+    own_tax_id_missing: bool
+    own_tax_id_exception_confirmed: bool
     status: str
     confirmed_by: UUID
     confirmed_at: datetime
@@ -110,7 +112,8 @@ _INVOICE_COLUMNS = (
     "pgp_sym_decrypt(counterparty_tax_id, :key)::text AS counterparty_tax_id, "
     "pgp_sym_decrypt(counterparty_name, :key)::text AS counterparty_name, "
     "counterparty_cif_status, net_amount, tax_amount, total_amount, irpf_amount, "
-    "is_test, balance_ok, status, confirmed_by, confirmed_at"
+    "is_test, balance_ok, own_tax_id_missing, own_tax_id_exception_confirmed, "
+    "status, confirmed_by, confirmed_at"
 )
 
 
@@ -145,6 +148,8 @@ def _to_invoice_record(
         irpf_amount=row.irpf_amount,
         is_test=row.is_test,
         balance_ok=row.balance_ok,
+        own_tax_id_missing=row.own_tax_id_missing,
+        own_tax_id_exception_confirmed=row.own_tax_id_exception_confirmed,
         status=row.status,
         confirmed_by=row.confirmed_by,
         confirmed_at=row.confirmed_at,
@@ -271,6 +276,8 @@ async def insert_invoice(
     irpf_amount: Decimal | None,
     is_test: bool,
     balance_ok: bool | None,
+    own_tax_id_missing: bool,
+    own_tax_id_exception_confirmed: bool,
     snapshot: dict[str, Any],
     confirmed_by: UUID,
     encryption_key: str,
@@ -289,12 +296,14 @@ async def insert_invoice(
                 f" counterparty_tax_id, counterparty_tax_id_blind_index, counterparty_name, "
                 f" counterparty_cif_status, invoice_number, "
                 f" net_amount, tax_amount, total_amount, irpf_amount, is_test, balance_ok, "
+                f" own_tax_id_missing, own_tax_id_exception_confirmed, "
                 f" snapshot, status, confirmed_by) "
                 f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :uploaded_file_id, :direction, "
                 f" :issue_date, pgp_sym_encrypt(:counterparty_tax_id, :key), "
                 f" :counterparty_tax_id_blind_index, pgp_sym_encrypt(:counterparty_name, :key), "
                 f" :counterparty_cif_status, :invoice_number, "
                 f" :net_amount, :tax_amount, :total_amount, :irpf_amount, :is_test, :balance_ok, "
+                f" :own_tax_id_missing, :own_tax_id_exception_confirmed, "
                 f" CAST(:snapshot AS jsonb), 'confirmed', :confirmed_by) "
                 f"RETURNING id"
             ),
@@ -314,6 +323,8 @@ async def insert_invoice(
                 "irpf_amount": irpf_amount,
                 "is_test": is_test,
                 "balance_ok": balance_ok,
+                "own_tax_id_missing": own_tax_id_missing,
+                "own_tax_id_exception_confirmed": own_tax_id_exception_confirmed,
                 "snapshot": json.dumps(snapshot),
                 "confirmed_by": str(confirmed_by),
                 "key": encryption_key,

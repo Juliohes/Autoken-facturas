@@ -734,3 +734,30 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
   escaneo opcional. El arranque inicial recibe una gracia de diez minutos para cargar la base de firmas antes
   de activar el contador. Reinicio manual aplicado al incidente y verificado con `clamdcheck.sh` + un escaneo
   real desde el contenedor de API. Runbook actualizado.
+
+### 11.15 S6.10 — Captura manual y confirmación segura de CIF (implementada, 2026-08-13)
+
+- **Captura:** se elimina el disparo automático por análisis de frames. Entrar en `/capturar` no pide permiso
+  de cámara: "Abrir cámara" abre una capa visual completa, accesible y separada del panel, con vista previa,
+  marco A4 vertical grande, botón manual y selector de archivo. Cerrar, tomar foto, repetir o elegir archivo
+  detiene siempre el stream; un resultado o rechazo tardío de `getUserMedia`, OpenCV o decodificación de
+  fichero no puede reabrir cámara ni reemplazar una captura más reciente.
+- **CIF conocido:** el CIF de la empresa registrado al alta es la referencia cierta de cada fichero (receptor
+  en recibida, emisor en emitida); OCR solo debe encontrarlo, nunca inventarlo. Si falta, un `user` puede
+  marcar una aceptación explícita con razón social y CIF de su empresa. La confirmación persiste de forma
+  inmutable `own_tax_id_missing` y, solo cuando corresponde, `own_tax_id_exception_confirmed`; un
+  `tenant_admin` conserva la excepción sin esa casilla. El panel y Excel muestran/filtran "Revisar CIF propio".
+  No se marcan facturas históricas de forma retrospectiva: `ocr_extractions` se sobrescribe al reprocesar y no
+  es evidencia fiable del instante de confirmación.
+- **CIF de contraparte:** `POST /uploads/{file_id}/counterparty-verdict` recalcula el veredicto sobre los
+  valores actuales del formulario, con pausa de edición en cliente, descarte de respuestas antiguas, límite
+  de 30 comprobaciones/minuto por usuario+tenant y autorización idéntica a review/confirm. `POST confirm`
+  vuelve a validar siempre y devuelve su veredicto estructurado si cambió, que la UI aplica en vez de conservar
+  un check viejo. El endpoint está añadido al gate anti-cruce y al OpenAPI generado.
+- **Auditoría de 3 lentes:** se corrigieron antes de cerrar 5 hallazgos altos (veredicto de servidor ignorado,
+  carreras de cámara/capturas, migración mutable de histórico, endpoint fuera del gate de aislamiento y abuso
+  de verificaciones externas) y 3 medios (marco no A4, contrato OpenAPI manual y accesibilidad pendiente de
+  prueba física). Verificación: 10 pruebas backend focalizadas (incluida la suite de aislamiento) contra
+  Postgres/Redis reales; `ruff`/`mypy` verdes; 320 pruebas frontend, `tsc` y build verdes. La suite backend
+  completa llega a 85 tests verdes y se detiene únicamente en los 8 tests de backup porque este host no tiene
+  `pg_dump`/`pg_restore`; no es regresión de S6.10. Prueba manual Android/iPhone sigue obligatoria.

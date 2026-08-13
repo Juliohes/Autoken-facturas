@@ -18,7 +18,9 @@ from pydantic import BaseModel
 
 from identity.authz import require_roles
 from identity.dependencies import AuthContext
+from identity.ratelimit import draft_counterparty_attempt_exceeds
 from invoicing import service
+from shared.redis import get_redis
 from tenancy.constants import Role
 
 router = APIRouter(prefix="/uploads", tags=["invoicing"])
@@ -63,7 +65,26 @@ class ConfirmIn(BaseModel):
     irpf_amount: Decimal | None = None
     tax_lines: list[TaxLineIn] = []
     responsibility_accepted: bool = False
+    own_tax_id_exception_accepted: bool = False
     is_test: bool = False
+
+
+class DraftCounterpartyVerdictIn(BaseModel):
+    """Valores actuales del formulario para validar antes de confirmar (S6.10)."""
+
+    counterparty_tax_id: str | None = None
+    counterparty_name: str | None = None
+
+
+class CounterpartyVerdictOut(BaseModel):
+    status: Literal["valid", "invalid", "not_found", "unverified"]
+    name_match: bool | None
+    official_name: str | None
+
+
+class DraftCounterpartyVerdictOut(BaseModel):
+    counterparty_verdict: CounterpartyVerdictOut
+    blocking_reasons: list[str]
 
 
 # Traducción única de cada excepción de dominio a su código HTTP (spec §3).
@@ -90,7 +111,10 @@ def _raise_http(exc: service.InvoicingError) -> NoReturn:
     """Traduce una excepción de dominio al `HTTPException` correspondiente (o la propaga)."""
     for error_type, status, detail in _ERROR_STATUS:
         if isinstance(exc, error_type):
-            raise HTTPException(status_code=status, detail=detail) from exc
+            structured_detail = (
+                exc.as_detail() if isinstance(exc, service.StructuredInvoicingError) else detail
+            )
+            raise HTTPException(status_code=status, detail=structured_detail) from exc
     raise exc  # pragma: no cover - toda subclase de dominio está mapeada arriba
 
 
@@ -107,6 +131,35 @@ async def review_upload(identity: Reviewer, file_id: UUID) -> dict[str, object]:
         "counterparty_verdict": data.counterparty_verdict,
         "own": data.own,
         "warnings": data.warnings,
+        "blocking_reasons": data.blocking_reasons,
+    }
+
+
+@router.post("/{file_id}/counterparty-verdict", response_model=DraftCounterpartyVerdictOut)
+async def draft_counterparty_verdict(
+    identity: Reviewer, file_id: UUID, body: DraftCounterpartyVerdictIn
+) -> dict[str, object]:
+    """Valida el CIF/nombre que se está editando, sin guardar una factura (S6.10 C6)."""
+    # El endpoint consulta verificadores externos: limita el tecleo automatizado por usuario+tenant
+    # sin penalizar el trabajo normal de corrección humana.
+    if await draft_counterparty_attempt_exceeds(
+        get_redis(),
+        str(identity.tenant_id),
+        str(identity.user_id),
+        max_attempts=30,
+        window_seconds=60,
+    ):
+        raise HTTPException(
+            status_code=429, detail="Demasiadas comprobaciones de CIF. Espera un minuto."
+        )
+    try:
+        data = await service.draft_counterparty_verdict(
+            identity, file_id, body.counterparty_tax_id, body.counterparty_name
+        )
+    except service.InvoicingError as exc:
+        _raise_http(exc)
+    return {
+        "counterparty_verdict": data.counterparty_verdict,
         "blocking_reasons": data.blocking_reasons,
     }
 
@@ -129,6 +182,7 @@ async def confirm_upload(identity: Reviewer, file_id: UUID, body: ConfirmIn) -> 
             for line in body.tax_lines
         ],
         responsibility_accepted=body.responsibility_accepted,
+        own_tax_id_exception_accepted=body.own_tax_id_exception_accepted,
         is_test=body.is_test,
     )
     try:

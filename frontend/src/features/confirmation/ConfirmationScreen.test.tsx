@@ -149,7 +149,7 @@ describe('ConfirmationScreen (S2.4)', () => {
     renderScreen()
     const block = await screen.findByTestId('counterparty-verdict')
     expect(block).toHaveAttribute('data-tone', 'warn')
-    expect(block).toHaveTextContent('ACME SOCIEDAD LIMITADA')
+    expect(block).toHaveTextContent('El nombre no coincide con el registrado.')
   })
 
   it('C3: veredicto invalid/not_found -> rojo; unverified -> aviso revisar manual', async () => {
@@ -189,7 +189,7 @@ describe('ConfirmationScreen (S2.4)', () => {
     await waitFor(() => {
       const last = screen.getAllByTestId('counterparty-verdict').at(-1)
       expect(last).toHaveAttribute('data-tone', 'warn')
-      expect(last).toHaveTextContent(/revisar manual/i)
+      expect(last).toHaveTextContent('No se pudo verificar el CIF. Revísalo antes de guardar.')
     })
   })
 
@@ -240,8 +240,59 @@ describe('ConfirmationScreen (S2.4)', () => {
     renderScreen()
 
     expect(await screen.findByTestId('warning-own-tax-id-missing')).toHaveTextContent(
-      /tu cif no aparece en esta factura/i,
+      'No se ve el CIF de Mi Empresa SL (A11111111). Confirma que esta factura es suya.',
     )
+  })
+
+  it('S6.10 C6-C7: al editar el CIF, sustituye el bloqueo OCR por el veredicto del borrador actual', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/auth/me')) {
+        return Promise.resolve({ data: { id: 'u1', role: 'user', company: { id: 'c1', name: 'Mi Empresa SL' } }, error: undefined })
+      }
+      return Promise.resolve({ data: makeReview({ blocking_reasons: ['counterparty_cif_invalid'], counterparty_verdict: { status: 'invalid', name_match: null, official_name: null } }), error: undefined })
+    })
+    postMock.mockResolvedValueOnce({
+      data: { counterparty_verdict: { status: 'valid', name_match: true, official_name: null }, blocking_reasons: [] },
+      error: undefined,
+    })
+    const user = userEvent.setup()
+    renderScreen()
+    const cif = await screen.findByLabelText('CIF de contraparte')
+    await user.clear(cif)
+    await user.type(cif, 'A12345678')
+
+    // Mientras espera la pausa breve y la respuesta, un veredicto anterior nunca habilita guardar.
+    await user.click(screen.getByLabelText('Acepto la responsabilidad de la veracidad de los datos que confirmo.'))
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+
+    await waitFor(() => expect(postMock).toHaveBeenCalledWith(
+      '/api/v1/uploads/{file_id}/counterparty-verdict',
+      expect.objectContaining({ body: { counterparty_tax_id: 'A12345678', counterparty_name: 'Proveedor SL' } }),
+    ))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeEnabled())
+  })
+
+  it('S6.10 C10-C11: un user puede aceptar expresamente el CIF propio ausente', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/auth/me')) {
+        return Promise.resolve({ data: { id: 'u1', role: 'user', company: { id: 'c1', name: 'Mi Empresa SL' } }, error: undefined })
+      }
+      return Promise.resolve({ data: makeReview({ blocking_reasons: ['own_tax_id_missing'] }), error: undefined })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByLabelText('Importe total')
+    await user.click(screen.getByLabelText('Acepto la responsabilidad de la veracidad de los datos que confirmo.'))
+    expect(screen.getByText('Marca la confirmación para guardar.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+
+    await user.click(screen.getByLabelText('Confirmo que esta factura corresponde a Mi Empresa SL (A11111111)'))
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
+    await waitFor(() => expect(postMock).toHaveBeenCalledWith(
+      '/api/v1/uploads/{file_id}/confirm',
+      expect.objectContaining({ body: expect.objectContaining({ own_tax_id_exception_accepted: true }) }),
+    ))
   })
 
   it('sin own_tax_id_missing, no se muestra el aviso', async () => {
@@ -298,7 +349,7 @@ describe('ConfirmationScreen (S2.4)', () => {
     })
     const user = userEvent.setup()
     renderScreen()
-    expect(await screen.findByTestId('warning-imbalance')).toHaveTextContent(/revisar/i)
+    expect(await screen.findByTestId('warning-imbalance')).toHaveTextContent('El total no cuadra con el IVA.')
 
     // El descuadre NO bloquea: con la responsabilidad marcada el botón se habilita.
     await acceptResponsibility(user)
@@ -332,7 +383,7 @@ describe('ConfirmationScreen (S2.4)', () => {
 
     // Error legible mostrado; no se navega a éxito; el valor editado se conserva.
     expect(await screen.findByTestId('confirm-error')).toHaveTextContent(
-      'El CIF de contraparte no es válido o no consta',
+      'No se pudo guardar. Revisa los datos e inténtalo de nuevo.',
     )
     expect(onConfirmed).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Importe total')).toHaveValue('250.00')
@@ -464,8 +515,7 @@ describe('ConfirmationScreen (S2.4)', () => {
     )
 
     // Se muestra el spinner de procesamiento
-    expect(await screen.findByText('Procesando factura con IA…')).toBeInTheDocument()
-    expect(screen.getByText('Esto puede tardar unos segundos.')).toBeInTheDocument()
+    expect(await screen.findByText('Leyendo la factura...')).toBeInTheDocument()
 
     // Eventualmente carga el formulario de confirmación con éxito tras el reintento de QueryClient
     expect(await screen.findByLabelText('Importe total', {}, { timeout: 3000 })).toBeInTheDocument()
@@ -508,9 +558,9 @@ describe('ConfirmationScreen (S2.4)', () => {
 
     // Error inmediato, no el spinner de "procesando" (no es un caso transitorio: no debe reintentar)
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'No se pudieron cargar los datos de esta factura.',
+      'No se pudo abrir esta factura. Inténtalo de nuevo.',
     )
-    expect(screen.queryByText('Procesando factura con IA…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Leyendo la factura...')).not.toBeInTheDocument()
     expect(reviewCallCount).toBe(1)
   })
 })

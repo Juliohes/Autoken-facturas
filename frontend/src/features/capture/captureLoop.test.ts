@@ -3,7 +3,7 @@
 // opencv/documentEdges.test.ts) — aquí solo importa la decisión de estado, no el algoritmo.
 import { describe, expect, it } from 'vitest'
 
-import { captureReducer, INITIAL_CAPTURE_STATE, shouldAutoCapture } from './captureLoop'
+import { captureReducer, INITIAL_CAPTURE_STATE } from './captureLoop'
 import type { FrameAnalysis } from './types'
 
 const THRESHOLD = 100
@@ -18,28 +18,14 @@ function analysis(over: Partial<FrameAnalysis> = {}): FrameAnalysis {
   return { sharpness: 200, corners: CORNERS, ...over }
 }
 
-describe('shouldAutoCapture', () => {
-  it('dispara con nitidez suficiente y esquinas detectadas', () => {
-    expect(shouldAutoCapture(analysis({ sharpness: 150, corners: CORNERS }), THRESHOLD)).toBe(true)
-  })
-
-  it('no dispara con nitidez insuficiente aunque haya esquinas (C5)', () => {
-    expect(shouldAutoCapture(analysis({ sharpness: 50, corners: CORNERS }), THRESHOLD)).toBe(false)
-  })
-
-  it('no dispara sin esquinas aunque el frame sea nítido (C6)', () => {
-    expect(shouldAutoCapture(analysis({ sharpness: 150, corners: null }), THRESHOLD)).toBe(false)
-  })
-})
-
 describe('captureReducer', () => {
-  it('C4: un frame nítido y encuadrado pasa a "captured" con sus esquinas', () => {
+  it('S6.10 C1: analizar un fotograma nítido y encuadrado nunca toma una foto por sí solo', () => {
     const next = captureReducer(
       INITIAL_CAPTURE_STATE,
       { type: 'frame_analyzed', analysis: analysis({ sharpness: 150, corners: CORNERS }) },
       THRESHOLD,
     )
-    expect(next).toEqual({ phase: 'captured', corners: CORNERS, wasBlurry: false })
+    expect(next).toEqual(INITIAL_CAPTURE_STATE)
   })
 
   it('C5: un frame borroso se queda en "live"', () => {
@@ -60,7 +46,7 @@ describe('captureReducer', () => {
     expect(next).toEqual(INITIAL_CAPTURE_STATE)
   })
 
-  it('un frame analizado tras ya estar en "captured" no cambia nada (no hay doble captura)', () => {
+  it('un fotograma analizado tras una captura manual no cambia nada', () => {
     const captured = captureReducer(
       INITIAL_CAPTURE_STATE,
       { type: 'frame_analyzed', analysis: analysis({ sharpness: 150, corners: CORNERS }) },

@@ -11,9 +11,16 @@ import { ResponsibilityCheckbox } from './ResponsibilityCheckbox'
 import { isConfirmEnabled } from './confirmGate'
 import { formStateToConfirmBody, initialFormState, type ConfirmFormState } from './formState'
 import { availableTaxRates, taxRateLabel } from './taxLines'
-import { useConfirm } from './useConfirm'
+import { ConfirmRejectedError, useConfirm } from './useConfirm'
 import { useReview, PendingOcrError } from './useReview'
-import { BLOCKING_REASONS, WARNING_IMBALANCE, type Confidence, type ReviewResponse } from './types'
+import { useDraftCounterpartyVerdict } from './useDraftCounterpartyVerdict'
+import {
+  BLOCKING_REASONS,
+  WARNING_IMBALANCE,
+  type Confidence,
+  type CounterpartyVerdict,
+  type ReviewResponse,
+} from './types'
 
 // Aviso rojo de responsabilidad, SIEMPRE bajo el botón (spec §2, C9).
 export const RESPONSIBILITY_NOTICE =
@@ -37,10 +44,10 @@ export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction = '
       <div className="p-6 flex flex-col items-center justify-center space-y-4 text-center py-20">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-emerald-500" />
         <p className="text-slate-100 font-medium">
-          {isPendingOcr ? 'Procesando factura con IA…' : 'Cargando datos de revisión…'}
+          {isPendingOcr ? 'Leyendo la factura...' : 'Cargando datos de revisión…'}
         </p>
         <p className="text-sm text-slate-400">
-          {isPendingOcr ? 'Esto puede tardar unos segundos.' : 'Espera un momento, por favor.'}
+          {isPendingOcr ? null : 'Espera un momento, por favor.'}
         </p>
       </div>
     )
@@ -49,7 +56,7 @@ export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction = '
     return (
       <div className="p-6">
         <p className="text-red-400" role="alert">
-          No se pudieron cargar los datos de esta factura.
+          No se pudo abrir esta factura. Inténtalo de nuevo.
         </p>
         <button
           type="button"
@@ -88,23 +95,60 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
   const [form, setForm] = useState<ConfirmFormState>(() => initialFormState(review))
   const [responsibilityAccepted, setResponsibilityAccepted] = useState(false)
   const [isTest, setIsTest] = useState(false)
+  const [ownTaxIdExceptionAccepted, setOwnTaxIdExceptionAccepted] = useState(false)
+  const [serverVerdict, setServerVerdict] = useState<CounterpartyVerdict | null>(null)
+  const [serverBlockingReasons, setServerBlockingReasons] = useState<string[] | null>(null)
   const isAdmin = currentUser.data?.role === 'tenant_admin'
+  const isUser = currentUser.data?.role === 'user'
+  const draftVerdict = useDraftCounterpartyVerdict({
+    fileId,
+    taxId: form.counterparty_tax_id,
+    name: form.counterparty_name,
+    initialTaxId: review.fields.counterparty_tax_id ?? '',
+    initialName: review.fields.counterparty_name ?? '',
+  })
 
   const conf = (field: string): Confidence => review.confidences[field] ?? null
-  const set = (patch: Partial<ConfirmFormState>) => setForm((prev) => ({ ...prev, ...patch }))
+  const set = (patch: Partial<ConfirmFormState>) => {
+    if ('counterparty_tax_id' in patch || 'counterparty_name' in patch) {
+      setServerVerdict(null)
+      setServerBlockingReasons(null)
+    }
+    setForm((prev) => ({ ...prev, ...patch }))
+  }
 
+  const initialCounterpartyReasons = new Set<string>([
+    BLOCKING_REASONS.cifInvalid,
+    BLOCKING_REASONS.cifNotFound,
+  ])
+  const counterpartyChanged =
+    form.counterparty_tax_id !== (review.fields.counterparty_tax_id ?? '') ||
+    form.counterparty_name !== (review.fields.counterparty_name ?? '')
+  const hasCurrentDraftVerdict = counterpartyChanged && !draftVerdict.isDebouncing && draftVerdict.isSuccess
+  const waitingForDraftVerdict = counterpartyChanged && !hasCurrentDraftVerdict && !serverBlockingReasons
+  const blockingReasons = counterpartyChanged
+    ? [
+        ...review.blocking_reasons.filter((reason) => !initialCounterpartyReasons.has(reason)),
+        ...(serverBlockingReasons ?? (hasCurrentDraftVerdict
+          ? draftVerdict.data.blocking_reasons
+          : [BLOCKING_REASONS.cifInvalid])),
+      ]
+    : review.blocking_reasons
   const enabled = isConfirmEnabled({
-    blockingReasons: review.blocking_reasons,
+    blockingReasons,
     responsibilityAccepted,
     submitting: confirm.isPending,
+    ownTaxIdExceptionAccepted: isUser && ownTaxIdExceptionAccepted,
   })
 
   const hasImbalance = review.warnings.includes(WARNING_IMBALANCE)
   // 2026-08-08 (petición de Julio): sin caja "CIF de contraparte verificado" — un check verde
   // junto al campo, mismo estilo que las marcas de confianza. La caja se conserva para los casos
   // que sí necesitan explicación (inválido/no encontrado/nombre que no coincide/sin verificar).
-  const isCounterpartyVerified =
-    review.counterparty_verdict.status === 'valid' && review.counterparty_verdict.name_match !== false
+  const counterpartyVerdict = serverVerdict ?? (hasCurrentDraftVerdict
+    ? draftVerdict.data.counterparty_verdict
+    : counterpartyChanged ? null : review.counterparty_verdict)
+  const isCounterpartyVerified = counterpartyVerdict?.status === 'valid' && counterpartyVerdict.name_match !== false
   const missingOwnTaxId = review.blocking_reasons.includes(BLOCKING_REASONS.ownTaxIdMissing)
 
   const handleConfirm = () => {
@@ -113,9 +157,18 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
     const body = formStateToConfirmBody(form, {
       direction,
       responsibilityAccepted,
+      ownTaxIdExceptionAccepted: isUser && ownTaxIdExceptionAccepted,
       isTest: isAdmin && isTest,
     })
-    confirm.mutate(body, { onSuccess: () => onConfirmed() })
+    confirm.mutate(body, {
+      onSuccess: () => onConfirmed(),
+      onError: (error) => {
+        if (error instanceof ConfirmRejectedError && error.counterpartyVerdict) {
+          setServerVerdict(error.counterpartyVerdict)
+          setServerBlockingReasons(error.blockingReasons ?? [BLOCKING_REASONS.cifInvalid])
+        }
+      },
+    })
   }
 
   return (
@@ -146,7 +199,13 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
             ) : undefined
           }
         />
-        {!isCounterpartyVerified && <CounterpartyVerdictBlock verdict={review.counterparty_verdict} />}
+        {counterpartyVerdict && !isCounterpartyVerified && <CounterpartyVerdictBlock verdict={counterpartyVerdict} />}
+        {waitingForDraftVerdict && !draftVerdict.isError && (
+          <p className="text-sm text-slate-400">Comprobando CIF...</p>
+        )}
+        {counterpartyChanged && !serverVerdict && !draftVerdict.isDebouncing && draftVerdict.isError && (
+          <p role="alert" className="text-sm text-red-400">No se pudo verificar el CIF. Revísalo antes de guardar.</p>
+        )}
         <FieldRow
           name="counterparty_name"
           label="Nombre de la contraparte"
@@ -275,7 +334,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
             data-testid="warning-imbalance"
             className="rounded-md border border-yellow-500 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200"
           >
-            Revisar: el total no cuadra con los tramos de IVA.
+            El total no cuadra con el IVA.
           </p>
         )}
       </div>
@@ -319,9 +378,19 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
           role="alert"
           className="rounded-md border border-red-500 bg-red-500/10 px-3 py-2 text-sm text-red-200"
         >
-          Tu CIF no aparece en esta factura: solo un administrador de la asesoría puede confirmarla
-          así. Revisa la foto o pide a un administrador que la confirme.
+          No se ve el CIF de {review.own.name ?? 'tu empresa'} ({review.own.cif ?? '—'}). Confirma que esta factura es suya.
         </p>
+      )}
+
+      {missingOwnTaxId && isUser && (
+        <label className="flex items-start gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={ownTaxIdExceptionAccepted}
+            onChange={(event) => setOwnTaxIdExceptionAccepted(event.target.checked)}
+          />
+          Confirmo que esta factura corresponde a {review.own.name ?? 'mi empresa'} ({review.own.cif ?? '—'})
+        </label>
       )}
 
       {/* S3.5: solo el tenant_admin puede marcar una factura como de prueba (excluida de
@@ -342,6 +411,10 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
         onChange={setResponsibilityAccepted}
       />
 
+      {missingOwnTaxId && isUser && !ownTaxIdExceptionAccepted && (
+        <p className="text-sm text-amber-300">Marca la confirmación para guardar.</p>
+      )}
+
       <button
         type="button"
         disabled={!enabled}
@@ -359,7 +432,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
       {/* C12: rechazo del servidor mostrado sin perder lo editado ni navegar. */}
       {confirm.isError && (
         <p data-testid="confirm-error" role="alert" className="text-sm text-red-400">
-          {confirm.error.message}
+          No se pudo guardar. Revisa los datos e inténtalo de nuevo.
         </p>
       )}
 

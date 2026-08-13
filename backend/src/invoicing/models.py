@@ -18,12 +18,15 @@ from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Numeric,
     Text,
     UniqueConstraint,
+    desc,
     func,
     text,
 )
@@ -43,7 +46,20 @@ class Invoice(Base):
     """
 
     __tablename__ = "invoices"
-    __table_args__ = (UniqueConstraint("uploaded_file_id", name="invoices_uploaded_file_unique"),)
+    __table_args__ = (
+        UniqueConstraint("uploaded_file_id", name="invoices_uploaded_file_unique"),
+        Index(
+            "invoices_own_tax_id_missing_idx",
+            "tenant_id",
+            desc("confirmed_at"),
+            desc("id"),
+            postgresql_where=text("own_tax_id_missing = true AND is_test = false"),
+        ),
+        CheckConstraint(
+            "NOT own_tax_id_exception_confirmed OR own_tax_id_missing",
+            name="invoices_own_tax_id_exception_requires_missing",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
@@ -75,6 +91,13 @@ class Invoice(Base):
     irpf_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     is_test: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     balance_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Snapshot de la situación al confirmar (S6.10): no se recalcula si cambia el OCR o el catálogo.
+    own_tax_id_missing: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    own_tax_id_exception_confirmed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     confirmed_by: Mapped[UUID] = mapped_column(

@@ -32,11 +32,20 @@ describe('useCameraStream (S6.9)', () => {
     })
   })
 
-  it('C1: si la trasera exacta no existe, solicita una cámara de vídeo compatible', async () => {
+  it('S6.10 C2: no solicita la cámara hasta que la persona la abre explícitamente', () => {
+    render(<CameraProbe onChange={() => undefined} />)
+
+    expect(screen.getByText('idle')).toBeInTheDocument()
+    expect(getUserMedia).not.toHaveBeenCalled()
+  })
+
+  it('C2: si la trasera exacta no existe, solicita una cámara de vídeo compatible al abrirla', async () => {
     const { stream } = fakeStream()
     getUserMedia.mockRejectedValueOnce(new DOMException('sin trasera', 'OverconstrainedError'))
     getUserMedia.mockResolvedValueOnce(stream)
-    render(<CameraProbe onChange={() => undefined} />)
+    let camera: CameraStreamState | null = null
+    render(<CameraProbe onChange={(state) => { camera = state }} />)
+    await act(async () => camera?.open())
 
     await waitFor(() => expect(screen.getByText('active')).toBeInTheDocument())
     expect(getUserMedia).toHaveBeenNthCalledWith(1, {
@@ -50,7 +59,9 @@ describe('useCameraStream (S6.9)', () => {
     const { stream } = fakeStream()
     getUserMedia.mockRejectedValueOnce(new DOMException('sin trasera', 'NotFoundError'))
     getUserMedia.mockResolvedValueOnce(stream)
-    render(<CameraProbe onChange={() => undefined} />)
+    let camera: CameraStreamState | null = null
+    render(<CameraProbe onChange={(state) => { camera = state }} />)
+    await act(async () => camera?.open())
 
     await waitFor(() => expect(screen.getByText('active')).toBeInTheDocument())
     expect(getUserMedia).toHaveBeenNthCalledWith(2, { video: true, audio: false })
@@ -60,6 +71,7 @@ describe('useCameraStream (S6.9)', () => {
     getUserMedia.mockRejectedValueOnce(new DOMException('denegado', 'NotAllowedError'))
     const states: CameraStreamState[] = []
     render(<CameraProbe onChange={(state) => { states.push(state) }} />)
+    await act(async () => states.at(-1)?.open())
 
     await waitFor(() => expect(states.at(-1)?.status).toBe('unavailable'))
     expect(getUserMedia).toHaveBeenCalledOnce()
@@ -71,6 +83,7 @@ describe('useCameraStream (S6.9)', () => {
     getUserMedia.mockImplementation(() => new Promise(() => undefined))
     const states: CameraStreamState[] = []
     render(<CameraProbe onChange={(state) => { states.push(state) }} />)
+    await act(async () => states.at(-1)?.open())
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000)
@@ -87,11 +100,41 @@ describe('useCameraStream (S6.9)', () => {
     getUserMedia.mockResolvedValueOnce(first.stream).mockResolvedValueOnce(second.stream)
     let camera: CameraStreamState | null = null
     render(<CameraProbe onChange={(state) => { camera = state }} />)
+    await act(async () => camera?.open())
 
     await waitFor(() => expect(camera?.status).toBe('active'))
     await act(async () => camera?.retry())
 
     expect(first.track.stop).toHaveBeenCalledOnce()
     await waitFor(() => expect(camera?.stream).toBe(second.stream))
+  })
+
+  it('S6.10 C5: cerrar detiene todas las pistas y vuelve al estado inactivo', async () => {
+    const { stream, track } = fakeStream()
+    getUserMedia.mockResolvedValue(stream)
+    let camera: CameraStreamState | null = null
+    render(<CameraProbe onChange={(state) => { camera = state }} />)
+
+    await act(async () => camera?.open())
+    await waitFor(() => expect(camera?.status).toBe('active'))
+    await act(async () => camera?.close())
+
+    expect(track.stop).toHaveBeenCalledOnce()
+    expect(screen.getByText('idle')).toBeInTheDocument()
+  })
+
+  it('S6.10 C5: un rechazo tardío tras cerrar no reabre el estado de error', async () => {
+    let rejectRequest: (error: Error) => void = () => undefined
+    getUserMedia.mockImplementation(() => new Promise((_, reject) => {
+      rejectRequest = reject
+    }))
+    let camera: CameraStreamState | null = null
+    render(<CameraProbe onChange={(state) => { camera = state }} />)
+
+    await act(async () => camera?.open())
+    await act(async () => camera?.close())
+    await act(async () => rejectRequest(new DOMException('denegado', 'NotAllowedError')))
+
+    expect(screen.getByText('idle')).toBeInTheDocument()
   })
 })

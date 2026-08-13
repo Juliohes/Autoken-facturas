@@ -31,4 +31,9 @@ describe('isConfirmEnabled', () => {
       isConfirmEnabled({ blockingReasons: [], responsibilityAccepted: true, submitting: true }),
     ).toBe(false)
   })
+
+  it('S6.10 C10: permite al user aceptar expresamente la excepción de CIF propio, sin retirar otros bloqueos', () => {
+    expect(isConfirmEnabled({ blockingReasons: ['own_tax_id_missing'], responsibilityAccepted: true, submitting: false, ownTaxIdExceptionAccepted: true })).toBe(true)
+    expect(isConfirmEnabled({ blockingReasons: ['own_tax_id_missing', 'counterparty_cif_invalid'], responsibilityAccepted: true, submitting: false, ownTaxIdExceptionAccepted: true })).toBe(false)
+  })
 })

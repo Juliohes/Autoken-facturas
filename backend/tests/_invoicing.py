@@ -42,6 +42,10 @@ def confirm_url(file_id: str) -> str:
     return f"/api/v1/uploads/{file_id}/confirm"
 
 
+def draft_counterparty_verdict_url(file_id: str) -> str:
+    return f"/api/v1/uploads/{file_id}/counterparty-verdict"
+
+
 def history_url() -> str:
     return "/api/v1/invoices/history"
 
@@ -224,6 +228,7 @@ async def seed_invoice(
     irpf_amount: str | None = None,
     tax_lines: list[dict] | None = None,
     confirmed_by: str | None = None,
+    own_tax_id_missing: bool = False,
 ) -> str:
     """Inserta una factura confirmada directamente (S2.6/S3.1), con los campos elegidos.
 
@@ -265,10 +270,10 @@ async def seed_invoice(
             " counterparty_tax_id, counterparty_tax_id_blind_index, counterparty_name, "
             " counterparty_cif_status, "
             " net_amount, tax_amount, total_amount, irpf_amount, is_test, balance_ok, snapshot, "
-            " status, confirmed_by, confirmed_at) "
+            " status, confirmed_by, confirmed_at, own_tax_id_missing) "
             "VALUES ($1,$2,$3,'recibida',$4::date,pgp_sym_encrypt($5,$15),$16,"
             " pgp_sym_encrypt($6,$15),$7,$8::numeric,$9::numeric,"
-            " $10::numeric,$11::numeric,$12,true,'{}'::jsonb,'confirmed',$13,$14) "
+            " $10::numeric,$11::numeric,$12,true,'{}'::jsonb,'confirmed',$13,$14,$17) "
             "RETURNING id",
             tenant_id,
             company_id,
@@ -286,6 +291,7 @@ async def seed_invoice(
             when,
             key,
             idx,
+            own_tax_id_missing,
         )
         invoice_id = str(row["id"])
         for line in tax_lines or []:

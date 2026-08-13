@@ -1,38 +1,39 @@
-// Ciclo de vida de la cámara (S2.2, C2/C3): pide la cámara trasera al montar; si no hay soporte,
-// se deniega el permiso, o falla por cualquier motivo, cae a "unavailable" (la pantalla de captura
-// usa entonces el selector de fichero nativo). Libera siempre el stream al desmontar.
+// Ciclo de vida de la cámara: solo solicita permiso tras una acción consciente. Libera el stream al
+// cerrar, repetir o desmontar, incluso si una petición tarda en responder.
 import { useEffect, useRef, useState } from 'react'
 
 const CAMERA_REQUEST_TIMEOUT_MS = 10_000
 
-export type CameraStatus = 'requesting' | 'active' | 'unavailable'
+export type CameraStatus = 'idle' | 'requesting' | 'active' | 'unavailable'
 
 export interface CameraStreamState {
   status: CameraStatus
   stream: MediaStream | null
   canRetry: boolean
   unavailableReason: 'insecure' | 'unavailable' | null
+  open: () => void
+  close: () => void
   retry: () => void
 }
 
 export function useCameraStream(): CameraStreamState {
-  const [status, setStatus] = useState<CameraStatus>('requesting')
+  const [status, setStatus] = useState<CameraStatus>('idle')
   const [stream, setStream] = useState<MediaStream | null>(null)
-  const [attempt, setAttempt] = useState(0)
+  const [attempt, setAttempt] = useState<number | null>(null)
   const [unavailableReason, setUnavailableReason] = useState<'insecure' | 'unavailable' | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const requestingRef = useRef(true)
+  const requestIdRef = useRef(0)
   const isSecure = window.isSecureContext !== false
   const canRetry = isSecure && Boolean(navigator.mediaDevices?.getUserMedia)
 
   useEffect(() => {
+    if (attempt === null) return undefined
     let cancelled = false
     let timedOut = false
 
     const stop = (media: MediaStream | null) => media?.getTracks().forEach((track) => track.stop())
     const timeout = window.setTimeout(() => {
       timedOut = true
-      requestingRef.current = false
       setUnavailableReason('unavailable')
       setStatus('unavailable')
     }, CAMERA_REQUEST_TIMEOUT_MS)
@@ -61,7 +62,7 @@ export function useCameraStream(): CameraStreamState {
           if (!(error instanceof DOMException) || !['OverconstrainedError', 'NotFoundError'].includes(error.name)) throw error
           media = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         }
-        if (cancelled || timedOut) {
+        if (cancelled || timedOut || requestIdRef.current !== attempt) {
           stop(media)
           return
         }
@@ -70,13 +71,12 @@ export function useCameraStream(): CameraStreamState {
         setStream(media)
         setStatus('active')
       } catch {
-        if (!cancelled && !timedOut) {
+        if (!cancelled && !timedOut && requestIdRef.current === attempt) {
           setUnavailableReason('unavailable')
           setStatus('unavailable')
         }
       } finally {
         window.clearTimeout(timeout)
-        requestingRef.current = false
       }
     })()
 
@@ -114,17 +114,26 @@ export function useCameraStream(): CameraStreamState {
     }
   }, [stream])
 
-  const retry = () => {
-    if (!canRetry || requestingRef.current) return
-    requestingRef.current = true
+  const close = () => {
+    requestIdRef.current += 1
     const previousStream = streamRef.current
     streamRef.current = null
     previousStream?.getTracks().forEach((track) => track.stop())
     setStream(null)
+    setAttempt(null)
     setUnavailableReason(null)
-    setStatus('requesting')
-    setAttempt((current) => current + 1)
+    setStatus('idle')
   }
 
-  return { status, stream, canRetry, unavailableReason, retry }
+  const open = () => {
+    if (!canRetry || status === 'requesting') return
+    close()
+    const nextAttempt = requestIdRef.current + 1
+    requestIdRef.current = nextAttempt
+    setUnavailableReason(null)
+    setStatus('requesting')
+    setAttempt(nextAttempt)
+  }
+
+  return { status, stream, canRetry, unavailableReason, open, close, retry: open }
 }

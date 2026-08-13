@@ -66,4 +66,7 @@ export const BLOCKING_REASONS = {
 export const WARNING_IMBALANCE = 'descuadre'
 
 /** Cuerpo tipado de `POST /uploads/{id}/confirm` (reutiliza el schema generado). */
-export type ConfirmBody = components['schemas']['ConfirmIn']
+export type ConfirmBody = components['schemas']['ConfirmIn'] & {
+  /** S6.10: trazabilidad de la aceptación explícita cuando falta el CIF de la empresa destino. */
+  own_tax_id_exception_accepted: boolean
+}
