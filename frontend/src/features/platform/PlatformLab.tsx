@@ -8,15 +8,16 @@
 // redimensionables/ordenables (2026-08-10, "todas las tablas de todas las URL"), mismo mecanismo
 // que `CompaniesPanel`/`InvoicesPanel`.
 import { getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 import { DataTableTh } from '../../shared/DataTableTh'
 import { formatCurrency, formatDateTime } from '../../shared/format'
 import { usePersistedTableState } from '../../shared/usePersistedTableState'
 import { InvoiceImageModal } from '../panel/InvoiceImageModal'
 import { useSession } from '../session/SessionProvider'
-import type { BenchmarkEntry, FieldComparison, LabDetail, LabInvoiceRow, TaxLineDict } from './labTypes'
+import type { FieldComparison, LabDetail, LabInvoiceRow, TaxLineDict } from './labTypes'
 import { useInvoiceLab } from './useInvoiceLab'
+import { useBenchmarkRanking } from './useBenchmarkRanking'
 import { useTenantInvoiceImage } from './useTenantInvoiceImage'
 import { useTenantInvoices } from './useTenantInvoices'
 import { useTenants } from './useTenants'
@@ -34,11 +35,13 @@ export function PlatformLab() {
   const [tenantId, setTenantId] = useState<string | null>(null)
   const [labFileId, setLabFileId] = useState<string | null>(null)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const imageRequestRef = useRef(0)
 
   const isAdminTech = user?.is_admin_tech ?? false
   const tenants = useTenants(isAdminTech)
   const invoices = useTenantInvoices(isAdminTech ? tenantId : null)
   const lab = useInvoiceLab(isAdminTech ? tenantId : null, labFileId)
+  const benchmark = useBenchmarkRanking(isAdminTech)
   const image = useTenantInvoiceImage()
 
   // Reglas de hooks de React: todos los hooks (incluidos los de la tabla) deben llamarse ANTES de
@@ -108,13 +111,54 @@ export function PlatformLab() {
 
   const handleView = (fileId: string) => {
     if (!tenantId) return
-    image.mutate({ tenantId, fileId }, { onSuccess: (url) => setImageUrl(url) })
+    const request = ++imageRequestRef.current
+    image.mutate({ tenantId, fileId }, {
+      onSuccess: (url) => {
+        if (imageRequestRef.current !== request) {
+          URL.revokeObjectURL(url)
+          return
+        }
+        setImageUrl(url)
+      },
+    })
   }
 
   const closeImage = () => {
+    imageRequestRef.current += 1
     if (imageUrl) URL.revokeObjectURL(imageUrl)
     setImageUrl(null)
     image.reset()
+  }
+
+  const closeLab = () => {
+    closeImage()
+    setLabFileId(null)
+  }
+
+  if (labFileId) {
+    return (
+      <section className="mx-auto max-w-6xl space-y-6 p-6 text-slate-100">
+        <button type="button" onClick={closeLab} className="text-sm text-emerald-400 underline">
+          Volver al resumen
+        </button>
+        <h1 className="text-xl font-semibold">Factura en laboratorio</h1>
+        {lab.isLoading && <p className="text-slate-400">Cargando laboratorio…</p>}
+        {lab.isError && (
+          <p role="alert" className="text-red-400">
+            No se pudo cargar el laboratorio de esta factura.
+          </p>
+        )}
+        {lab.data && (
+          <LabDetailView
+            detail={lab.data}
+            imageUrl={imageUrl}
+            imageLoading={image.isPending}
+            imageError={image.isError}
+            onLoadImage={() => handleView(labFileId)}
+          />
+        )}
+      </section>
+    )
   }
 
   return (
@@ -126,12 +170,15 @@ export function PlatformLab() {
         lectura, herramienta interna temporal.
       </p>
 
+      <BenchmarkSummary ranking={benchmark.data} isLoading={benchmark.isLoading} isError={benchmark.isError} />
+
       <label className="flex max-w-xs flex-col gap-1 text-sm text-slate-300">
         Tenant
         <select
           aria-label="Tenant"
           value={tenantId ?? ''}
           onChange={(e) => {
+            closeImage()
             setTenantId(e.target.value || null)
             setLabFileId(null)
           }}
@@ -195,7 +242,7 @@ export function PlatformLab() {
                       onClick={() => setLabFileId(row.uploaded_file_id)}
                       className="text-emerald-400 underline"
                     >
-                      Laboratorio
+                      Abrir laboratorio
                     </button>
                   </td>
                 </tr>
@@ -205,20 +252,135 @@ export function PlatformLab() {
         </div>
       )}
 
-      {labFileId && lab.isLoading && <p className="text-slate-400">Cargando laboratorio…</p>}
-      {labFileId && lab.isError && (
-        <p role="alert" className="text-red-400">
-          No se pudo cargar el laboratorio de esta factura.
-        </p>
-      )}
-      {labFileId && lab.data && (
-        <LabDetailModal detail={lab.data} onClose={() => setLabFileId(null)} />
-      )}
-
       {imageUrl && <InvoiceImageModal src={imageUrl} onClose={closeImage} />}
       {image.isError && (
         <p role="alert" className="text-sm text-red-400">
           No se pudo cargar la imagen de la factura.
+        </p>
+      )}
+    </section>
+  )
+}
+
+type BenchmarkRankingData = NonNullable<ReturnType<typeof useBenchmarkRanking>['data']>
+type FieldGroupRow = BenchmarkRankingData['by_field_group'][number]
+type CombinationRow = BenchmarkRankingData['by_combination'][number]
+
+function combinationKey(variant: string, engine: string) {
+  return `${variant}:${engine}`
+}
+
+function ratioLabel(ratio: number | null) {
+  return ratio === null ? 'Sin datos comparables todavía' : `${Math.round(ratio * 100)}%`
+}
+
+function BenchmarkSummary({
+  ranking,
+  isLoading,
+  isError,
+}: {
+  ranking: BenchmarkRankingData | undefined
+  isLoading: boolean
+  isError: boolean
+}) {
+  const [selectedField, setSelectedField] = useState('Todos los campos')
+  const fieldRows = ranking?.by_field_group ?? []
+  const combinations = ranking?.by_combination ?? []
+  const fields = [...new Set(fieldRows.map((row) => row.field_group))]
+  const displayed: Array<FieldGroupRow | (CombinationRow & { ratio: number | null })> =
+    selectedField === 'Todos los campos'
+      ? combinations.map((row) => ({ ...row, ratio: row.comparables === 0 ? null : row.aciertos / row.comparables }))
+      : fieldRows.filter((row) => row.field_group === selectedField)
+  const errors = new Map(combinations.map((row) => [combinationKey(row.variant, row.engine), row.errors]))
+  const engines = [...new Set(combinations.map((row) => row.engine))]
+  const variants = ['original', 'enhanced', 'clahe']
+
+  if (isLoading) return <p className="text-slate-400">Cargando comparativa real…</p>
+  if (isError) return <p role="alert" className="text-red-400">No se pudo cargar la comparativa real.</p>
+  if (!ranking || (fieldRows.length === 0 && combinations.length === 0)) {
+    return <p className="text-slate-400">Todavía no hay resultados. Lanza el lote desde Ranking OCR.</p>
+  }
+
+  return (
+    <section className="space-y-4 rounded-lg border border-slate-800 p-4">
+      <div>
+        <h2 className="font-semibold">Resumen de rendimiento real</h2>
+        <p className="text-sm text-slate-400">Solo resultados persistidos contra facturas confirmadas.</p>
+      </div>
+      <div className="flex flex-wrap gap-2" aria-label="Filtrar por campo">
+        {['Todos los campos', ...fields].map((field) => (
+          <button
+            key={field}
+            type="button"
+            onClick={() => setSelectedField(field)}
+            aria-pressed={selectedField === field}
+            className="rounded-full border border-slate-600 px-3 py-1 text-sm aria-pressed:border-emerald-500 aria-pressed:bg-emerald-600"
+          >
+            {field}
+          </button>
+        ))}
+      </div>
+      {fields.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {fields.map((field) => {
+            const rows = fieldRows.filter((row) => row.field_group === field)
+            const bestRatio = Math.max(...rows.map((row) => row.ratio ?? -1))
+            const winners = rows.filter((row) => row.ratio === bestRatio && row.ratio !== null)
+            return (
+              <article key={field} className="rounded border border-slate-700 p-3 text-sm">
+                <h3 className="font-medium">{field}</h3>
+                {winners.length === 0 ? (
+                  <p className="mt-1 text-slate-400">Sin datos comparables todavía.</p>
+                ) : (
+                  winners.map((winner) => (
+                    <p key={combinationKey(winner.variant, winner.engine)} className="mt-1 text-emerald-400">
+                      {winner.engine} ({winner.variant}): {winner.aciertos}/{winner.comparables}
+                    </p>
+                  ))
+                )}
+              </article>
+            )
+          })}
+        </div>
+      )}
+      <div data-testid="benchmark-heatmap" className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="text-slate-400">
+            <tr>
+              <th className="p-2">Motor</th>
+              {variants.map((variant) => <th key={variant} className="p-2">{variant}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {engines.map((engine) => (
+              <tr key={engine} className="border-t border-slate-800">
+                <th className="p-2 font-medium">{engine}</th>
+                {variants.map((variant) => {
+                  const row = displayed.find((entry) => entry.engine === engine && entry.variant === variant)
+                  const errorCount = errors.get(combinationKey(variant, engine)) ?? 0
+                  return (
+                    <td key={variant} className="p-2">
+                      {!row && errorCount > 0 ? (
+                        <span className="text-slate-400">Sin datos comparables todavía · {errorCount} errores</span>
+                      ) : !row ? '—' : (
+                        <span className={row.ratio === null ? 'text-slate-400' : row.ratio >= 0.8 ? 'text-emerald-400' : 'text-amber-400'}>
+                          {ratioLabel(row.ratio)} · {row.comparables} comparables{errorCount > 0 ? ` · ${errorCount} errores` : ''}
+                        </span>
+                      )}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {combinations.some((row) => row.errors > 0) && (
+        <p className="text-sm text-amber-400">
+          {combinations
+            .filter((row) => row.errors > 0)
+            .map((row) => `${row.engine}: ${row.errors} errores`)
+            .join(' · ')}
         </p>
       )}
     </section>
@@ -264,30 +426,10 @@ function TaxLinesList({ value }: { value: unknown }) {
 
 interface LabDetailProps {
   detail: LabDetail
-  onClose: () => void
-}
-
-// Panel lateral derecho (2026-08-09, corrección de Julio tras probar la primera versión centrada:
-// "en una ventana emergente comprobable o en una sidebar a la derecha, que eso sería incluso
-// mejor"), mismo `role="dialog"` que el resto de diálogos del proyecto (fondo oscuro, clic fuera
-// cierra), solo cambia la posición/anchura. `LabDetailView` no cambia por dentro: solo se envuelve.
-function LabDetailModal({ detail, onClose }: LabDetailProps) {
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Laboratorio de esta factura"
-      className="fixed inset-0 z-50 bg-black/60"
-      onClick={onClose}
-    >
-      <div
-        className="ml-auto h-full w-full max-w-2xl overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <LabDetailView detail={detail} onClose={onClose} />
-      </div>
-    </div>
-  )
+  imageUrl?: string | null
+  imageLoading?: boolean
+  imageError?: boolean
+  onLoadImage?: () => void
 }
 
 // S6.6 Área B: nombres de dominio (`invoicing`) traducidos a etiqueta legible. Un campo sin
@@ -308,12 +450,6 @@ const FIELD_COMPARISON_HEADER_LABELS: Record<string, string> = {
   column_2: 'Decidió el sistema',
   column_3: 'Confirmado',
   match: 'Acierto',
-}
-
-const RANKING_HEADER_LABELS: Record<string, string> = {
-  variant: 'Variante',
-  engine: 'Motor',
-  results: 'Acierto por campo',
 }
 
 /** Badge de acierto (S6.6 C6-C8): verde si coinciden, rojo si no, gris neutro si no es comparable
@@ -347,7 +483,9 @@ function matchSortKey(match: boolean | null): string {
   return match ? 'a-acierto' : 'c-fallo'
 }
 
-function LabDetailView({ detail, onClose }: LabDetailProps) {
+function LabDetailView({ detail, imageUrl, imageLoading = false, imageError = false, onLoadImage }: LabDetailProps) {
+  const [section, setSection] = useState<'photo' | 'reading-1' | 'reading-2' | 'reading-3' | 'ranking'>('reading-1')
+  const [benchmarkField, setBenchmarkField] = useState('Todos los campos')
   const fieldComparisonState = usePersistedTableState('lab-field-comparison-column-widths')
   const fieldComparisonColumns = useMemo<ColumnDef<FieldComparison, unknown>[]>(
     () => [
@@ -390,49 +528,55 @@ function LabDetailView({ detail, onClose }: LabDetailProps) {
   })
   const sortedFieldComparison = fieldComparisonTable.getRowModel().rows.map((r) => r.original)
 
-  const rankingState = usePersistedTableState('lab-ranking-column-widths')
-  const rankingColumns = useMemo<ColumnDef<BenchmarkEntry, unknown>[]>(
-    () => [
-      { id: 'variant', header: 'Variante', accessorFn: (r) => r.variant, size: 100, minSize: 32 },
-      { id: 'engine', header: 'Motor', accessorFn: (r) => r.engine, size: 160, minSize: 32 },
-      {
-        id: 'results',
-        header: 'Acierto por campo',
-        accessorFn: (r) => r.field_results.map((result) => `${result.field}:${result.match}`).join(','),
-        size: 280,
-        minSize: 32,
-      },
-    ],
-    [],
-  )
-  const rankingTable = useReactTable({
-    data: detail.ranking,
-    columns: rankingColumns,
-    state: {
-      columnSizing: rankingState.columnSizing,
-      columnSizingInfo: rankingState.columnSizingInfo,
-      sorting: rankingState.sorting,
-    },
-    onColumnSizingChange: rankingState.onColumnSizingChange,
-    onColumnSizingInfoChange: rankingState.onColumnSizingInfoChange,
-    onSortingChange: rankingState.setSorting,
-    columnResizeMode: 'onChange',
-    sortDescFirst: false,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  })
-  const sortedRanking = rankingTable.getRowModel().rows.map((r) => r.original)
+  const benchmarkFields = [
+    ...new Set([
+      ...detail.ranking.flatMap((entry) => entry.field_results.map((result) => result.field)),
+      'tax_lines',
+    ]),
+  ]
+  const benchmarkEngines = [...new Set(detail.ranking.map((entry) => entry.engine))].sort()
+  const benchmarkVariants = ['original', 'enhanced', 'clahe']
 
   return (
-    <div className="min-h-full space-y-6 border-l border-slate-700 bg-slate-800 p-4">
+    <div className="min-h-full space-y-6 bg-slate-800 p-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Laboratorio de esta factura</h2>
-        <button type="button" onClick={onClose} className="text-sm text-slate-400 underline">
-          Cerrar
-        </button>
+        <h2 className="text-lg font-semibold">Diagnóstico de factura</h2>
+      </div>
+      <div className="flex flex-wrap gap-2" aria-label="Sección del diagnóstico">
+        {[
+          ['photo', 'Foto'],
+          ['reading-1', 'Lectura 1'],
+          ['reading-2', 'Lectura 2'],
+          ['reading-3', 'Lectura 3'],
+          ['ranking', 'Comparativa IA'],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setSection(id as typeof section)}
+            aria-pressed={section === id}
+            className="rounded-full border border-slate-600 px-3 py-1 text-sm aria-pressed:border-emerald-500 aria-pressed:bg-emerald-600"
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      <section data-testid="lab-reading-1" className="space-y-2">
+      {section === 'photo' && (
+        <section className="space-y-3">
+          <h3 className="font-semibold text-slate-200">Foto original</h3>
+          {!imageUrl && !imageLoading && !imageError && (
+            <button type="button" onClick={onLoadImage} className="rounded border border-slate-600 px-3 py-2 text-sm text-slate-100">
+              Cargar foto
+            </button>
+          )}
+          {imageLoading && <p className="text-slate-400">Cargando foto…</p>}
+          {imageError && <p role="alert" className="text-red-400">No se pudo cargar la imagen de la factura.</p>}
+          {imageUrl && <img src={imageUrl} alt="Factura original" className="max-h-[70vh] max-w-full rounded border border-slate-700" />}
+        </section>
+      )}
+
+      {section === 'reading-1' && <section data-testid="lab-reading-1" className="space-y-2">
         <h3 className="font-semibold text-slate-200">Lectura 1 — lo que leyó la IA</h3>
         {detail.reading_1 ? (
           <>
@@ -449,9 +593,9 @@ function LabDetailView({ detail, onClose }: LabDetailProps) {
         ) : (
           <p className="text-slate-400">Sin lectura cruda disponible para esta factura.</p>
         )}
-      </section>
+      </section>}
 
-      <section data-testid="lab-reading-2" className="space-y-2">
+      {section === 'reading-2' && <section data-testid="lab-reading-2" className="space-y-2">
         <h3 className="font-semibold text-slate-200">
           Lectura 2 — tras los ajustes internos (reglas actuales)
         </h3>
@@ -498,9 +642,9 @@ function LabDetailView({ detail, onClose }: LabDetailProps) {
         ) : (
           <p className="text-slate-400">Sin lectura disponible para esta factura.</p>
         )}
-      </section>
+      </section>}
 
-      <section data-testid="lab-reading-3" className="space-y-2">
+      {section === 'reading-3' && <section data-testid="lab-reading-3" className="space-y-2">
         <h3 className="font-semibold text-slate-200">Lectura 3 — lo guardado tras tus cambios</h3>
         <ul className="space-y-1 text-sm text-slate-300">
           {scalarFields(detail.reading_3.invoice).map(([field, value]) => (
@@ -561,49 +705,65 @@ function LabDetailView({ detail, onClose }: LabDetailProps) {
             </tr>
           </tbody>
         </table>
-      </section>
+      </section>}
 
-      <section data-testid="lab-ranking" className="space-y-2">
+      {section === 'ranking' && <section data-testid="lab-ranking" className="space-y-2">
         <h3 className="font-semibold text-slate-200">Comparativa real de variantes y modelos</h3>
         {detail.ranking_available ? (
-          <table className="whitespace-nowrap text-left text-sm" style={{ tableLayout: 'fixed', width: rankingTable.getTotalSize() }}>
-            <thead className="text-slate-400">
-              {rankingTable.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <DataTableTh
-                      key={header.id}
-                      header={header}
-                      label={RANKING_HEADER_LABELS[header.id] ?? ''}
-                    />
-                  ))}
-                </tr>
+          <>
+            <div className="flex flex-wrap gap-2" aria-label="Campo de la comparativa">
+              {['Todos los campos', ...benchmarkFields].map((field) => (
+                <button
+                  key={field}
+                  type="button"
+                  onClick={() => setBenchmarkField(field)}
+                  aria-pressed={benchmarkField === field}
+                  className="rounded-full border border-slate-600 px-3 py-1 text-sm aria-pressed:border-emerald-500 aria-pressed:bg-emerald-600"
+                >
+                  {FIELD_LABELS[field] ?? (field === 'tax_lines' ? 'Tramos IVA' : field)}
+                </button>
               ))}
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {sortedRanking.map((row) => (
-                <tr key={`${row.variant}-${row.engine}`}>
-                  <td className="truncate p-1">{row.variant}</td>
-                  <td className="truncate p-1">{row.engine}</td>
-                  <td className="truncate p-1">
-                    {[...row.field_results, { field: 'tax_lines', match: row.tax_lines_matched }].map((result) => (
-                      <span key={result.field} className="mr-2 inline-flex gap-1">
-                        {FIELD_LABELS[result.field] ?? (result.field === 'tax_lines' ? 'Tramos IVA' : result.field)}
-                        <MatchBadge match={result.match} />
-                      </span>
-                    ))}
-                  </td>
+            </div>
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-slate-400">
+                <tr>
+                  <th className="p-2">Motor</th>
+                  {benchmarkVariants.map((variant) => <th key={variant} className="p-2">{variant}</th>)}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {benchmarkEngines.map((engine) => (
+                  <tr key={engine}>
+                    <th className="p-2 text-left font-medium">{engine}</th>
+                    {benchmarkVariants.map((variant) => {
+                      const entry = detail.ranking.find((candidate) => candidate.engine === engine && candidate.variant === variant)
+                      const results = entry
+                        ? [...entry.field_results, { field: 'tax_lines', match: entry.tax_lines_matched }]
+                            .filter((result) => benchmarkField === 'Todos los campos' || result.field === benchmarkField)
+                        : []
+                      return (
+                        <td key={variant} className="p-2">
+                          {!entry ? 'Sin resultado' : results.map((result) => (
+                            <span key={result.field} className="mr-2 inline-flex gap-1">
+                              {benchmarkField === 'Todos los campos' && `${FIELD_LABELS[result.field] ?? (result.field === 'tax_lines' ? 'Tramos IVA' : result.field)} `}
+                              <MatchBadge match={result.match} />
+                            </span>
+                          ))}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         ) : (
           <p className="text-slate-400">
             Sin datos de comparativa para esta factura (el experimento no estaba encendido cuando
             se procesó).
           </p>
         )}
-      </section>
+      </section>}
     </div>
   )
 }

@@ -103,6 +103,63 @@ beforeEach(() => {
 })
 
 describe('PlatformLab (S6.2)', () => {
+  it('S6.8 C1: abrir una factura usa una vista completa, no el diálogo lateral antiguo', async () => {
+    asUser(true)
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/platform/benchmark/ranking')) {
+        return Promise.resolve({ data: { by_field_group: [], by_combination: [] }, error: undefined })
+      }
+      if (path.includes('/platform/tenants') && !path.includes('/invoices')) {
+        return Promise.resolve({ data: TENANTS, error: undefined })
+      }
+      if (path.includes('/lab')) return Promise.resolve({ data: LAB_DETAIL, error: undefined })
+      if (path.includes('/invoices')) return Promise.resolve({ data: [INVOICE_ROW], error: undefined })
+      return Promise.resolve({ data: {}, error: undefined })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+
+    const tenant = await screen.findByLabelText(/tenant/i)
+    await screen.findByRole('option', { name: 'ILEX Asesoría' })
+    await user.selectOptions(tenant, 't-ilex')
+    await user.click(await screen.findByRole('button', { name: /abrir laboratorio/i }))
+
+    expect(await screen.findByRole('heading', { name: /factura en laboratorio/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /volver al resumen/i })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('S6.8 C5/C7/C8: el resumen ofrece pulsadores de campos y comunica sin datos o errores honestamente', async () => {
+    asUser(true)
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/platform/benchmark/ranking')) {
+        return Promise.resolve({
+          data: {
+            by_field_group: [
+              { field_group: 'CIF/NIF', variant: 'enhanced', engine: 'gemini-3-flash', aciertos: 9, comparables: 10, ratio: 0.9 },
+              { field_group: 'Nº factura', variant: 'original', engine: 'gemini-3-flash', aciertos: 0, comparables: 0, ratio: null },
+            ],
+            by_combination: [
+              { variant: 'enhanced', engine: 'gemini-3-flash', executions: 10, errors: 0, aciertos: 9, comparables: 10, avg_duration_ms: 1200 },
+              { variant: 'enhanced', engine: 'claude-vertex', executions: 10, errors: 10, aciertos: 0, comparables: 0, avg_duration_ms: null },
+            ],
+          },
+          error: undefined,
+        })
+      }
+      if (path.includes('/platform/tenants')) return Promise.resolve({ data: TENANTS, error: undefined })
+      return Promise.resolve({ data: [], error: undefined })
+    })
+    const user = userEvent.setup()
+    renderScreen()
+
+    await screen.findByRole('button', { name: 'CIF/NIF' })
+    await user.click(screen.getByRole('button', { name: /nº factura/i }))
+
+    expect(screen.getAllByText(/sin datos comparables todavía/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/claude-vertex.*10 errores/i)).toBeInTheDocument()
+    expect(screen.getByTestId('benchmark-heatmap')).toBeInTheDocument()
+  })
   it('C1: un platform_admin sin el flag ve "sin acceso", nunca el selector de tenants', () => {
     asUser(false)
 
@@ -134,7 +191,7 @@ describe('PlatformLab (S6.2)', () => {
     const row = await screen.findByText('Proveedor SA')
     const tr = row.closest('tr') as HTMLElement
     expect(within(tr).getByRole('button', { name: 'Ver' })).toBeInTheDocument()
-    expect(within(tr).getByRole('button', { name: 'Laboratorio' })).toBeInTheDocument()
+    expect(within(tr).getByRole('button', { name: 'Abrir laboratorio' })).toBeInTheDocument()
   })
 
   it('S6.6 C11/S6.2 C13: la tabla unificada se pinta siempre (sin mensaje "sin correcciones" aparte) y la comparativa sigue avisando cuando no hay datos', async () => {
@@ -157,20 +214,18 @@ describe('PlatformLab (S6.2)', () => {
     const select = await screen.findByLabelText(/tenant/i)
     await screen.findByRole('option', { name: 'ILEX Asesoría' }) // espera a que carguen los tenants
     await user.selectOptions(select, 't-ilex')
-    await user.click(await screen.findByRole('button', { name: 'Laboratorio' }))
+    await user.click(await screen.findByRole('button', { name: 'Abrir laboratorio' }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'Laboratorio de esta factura' })
+    await screen.findByRole('heading', { name: 'Factura en laboratorio' })
+    await user.click(screen.getByRole('button', { name: 'Lectura 3' }))
     // La tabla unificada muestra el campo con acierto (total_amount) y también "Tramos de IVA".
     await waitFor(() => {
-      expect(within(dialog).getByText('Total')).toBeInTheDocument()
+      expect(screen.getByText('Total')).toBeInTheDocument()
     })
-    expect(within(dialog).getByText('Tramos de IVA')).toBeInTheDocument()
-    expect(within(dialog).queryByText(/sin correcciones/i)).not.toBeInTheDocument()
-    expect(within(dialog).getByText(/sin datos de comparativa/i)).toBeInTheDocument()
-    // Las 3 lecturas están presentes (aunque sea con datos mínimos del mock).
-    expect(within(dialog).getByTestId('lab-reading-1')).toBeInTheDocument()
-    expect(within(dialog).getByTestId('lab-reading-2')).toBeInTheDocument()
-    expect(within(dialog).getByTestId('lab-reading-3')).toBeInTheDocument()
+    expect(screen.getByText('Tramos de IVA')).toBeInTheDocument()
+    expect(screen.queryByText(/sin correcciones/i)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Comparativa IA' }))
+    expect(screen.getByText(/sin datos de comparativa/i)).toBeInTheDocument()
   })
 
   it('S6.6 C6-C8: el badge de acierto es verde si coincide, rojo si no, gris si no es comparable', async () => {
@@ -207,20 +262,20 @@ describe('PlatformLab (S6.2)', () => {
     const select = await screen.findByLabelText(/tenant/i)
     await screen.findByRole('option', { name: 'ILEX Asesoría' })
     await user.selectOptions(select, 't-ilex')
-    await user.click(await screen.findByRole('button', { name: 'Laboratorio' }))
-
-    const dialog = await screen.findByRole('dialog', { name: 'Laboratorio de esta factura' })
-    await within(dialog).findAllByLabelText('fallo')
-    expect(within(dialog).getAllByLabelText('fallo')).toHaveLength(1)
-    expect(within(dialog).getAllByLabelText('acierto').length).toBeGreaterThanOrEqual(1)
-    expect(within(dialog).getAllByLabelText('no comparable')).toHaveLength(1)
+    await user.click(await screen.findByRole('button', { name: 'Abrir laboratorio' }))
+    await screen.findByRole('heading', { name: 'Factura en laboratorio' })
+    await user.click(screen.getByRole('button', { name: 'Lectura 3' }))
+    await screen.findAllByLabelText('fallo')
+    expect(screen.getAllByLabelText('fallo')).toHaveLength(1)
+    expect(screen.getAllByLabelText('acierto').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByLabelText('no comparable')).toHaveLength(1)
     // El campo corregido lleva un fondo distinto (C7: "el ojo va solo a lo que falló").
-    const totalCells = within(dialog).getAllByText('Total')
+    const totalCells = screen.getAllByText('Total')
     const totalRow = totalCells[totalCells.length - 1].closest('tr') as HTMLElement
     expect(totalRow.className).toContain('bg-red-950')
   })
 
-  it('el laboratorio se abre en una ventana emergente, no debajo de la tabla, y se puede cerrar', async () => {
+  it('el laboratorio se abre a pantalla completa y volver conserva el tenant elegido', async () => {
     asUser(true)
     getMock.mockImplementation((path: string) => {
       if (path.includes('/platform/tenants') && !path.includes('/invoices')) {
@@ -240,16 +295,12 @@ describe('PlatformLab (S6.2)', () => {
     const select = await screen.findByLabelText(/tenant/i)
     await screen.findByRole('option', { name: 'ILEX Asesoría' })
     await user.selectOptions(select, 't-ilex')
-    // Antes de abrirlo, no hay ningún diálogo en pantalla.
+    await user.click(await screen.findByRole('button', { name: 'Abrir laboratorio' }))
+    expect(await screen.findByRole('heading', { name: 'Factura en laboratorio' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
-    await user.click(await screen.findByRole('button', { name: 'Laboratorio' }))
-
-    const dialog = await screen.findByRole('dialog', { name: 'Laboratorio de esta factura' })
-    expect(dialog).toBeInTheDocument()
-
-    await user.click(within(dialog).getByRole('button', { name: 'Cerrar' }))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: 'Volver al resumen' })[0])
+    expect(await screen.findByLabelText('Tenant')).toHaveValue('t-ilex')
   })
 
   it('S6.7 C21: la comparativa muestra el acierto real por variante y motor, no el ranking histórico', async () => {
@@ -292,13 +343,14 @@ describe('PlatformLab (S6.2)', () => {
     const select = await screen.findByLabelText(/tenant/i)
     await screen.findByRole('option', { name: 'ILEX Asesoría' }) // espera a que carguen los tenants
     await user.selectOptions(select, 't-ilex')
-    await user.click(await screen.findByRole('button', { name: 'Laboratorio' }))
-
+    await user.click(await screen.findByRole('button', { name: 'Abrir laboratorio' }))
+    await screen.findByRole('heading', { name: 'Factura en laboratorio' })
+    await user.click(screen.getByRole('button', { name: 'Comparativa IA' }))
     expect(await screen.findByText('gemini-3-flash')).toBeInTheDocument()
     expect(screen.getByText('mistral-ocr-4')).toBeInTheDocument()
     expect(screen.getByText('clahe')).toBeInTheDocument()
     expect(screen.getByText('original')).toBeInTheDocument()
-    expect(screen.getAllByText('Tramos IVA')).toHaveLength(2)
+    expect(screen.getAllByText('Tramos IVA')).toHaveLength(3)
     expect(screen.queryByText(/sin datos de comparativa/i)).not.toBeInTheDocument()
   })
 
@@ -375,18 +427,18 @@ describe('PlatformLab (S6.2)', () => {
     const select = await screen.findByLabelText(/tenant/i)
     await screen.findByRole('option', { name: 'ILEX Asesoría' })
     await user.selectOptions(select, 't-ilex')
-    await user.click(await screen.findByRole('button', { name: 'Laboratorio' }))
+    await user.click(await screen.findByRole('button', { name: 'Abrir laboratorio' }))
+    await screen.findByRole('heading', { name: 'Factura en laboratorio' })
+    await user.click(screen.getByRole('button', { name: 'Lectura 3' }))
+    await user.click(screen.getByRole('button', { name: 'Campo' }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'Laboratorio de esta factura' })
-    await user.click(within(dialog).getByRole('button', { name: 'Campo' }))
-
-    const rows = within(dialog).getAllByRole('row').filter((r) => within(r).queryAllByRole('cell').length > 0)
+    const rows = screen.getAllByRole('row').filter((r) => within(r).queryAllByRole('cell').length > 0)
     const fields = rows.map((row) => within(row).getAllByRole('cell')[0].textContent)
     // "Tramos de IVA" es una fila manual, siempre al final, ajena al orden de los campos (C9).
     expect(fields).toEqual(['alfa_field', 'zeta_field', 'Tramos de IVA'])
   })
 
-  it('2026-08-10: la comparativa de benchmark se puede ordenar por motor', async () => {
+  it('S6.8 C11: la comparativa por factura es una matriz de motor por las tres variantes', async () => {
     asUser(true)
     getMock.mockImplementation((path: string) => {
       if (path.includes('/platform/tenants') && !path.includes('/invoices')) {
@@ -416,13 +468,14 @@ describe('PlatformLab (S6.2)', () => {
     const select = await screen.findByLabelText(/tenant/i)
     await screen.findByRole('option', { name: 'ILEX Asesoría' })
     await user.selectOptions(select, 't-ilex')
-    await user.click(await screen.findByRole('button', { name: 'Laboratorio' }))
-
-    const dialog = await screen.findByRole('dialog', { name: 'Laboratorio de esta factura' })
+    await user.click(await screen.findByRole('button', { name: 'Abrir laboratorio' }))
+    await screen.findByRole('heading', { name: 'Factura en laboratorio' })
+    await user.click(screen.getByRole('button', { name: 'Comparativa IA' }))
     await screen.findByText('b-engine')
-    await user.click(within(dialog).getByRole('button', { name: 'Motor' }))
-
     const engines = screen.getAllByText(/-engine$/).map((el) => el.textContent)
     expect(engines).toEqual(['a-engine', 'b-engine'])
+    expect(screen.getByRole('columnheader', { name: 'original' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'enhanced' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'clahe' })).toBeInTheDocument()
   })
 })

@@ -42,6 +42,7 @@ export function CaptureScreen({ onUploaded }: Props) {
   const [reviewUrl, setReviewUrl] = useState<string | null>(null)
   const [processing, setProcessing] = useState(false)
   const [captureError, setCaptureError] = useState<string | null>(null)
+  const [videoReady, setVideoReady] = useState(false)
 
   const companies = useCompanyOptions({ enabled: role === 'tenant_admin' })
   const upload = useUploadCapture()
@@ -53,8 +54,14 @@ export function CaptureScreen({ onUploaded }: Props) {
   })
 
   useEffect(() => {
+    setVideoReady(false)
     if (videoRef.current) videoRef.current.srcObject = camera.stream
   }, [camera.stream])
+
+  const markVideoReady = () => {
+    const video = videoRef.current
+    setVideoReady(Boolean(video && video.videoWidth > 0 && video.videoHeight > 0))
+  }
 
   // Recorta/normaliza la captura de CÁMARA (auto o manual) a JPEG. El fallback de fichero (C3) no
   // pasa por aquí: ya deja `reviewBlob` listo él mismo en `handleFileSelected`, sin frame que
@@ -86,9 +93,9 @@ export function CaptureScreen({ onUploaded }: Props) {
   const handleManualCapture = async () => {
     const frame = grabVideoFrame(videoRef.current as HTMLVideoElement)
     if (!frame) {
-      // La cámara todavía no ha entregado ningún frame real (vídeo aún cargando metadatos) —
-      // nunca se despacha una captura sin datos que procesar (hallazgo de auditoría de seguridad).
-      setCaptureError('La cámara todavía se está preparando. Espera un momento e inténtalo de nuevo.')
+      // Defensa adicional ante una revocación entre habilitar el botón y el clic: nunca se procesa
+      // un frame vacío, aunque el navegador deje de entregar píxeles justo en ese instante.
+      setVideoReady(false)
       return
     }
     setCaptureError(null)
@@ -177,6 +184,14 @@ export function CaptureScreen({ onUploaded }: Props) {
         className="sr-only"
       />
     </label>
+  )
+
+  const CameraProblem = (
+    <p className="text-slate-400">
+      {camera.unavailableReason === 'insecure'
+        ? 'La cámara requiere una conexión segura. Puedes subir una foto desde tu dispositivo.'
+        : 'No se pudo acceder a la cámara. Elige o toma una foto con tu dispositivo.'}
+    </p>
   )
 
   const DirectionSelector = (
@@ -300,19 +315,33 @@ export function CaptureScreen({ onUploaded }: Props) {
         </p>
       )}
 
-      {camera.status === 'requesting' && <p className="text-slate-400">Pidiendo acceso a la cámara…</p>}
+      {camera.status === 'requesting' && (
+        <div className="space-y-3">
+          <p className="text-slate-400">Pidiendo acceso a la cámara…</p>
+          {FilePickerButton}
+        </div>
+      )}
 
       {camera.status === 'active' && (
         <div className="space-y-3">
           <div className="rounded-lg border-4 border-emerald-500/50 p-1">
-            <video ref={videoRef} autoPlay playsInline muted className="w-full rounded" />
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              onLoadedData={markVideoReady}
+              onLoadedMetadata={markVideoReady}
+              className="w-full rounded"
+            />
           </div>
           <button
             type="button"
             onClick={() => void handleManualCapture()}
-            className="w-full rounded-md bg-emerald-600 px-4 py-4 text-lg font-semibold text-white"
+            disabled={!videoReady}
+            className="w-full rounded-md bg-emerald-600 px-4 py-4 text-lg font-semibold text-white disabled:opacity-40"
           >
-            Tomar foto
+            {videoReady ? 'Tomar foto' : 'Preparando cámara…'}
           </button>
           {FilePickerButton}
         </div>
@@ -320,9 +349,16 @@ export function CaptureScreen({ onUploaded }: Props) {
 
       {camera.status === 'unavailable' && (
         <div className="space-y-3">
-          <p className="text-slate-400">
-            No se pudo acceder a la cámara. Elige o toma una foto con tu dispositivo.
-          </p>
+          {CameraProblem}
+          {camera.canRetry && (
+            <button
+              type="button"
+              onClick={camera.retry}
+              className="rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100 hover:bg-slate-800"
+            >
+              Reintentar cámara
+            </button>
+          )}
           {FilePickerButton}
         </div>
       )}

@@ -3,7 +3,7 @@
 // `useUploadCapture` corren de verdad contra un cliente `api` mockeado, mismo patrón que el resto
 // del proyecto.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
@@ -71,7 +71,7 @@ const CORNERS = [
   { x: 1, y: 9 },
 ]
 
-function renderScreen(onUploaded = vi.fn()) {
+function renderScreen(onUploaded = vi.fn(), cameraReady = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <MemoryRouter>
@@ -80,6 +80,16 @@ function renderScreen(onUploaded = vi.fn()) {
       </QueryClientProvider>
     </MemoryRouter>,
   )
+  if (cameraReady) {
+    const video = document.querySelector('video')
+    if (video) {
+      Object.defineProperties(video, {
+        videoWidth: { configurable: true, value: 640 },
+        videoHeight: { configurable: true, value: 480 },
+      })
+      fireEvent.loadedData(video)
+    }
+  }
   return { onUploaded }
 }
 
@@ -96,7 +106,7 @@ beforeEach(() => {
   fileToJpegBlobMock.mockReset()
   fileToJpegBlobMock.mockResolvedValue(FAKE_BLOB)
   useSessionMock.mockReturnValue(TENANT_ADMIN_SESSION)
-  useCameraStreamMock.mockReturnValue({ status: 'active', stream: null })
+  useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, retry: vi.fn() })
   getMock.mockImplementation((path: string) => {
     if (path === '/api/v1/companies') {
       return Promise.resolve({ data: [{ id: 'c1', name: 'Cliente SL' }], error: undefined })
@@ -114,7 +124,7 @@ describe('CaptureScreen (S2.2)', () => {
   })
 
   it('C3: sin cámara disponible, muestra el selector de fichero nativo', () => {
-    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null })
+    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null, canRetry: true, unavailableReason: 'unavailable', retry: vi.fn() })
     renderScreen()
 
     expect(screen.queryByRole('button', { name: 'Tomar foto' })).not.toBeInTheDocument()
@@ -141,7 +151,7 @@ describe('CaptureScreen (S2.2)', () => {
   })
 
   it('C3: elegir un fichero del selector nativo normaliza a JPEG y lleva a la revisión', async () => {
-    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null })
+    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null, canRetry: true, unavailableReason: 'unavailable', retry: vi.fn() })
     renderScreen()
     const user = userEvent.setup()
     const file = new File(['contenido'], 'foto.heic', { type: 'image/heic' })
@@ -158,7 +168,7 @@ describe('CaptureScreen (S2.2)', () => {
     // ficheros que no declaran un MIME de imagen — pero eso no garantiza que el navegador SEPA
     // decodificarlo de verdad (p. ej. un HEIC corrupto, o un formato que ese navegador no soporta):
     // de ahí que `fileToJpegBlob` (no el tipo declarado) sea la fuente de verdad del rechazo.
-    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null })
+    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null, canRetry: true, unavailableReason: 'unavailable', retry: vi.fn() })
     fileToJpegBlobMock.mockRejectedValueOnce(new Error('The source image cannot be decoded'))
     renderScreen()
     const user = userEvent.setup()
@@ -170,16 +180,48 @@ describe('CaptureScreen (S2.2)', () => {
     expect(screen.queryByRole('heading', { name: 'Revisar foto' })).not.toBeInTheDocument()
   })
 
-  it('C7: pulsar "Tomar foto" antes de que la cámara esté lista avisa, sin capturar nada', async () => {
+  it('C7: antes de que la cámara esté lista no permite capturar ni procesar nada', async () => {
     grabVideoFrameMock.mockReturnValue(null)
-    renderScreen()
+    renderScreen(vi.fn(), false)
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+    await user.click(screen.getByRole('button', { name: /preparando cámara/i }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/todavía se está preparando/i)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Revisar foto' })).not.toBeInTheDocument()
     expect(processCapturedFrameMock).not.toHaveBeenCalled()
+  })
+
+  it('S6.9 C2: mientras el vídeo no tiene frame, la captura queda deshabilitada y explica que prepara la cámara', () => {
+    grabVideoFrameMock.mockReturnValue(null)
+    renderScreen(vi.fn(), false)
+
+    expect(screen.getByRole('button', { name: /preparando cámara/i })).toBeDisabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('S6.9 C4: sin cámara, ofrece reintentar además del selector de archivo', () => {
+    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null, canRetry: true, unavailableReason: 'unavailable', retry: vi.fn() })
+    renderScreen()
+
+    expect(screen.getByRole('button', { name: /reintentar cámara/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/elige o toma una foto/i)).toBeInTheDocument()
+  })
+
+  it('S6.9 C4: mientras el navegador pide permiso, mantiene disponible el selector de archivo', () => {
+    useCameraStreamMock.mockReturnValue({ status: 'requesting', stream: null, canRetry: true, unavailableReason: null, retry: vi.fn() })
+    renderScreen()
+
+    expect(screen.getByText(/pidiendo acceso a la cámara/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/elige o toma una foto/i)).toBeInTheDocument()
+  })
+
+  it('S6.9 §5: en conexión no segura explica el requisito y no ofrece reintento', () => {
+    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null, canRetry: false, unavailableReason: 'insecure', retry: vi.fn() })
+    renderScreen()
+
+    expect(screen.getByText(/requiere una conexión segura/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /reintentar cámara/i })).not.toBeInTheDocument()
   })
 
   it('§5: user sin empresa asignada nunca llega a ver la cámara ni el fallback de fichero', () => {
