@@ -761,3 +761,14 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
   Postgres/Redis reales; `ruff`/`mypy` verdes; 320 pruebas frontend, `tsc` y build verdes. La suite backend
   completa llega a 85 tests verdes y se detiene únicamente en los 8 tests de backup porque este host no tiene
   `pg_dump`/`pg_restore`; no es regresión de S6.10. Prueba manual Android/iPhone sigue obligatoria.
+
+### 11.16 S6.11 — Captura directa desde cámara completa (implementada, 2026-08-13)
+
+- **Decisión de flujo de Julio:** el panel inicial conserva visibles Recibida/Emitida, "Tomar foto" y "Subir
+  archivo". "Tomar foto" abre la cámara en pantalla completa con guía A4 grande; "Capturar foto" apaga la
+  cámara, normaliza y sube inmediatamente, sin revisión intermedia ni botón "Usar esta foto". Al aceptar la
+  API, muestra "Procesando factura..." y navega a comprobación, que ya espera el OCR de forma segura.
+- Un `tenant_admin` debe elegir empresa antes de abrir cámara o selector; un `user` conserva la empresa fija.
+  Los resultados asíncronos tardíos no pueden sustituir una captura posterior ni subir tras desmontar. 310
+  pruebas frontend, `tsc`, lint sin errores y build verdes; auditoría adversarial sin bloqueantes. Pendiente
+  obligatorio: prueba manual Android/iPhone real.
