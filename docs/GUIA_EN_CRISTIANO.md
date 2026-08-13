@@ -1146,6 +1146,13 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   seguridad. Pasaron las pruebas de aislamiento entre asesorías, 10 pruebas backend nuevas contra bases reales
   y las 320 pruebas del frontend. Queda probar físicamente la cámara en Android y iPhone.
 
+- **Flujo final de hacer una foto (13/08/2026):** Julio ajustó el recorrido para que se parezca a una cámara
+  normal y sea más rápido. En la pantalla de captura se elige si la factura es recibida o emitida y se pulsa
+  "Tomar foto". Solo entonces se abre la cámara ocupando toda la pantalla, con un marco grande para acercar la
+  factura. Dentro se pulsa "Capturar foto" y la aplicación la manda directamente a leer: no hay una pantalla
+  extra para aprobar la propia foto. Mientras trabaja aparece "Procesando factura..." y después llega la
+  pantalla donde se revisan los datos que entendió la IA. Subir un archivo sigue el mismo recorrido directo.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

@@ -1,7 +1,5 @@
-// Tests de comportamiento de `CaptureScreen` (S2.2, C1-C3/C7-C14). Cámara, grabado de frames y
-// análisis mockeados (jsdom no reproduce vídeo/canvas real, ver spec §6); `useCompanyOptions`/
-// `useUploadCapture` corren de verdad contra un cliente `api` mockeado, mismo patrón que el resto
-// del proyecto.
+// Comportamientos observables de la captura directa S6.11. Canvas y cámara se
+// simulan porque jsdom no proporciona píxeles ni un MediaStream real.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -17,12 +15,8 @@ import { fileToJpegBlob } from './normalizeToJpeg'
 import { processCapturedFrame } from './processCapture'
 import { useCameraStream } from './useCameraStream'
 
-vi.mock('../../api/client', () => ({
-  api: { GET: vi.fn(), POST: vi.fn() },
-}))
-vi.mock('../session/SessionProvider', () => ({
-  useSession: vi.fn(),
-}))
+vi.mock('../../api/client', () => ({ api: { GET: vi.fn(), POST: vi.fn() } }))
+vi.mock('../session/SessionProvider', () => ({ useSession: vi.fn() }))
 vi.mock('./useCameraStream')
 vi.mock('./grabVideoFrame')
 vi.mock('./analyzeFrame')
@@ -44,50 +38,35 @@ const TENANT_ADMIN_SESSION = {
   login: vi.fn(),
   logout: vi.fn(),
 }
-
 const USER_SESSION = {
   status: 'authenticated' as const,
-  user: {
-    id: 'u1',
-    email: 'raul@ilex.es',
-    role: 'user' as const,
-    tenant: 'ilex',
-    company: { id: 'c1', name: 'Cliente SL' },
-    is_admin_tech: false,
-  },
+  user: { id: 'u1', email: 'raul@ilex.es', role: 'user' as const, tenant: 'ilex', company: { id: 'c1', name: 'Cliente SL' }, is_admin_tech: false },
   login: vi.fn(),
   logout: vi.fn(),
 }
-
 const FAKE_FRAME = { width: 10, height: 10, data: new Uint8ClampedArray(400) } as ImageData
 const FAKE_BLOB = new Blob(['fake-jpeg'], { type: 'image/jpeg' })
-const CORNERS = [
-  { x: 1, y: 1 },
-  { x: 9, y: 1 },
-  { x: 9, y: 9 },
-  { x: 1, y: 9 },
-]
+const CORNERS = [{ x: 1, y: 1 }, { x: 9, y: 1 }, { x: 9, y: 9 }, { x: 1, y: 9 }]
 
 function renderScreen(onUploaded = vi.fn(), cameraReady = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(
-    <MemoryRouter>
-      <QueryClientProvider client={client}>
-        <CaptureScreen onUploaded={onUploaded} />
-      </QueryClientProvider>
-    </MemoryRouter>,
-  )
+  const view = render(<MemoryRouter><QueryClientProvider client={client}><CaptureScreen onUploaded={onUploaded} /></QueryClientProvider></MemoryRouter>)
   if (cameraReady) {
     const video = document.querySelector('video')
     if (video) {
-      Object.defineProperties(video, {
-        videoWidth: { configurable: true, value: 640 },
-        videoHeight: { configurable: true, value: 480 },
-      })
+      Object.defineProperties(video, { videoWidth: { configurable: true, value: 640 }, videoHeight: { configurable: true, value: 480 } })
       fireEvent.loadedData(video)
     }
   }
-  return { onUploaded }
+  return { onUploaded, unmount: view.unmount }
+}
+
+function successfulUpload() {
+  postMock.mockResolvedValueOnce({
+    data: { id: 'file-abc', company_id: 'c1', content_type: 'image/jpeg', size_bytes: 10, sha256: 'x', status: 'pending_ocr', scan_status: 'clean', created_at: '2026-08-13T00:00:00Z' },
+    error: undefined,
+    response: { status: 201 },
+  })
 }
 
 beforeEach(() => {
@@ -102,295 +81,165 @@ beforeEach(() => {
   fileToJpegBlobMock.mockReset()
   fileToJpegBlobMock.mockResolvedValue(FAKE_BLOB)
   useSessionMock.mockReturnValue(TENANT_ADMIN_SESSION)
-  useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
-  getMock.mockImplementation((path: string) => {
-    if (path === '/api/v1/companies') {
-      return Promise.resolve({ data: [{ id: 'c1', name: 'Cliente SL' }], error: undefined })
-    }
-    throw new Error(`ruta GET no mockeada: ${path}`)
-  })
+  useCameraStreamMock.mockReturnValue({ status: 'idle', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+  getMock.mockResolvedValue({ data: [{ id: 'c1', name: 'Cliente SL' }], error: undefined })
 })
 
-describe('CaptureScreen (S2.2)', () => {
-  it('S6.10 C2: entrar no pide la cámara y ofrece abrirla o subir un archivo', () => {
+describe('CaptureScreen (S6.11)', () => {
+  it('C1: el panel inicial conserva dirección, Tomar foto y Subir archivo sin pedir la cámara', () => {
     const open = vi.fn()
     useCameraStreamMock.mockReturnValue({ status: 'idle', stream: null, canRetry: true, unavailableReason: null, open, close: vi.fn(), retry: vi.fn() })
     renderScreen()
 
-    expect(screen.getByRole('button', { name: 'Abrir cámara' })).toBeInTheDocument()
-    expect(screen.getByLabelText(/elige o toma una foto/i)).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Recibida' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Emitida' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tomar foto' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Subir archivo' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir cámara' })).not.toBeInTheDocument()
     expect(open).not.toHaveBeenCalled()
   })
 
-  it('S6.10 C3: la cámara activa se muestra en una capa completa con marco guía y sin la captura detrás', () => {
+  it('C2: tras elegir empresa, Tomar foto solicita la cámara y muestra el overlay completo', async () => {
+    const open = vi.fn()
+    useCameraStreamMock.mockReturnValue({ status: 'idle', stream: null, canRetry: true, unavailableReason: null, open, close: vi.fn(), retry: vi.fn() })
+    renderScreen()
+    const user = userEvent.setup()
+
+    await screen.findByRole('option', { name: 'Cliente SL' })
+    await user.selectOptions(screen.getByLabelText('Empresa'), 'c1')
+    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+
+    expect(open).toHaveBeenCalledOnce()
+  })
+
+  it('C2: tenant_admin no abre la cámara hasta elegir la empresa autorizada', async () => {
+    const open = vi.fn()
+    useCameraStreamMock.mockReturnValue({ status: 'idle', stream: null, canRetry: true, unavailableReason: null, open, close: vi.fn(), retry: vi.fn() })
+    renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+
+    expect(open).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent(/elige una empresa/i)
+  })
+
+  it('C2: la cámara activa ocupa la pantalla y ofrece guía A4, Capturar foto y Cerrar cámara', () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
     useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
     renderScreen()
 
-    expect(screen.getByRole('dialog', { name: 'Cámara para capturar factura' })).toHaveClass('fixed')
+    expect(screen.getByRole('dialog', { name: 'Cámara para capturar factura' })).toHaveClass('fixed', 'inset-0')
     expect(screen.getByTestId('camera-guide-frame')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Capturar foto' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cerrar cámara' })).toBeInTheDocument()
-    expect(screen.getByRole('dialog', { name: 'Cámara para capturar factura' })).toHaveClass('inset-0')
   })
 
-  it('C3: sin cámara disponible, muestra el selector de fichero nativo', () => {
-    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null, canRetry: true, unavailableReason: 'unavailable', open: vi.fn(), close: vi.fn(), retry: vi.fn() })
-    renderScreen()
-
-    expect(screen.queryByRole('button', { name: 'Tomar foto' })).not.toBeInTheDocument()
-    expect(screen.getByText(/no se pudo acceder a la cámara/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/elige o toma una foto/i)).toBeInTheDocument()
-  })
-
-  it('2026-08-02 (Julio): con cámara activa, "Subir archivo" también está disponible, no solo "Tomar foto"', async () => {
-    renderScreen()
-    const user = userEvent.setup()
-    const file = new File(['contenido'], 'foto.jpg', { type: 'image/jpeg' })
-
-    expect(screen.getByRole('button', { name: 'Tomar foto' })).toBeInTheDocument()
-    await user.upload(screen.getByLabelText(/elige o toma una foto/i), file)
-
-    await waitFor(() => expect(fileToJpegBlobMock).toHaveBeenCalledWith(file))
-    expect(await screen.findByRole('heading', { name: 'Revisar foto' })).toBeInTheDocument()
-  })
-
-  it('2026-08-02 (Julio): "Subir archivo" abre el selector de ficheros del dispositivo, no la cámara del móvil directamente', () => {
-    renderScreen()
-
-    expect(screen.getByLabelText(/elige o toma una foto/i)).not.toHaveAttribute('capture')
-  })
-
-  it('C3: elegir un fichero del selector nativo normaliza a JPEG y lleva a la revisión', async () => {
-    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null, canRetry: true, unavailableReason: 'unavailable', open: vi.fn(), close: vi.fn(), retry: vi.fn() })
-    renderScreen()
-    const user = userEvent.setup()
-    const file = new File(['contenido'], 'foto.heic', { type: 'image/heic' })
-
-    await user.upload(screen.getByLabelText(/elige o toma una foto/i), file)
-
-    await waitFor(() => expect(fileToJpegBlobMock).toHaveBeenCalledWith(file))
-    expect(await screen.findByRole('heading', { name: 'Revisar foto' })).toBeInTheDocument()
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  })
-
-  it('C3: un fichero que no se puede decodificar muestra un aviso claro, sin quedarse en una revisión vacía', async () => {
-    // `accept="image/*"` filtra en el navegador (y en `userEvent.upload`, que lo simula) los
-    // ficheros que no declaran un MIME de imagen — pero eso no garantiza que el navegador SEPA
-    // decodificarlo de verdad (p. ej. un HEIC corrupto, o un formato que ese navegador no soporta):
-    // de ahí que `fileToJpegBlob` (no el tipo declarado) sea la fuente de verdad del rechazo.
-    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null, canRetry: true, unavailableReason: 'unavailable', open: vi.fn(), close: vi.fn(), retry: vi.fn() })
-    fileToJpegBlobMock.mockRejectedValueOnce(new Error('The source image cannot be decoded'))
-    renderScreen()
-    const user = userEvent.setup()
-    const file = new File(['contenido'], 'foto.heic', { type: 'image/heic' })
-
-    await user.upload(screen.getByLabelText(/elige o toma una foto/i), file)
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/no es una imagen válida/i)
-    expect(screen.queryByRole('heading', { name: 'Revisar foto' })).not.toBeInTheDocument()
-  })
-
-  it('C7: antes de que la cámara esté lista no permite capturar ni procesar nada', async () => {
-    grabVideoFrameMock.mockReturnValue(null)
-    renderScreen(vi.fn(), false)
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: /preparando cámara/i }))
-
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Revisar foto' })).not.toBeInTheDocument()
-    expect(processCapturedFrameMock).not.toHaveBeenCalled()
-  })
-
-  it('S6.9 C2: mientras el vídeo no tiene frame, la captura queda deshabilitada y explica que prepara la cámara', () => {
-    grabVideoFrameMock.mockReturnValue(null)
-    renderScreen(vi.fn(), false)
-
-    expect(screen.getByRole('button', { name: /preparando cámara/i })).toBeDisabled()
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  })
-
-  it('S6.9 C4: si el stream no entrega dimensiones, permite reintentar sin ocultar el selector de archivo', async () => {
-    const retry = vi.fn()
-    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry })
-    renderScreen(vi.fn(), false)
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Reintentar cámara' }))
-
-    expect(retry).toHaveBeenCalledOnce()
-    expect(screen.getByLabelText(/elige o toma una foto/i)).toBeInTheDocument()
-  })
-
-  it('S6.9 C4: sin cámara, ofrece reintentar además del selector de archivo', () => {
-    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null, canRetry: true, unavailableReason: 'unavailable', open: vi.fn(), close: vi.fn(), retry: vi.fn() })
-    renderScreen()
-
-    expect(screen.getByRole('button', { name: /reintentar cámara/i })).toBeInTheDocument()
-    expect(screen.getByLabelText(/elige o toma una foto/i)).toBeInTheDocument()
-  })
-
-  it('S6.9 C4: mientras el navegador pide permiso, mantiene disponible el selector de archivo', () => {
-    useCameraStreamMock.mockReturnValue({ status: 'requesting', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
-    renderScreen()
-
-    expect(screen.getByText(/pidiendo acceso a la cámara/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/elige o toma una foto/i)).toBeInTheDocument()
-  })
-
-  it('S6.9 §5: en conexión no segura explica el requisito y no ofrece reintento', () => {
-    useCameraStreamMock.mockReturnValue({ status: 'unavailable', stream: null, canRetry: false, unavailableReason: 'insecure', open: vi.fn(), close: vi.fn(), retry: vi.fn() })
-    renderScreen()
-
-    expect(screen.getByText(/requiere una conexión segura/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /reintentar cámara/i })).not.toBeInTheDocument()
-  })
-
-  it('§5: user sin empresa asignada nunca llega a ver la cámara ni el fallback de fichero', () => {
-    useSessionMock.mockReturnValue({
-      ...USER_SESSION,
-      user: { ...USER_SESSION.user, company: null },
-    })
-    renderScreen()
-
-    expect(screen.getByRole('alert')).toHaveTextContent(/no se pudo cargar tu empresa/i)
-    expect(screen.queryByRole('button', { name: 'Tomar foto' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/elige o toma una foto/i)).not.toBeInTheDocument()
-  })
-
-  it('C8: tras capturar con esquinas detectadas, muestra la revisión sin aviso de borrosidad', async () => {
-    renderScreen()
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
-
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Revisar foto' })).toBeInTheDocument())
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(await screen.findByAltText('Foto capturada')).toBeInTheDocument()
-    expect(processCapturedFrameMock).toHaveBeenCalledWith(FAKE_FRAME, CORNERS)
-  })
-
-  it('C9: sin esquinas detectadas, procesa el frame completo igualmente (sin bloquear)', async () => {
-    analyzeFrameMock.mockResolvedValue({ sharpness: 200, corners: null })
-    renderScreen()
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
-
-    await waitFor(() => expect(processCapturedFrameMock).toHaveBeenCalledWith(FAKE_FRAME, null))
-    expect(await screen.findByAltText('Foto capturada')).toBeInTheDocument()
-  })
-
-  it('C7: una captura manual forzada con nitidez baja avisa, sin bloquear el avance', async () => {
-    analyzeFrameMock.mockResolvedValue({ sharpness: 5, corners: null })
-    renderScreen()
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/puede salir borrosa/i)
-    await user.selectOptions(screen.getByLabelText('Empresa'), 'c1')
-    expect(screen.getByRole('button', { name: 'Usar esta foto' })).not.toBeDisabled()
-  })
-
-  it('S6.10 C5: "Repetir" apaga la cámara y obliga a abrirla otra vez', async () => {
-    renderScreen()
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
-    await screen.findByRole('heading', { name: 'Revisar foto' })
-    await user.click(screen.getByRole('button', { name: 'Repetir' }))
-
-    expect(useCameraStreamMock.mock.results.at(-1)?.value.close).toHaveBeenCalled()
-    expect(postMock).not.toHaveBeenCalled()
-  })
-
-  it('C12: tenant_admin debe elegir una empresa antes de poder subir', async () => {
-    renderScreen()
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
-    await screen.findByRole('heading', { name: 'Revisar foto' })
-
-    const uploadButton = screen.getByRole('button', { name: 'Usar esta foto' })
-    expect(uploadButton).toBeDisabled()
-
-    await user.selectOptions(screen.getByLabelText('Empresa'), 'c1')
-    expect(uploadButton).not.toBeDisabled()
-  })
-
-  it('C11: user sube directo a su empresa fija, sin selector', async () => {
+  it('C3: Capturar foto apaga la cámara, normaliza y sube directamente sin revisión', async () => {
+    const close = vi.fn()
+    successfulUpload()
     useSessionMock.mockReturnValue(USER_SESSION)
-    renderScreen()
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close, retry: vi.fn() })
+    const { onUploaded } = renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
-    await screen.findByRole('heading', { name: 'Revisar foto' })
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
 
-    expect(screen.queryByLabelText('Empresa')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Usar esta foto' })).not.toBeDisabled()
+    await waitFor(() => expect(processCapturedFrameMock).toHaveBeenCalledWith(FAKE_FRAME, CORNERS))
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida'))
+    expect(close).toHaveBeenCalled()
+    expect(screen.queryByRole('heading', { name: 'Revisar foto' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Usar esta foto' })).not.toBeInTheDocument()
   })
 
-  it('C13: subida con éxito llama a onUploaded con el id y la dirección elegida', async () => {
-    postMock.mockResolvedValueOnce({
-      data: {
-        id: 'file-abc',
-        company_id: 'c1',
-        content_type: 'image/jpeg',
-        size_bytes: 10,
-        sha256: 'x',
-        status: 'pending_ocr',
-        scan_status: 'clean',
-        created_at: '2026-07-24T00:00:00Z',
-      },
-      error: undefined,
-      response: { status: 201 },
-    })
+  it('C3: conserva la dirección elegida hasta el envío directo', async () => {
+    successfulUpload()
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
     const { onUploaded } = renderScreen()
     const user = userEvent.setup()
 
     await user.click(screen.getByRole('radio', { name: 'Emitida' }))
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
-    await screen.findByRole('heading', { name: 'Revisar foto' })
-    await user.selectOptions(screen.getByLabelText('Empresa'), 'c1')
-    await user.click(screen.getByRole('button', { name: 'Usar esta foto' }))
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
 
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'emitida'))
   })
 
-  it('C14: un 409 muestra "ya se había subido" y no ofrece reintentar', async () => {
-    postMock.mockResolvedValueOnce({
-      data: undefined,
-      error: { detail: 'duplicate_of' },
-      response: { status: 409 },
-    })
-    renderScreen()
+  it('C4: el selector normaliza y envía el archivo sin revisión intermedia', async () => {
+    successfulUpload()
+    useSessionMock.mockReturnValue(USER_SESSION)
+    const { onUploaded } = renderScreen()
     const user = userEvent.setup()
+    const file = new File(['contenido'], 'foto.heic', { type: 'image/heic' })
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
-    await screen.findByRole('heading', { name: 'Revisar foto' })
-    await user.selectOptions(screen.getByLabelText('Empresa'), 'c1')
-    await user.click(screen.getByRole('button', { name: 'Usar esta foto' }))
+    await user.upload(screen.getByLabelText(/elige o toma una foto/i), file)
 
-    expect(await screen.findByText(/ya se había subido/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument()
-    // La foto capturada sigue mostrándose: no hace falta repetir la captura.
-    expect(screen.getByAltText('Foto capturada')).toBeInTheDocument()
+    await waitFor(() => expect(fileToJpegBlobMock).toHaveBeenCalledWith(file))
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida'))
+    expect(screen.queryByRole('heading', { name: 'Revisar foto' })).not.toBeInTheDocument()
   })
 
-  it('C14: un 503 ofrece reintentar sin perder la foto', async () => {
-    postMock.mockResolvedValueOnce({
-      data: undefined,
-      error: { detail: 'unavailable' },
-      response: { status: 503 },
-    })
+  it('C4: mientras la API acepta el archivo, comunica que procesa la factura', async () => {
+    let resolveUpload: (value: unknown) => void = () => {}
+    postMock.mockImplementationOnce(() => new Promise((resolve) => { resolveUpload = resolve }))
+    useSessionMock.mockReturnValue(USER_SESSION)
     renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
-    await screen.findByRole('heading', { name: 'Revisar foto' })
-    await user.selectOptions(screen.getByLabelText('Empresa'), 'c1')
-    await user.click(screen.getByRole('button', { name: 'Usar esta foto' }))
+    await user.upload(screen.getByLabelText(/elige o toma una foto/i), new File(['contenido'], 'foto.jpg', { type: 'image/jpeg' }))
 
-    expect(await screen.findByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
+    expect(await screen.findByText('Procesando factura...')).toBeInTheDocument()
+    resolveUpload({ data: { id: 'file-abc' }, error: undefined, response: { status: 201 } })
+  })
+
+  it('C5: un fichero no decodificable deja el panel listo para elegir otra foto', async () => {
+    fileToJpegBlobMock.mockRejectedValueOnce(new Error('invalid image'))
+    useSessionMock.mockReturnValue(USER_SESSION)
+    renderScreen()
+    const user = userEvent.setup()
+
+    await user.upload(screen.getByLabelText(/elige o toma una foto/i), new File(['x'], 'rota.jpg', { type: 'image/jpeg' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo preparar la foto/i)
+    expect(screen.getByRole('button', { name: 'Tomar foto' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Subir archivo' })).toBeInTheDocument()
+  })
+
+  it('C5: cerrar la cámara detiene el stream', async () => {
+    const close = vi.fn()
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close, retry: vi.fn() })
+    renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Cerrar cámara' }))
+
+    expect(close).toHaveBeenCalledOnce()
+  })
+
+  it('C5: user sin empresa no puede abrir cámara ni selector de archivo', () => {
+    useSessionMock.mockReturnValue({ ...USER_SESSION, user: { ...USER_SESSION.user, company: null } })
+    renderScreen()
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/no se pudo cargar tu empresa/i)
+    expect(screen.queryByRole('button', { name: 'Tomar foto' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Subir archivo' })).not.toBeInTheDocument()
+  })
+
+  it('C5: un resultado de cámara tras desmontar no puede subir ni navegar', async () => {
+    let resolveAnalysis: (value: { sharpness: number; corners: typeof CORNERS }) => void = () => {}
+    analyzeFrameMock.mockImplementationOnce(() => new Promise((resolve) => { resolveAnalysis = resolve }))
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+    const { onUploaded, unmount } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+    unmount()
+    resolveAnalysis({ sharpness: 200, corners: CORNERS })
+
+    await waitFor(() => expect(analyzeFrameMock).toHaveBeenCalled())
+    expect(postMock).not.toHaveBeenCalled()
+    expect(onUploaded).not.toHaveBeenCalled()
   })
 })
