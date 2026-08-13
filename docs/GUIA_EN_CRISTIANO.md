@@ -1115,6 +1115,13 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   Pasaron las 314 comprobaciones automáticas de la parte visual y de comportamiento de la aplicación antes de
   dejar el cambio listo para revisión.
 
+   Una revisión posterior encontró tres casos límite que podían dejar la experiencia incompleta y se
+   corrigieron antes de integrar: si el navegador se queda esperando una cámara sin responder, a los diez
+   segundos ya ofrece reintentar; si concede la cámara pero nunca entrega imagen, también aparece ese
+   reintento; y la tabla ancha que compara IAs se puede desplazar lateralmente en móvil para que ninguna
+   columna quede escondida. Ahora son 316 comprobaciones automáticas del frontend en verde. Solo falta probar
+   estos gestos y permisos con un Android y un iPhone físicos.
+
 - **Arreglo urgente al subir fotos (13/08/2026):** una foto hecha desde el móvil no fallaba por la cámara;
   llegaba correctamente al servidor, pero el antivirus que debe revisarla antes de guardarla se había parado.
   La aplicación hizo lo correcto: rechazó la subida en lugar de almacenar un archivo sin revisar. Se reinició

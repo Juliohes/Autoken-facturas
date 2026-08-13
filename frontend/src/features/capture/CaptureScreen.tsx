@@ -343,6 +343,15 @@ export function CaptureScreen({ onUploaded }: Props) {
           >
             {videoReady ? 'Tomar foto' : 'Preparando cámara…'}
           </button>
+          {!videoReady && camera.canRetry && (
+            <button
+              type="button"
+              onClick={camera.retry}
+              className="rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100 hover:bg-slate-800"
+            >
+              Reintentar cámara
+            </button>
+          )}
           {FilePickerButton}
         </div>
       )}

@@ -713,6 +713,14 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
   en `SessionProvider.tsx`. El build conserva el aviso conocido por el chunk perezoso de OpenCV. Falta la
   verificación manual obligatoria en Android y iPhone reales: permiso concedido/denegado, sin lente trasera,
   reintento y segunda apertura tras volver a la app.
+- **Auditoría posterior (2026-08-13):** tres revisiones independientes encontraron dos huecos reales de
+  recuperación de S6.9 y uno de legibilidad móvil de S6.8, todos corregidos antes de integrar. Una petición
+  `getUserMedia` que no responde ya caduca a los 10 segundos y permite reintentar; un stream concedido cuyo
+  vídeo nunca entrega dimensiones muestra también ese reintento, sin ocultar el selector de archivo. Si la
+  solicitud caducada resuelve tarde, sus pistas se detienen en vez de reactivar una cámara obsoleta. La matriz
+  motor × variante del detalle de factura ahora tiene scroll horizontal en móvil. Nuevas regresiones cubren
+  los tres caminos; 316 pruebas frontend, `tsc` y build en verde. La prueba manual Android/iPhone sigue siendo
+  el único bloqueo de hardware pendiente.
 
 ### 11.14 Hotfix de subida — autorecuperación de ClamAV (2026-08-13)
 

@@ -724,38 +724,40 @@ function LabDetailView({ detail, imageUrl, imageLoading = false, imageError = fa
                 </button>
               ))}
             </div>
-            <table className="min-w-full text-left text-sm">
-              <thead className="text-slate-400">
-                <tr>
-                  <th className="p-2">Motor</th>
-                  {benchmarkVariants.map((variant) => <th key={variant} className="p-2">{variant}</th>)}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {benchmarkEngines.map((engine) => (
-                  <tr key={engine}>
-                    <th className="p-2 text-left font-medium">{engine}</th>
-                    {benchmarkVariants.map((variant) => {
-                      const entry = detail.ranking.find((candidate) => candidate.engine === engine && candidate.variant === variant)
-                      const results = entry
-                        ? [...entry.field_results, { field: 'tax_lines', match: entry.tax_lines_matched }]
-                            .filter((result) => benchmarkField === 'Todos los campos' || result.field === benchmarkField)
-                        : []
-                      return (
-                        <td key={variant} className="p-2">
-                          {!entry ? 'Sin resultado' : results.map((result) => (
-                            <span key={result.field} className="mr-2 inline-flex gap-1">
-                              {benchmarkField === 'Todos los campos' && `${FIELD_LABELS[result.field] ?? (result.field === 'tax_lines' ? 'Tramos IVA' : result.field)} `}
-                              <MatchBadge match={result.match} />
-                            </span>
-                          ))}
-                        </td>
-                      )
-                    })}
+            <div data-testid="lab-ranking-scroll" className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="text-slate-400">
+                  <tr>
+                    <th className="p-2">Motor</th>
+                    {benchmarkVariants.map((variant) => <th key={variant} className="p-2">{variant}</th>)}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {benchmarkEngines.map((engine) => (
+                    <tr key={engine}>
+                      <th className="p-2 text-left font-medium">{engine}</th>
+                      {benchmarkVariants.map((variant) => {
+                        const entry = detail.ranking.find((candidate) => candidate.engine === engine && candidate.variant === variant)
+                        const results = entry
+                          ? [...entry.field_results, { field: 'tax_lines', match: entry.tax_lines_matched }]
+                              .filter((result) => benchmarkField === 'Todos los campos' || result.field === benchmarkField)
+                          : []
+                        return (
+                          <td key={variant} className="p-2">
+                            {!entry ? 'Sin resultado' : results.map((result) => (
+                              <span key={result.field} className="mr-2 inline-flex gap-1">
+                                {benchmarkField === 'Todos los campos' && `${FIELD_LABELS[result.field] ?? (result.field === 'tax_lines' ? 'Tramos IVA' : result.field)} `}
+                                <MatchBadge match={result.match} />
+                              </span>
+                            ))}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         ) : (
           <p className="text-slate-400">

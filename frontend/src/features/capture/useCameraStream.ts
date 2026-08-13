@@ -3,6 +3,8 @@
 // usa entonces el selector de fichero nativo). Libera siempre el stream al desmontar.
 import { useEffect, useRef, useState } from 'react'
 
+const CAMERA_REQUEST_TIMEOUT_MS = 10_000
+
 export type CameraStatus = 'requesting' | 'active' | 'unavailable'
 
 export interface CameraStreamState {
@@ -25,11 +27,19 @@ export function useCameraStream(): CameraStreamState {
 
   useEffect(() => {
     let cancelled = false
+    let timedOut = false
 
     const stop = (media: MediaStream | null) => media?.getTracks().forEach((track) => track.stop())
+    const timeout = window.setTimeout(() => {
+      timedOut = true
+      requestingRef.current = false
+      setUnavailableReason('unavailable')
+      setStatus('unavailable')
+    }, CAMERA_REQUEST_TIMEOUT_MS)
 
     void (async () => {
       if (!canRetry) {
+        window.clearTimeout(timeout)
         if (!cancelled) {
           setUnavailableReason(isSecure ? 'unavailable' : 'insecure')
           setStatus('unavailable')
@@ -51,7 +61,7 @@ export function useCameraStream(): CameraStreamState {
           if (!(error instanceof DOMException) || !['OverconstrainedError', 'NotFoundError'].includes(error.name)) throw error
           media = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         }
-        if (cancelled) {
+        if (cancelled || timedOut) {
           stop(media)
           return
         }
@@ -60,17 +70,19 @@ export function useCameraStream(): CameraStreamState {
         setStream(media)
         setStatus('active')
       } catch {
-        if (!cancelled) {
+        if (!cancelled && !timedOut) {
           setUnavailableReason('unavailable')
           setStatus('unavailable')
         }
       } finally {
+        window.clearTimeout(timeout)
         requestingRef.current = false
       }
     })()
 
     return () => {
       cancelled = true
+      window.clearTimeout(timeout)
     }
   }, [attempt, canRetry, isSecure])
 

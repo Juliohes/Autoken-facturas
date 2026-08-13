@@ -66,6 +66,21 @@ describe('useCameraStream (S6.9)', () => {
     expect(states.at(-1)?.canRetry).toBe(true)
   })
 
+  it('C4: si la solicitud no termina, deja de esperar y permite recuperar la cámara', async () => {
+    vi.useFakeTimers()
+    getUserMedia.mockImplementation(() => new Promise(() => undefined))
+    const states: CameraStreamState[] = []
+    render(<CameraProbe onChange={(state) => { states.push(state) }} />)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000)
+    })
+
+    expect(states.at(-1)?.status).toBe('unavailable')
+    expect(states.at(-1)?.canRetry).toBe(true)
+    vi.useRealTimers()
+  })
+
   it('C5: reintentar detiene el stream anterior antes de solicitar otro', async () => {
     const first = fakeStream()
     const second = fakeStream()
