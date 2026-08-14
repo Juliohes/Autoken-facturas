@@ -55,8 +55,10 @@ _PROTECTED_ROUTES = {
     ("GET", f"{API}/companies/{{company_id}}/history"),
     ("POST", f"{API}/companies/import"),
     ("POST", f"{API}/uploads"),
+    ("POST", f"{API}/uploads/batch"),
     ("GET", f"{API}/uploads/{{file_id}}/download-url"),
     ("GET", f"{API}/uploads/{{file_id}}/image"),
+    ("GET", f"{API}/uploads/{{file_id}}/pages/{{page_number}}/image"),
     ("GET", f"{API}/uploads/{{file_id}}/review"),
     ("POST", f"{API}/uploads/{{file_id}}/counterparty-verdict"),
     ("POST", f"{API}/uploads/{{file_id}}/confirm"),
@@ -117,8 +119,20 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
             f"{API}/uploads",
             upload_parts(JPEG, dummy_id, filename="f.jpg", content_type=JPEG_CT),
         ),
+        (
+            "POST",
+            f"{API}/uploads/batch",
+            {
+                "data": {"company_id": dummy_id, "direction": "recibida"},
+                "files": [
+                    ("files", ("uno.jpg", JPEG, JPEG_CT)),
+                    ("files", ("dos.jpg", JPEG, JPEG_CT)),
+                ],
+            },
+        ),
         ("GET", f"{API}/uploads/{dummy_id}/download-url", {}),
         ("GET", f"{API}/uploads/{dummy_id}/image", {}),
+        ("GET", f"{API}/uploads/{dummy_id}/pages/2/image", {}),
         ("GET", f"{API}/uploads/{dummy_id}/review", {}),
         (
             "POST",

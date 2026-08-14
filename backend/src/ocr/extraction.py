@@ -133,6 +133,7 @@ class InvoiceExtractor(Protocol):
         """Lee el documento y devuelve los campos de oro; `InvoiceExtractionError` al fallar."""
         ...
 
+
 async def extract_document(
     extractor: InvoiceExtractor, pages: list[DocumentPage]
 ) -> ExtractedInvoice:
