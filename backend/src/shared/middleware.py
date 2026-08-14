@@ -8,7 +8,7 @@ from starlette.datastructures import Headers
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from shared.metrics import http_requests_total, normalize_http_method
 from shared.security_headers import apply_static_security_headers
@@ -26,35 +26,75 @@ CORRELATION_ID_HEADER = "X-Correlation-ID"
 
 
 class RequestSizeLimitMiddleware:
-    """Rechaza con 413 una petición cuyo `Content-Length` supera el máximo, antes de leer el cuerpo.
+    """Rechaza con 413 una petición cuyo cuerpo supera el máximo, antes del parser multipart.
 
     Guardarraíl anti-DoS de disco (issue #66): Starlette/python-multipart vuelca el cuerpo a un
-    fichero temporal durante el parseo, así que comprobar el `Content-Length` en el borde (antes de
-    tocar el cuerpo, la auth o el enrutado) evita materializar un cuerpo gigante. Un cliente sin
-    `Content-Length` (chunked) no se caza aquí: el endpoint de subida sigue acotando los bytes
-    leídos en memoria (S2.1 C5) y el proxy inverso debe poner su propia cota en producción. Es ASGI
-    puro (no `BaseHTTPMiddleware`) para responder sin instanciar la petición ni su cuerpo.
+    fichero temporal durante el parseo. Con `Content-Length`, se rechaza sin leer ningún byte si
+    rebasa la cota y, si cabe, se deja fluir directamente al parser. Sin esa cabecera (o si es
+    inválida), envuelve `receive`: cuenta cada fragmento y responde 413 antes de entregar el que
+    rebasa la cota. Así no acumula el cuerpo en memoria ni permite que el parser escriba el exceso.
+    Es ASGI puro (no `BaseHTTPMiddleware`) para responder sin instanciar una petición.
     """
 
-    def __init__(self, app: ASGIApp, *, max_body_bytes: int) -> None:
+    def __init__(
+        self, app: ASGIApp, *, max_body_bytes: int, max_batch_body_bytes: int | None = None
+    ) -> None:
         self._app = app
         self._max_body_bytes = max_body_bytes
+        self._max_batch_body_bytes = max_batch_body_bytes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http":
-            declared = Headers(scope=scope).get("content-length")
-            if declared is not None and declared.isdigit() and int(declared) > self._max_body_bytes:
-                response = PlainTextResponse(
-                    f"El cuerpo de la petición supera el máximo ({self._max_body_bytes} bytes)",
-                    status_code=413,
-                )
-                # Este middleware es el más externo (a propósito, ver docstring): responde SIN
-                # llamar a `self._app`, así que `SecurityHeadersMiddleware` nunca se ejecuta para
-                # este camino. Se aplican las mismas cabeceras aquí (S5.1 C2, "toda respuesta").
-                apply_static_security_headers(response)
-                await response(scope, receive, send)
-                return
-        await self._app(scope, receive, send)
+        if scope["type"] != "http":
+            await self._app(scope, receive, send)
+            return
+
+        declared = Headers(scope=scope).get("content-length")
+        is_batch_upload = scope.get("method") == "POST" and scope.get("path", "").endswith(
+            "/uploads/batch"
+        )
+        max_body_bytes = (
+            self._max_batch_body_bytes
+            if is_batch_upload and self._max_batch_body_bytes is not None
+            else self._max_body_bytes
+        )
+        if declared is not None and declared.isdigit() and int(declared) > max_body_bytes:
+            await self._send_too_large(scope, receive, send, max_body_bytes)
+            return
+
+        received_bytes = 0
+        rejected = False
+
+        async def limited_receive() -> Message:
+            nonlocal received_bytes, rejected
+            message = await receive()
+            if message["type"] != "http.request":
+                return message
+            received_bytes += len(message.get("body", b""))
+            if received_bytes > max_body_bytes:
+                rejected = True
+                await self._send_too_large(scope, receive, send, max_body_bytes)
+                # La aplicación ya puede estar leyendo fragmentos previos. No ve el fragmento que
+                # excede ni llega a emitir una respuesta posterior que tape el 413.
+                return {"type": "http.disconnect"}
+            return message
+
+        async def limited_send(message: Message) -> None:
+            if not rejected:
+                await send(message)
+
+        await self._app(scope, limited_receive, limited_send)
+
+    @staticmethod
+    async def _send_too_large(
+        scope: Scope, receive: Receive, send: Send, max_body_bytes: int
+    ) -> None:
+        response = PlainTextResponse(
+            f"El cuerpo de la petición supera el máximo ({max_body_bytes} bytes)", status_code=413
+        )
+        # Este middleware es el más externo (a propósito, ver docstring): responde SIN llamar a la
+        # aplicación, así que `SecurityHeadersMiddleware` nunca se ejecuta para este camino.
+        apply_static_security_headers(response)
+        await response(scope, receive, send)
 
 
 async def _resolve_uncached(slug: str) -> ResolvedTenant | None:

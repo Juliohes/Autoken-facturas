@@ -83,7 +83,11 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.is_production)
     # Cota del cuerpo de la petición (issue #66): el más externo, para rechazar (413) un cuerpo
     # gigante por `Content-Length` antes de auth, enrutado o volcado a disco del multipart.
-    app.add_middleware(RequestSizeLimitMiddleware, max_body_bytes=settings.max_request_body_bytes)
+    app.add_middleware(
+        RequestSizeLimitMiddleware,
+        max_body_bytes=settings.max_request_body_bytes,
+        max_batch_body_bytes=settings.max_batch_upload_body_bytes,
+    )
     app.include_router(health_router, prefix=settings.api_prefix)
     app.include_router(metrics_router, prefix=settings.api_prefix)
     app.include_router(tenancy_router, prefix=settings.api_prefix)

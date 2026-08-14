@@ -13,7 +13,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
-from uuid import UUID
+from dataclasses import dataclass
+from uuid import UUID, uuid4
 
 import structlog
 from sqlalchemy import event
@@ -59,7 +60,7 @@ class UnsupportedMediaType(IntakeError):
 
 
 class DuplicateUpload(IntakeError):
-    """Ya existe ese fichero en la empresa (mismo `(company_id, sha256)`) (-> 409)."""
+    """Ya existe ese fichero para quien lo sube (mismo hash privado) (-> 409)."""
 
     def __init__(self, duplicate_of: UUID) -> None:
         super().__init__(f"Fichero duplicado en la empresa (original {duplicate_of})")
@@ -72,6 +73,21 @@ class FileForbidden(IntakeError):
 
 class FileNotVisible(IntakeError):
     """El fichero no existe en el contexto del actor (inexistente u otro tenant) (-> 404)."""
+
+
+class PrivateFileNotVisible(FileNotVisible):
+    """Un compañero intenta acceder a un documento propio de otro `user` (-> 404)."""
+
+
+class InvalidPageCount(IntakeError):
+    """Un documento multipágina debe contener de dos a cinco imágenes (-> 422)."""
+
+
+@dataclass(frozen=True)
+class _PreparedUpload:
+    content: bytes
+    content_type: str
+    sha256: str
 
 
 def _sha256(content: bytes) -> str:
@@ -138,7 +154,7 @@ async def authorize_file_access(
     ctx = await repository.get_file_context(session, file_id)
     if ctx is not None:
         if actor_role == Role.USER and ctx.uploaded_by != actor_user_id:
-            raise FileForbidden
+            raise PrivateFileNotVisible
         return ctx
     async with tenant_session(tenant_id) as sess:
         in_tenant = await repository.get_file_context(sess, file_id)
@@ -200,10 +216,38 @@ async def get_download_bytes(
     return content, location.content_type
 
 
+async def get_page_download_bytes(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    root_file_id: UUID,
+    page_number: int,
+    actor_user_id: UUID,
+    actor_role: str,
+) -> tuple[bytes, str]:
+    """Bytes de una hoja secundaria tras autorizar primero el documento raíz.
+
+    La autorización queda anclada en la raíz, que conserva `uploaded_by`; una URL de página no
+    permite a un compañero inferir que existe un documento ajeno.
+    """
+    await authorize_file_access(
+        session,
+        tenant_id=tenant_id,
+        file_id=root_file_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+    )
+    location = await repository.get_page_location(session, root_file_id, page_number)
+    if location is None:
+        raise FileNotVisible
+    content = await asyncio.to_thread(storage.get_object, location.bucket, location.key)
+    return content, location.content_type
+
+
 async def delete_uploaded_file_row(
     session: AsyncSession, file_id: UUID
-) -> repository.UploadedFileLocation | None:
-    """Borra la fila de `uploaded_files` y devuelve su ubicación en MinIO, sin tocar el objeto.
+) -> list[repository.UploadedFileLocation]:
+    """Borra la raíz y devuelve las ubicaciones de todas sus páginas, sin tocar MinIO.
 
     Llamada desde `invoicing.service.purge_test_invoices` (S3.5, dueño de la orquestación), una vez
     por factura de prueba purgada. A propósito NO borra el objeto de MinIO aquí: eso implicaría una
@@ -212,9 +256,11 @@ async def delete_uploaded_file_row(
     agenda esas bajas para DESPUÉS del commit. La ubicación se lee ANTES de borrar la fila: después
     ya no habría de dónde leerla.
     """
-    location = await repository.get_file_location(session, file_id)
+    pages = await repository.get_document_pages(session, file_id)
     await repository.delete_uploaded_file(session, file_id)
-    return location
+    return [
+        repository.UploadedFileLocation(page.bucket, page.key, page.content_type) for page in pages
+    ]
 
 
 def schedule_storage_cleanup(
@@ -281,10 +327,11 @@ async def create_upload(
 
     sha256 = _sha256(content)
     bucket = storage.bucket_for(tenant_id)
-    key = storage.key_for(company_id, sha256)
+    key = storage.key_for(company_id, uuid4())
 
-    # Dedup por empresa ANTES del antivirus (spec): si ya existe, ni se escanea ni se almacena.
-    existing = await repository.find_duplicate_id(session, company_id, sha256)
+    # Dedup privado ANTES del antivirus: un compañero puede subir los mismos bytes sin descubrir
+    # este documento ni su id; quien ya lo subió no vuelve a escanearlo ni almacenarlo.
+    existing = await repository.find_duplicate_id(session, company_id, user_id, sha256)
     if existing is not None:
         raise DuplicateUpload(existing)
 
@@ -307,10 +354,114 @@ async def create_upload(
         content_type=real_mime,
         size_bytes=len(content),
     )
-    # Encola el OCR del fichero (S2.3) best-effort: si el worker/Redis no está, el fichero se queda
-    # en `pending_ocr` y se reprocesará; el encolado NUNCA hace fallar la subida ya persistida.
-    await queue.enqueue_ocr(tenant_id, company_id, record.id)
+    _enqueue_ocr_after_commit(session, tenant_id, company_id, record.id)
     return record
+
+
+async def create_upload_batch(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    user_id: UUID,
+    company_id: UUID,
+    contents: list[bytes],
+) -> repository.UploadedFileRecord:
+    """Persiste de dos a cinco imágenes como un único documento raíz y sus hojas secundarias.
+
+    Todas las validaciones y el antivirus terminan antes de tocar MinIO. Tras ello, cualquier fallo
+    de almacenamiento o BD compensa todos los objetos ya escritos y no agenda ningún OCR parcial.
+    """
+    if not 2 <= len(contents) <= 5:
+        raise InvalidPageCount
+
+    prepared: list[_PreparedUpload] = []
+    seen_hashes: set[str] = set()
+    for content in contents:
+        if not content:
+            raise EmptyFile
+        content_type = mime.sniff_mime(content)
+        if content_type not in {"image/jpeg", "image/png"}:
+            raise UnsupportedMediaType
+        sha256 = _sha256(content)
+        if sha256 in seen_hashes:
+            raise DuplicateUpload(UUID(int=0))
+        seen_hashes.add(sha256)
+        duplicate_of = await repository.find_document_duplicate_id(
+            session, company_id, user_id, sha256
+        )
+        if duplicate_of is not None:
+            raise DuplicateUpload(duplicate_of)
+        await asyncio.to_thread(scanner.scan, content)
+        prepared.append(_PreparedUpload(content, content_type, sha256))
+
+    bucket = storage.bucket_for(tenant_id)
+    locations = [
+        repository.UploadedFileLocation(
+            bucket=bucket,
+            key=storage.key_for(company_id, uuid4()),
+            content_type=page.content_type,
+        )
+        for page in prepared
+    ]
+    stored: list[repository.UploadedFileLocation] = []
+    try:
+        for page, location in zip(prepared, locations, strict=True):
+            # Una llamada de red puede escribir el objeto y aun así fallar al recibir la respuesta.
+            # La ubicación se registra antes para compensarla también en ese caso ambiguo.
+            stored.append(location)
+            await asyncio.to_thread(
+                storage.put_object,
+                location.bucket,
+                location.key,
+                page.content,
+                len(page.content),
+                page.content_type,
+            )
+        first = prepared[0]
+        root = await repository.insert_uploaded_file(
+            session,
+            company_id=company_id,
+            uploaded_by=user_id,
+            storage_bucket=locations[0].bucket,
+            storage_key=locations[0].key,
+            content_type=first.content_type,
+            size_bytes=len(first.content),
+            sha256=first.sha256,
+        )
+        for page_number, (page, location) in enumerate(
+            zip(prepared[1:], locations[1:], strict=True), start=2
+        ):
+            await repository.insert_uploaded_file_page(
+                session,
+                root_uploaded_file_id=root.id,
+                company_id=company_id,
+                uploaded_by=user_id,
+                page_number=page_number,
+                storage_bucket=location.bucket,
+                storage_key=location.key,
+                content_type=page.content_type,
+                size_bytes=len(page.content),
+                sha256=page.sha256,
+            )
+        await write_audit(
+            session,
+            actor_id=user_id,
+            action=AUDIT_ACTION_UPLOAD,
+            entity=_AUDIT_ENTITY,
+            entity_id=root.id,
+        )
+    except IntegrityError as exc:
+        await _remove_locations_best_effort(stored)
+        if repository.is_duplicate_violation(exc):
+            duplicate_of = await _resolve_batch_duplicate(tenant_id, company_id, user_id, prepared)
+            raise DuplicateUpload(duplicate_of) from exc
+        raise
+    except Exception:
+        await _remove_locations_best_effort(stored)
+        raise
+
+    _enqueue_ocr_after_commit(session, tenant_id, company_id, root.id)
+    return root
 
 
 async def _persist_or_compensate(
@@ -327,9 +478,8 @@ async def _persist_or_compensate(
 ) -> repository.UploadedFileRecord:
     """Inserta el registro + la traza en la transacción de la petición; compensa si algo falla.
 
-    - Violación del UNIQUE `(company_id, sha256)` (carrera concurrente, C14): el objeto en esa clave
-      es el del ganador (misma clave, mismos bytes), así que NO se borra; se responde 409 con el id
-      del original.
+    - Violación de la unicidad global `(company_id, sha256)` (carrera concurrente, C14): cada
+      intento tiene su propia clave de objeto, así que se borra únicamente el objeto perdedor.
     - Cualquier otro fallo al registrar (C12b): se borra el objeto recién subido para no dejar un
       huérfano y se propaga (>= 500).
     """
@@ -354,7 +504,8 @@ async def _persist_or_compensate(
         return record
     except IntegrityError as exc:
         if repository.is_duplicate_violation(exc):
-            duplicate_of = await _resolve_duplicate(tenant_id, company_id, sha256)
+            duplicate_of = await _resolve_duplicate(tenant_id, company_id, user_id, sha256)
+            await _remove_object_best_effort(bucket, key)
             raise DuplicateUpload(duplicate_of) from exc
         await _remove_object_best_effort(bucket, key)
         raise
@@ -363,17 +514,55 @@ async def _persist_or_compensate(
         raise
 
 
-async def _resolve_duplicate(tenant_id: UUID, company_id: UUID, sha256: str) -> UUID:
+async def _resolve_duplicate(
+    tenant_id: UUID, company_id: UUID, uploaded_by: UUID, sha256: str
+) -> UUID:
     """Id del original tras perder la carrera del UNIQUE (la transacción de la petición ya abortó).
 
     Se lee en una sesión nueva (la del ganador ya cometió): el original es visible. Si por una
     condición extrema no se encontrara, se propaga el fallo original (no se inventa un id).
     """
     async with tenant_session(tenant_id) as sess:
-        duplicate_of = await repository.find_duplicate_id(sess, company_id, sha256)
+        duplicate_of = await repository.find_document_duplicate_id(
+            sess, company_id, uploaded_by, sha256
+        )
     if duplicate_of is None:  # pragma: no cover - el ganador está cometido cuando saltó el UNIQUE
         raise RuntimeError("violación de unicidad sin fila original visible")
     return duplicate_of
+
+
+async def _resolve_batch_duplicate(
+    tenant_id: UUID, company_id: UUID, uploaded_by: UUID, prepared: list[_PreparedUpload]
+) -> UUID:
+    """Devuelve el documento propio que ganó una carrera de un lote."""
+    async with tenant_session(tenant_id) as session:
+        for page in prepared:
+            duplicate_of = await repository.find_document_duplicate_id(
+                session, company_id, uploaded_by, page.sha256
+            )
+            if duplicate_of is not None:
+                return duplicate_of
+    raise RuntimeError("violación de unicidad sin documento original visible")
+
+
+def _enqueue_ocr_after_commit(
+    session: AsyncSession, tenant_id: UUID, company_id: UUID, file_id: UUID
+) -> None:
+    """Publica OCR cuando la fila confirmada ya es visible para el worker."""
+
+    async def dispatch() -> None:
+        try:
+            await queue.enqueue_ocr(tenant_id, company_id, file_id)
+        except Exception:  # noqa: BLE001 - un post-commit no puede invalidar datos confirmados
+            logger.exception("ocr.enqueue_unexpected_failure", uploaded_file_id=str(file_id))
+
+    def after_commit(_sync_session: Session) -> None:
+        try:
+            asyncio.get_running_loop().create_task(dispatch())
+        except RuntimeError:
+            logger.exception("ocr.enqueue_dispatcher_unavailable", uploaded_file_id=str(file_id))
+
+    event.listen(session.sync_session, "after_commit", after_commit, once=True)
 
 
 async def _remove_object_best_effort(bucket: str, key: str) -> None:
@@ -381,3 +570,9 @@ async def _remove_object_best_effort(bucket: str, key: str) -> None:
     # Compensación best-effort: un fallo al borrar no debe enmascarar el error que la disparó.
     with contextlib.suppress(storage.StorageUnavailable):
         await asyncio.to_thread(storage.remove_object, bucket, key)
+
+
+async def _remove_locations_best_effort(locations: list[repository.UploadedFileLocation]) -> None:
+    """Compensa todos los objetos escritos por un lote, sin ocultar su error original."""
+    for location in locations:
+        await _remove_object_best_effort(location.bucket, location.key)

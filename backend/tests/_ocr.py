@@ -94,6 +94,44 @@ async def seed_uploaded_file(
         await conn.close()
 
 
+async def seed_uploaded_file_page(
+    dsns: dict[str, str],
+    *,
+    tenant_id: str,
+    company_id: str,
+    root_uploaded_file_id: str,
+    page_number: int,
+    content: bytes,
+    content_type: str = JPEG_CT,
+) -> tuple[str, str]:
+    """Añade una página secundaria real y devuelve su ubicación de MinIO."""
+    import hashlib
+
+    bucket = storage.bucket_for(tenant_id)
+    key = storage.key_for(company_id, uuid4())
+    storage.put_object(bucket, key, content, len(content), content_type)
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        await conn.execute(
+            "INSERT INTO uploaded_file_pages "
+            "(root_uploaded_file_id, company_id, uploaded_by, page_number, storage_bucket, "
+            "storage_key, "
+            "content_type, size_bytes, sha256) "
+            "SELECT $1,$2,uploaded_by,$3,$4,$5,$6,$7,$8 FROM uploaded_files WHERE id = $1",
+            root_uploaded_file_id,
+            company_id,
+            page_number,
+            bucket,
+            key,
+            content_type,
+            len(content),
+            hashlib.sha256(content).hexdigest(),
+        )
+    finally:
+        await conn.close()
+    return bucket, key
+
+
 def build_extracted(
     *,
     own_cif: str | None = OWN_CIF,

@@ -139,6 +139,43 @@ async def test_c9_genera_una_fila_por_cada_variante_de_un_motor_con_su_desglose_
         assert row["tax_lines_matched"] is True
 
 
+async def test_benchmark_multipagina_entrega_el_documento_completo_en_cada_variante(
+    authapi: Api,
+) -> None:
+    """Las tres variantes conservan todas las hojas; no se permite evaluar solo la raíz."""
+    from ocr.benchmark import run_benchmark
+    from ocr.extraction import DocumentPage
+
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns, slug="bm-multipage")
+    observed_pages: list[int] = []
+
+    class PageExtractor:
+        async def extract(self, _content: bytes, _content_type: str):
+            raise AssertionError("no debe reducirse a una página")
+
+        async def extract_pages(self, pages):
+            observed_pages.append(len(pages))
+            return _reading_invoice()
+
+    await run_benchmark(
+        tenant_id,
+        company_id,
+        file_id,
+        pages=[
+            DocumentPage(real_jpeg_bytes(), "image/jpeg"),
+            DocumentPage(real_jpeg_bytes(), "image/jpeg"),
+        ],
+        truth=_truth(),
+        own_cif=OWN_CIF,
+        ocr_experiment_enabled=True,
+        extractors=[("gemini-3-flash", PageExtractor())],
+    )
+
+    assert observed_pages == [2, 2, 2]
+    assert await count_benchmark_results(dsns, file_id=file_id) == 3
+
+
 async def test_c2_un_motor_caido_en_una_variante_no_impide_que_los_demas_terminen(
     authapi: Api,
 ) -> None:
@@ -246,7 +283,7 @@ async def test_s6_7_el_lote_recibe_un_fallo_de_orquestacion(authapi: Api, monkey
     _client, dsns = authapi
     tenant_id, company_id, file_id = await _seed(dsns, slug="bm-orchestration-failure")
 
-    async def broken_variants(_content: bytes, _content_type: str):
+    async def broken_variants(_pages: list[object]):
         raise RuntimeError("infraestructura rota")
 
     monkeypatch.setattr(benchmark, "_build_variants", broken_variants)

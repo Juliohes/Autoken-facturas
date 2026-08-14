@@ -55,7 +55,7 @@ from invoice_intake import repository as intake_repo
 from invoice_intake import storage
 from invoicing import repository as invoicing_repo
 from ocr.benchmark import run_benchmark
-from ocr.extraction import InvoiceExtractor
+from ocr.extraction import DocumentPage, InvoiceExtractor
 from ocr.ranking_engines import build_named_ranking_extractors
 from platform_admin import settings_repository
 from shared.config import get_settings
@@ -141,8 +141,8 @@ async def _run_for_invoice(
                 tenant_id=str(tenant_id),
             )
             return
-        location = await intake_repo.get_file_location(session, uploaded_file_id)
-        if location is None:
+        locations = await intake_repo.get_document_pages(session, uploaded_file_id)
+        if not locations:
             logger.error(
                 "ocr_benchmark.file_not_found",
                 uploaded_file_id=str(uploaded_file_id),
@@ -161,13 +161,18 @@ async def _run_for_invoice(
             return
         truth = _build_truth(invoice)
 
-    content = await asyncio.to_thread(storage.get_object, location.bucket, location.key)
+    pages = [
+        DocumentPage(
+            content=await asyncio.to_thread(storage.get_object, location.bucket, location.key),
+            content_type=location.content_type,
+        )
+        for location in locations
+    ]
     await run_benchmark(
         tenant_id,
         company_id,
         uploaded_file_id,
-        content=content,
-        content_type=location.content_type,
+        pages=pages,
         truth=truth,
         own_cif=company.cif,
         ocr_experiment_enabled=True,

@@ -4,9 +4,9 @@ Funciones de módulo (síncronas) que el servicio invoca envueltas en un hilo (`
 para no bloquear el event loop. Son funciones de módulo a propósito, para que los tests inyecten el
 "almacén caído" con `monkeypatch.setattr(storage, "put_object", ...)` (C12a).
 
-Aislamiento: cada asesoría tiene su **propio bucket** `tenant-{tenant_id}`; la clave del objeto es
-`{company_id}/{sha256}`. Un fallo del almacén se traduce a `StorageUnavailable` (-> 503), nunca a un
-500 silencioso ni a un éxito falso (spec S2.1 §5, C12).
+Aislamiento: cada asesoría tiene su **propio bucket** `tenant-{tenant_id}`; cada escritura recibe
+una clave propia `{company_id}/{object_id}`. Un fallo del almacén se traduce a
+`StorageUnavailable` (-> 503), nunca a un 500 silencioso ni a un éxito falso (spec S2.1 §5, C12).
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import io
 import json
 from datetime import timedelta
 from functools import lru_cache
+from uuid import UUID
 
 from minio import Minio
 from minio.deleteobjects import DeleteObject
@@ -38,9 +39,13 @@ def bucket_for(tenant_id: object) -> str:
     return f"tenant-{tenant_id}"
 
 
-def key_for(company_id: object, sha256: str) -> str:
-    """Clave del objeto dentro del bucket del tenant. Fuente única del formato."""
-    return f"{company_id}/{sha256}"
+def key_for(company_id: object, object_id: UUID | str) -> str:
+    """Clave privada de un objeto de intake dentro del bucket del tenant.
+
+    El hash sirve para deduplicar en PostgreSQL, nunca para compartir un objeto: dos carreras deben
+    poder compensar su propia escritura sin borrar la del ganador.
+    """
+    return f"{company_id}/{object_id}"
 
 
 # Bucket único de plataforma para los ZIP de export de tenants (S4.7), deliberadamente DISTINTO del

@@ -9,6 +9,10 @@ tests dedicados de cada extractor.
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
+import pytest
+
 from tests._dbtest import seed_company, seed_tenant, seed_user
 from tests._ocr import (
     OWN_CIF,
@@ -20,6 +24,7 @@ from tests._ocr import (
     ranking_entries_visible_as_tenant,
     run_ocr,
     seed_uploaded_file,
+    seed_uploaded_file_page,
     set_ocr_experiment_enabled,
 )
 
@@ -59,6 +64,7 @@ async def test_c1_interruptor_apagado_no_genera_entradas_de_ranking(authapi: Api
 async def test_c2_interruptor_encendido_genera_una_entrada_por_motor(authapi: Api) -> None:
     """C2: cada motor disponible deja su propia entrada, con su lectura y puntuación."""
     from jobs.ocr_ranking import run_ocr_ranking
+    from ocr.extraction import DocumentPage
 
     _client, dsns = authapi
     await set_ocr_experiment_enabled(dsns, True)
@@ -68,8 +74,7 @@ async def test_c2_interruptor_encendido_genera_una_entrada_por_motor(authapi: Ap
         tenant_id,
         company_id,
         file_id,
-        content=b"bytes de la factura",
-        content_type="image/jpeg",
+        pages=[DocumentPage(b"bytes de la factura", "image/jpeg")],
         own_cif=OWN_CIF,
         extractors=[
             make_extractor(build_extracted(engine="gemini-3-flash", model="gemini-3-flash")),
@@ -83,10 +88,52 @@ async def test_c2_interruptor_encendido_genera_una_entrada_por_motor(authapi: Ap
     assert all(e["score"] == 5 for e in entries)  # lectura perfecta por defecto de build_extracted
 
 
+async def test_ranking_cierra_la_sesion_antes_de_llamar_a_los_motores(
+    authapi: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """El ranking solo abre Postgres para consultar el interruptor y persistir los resultados."""
+    import jobs.ocr_ranking as ranking_job
+    from ocr.extraction import DocumentPage
+
+    _client, dsns = authapi
+    await set_ocr_experiment_enabled(dsns, True)
+    tenant_id, company_id, file_id = await _seed(dsns, slug="ranking-short-session")
+    original_session = ranking_job.tenant_session
+    active_sessions = 0
+
+    @asynccontextmanager
+    async def tracked_session(*args, **kwargs):
+        nonlocal active_sessions
+        async with original_session(*args, **kwargs) as session:
+            active_sessions += 1
+            try:
+                yield session
+            finally:
+                active_sessions -= 1
+
+    class Extractor:
+        async def extract(self, _content: bytes, _content_type: str):
+            assert active_sessions == 0
+            return build_extracted(engine="short-session-engine")
+
+    monkeypatch.setattr(ranking_job, "tenant_session", tracked_session)
+    await ranking_job.run_ocr_ranking(
+        tenant_id,
+        company_id,
+        file_id,
+        pages=[DocumentPage(b"ranking document", "image/jpeg")],
+        own_cif=OWN_CIF,
+        extractors=[Extractor()],
+    )
+
+    entries = await fetch_ranking_entries(dsns, file_id=file_id)
+    assert [entry["engine"] for entry in entries] == ["short-session-engine"]
+
+
 async def test_c4_el_fallo_de_un_motor_no_bloquea_a_los_demas(authapi: Api) -> None:
     """C4: un motor que falla en esta factura no deja entrada; los demás sí."""
     from jobs.ocr_ranking import run_ocr_ranking
-    from ocr.extraction import InvoiceExtractionError
+    from ocr.extraction import DocumentPage, InvoiceExtractionError
 
     _client, dsns = authapi
     await set_ocr_experiment_enabled(dsns, True)
@@ -96,8 +143,7 @@ async def test_c4_el_fallo_de_un_motor_no_bloquea_a_los_demas(authapi: Api) -> N
         tenant_id,
         company_id,
         file_id,
-        content=b"x",
-        content_type="image/jpeg",
+        pages=[DocumentPage(b"x", "image/jpeg")],
         own_cif=OWN_CIF,
         extractors=[
             make_extractor(build_extracted(engine="gemini-3-flash")),
@@ -113,6 +159,7 @@ async def test_c4_el_fallo_de_un_motor_no_bloquea_a_los_demas(authapi: Api) -> N
 async def test_c8_reprocesar_no_duplica_las_entradas(authapi: Api) -> None:
     """C8: reprocesar hace upsert por `(uploaded_file_id, engine)`, no duplica."""
     from jobs.ocr_ranking import run_ocr_ranking
+    from ocr.extraction import DocumentPage
 
     _client, dsns = authapi
     await set_ocr_experiment_enabled(dsns, True)
@@ -124,8 +171,7 @@ async def test_c8_reprocesar_no_duplica_las_entradas(authapi: Api) -> None:
             tenant_id,
             company_id,
             file_id,
-            content=b"x",
-            content_type="image/jpeg",
+            pages=[DocumentPage(b"x", "image/jpeg")],
             own_cif=OWN_CIF,
             extractors=extractors,
         )
@@ -136,6 +182,7 @@ async def test_c8_reprocesar_no_duplica_las_entradas(authapi: Api) -> None:
 async def test_c9_aislamiento_por_tenant(authapi: Api) -> None:
     """C9: el ranking de un tenant nunca es visible desde el contexto RLS de otro."""
     from jobs.ocr_ranking import run_ocr_ranking
+    from ocr.extraction import DocumentPage
 
     _client, dsns = authapi
     await set_ocr_experiment_enabled(dsns, True)
@@ -146,14 +193,55 @@ async def test_c9_aislamiento_por_tenant(authapi: Api) -> None:
         tenant_a,
         company_a,
         file_a,
-        content=b"x",
-        content_type="image/jpeg",
+        pages=[DocumentPage(b"x", "image/jpeg")],
         own_cif=OWN_CIF,
         extractors=[make_extractor(build_extracted(engine="gemini-3-flash"))],
     )
 
     assert await ranking_entries_visible_as_tenant(dsns, tenant_id=tenant_a) == 1
     assert await ranking_entries_visible_as_tenant(dsns, tenant_id=tenant_b) == 0
+
+
+async def test_ranking_multipagina_procesa_todas_las_hojas(authapi: Api) -> None:
+    """El ranking legado recibe el documento entero, nunca solo los bytes de la raíz."""
+    from jobs.ocr_ranking import run_ocr_ranking
+    from ocr.extraction import DocumentPage
+
+    _client, dsns = authapi
+    await set_ocr_experiment_enabled(dsns, True)
+    tenant_id, company_id, file_id = await _seed(dsns, slug="rk-multipage")
+    await seed_uploaded_file_page(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        root_uploaded_file_id=file_id,
+        page_number=2,
+        content=b"second ranking page",
+    )
+    observed_pages: list[int] = []
+
+    class PageExtractor:
+        async def extract(self, _content: bytes, _content_type: str):
+            raise AssertionError("no debe reducirse a una página")
+
+        async def extract_pages(self, pages):
+            observed_pages.append(len(pages))
+            return build_extracted(engine="gemini-3-flash")
+
+    await run_ocr_ranking(
+        tenant_id,
+        company_id,
+        file_id,
+        pages=[
+            DocumentPage(b"first ranking page", "image/jpeg"),
+            DocumentPage(b"second ranking page", "image/jpeg"),
+        ],
+        own_cif=OWN_CIF,
+        extractors=[PageExtractor()],
+    )
+
+    assert observed_pages == [2]
+    assert await count_ranking_entries(dsns, file_id=file_id) == 1
 
 
 async def test_s6_7_el_ocr_principal_no_dispara_el_ranking_legado(authapi: Api) -> None:

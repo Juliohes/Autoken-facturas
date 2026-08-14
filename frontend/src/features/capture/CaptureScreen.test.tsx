@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
-import { api } from '../../api/client'
+import { api, postMultipart } from '../../api/client'
 import { useSession } from '../session/SessionProvider'
 import { analyzeFrame } from './analyzeFrame'
 import { CaptureScreen } from './CaptureScreen'
@@ -15,7 +15,7 @@ import { fileToJpegBlob } from './normalizeToJpeg'
 import { processCapturedFrame } from './processCapture'
 import { useCameraStream } from './useCameraStream'
 
-vi.mock('../../api/client', () => ({ api: { GET: vi.fn(), POST: vi.fn() } }))
+vi.mock('../../api/client', () => ({ api: { GET: vi.fn(), POST: vi.fn() }, postMultipart: vi.fn() }))
 vi.mock('../session/SessionProvider', () => ({ useSession: vi.fn() }))
 vi.mock('./useCameraStream')
 vi.mock('./grabVideoFrame')
@@ -24,7 +24,7 @@ vi.mock('./processCapture')
 vi.mock('./normalizeToJpeg')
 
 const getMock = api.GET as unknown as Mock<(...args: never[]) => Promise<unknown>>
-const postMock = api.POST as unknown as Mock<(...args: never[]) => Promise<unknown>>
+const postMultipartMock = vi.mocked(postMultipart)
 const useSessionMock = vi.mocked(useSession)
 const useCameraStreamMock = vi.mocked(useCameraStream)
 const grabVideoFrameMock = vi.mocked(grabVideoFrame)
@@ -50,7 +50,8 @@ const CORNERS = [{ x: 1, y: 1 }, { x: 9, y: 1 }, { x: 9, y: 9 }, { x: 1, y: 9 }]
 
 function renderScreen(onUploaded = vi.fn(), cameraReady = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const view = render(<MemoryRouter><QueryClientProvider client={client}><CaptureScreen onUploaded={onUploaded} /></QueryClientProvider></MemoryRouter>)
+  const screenTree = () => <MemoryRouter><QueryClientProvider client={client}><CaptureScreen onUploaded={onUploaded} /></QueryClientProvider></MemoryRouter>
+  const view = render(screenTree())
   if (cameraReady) {
     const video = document.querySelector('video')
     if (video) {
@@ -58,20 +59,18 @@ function renderScreen(onUploaded = vi.fn(), cameraReady = true) {
       fireEvent.loadedData(video)
     }
   }
-  return { onUploaded, unmount: view.unmount }
+  return { onUploaded, rerender: () => view.rerender(screenTree()), unmount: view.unmount }
 }
 
 function successfulUpload() {
-  postMock.mockResolvedValueOnce({
-    data: { id: 'file-abc', company_id: 'c1', content_type: 'image/jpeg', size_bytes: 10, sha256: 'x', status: 'pending_ocr', scan_status: 'clean', created_at: '2026-08-13T00:00:00Z' },
-    error: undefined,
-    response: { status: 201 },
-  })
+  postMultipartMock.mockResolvedValueOnce(new Response(JSON.stringify({
+    id: 'file-abc', company_id: 'c1', content_type: 'image/jpeg', size_bytes: 10, sha256: 'x', status: 'pending_ocr', scan_status: 'clean', created_at: '2026-08-13T00:00:00Z',
+  }), { status: 201 }))
 }
 
 beforeEach(() => {
   getMock.mockReset()
-  postMock.mockReset()
+  postMultipartMock.mockReset()
   grabVideoFrameMock.mockReset()
   grabVideoFrameMock.mockReturnValue(FAKE_FRAME)
   analyzeFrameMock.mockReset()
@@ -86,6 +85,23 @@ beforeEach(() => {
 })
 
 describe('CaptureScreen (S6.11)', () => {
+  it('S6.12 C1: el selector de dirección es el primer control y prioriza la foto sobre las acciones secundarias', () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    renderScreen()
+
+    const directionSelector = screen.getByRole('group', { name: 'Dirección' })
+    const historyLink = screen.getByRole('link', { name: 'Ver historial' })
+    const takePhoto = screen.getByRole('button', { name: 'Tomar foto' })
+    const uploadFile = screen.getByRole('button', { name: 'Subir archivo' })
+    const multiplePages = screen.getByRole('button', { name: 'Varias hojas' })
+
+    expect(directionSelector.compareDocumentPosition(historyLink)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(directionSelector.compareDocumentPosition(takePhoto)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(takePhoto).toHaveClass('rounded-full')
+    expect(takePhoto.parentElement).toHaveClass('justify-center')
+    expect(uploadFile.parentElement).toBe(multiplePages.parentElement)
+  })
+
   it('C1: el panel inicial conserva dirección, Tomar foto y Subir archivo sin pedir la cámara', () => {
     const open = vi.fn()
     useCameraStreamMock.mockReturnValue({ status: 'idle', stream: null, canRetry: true, unavailableReason: null, open, close: vi.fn(), retry: vi.fn() })
@@ -135,6 +151,270 @@ describe('CaptureScreen (S6.11)', () => {
     expect(screen.getByRole('button', { name: 'Cerrar cámara' })).toBeInTheDocument()
   })
 
+  it('S6.12 C3: la cámara simple cubre el viewport y muestra la vista previa a sangre con una guía cercana al borde', () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+    renderScreen()
+
+    expect(screen.getByRole('dialog', { name: 'Cámara para capturar factura' })).toHaveClass('fixed', 'inset-0', 'p-0')
+    expect(document.querySelector('video')).toHaveClass('h-full', 'w-full', 'object-cover')
+    expect(screen.getByTestId('camera-guide-frame')).toHaveClass('inset-4')
+  })
+
+  it('S6.12 C4: una cámara con flash ofrece Linterna y alterna la luz sin cerrar la captura', async () => {
+    const applyConstraints = vi.fn().mockResolvedValue(undefined)
+    const track = { getCapabilities: () => ({ torch: true }), applyConstraints } as unknown as MediaStreamTrack
+    const stream = { getTracks: () => [track] } as unknown as MediaStream
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+    renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Linterna' }))
+
+    expect(applyConstraints).toHaveBeenCalledWith({ advanced: [{ torch: true }] })
+    expect(screen.getByRole('button', { name: 'Capturar foto' })).toBeEnabled()
+  })
+
+  it('S6.12 C4: una cámara sin flash sigue lista para capturar sin prometer una linterna inexistente', () => {
+    const track = { getCapabilities: () => ({}) } as unknown as MediaStreamTrack
+    const stream = { getTracks: () => [track] } as unknown as MediaStream
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+    renderScreen()
+
+    expect(screen.queryByRole('button', { name: 'Linterna' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Capturar foto' })).toBeEnabled()
+  })
+
+  it('S6.12 C4: un fallo al encender la linterna no bloquea ni muestra un error engañoso', async () => {
+    const applyConstraints = vi.fn().mockRejectedValue(new DOMException('flash unavailable', 'OverconstrainedError'))
+    const track = { getCapabilities: () => ({ torch: true }), applyConstraints } as unknown as MediaStreamTrack
+    const stream = { getTracks: () => [track] } as unknown as MediaStream
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+    renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Linterna' }))
+
+    expect(applyConstraints).toHaveBeenCalledWith({ advanced: [{ torch: true }] })
+    expect(screen.getByRole('button', { name: 'Capturar foto' })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('S6.12 C6: Varias hojas abre la cámara completa y guía primero hacia los datos fiscales', async () => {
+    let status: 'idle' | 'active' = 'idle'
+    const open = vi.fn(() => { status = 'active' })
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockImplementation(() => ({ status, stream: null, canRetry: true, unavailableReason: null, open, close: vi.fn(), retry: vi.fn() }))
+    const { rerender } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
+    rerender()
+
+    expect(open).toHaveBeenCalledOnce()
+    expect(screen.getByRole('dialog', { name: 'Cámara para capturar factura' })).toHaveClass('fixed', 'inset-0')
+    expect(screen.getByText(/página 1.*datos fiscales/i)).toBeInTheDocument()
+  })
+
+  it('S6.12 C7: Varias hojas conserva el orden, permite quitar una página y exige dos antes de enviar', async () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    renderScreen()
+    const user = userEvent.setup()
+    const firstPage = new File(['página 1'], 'fiscal.jpg', { type: 'image/jpeg' })
+    const secondPage = new File(['página 2'], 'importes.jpg', { type: 'image/jpeg' })
+
+    await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
+    await user.upload(screen.getByLabelText(/elige o toma una foto/i), firstPage)
+
+    expect(await screen.findByRole('listitem', { name: /página 1.*datos fiscales/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Enviar factura' })).toBeDisabled()
+    expect(screen.getByText(/añade.*importes/i)).toBeInTheDocument()
+
+    await user.upload(screen.getByLabelText(/elige o toma una foto/i), secondPage)
+
+    expect(await screen.findByRole('listitem', { name: /página 2.*importes/i })).toBeInTheDocument()
+    const [firstThumbnail, secondThumbnail] = screen.getAllByRole('listitem')
+    expect(firstThumbnail).toHaveAccessibleName(/página 1.*datos fiscales/i)
+    expect(secondThumbnail).toHaveAccessibleName(/página 2.*importes/i)
+    expect(screen.getByRole('button', { name: 'Enviar factura' })).toBeEnabled()
+    expect(screen.getByText(/datos complementarios/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Quitar página 2' }))
+
+    expect(screen.queryByRole('listitem', { name: /página 2.*importes/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Enviar factura' })).toBeDisabled()
+  })
+
+  it('S6.12 C7: bloquea una segunda pulsación mientras prepara la página para no descartar ni reordenar capturas', async () => {
+    let resolveAnalysis: (value: { sharpness: number; corners: typeof CORNERS }) => void = () => {}
+    analyzeFrameMock.mockImplementationOnce(() => new Promise((resolve) => { resolveAnalysis = resolve }))
+    let status: 'idle' | 'active' = 'idle'
+    const open = vi.fn(() => { status = 'active' })
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockImplementation(() => ({ status, stream: null, canRetry: true, unavailableReason: null, open, close: vi.fn(), retry: vi.fn() }))
+    const { rerender } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
+    rerender()
+    const video = document.querySelector('video')
+    Object.defineProperties(video as HTMLVideoElement, { videoWidth: { configurable: true, value: 640 }, videoHeight: { configurable: true, value: 480 } })
+    fireEvent.loadedData(video as HTMLVideoElement)
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+    expect(screen.getByRole('button', { name: 'Añadiendo página…' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Añadiendo página…' }))
+
+    expect(analyzeFrameMock).toHaveBeenCalledTimes(1)
+    resolveAnalysis({ sharpness: 200, corners: CORNERS })
+
+    await screen.findByText(/página 2.*importes/i)
+    expect(processCapturedFrameMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('S6.12 C7: cada captura multipágina vuelve automáticamente al panel para ver, quitar o enviar las hojas', async () => {
+    let status: 'idle' | 'active' = 'idle'
+    const open = vi.fn(() => { status = 'active' })
+    const close = vi.fn(() => { status = 'idle' })
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockImplementation(() => ({ status, stream: null, canRetry: true, unavailableReason: null, open, close, retry: vi.fn() }))
+    const { rerender } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
+    rerender()
+    let video = document.querySelector('video') as HTMLVideoElement
+    Object.defineProperties(video, { videoWidth: { configurable: true, value: 640 }, videoHeight: { configurable: true, value: 480 } })
+    fireEvent.loadedData(video)
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+
+    await waitFor(() => expect(close).toHaveBeenCalledOnce())
+    rerender()
+    expect(screen.getByRole('listitem', { name: /página 1.*datos fiscales/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Quitar página 1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Enviar factura' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'Tomar otra foto' }))
+    rerender()
+    expect(screen.getByText(/página 2.*importes/i)).toBeInTheDocument()
+    video = document.querySelector('video') as HTMLVideoElement
+    Object.defineProperties(video, { videoWidth: { configurable: true, value: 640 }, videoHeight: { configurable: true, value: 480 } })
+    fireEvent.loadedData(video)
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+
+    await waitFor(() => expect(close).toHaveBeenCalledTimes(2))
+    rerender()
+    expect(screen.getAllByRole('listitem', { name: /página \d/i })).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Quitar página 2' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Enviar factura' })).toBeEnabled()
+  })
+
+  it('S6.12 C7: si no puede capturar una página, apaga cámara y linterna antes de mostrar el error', async () => {
+    const applyConstraints = vi.fn().mockResolvedValue(undefined)
+    const track = { getCapabilities: () => ({ torch: true }), applyConstraints } as unknown as MediaStreamTrack
+    const stream = { getTracks: () => [track] } as unknown as MediaStream
+    let status: 'idle' | 'active' = 'idle'
+    const open = vi.fn(() => { status = 'active' })
+    const close = vi.fn(() => { status = 'idle' })
+    grabVideoFrameMock.mockReturnValue(null)
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockImplementation(() => ({ status, stream, canRetry: true, unavailableReason: null, open, close, retry: vi.fn() }))
+    const { rerender } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
+    rerender()
+    const video = document.querySelector('video') as HTMLVideoElement
+    Object.defineProperties(video, { videoWidth: { configurable: true, value: 640 }, videoHeight: { configurable: true, value: 480 } })
+    fireEvent.loadedData(video)
+    await user.click(screen.getByRole('button', { name: 'Linterna' }))
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/cámara aún no está lista/i)
+    expect(close).toHaveBeenCalledOnce()
+    expect(applyConstraints).toHaveBeenLastCalledWith({ advanced: [{ torch: false }] })
+  })
+
+  it('S6.12 C7: si falla la normalización de una captura multipágina, apaga cámara y linterna', async () => {
+    const applyConstraints = vi.fn().mockResolvedValue(undefined)
+    const track = { getCapabilities: () => ({ torch: true }), applyConstraints } as unknown as MediaStreamTrack
+    const stream = { getTracks: () => [track] } as unknown as MediaStream
+    let status: 'idle' | 'active' = 'idle'
+    const open = vi.fn(() => { status = 'active' })
+    const close = vi.fn(() => { status = 'idle' })
+    processCapturedFrameMock.mockRejectedValueOnce(new Error('invalid frame'))
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockImplementation(() => ({ status, stream, canRetry: true, unavailableReason: null, open, close, retry: vi.fn() }))
+    const { rerender } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
+    rerender()
+    const video = document.querySelector('video') as HTMLVideoElement
+    Object.defineProperties(video, { videoWidth: { configurable: true, value: 640 }, videoHeight: { configurable: true, value: 480 } })
+    fireEvent.loadedData(video)
+    await user.click(screen.getByRole('button', { name: 'Linterna' }))
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo preparar la foto/i)
+    expect(close).toHaveBeenCalledOnce()
+    expect(applyConstraints).toHaveBeenLastCalledWith({ advanced: [{ torch: false }] })
+  })
+
+  it('S6.12 C7: si falla la normalización de un fichero multipágina, apaga cámara y linterna', async () => {
+    const applyConstraints = vi.fn().mockResolvedValue(undefined)
+    const track = { getCapabilities: () => ({ torch: true }), applyConstraints } as unknown as MediaStreamTrack
+    const stream = { getTracks: () => [track] } as unknown as MediaStream
+    let status: 'idle' | 'active' = 'idle'
+    const open = vi.fn(() => { status = 'active' })
+    const close = vi.fn(() => { status = 'idle' })
+    fileToJpegBlobMock.mockRejectedValueOnce(new Error('invalid image'))
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockImplementation(() => ({ status, stream, canRetry: true, unavailableReason: null, open, close, retry: vi.fn() }))
+    const { rerender } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
+    rerender()
+    await user.click(screen.getByRole('button', { name: 'Linterna' }))
+    await user.upload(screen.getByLabelText(/elige o toma una foto/i), new File(['rota'], 'rota.jpg', { type: 'image/jpeg' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo preparar una de las fotos/i)
+    expect(close).toHaveBeenCalledOnce()
+    expect(applyConstraints).toHaveBeenLastCalledWith({ advanced: [{ torch: false }] })
+  })
+
+  it('S6.12 C2, C7 y C8: hasta cinco páginas se envían una sola vez en orden y con la dirección elegida', async () => {
+    successfulUpload()
+    useSessionMock.mockReturnValue(USER_SESSION)
+    const { onUploaded } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('radio', { name: 'Emitida' }))
+    await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
+
+    for (const pageNumber of [1, 2, 3, 4, 5]) {
+      await user.upload(
+        screen.getByLabelText(/elige o toma una foto/i),
+        new File([`página ${pageNumber}`], `pagina-${pageNumber}.jpg`, { type: 'image/jpeg' }),
+      )
+    }
+
+    expect(await screen.findAllByRole('listitem', { name: /página \d/i })).toHaveLength(5)
+    await user.upload(
+      screen.getByLabelText(/elige o toma una foto/i),
+      new File(['página 6'], 'pagina-6.jpg', { type: 'image/jpeg' }),
+    )
+    expect(screen.getAllByRole('listitem', { name: /página \d/i })).toHaveLength(5)
+    expect(screen.getByRole('alert')).toHaveTextContent(/máximo de cinco páginas/i)
+    await user.click(screen.getByRole('button', { name: 'Enviar factura' }))
+
+    await waitFor(() => expect(postMultipartMock).toHaveBeenCalledOnce())
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'emitida'))
+  })
+
   it('C3: Capturar foto apaga la cámara, normaliza y sube directamente sin revisión', async () => {
     const close = vi.fn()
     successfulUpload()
@@ -180,8 +460,8 @@ describe('CaptureScreen (S6.11)', () => {
   })
 
   it('C4: mientras la API acepta el archivo, comunica que procesa la factura', async () => {
-    let resolveUpload: (value: unknown) => void = () => {}
-    postMock.mockImplementationOnce(() => new Promise((resolve) => { resolveUpload = resolve }))
+    let resolveUpload: (value: Response) => void = () => {}
+    postMultipartMock.mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveUpload = resolve }))
     useSessionMock.mockReturnValue(USER_SESSION)
     renderScreen()
     const user = userEvent.setup()
@@ -189,7 +469,7 @@ describe('CaptureScreen (S6.11)', () => {
     await user.upload(screen.getByLabelText(/elige o toma una foto/i), new File(['contenido'], 'foto.jpg', { type: 'image/jpeg' }))
 
     expect(await screen.findByText('Procesando factura...')).toBeInTheDocument()
-    resolveUpload({ data: { id: 'file-abc' }, error: undefined, response: { status: 201 } })
+    resolveUpload(new Response(JSON.stringify({ id: 'file-abc' }), { status: 201 }))
   })
 
   it('C5: un fichero no decodificable deja el panel listo para elegir otra foto', async () => {
@@ -239,7 +519,7 @@ describe('CaptureScreen (S6.11)', () => {
     resolveAnalysis({ sharpness: 200, corners: CORNERS })
 
     await waitFor(() => expect(analyzeFrameMock).toHaveBeenCalled())
-    expect(postMock).not.toHaveBeenCalled()
+    expect(postMultipartMock).not.toHaveBeenCalled()
     expect(onUploaded).not.toHaveBeenCalled()
   })
 })

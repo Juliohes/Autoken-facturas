@@ -25,6 +25,7 @@ TENANT_TABLES = (
     "companies",
     "memberships",
     "uploaded_files",
+    "uploaded_file_pages",
     "ocr_extractions",
     "counterparties",
     "invoices",

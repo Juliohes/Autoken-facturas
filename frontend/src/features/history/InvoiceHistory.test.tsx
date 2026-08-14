@@ -1,4 +1,4 @@
-// Tests de comportamiento de la pantalla de historial (S2.6), C7-C9. El cliente
+// Tests de comportamiento de la pantalla de historial privado (S6.12). El cliente
 // de API está mockeado: se inyecta la respuesta de `GET /invoices/history` de
 // cada escenario (sin navegador ni backend reales; jsdom).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -19,13 +19,8 @@ const getMock = api.GET as unknown as AsyncMock
 function makeEntry(over: Partial<HistoryEntry> = {}): HistoryEntry {
   return {
     id: 'inv-1',
-    issue_date: '2026-07-20',
-    direction: 'recibida',
-    counterparty_tax_id: 'B12345678',
-    counterparty_name: 'Proveedor SL',
-    counterparty_cif_status: 'valid',
-    total_amount: '121.00',
-    confirmed_at: '2026-07-21T10:00:00Z',
+    status: 'pending_ocr',
+    created_at: '2026-08-14T10:30:00Z',
     ...over,
   }
 }
@@ -43,13 +38,17 @@ beforeEach(() => {
   getMock.mockReset()
 })
 
-describe('InvoiceHistory (S2.6)', () => {
-  it('C7: muestra una fila por factura con contraparte, fecha, total y estado', async () => {
+describe('InvoiceHistory (S6.12)', () => {
+  it('C11: muestra los envíos privados con su fecha de creación y estado, sin PII ni dirección ausente', async () => {
     getMock.mockResolvedValue({
       data: {
         entries: [
-          makeEntry({ id: 'inv-1', counterparty_name: 'Reciente SL', confirmed_at: '2026-07-21T10:00:00Z' }),
-          makeEntry({ id: 'inv-2', counterparty_name: 'Antigua SL', confirmed_at: '2026-07-15T10:00:00Z' }),
+          {
+            ...makeEntry({ id: 'upload-1', status: 'pending_ocr', created_at: '2026-08-14T10:30:00Z' }),
+            counterparty_name: 'Proveedor confidencial',
+            counterparty_tax_id: 'B12345678',
+          },
+          makeEntry({ id: 'upload-2', status: 'ocr_failed', created_at: '2026-08-14T09:30:00Z' }),
         ],
       },
       error: undefined,
@@ -58,21 +57,31 @@ describe('InvoiceHistory (S2.6)', () => {
 
     const rows = await screen.findAllByTestId('history-row')
     expect(rows).toHaveLength(2)
-    // La más reciente arriba (el backend ya ordena; la pantalla no reordena).
-    expect(within(rows[0]).getByText('Reciente SL')).toBeInTheDocument()
-    // Con coma decimal, nunca con punto (2026-08-08, hallazgo de Julio).
-    expect(within(rows[0]).getByText('121,00')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('valid')).toBeInTheDocument()
-    expect(within(rows[0]).getByText(/2026-07-20/)).toBeInTheDocument()
-    expect(within(rows[1]).getByText('Antigua SL')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Factura enviada')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Pendiente de OCR')).toBeInTheDocument()
+    expect(within(rows[0]).getByText(/14\/8\/2026.*10:30/)).toBeInTheDocument()
+    expect(within(rows[1]).getByText('OCR no completado')).toBeInTheDocument()
+    expect(screen.queryByText(/Proveedor|B12345678|Recibida|Emitida/)).not.toBeInTheDocument()
   })
 
-  it('C8: lista vacía muestra el mensaje de "no hay facturas", no una tabla vacía', async () => {
+  it('C11: una respuesta degradada de más de veinte entradas no muestra una vigesimoprimera', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        entries: Array.from({ length: 21 }, (_, index) => makeEntry({ id: `upload-${index}` })),
+      },
+      error: undefined,
+    })
+    renderScreen()
+
+    expect(await screen.findAllByTestId('history-row')).toHaveLength(20)
+  })
+
+  it('C11: lista vacía no conserva el corte obsoleto de siete días', async () => {
     getMock.mockResolvedValue({ data: { entries: [] }, error: undefined })
     renderScreen()
 
     expect(
-      await screen.findByText('No hay facturas en los últimos 7 días.'),
+      await screen.findByText('Todavía no has enviado ninguna factura.'),
     ).toBeInTheDocument()
     expect(screen.queryByTestId('history-list')).not.toBeInTheDocument()
   })

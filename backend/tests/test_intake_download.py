@@ -87,8 +87,8 @@ async def test_c2_la_url_firmada_expira(authapi: Api, monkeypatch: pytest.Monkey
     assert download.status_code != 200
 
 
-async def test_c3_descargar_fichero_de_empresa_hermana_da_403(authapi: Api) -> None:
-    """C3: fichero de otra empresa del mismo tenant -> 403; no se genera URL."""
+async def test_c3_descargar_fichero_de_empresa_hermana_da_404(authapi: Api) -> None:
+    """C3: fichero de otra empresa del mismo tenant -> 404, sin revelar que existe."""
     client, dsns = authapi
     tenant_id, _user_id, _company_e1 = await seed_uploader(dsns, slug="ilex")
     company_e2 = await seed_company(dsns["admin"], tenant_id=tenant_id, name="E2", cif="B06183446")
@@ -107,7 +107,7 @@ async def test_c3_descargar_fichero_de_empresa_hermana_da_403(authapi: Api) -> N
     empleado_token = await token_for(client, email="ana@ilex.es")
     resp = await client.get(download_url_path(file_e2), headers=auth(empleado_token))
 
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code == 404, resp.text
 
 
 async def test_c4_descargar_fichero_de_otro_tenant_da_404(authapi: Api) -> None:
@@ -183,7 +183,7 @@ async def test_c7_un_user_no_descarga_el_fichero_de_un_companero_de_la_misma_emp
 
     resp = await client.get(download_url_path(file_ana), headers=auth(bob_token))
 
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code == 404, resp.text
 
 
 async def test_c8_bucket_de_minio_no_es_accesible_sin_firma(authapi: Api) -> None:

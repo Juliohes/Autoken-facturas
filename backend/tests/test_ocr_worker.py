@@ -7,7 +7,10 @@ CI). Fase roja: `jobs.ocr.run_ocr` y `ocr.extraction` aún no existen.
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from decimal import Decimal
+
+import pytest
 
 from tests._dbtest import seed_company, seed_tenant, seed_user
 from tests._ocr import (
@@ -59,6 +62,49 @@ async def test_c1_factura_legible_pasa_a_ocr_done(authapi: Api) -> None:
     assert row["counterparty_tax_id"] == COUNTERPARTY_CIF
     assert row["own_tax_id_present"] is True
     assert row["status"] == "auto_ok"
+    assert await file_status(dsns, file_id=file_id) == "ocr_done"
+
+
+async def test_el_ocr_cierra_la_sesion_antes_de_minio_y_del_extractor(
+    authapi: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """La descarga y el proveedor no agotan conexiones del pool del tenant mientras esperan."""
+    import jobs.ocr as ocr_job
+
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns, slug="ocr-short-session")
+    original_session = ocr_job.tenant_session
+    original_get_object = ocr_job.storage.get_object
+    active_sessions = 0
+    external_calls: list[str] = []
+
+    @asynccontextmanager
+    async def tracked_session(*args, **kwargs):
+        nonlocal active_sessions
+        async with original_session(*args, **kwargs) as session:
+            active_sessions += 1
+            try:
+                yield session
+            finally:
+                active_sessions -= 1
+
+    def tracked_get_object(*args, **kwargs):
+        assert active_sessions == 0
+        external_calls.append("minio")
+        return original_get_object(*args, **kwargs)
+
+    class Extractor:
+        async def extract(self, _content: bytes, _content_type: str):
+            assert active_sessions == 0
+            external_calls.append("ocr")
+            return build_extracted()
+
+    monkeypatch.setattr(ocr_job, "tenant_session", tracked_session)
+    monkeypatch.setattr(ocr_job.storage, "get_object", tracked_get_object)
+
+    await ocr_job.run_ocr(tenant_id, company_id, file_id, extractor=Extractor())
+
+    assert external_calls == ["minio", "ocr"]
     assert await file_status(dsns, file_id=file_id) == "ocr_done"
 
 

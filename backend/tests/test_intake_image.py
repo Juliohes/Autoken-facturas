@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import httpx
 
+from main import create_app
 from tests._auth import USER_PASSWORD_HASH
 from tests._dbtest import seed_company, seed_tenant, seed_user
 from tests._intake import JPEG, JPEG_CT, auth, seed_uploader, token_for, upload_parts
@@ -25,6 +26,27 @@ UPLOADS = "/api/v1/uploads"
 
 def image_path(file_id: str) -> str:
     return f"{UPLOADS}/{file_id}/image"
+
+
+def test_openapi_declara_bytes_binarios_para_las_imagenes() -> None:
+    """Los tres endpoints de imagen describen bytes reales, no JSON, en OpenAPI."""
+    paths = create_app().openapi()["paths"]
+    endpoints = (
+        "/api/v1/uploads/{file_id}/image",
+        "/api/v1/uploads/{file_id}/pages/{page_number}/image",
+        "/api/v1/platform/tenants/{tenant_id}/invoices/{file_id}/image",
+    )
+
+    for endpoint in endpoints:
+        content = paths[endpoint]["get"]["responses"]["200"]["content"]
+        assert content["image/jpeg"]["schema"] == {"type": "string", "format": "binary"}
+        assert content["image/png"]["schema"] == {"type": "string", "format": "binary"}
+    assert paths[endpoints[0]]["get"]["responses"]["200"]["content"]["application/pdf"][
+        "schema"
+    ] == {"type": "string", "format": "binary"}
+    assert paths[endpoints[2]]["get"]["responses"]["200"]["content"]["application/pdf"][
+        "schema"
+    ] == {"type": "string", "format": "binary"}
 
 
 async def _upload_and_get_file_id(client: httpx.AsyncClient, token: str, company_id: str) -> str:
@@ -51,8 +73,8 @@ async def test_c1_ver_el_fichero_propio_devuelve_los_bytes_originales(authapi: A
     assert resp.headers["content-type"] == JPEG_CT
 
 
-async def test_c2_ver_fichero_de_empresa_hermana_da_403(authapi: Api) -> None:
-    """C2: fichero de otra empresa del mismo tenant -> 403."""
+async def test_c2_ver_fichero_de_empresa_hermana_da_404(authapi: Api) -> None:
+    """C2: fichero de otra empresa del mismo tenant -> 404, sin oráculo de existencia."""
     client, dsns = authapi
     tenant_id, _user_id, _company_e1 = await seed_uploader(dsns, slug="ilex")
     company_e2 = await seed_company(dsns["admin"], tenant_id=tenant_id, name="E2", cif="B06183446")
@@ -70,7 +92,7 @@ async def test_c2_ver_fichero_de_empresa_hermana_da_403(authapi: Api) -> None:
     empleado_token = await token_for(client, email="ana@ilex.es")
     resp = await client.get(image_path(file_e2), headers=auth(empleado_token))
 
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code == 404, resp.text
 
 
 async def test_c3_ver_fichero_de_otro_tenant_da_404(authapi: Api) -> None:
@@ -125,7 +147,8 @@ async def test_c6_un_user_no_ve_la_foto_de_un_companero_de_la_misma_empresa(
 ) -> None:
     """C6 (cumplimiento, 2026-08-02): dos `user` de la MISMA empresa -> cada uno solo ve lo que
     subió él mismo, aunque la RLS (tenant+empresa) los deje pasar a ambos. Julio lo pidió de forma
-    explícita: ningún `user` debe poder ver, de ninguna manera, la foto de otro."""
+    explícita: ningún `user` debe poder ver, de ninguna manera, la foto de otro. S6.12 además
+    exige no revelar por URL directa que el documento existe, por eso es 404 y no 403."""
     client, dsns = authapi
     tenant_id, _user_id, company_id = await seed_uploader(dsns, slug="ilex")
     ana_token = await token_for(client, email="ana@ilex.es")
@@ -145,7 +168,7 @@ async def test_c6_un_user_no_ve_la_foto_de_un_companero_de_la_misma_empresa(
 
     resp = await client.get(image_path(file_ana), headers=auth(bob_token))
 
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code == 404, resp.text
 
 
 async def test_c7_un_tenant_admin_si_ve_cualquier_foto_de_su_asesoria(authapi: Api) -> None:

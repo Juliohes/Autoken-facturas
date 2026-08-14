@@ -26,7 +26,7 @@ from tests._counterparty import fetch_cif_lookup, seed_cif_lookup, seed_counterp
 from tests._dbtest import seed_branding, seed_company, seed_membership, seed_tenant, seed_user
 from tests._intake import JPEG
 from tests._invoicing import fetch_invoice_by_id, seed_invoice
-from tests._ocr import seed_uploaded_file
+from tests._ocr import seed_uploaded_file, seed_uploaded_file_page
 from tests._platform import (
     fetch_tenant_by_id,
     platform_token,
@@ -166,6 +166,14 @@ async def test_c5_exportar_genera_un_zip_completo_y_descargable(authapi: Api) ->
     file_id = await seed_uploaded_file(
         dsns, tenant_id=tenant_id, company_id=company_id, uploaded_by=uploader
     )
+    await seed_uploaded_file_page(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        root_uploaded_file_id=file_id,
+        page_number=2,
+        content=JPEG + b"-export-page",
+    )
     await seed_platform_admin(dsns)
     token = await platform_token(client)
 
@@ -182,8 +190,10 @@ async def test_c5_exportar_genera_un_zip_completo_y_descargable(authapi: Api) ->
     invoices = json.loads(zip_file.read("invoices.json"))
     assert len(invoices) == 1
     matching_files = [n for n in names if n.startswith(f"files/{file_id}")]
-    assert len(matching_files) == 1
+    assert len(matching_files) == 2
     assert zip_file.read(matching_files[0]) == JPEG
+    pages = json.loads(zip_file.read("uploaded_file_pages.json"))
+    assert pages[0]["root_uploaded_file_id"] == file_id
 
 
 async def test_c6_exportar_marca_last_export_at(authapi: Api) -> None:

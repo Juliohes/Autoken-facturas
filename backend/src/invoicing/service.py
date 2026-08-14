@@ -192,20 +192,15 @@ class DraftCounterpartyVerdict:
 
 @dataclass(frozen=True)
 class HistoryItem:
-    """Una entrada del historial de facturas confirmadas (S2.6), contrato propio del servicio.
+    """Una entrada privada de documentos aceptados (S6.12), sin datos de contraparte.
 
     No reexporta `repository.HistoryEntry` tal cual: el router no debe depender de la forma interna
     de la capa de persistencia (misma separación que `ReviewData` frente a `ExtractionRecord`).
     """
 
     id: UUID
-    issue_date: date | None
-    direction: str
-    counterparty_tax_id: str | None
-    counterparty_name: str | None
-    counterparty_cif_status: str
-    total_amount: Decimal | None
-    confirmed_at: datetime
+    status: str
+    created_at: datetime
 
 
 @dataclass(frozen=True)
@@ -614,7 +609,7 @@ def _enqueue_benchmark_after_commit(
 
 
 async def history(identity: AuthContext) -> list[HistoryItem]:
-    """Historial de facturas confirmadas de los últimos 7 días del contexto (S2.6). Solo lectura.
+    """Historial de los 20 últimos documentos aceptados del contexto (S6.12). Solo lectura.
 
     Autorización de fichero por-fila no aplica aquí (a diferencia de `review`/`confirm`, que cargan
     UN fichero): la RLS de dos niveles ya acota el resultado al tenant/empresa de la sesión (spec
@@ -624,20 +619,10 @@ async def history(identity: AuthContext) -> list[HistoryItem]:
     """
     entries = await repository.list_history(
         identity.session,
-        encryption_key=tenant_encryption_key(get_settings(), identity.tenant_id),
-        confirmed_by=identity.user_id if identity.role == Role.USER else None,
+        uploaded_by=identity.user_id if identity.role == Role.USER else None,
     )
     return [
-        HistoryItem(
-            id=entry.id,
-            issue_date=entry.issue_date,
-            direction=entry.direction,
-            counterparty_tax_id=entry.counterparty_tax_id,
-            counterparty_name=entry.counterparty_name,
-            counterparty_cif_status=entry.counterparty_cif_status,
-            total_amount=entry.total_amount,
-            confirmed_at=entry.confirmed_at,
-        )
+        HistoryItem(id=entry.id, status=entry.status, created_at=entry.created_at)
         for entry in entries
     ]
 
@@ -881,11 +866,10 @@ async def purge_test_invoices(identity: AuthContext) -> PurgeResult:
             entity_id=item.id,
             payload={"uploaded_file_id": str(item.uploaded_file_id)},
         )
-        location = await intake_service.delete_uploaded_file_row(
+        file_locations = await intake_service.delete_uploaded_file_row(
             identity.session, item.uploaded_file_id
         )
-        if location is not None:
-            locations.append(location)
+        locations.extend(file_locations)
     intake_service.schedule_storage_cleanup(identity.session, locations)
     return PurgeResult(purged=len(purged))
 

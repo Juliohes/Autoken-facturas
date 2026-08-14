@@ -273,6 +273,12 @@ async def export_tenant(session: AsyncSession, tenant_id: UUID) -> str:
         content = storage.get_object(uploaded_file["storage_bucket"], uploaded_file["storage_key"])
         extension = extension_for_content_type(uploaded_file["content_type"])
         files.append((f"{uploaded_file['id']}{extension}", content))
+    for page in tables["uploaded_file_pages"]:
+        content = storage.get_object(page["storage_bucket"], page["storage_key"])
+        extension = extension_for_content_type(page["content_type"])
+        files.append(
+            (f"{page['root_uploaded_file_id']}-page-{page['page_number']}{extension}", content)
+        )
 
     zip_bytes = build_tenant_export_zip(tables, files)
     # Sufijo aleatorio, no solo el timestamp (hallazgo real de la auditoría de cobertura, verificado

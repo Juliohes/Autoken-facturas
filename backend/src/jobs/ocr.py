@@ -38,9 +38,11 @@ from ocr.analysis import STATUS_AUTO_OK, analyze_invoice
 from ocr.arbiter import reconcile
 from ocr.engines.gemini_extractor import build_default_extractor
 from ocr.extraction import (
+    DocumentPage,
     ExtractedInvoice,
     InvoiceExtractionError,
     InvoiceExtractor,
+    extract_document,
     serialize_tax_lines,
 )
 from ocr.preprocess.enhance import (
@@ -70,42 +72,53 @@ async def run_ocr(
 
     """
     tid, cid, fid = UUID(str(tenant_id)), UUID(str(company_id)), UUID(str(uploaded_file_id))
+    settings = get_settings()
     # Fan-out de extractores: hoy N=1 (una sola lectura), pero modelado como secuencia para que el
     # árbitro por campo reconcilie N>1 sin reescribir el job (ADR-0016). NUNCA se repite el MISMO
     # motor: la secuencia crecerá con motores DISTINTOS cuando el CIF de contraparte lo exija.
-    extractors: Sequence[InvoiceExtractor] = [extractor or build_default_extractor(get_settings())]
+    extractors: Sequence[InvoiceExtractor] = [extractor or build_default_extractor(settings)]
 
+    # La sesión solo protege la lectura coherente de metadatos. MinIO y proveedores externos nunca
+    # deben retener una conexión o una transacción del tenant.
     async with tenant_session(tid, cid) as session:
-        location = await intake_repo.get_file_location(session, fid)
-        if location is None:
+        locations = await intake_repo.get_document_pages(session, fid)
+        if not locations:
             # Sin fila visible no hay estado que transicionar; se registra y se abandona.
             logger.error("ocr.file_not_found", uploaded_file_id=str(fid), tenant_id=str(tid))
             return
 
         company = await companies_repo.get_company(
-            session, cid, encryption_key=company_encryption_key(get_settings(), tid)
+            session, cid, encryption_key=company_encryption_key(settings, tid)
         )
         if company is None:
             logger.error("ocr.company_not_found", company_id=str(cid), tenant_id=str(tid))
             await intake_repo.transition_status(session, fid, FileStatus.OCR_FAILED)
             return
 
-        try:
-            content = await asyncio.to_thread(storage.get_object, location.bucket, location.key)
-            readings = await asyncio.gather(
-                *(reader.extract(content, location.content_type) for reader in extractors)
+    try:
+        pages = [
+            DocumentPage(
+                content=await asyncio.to_thread(storage.get_object, location.bucket, location.key),
+                content_type=location.content_type,
             )
-        except (InvoiceExtractionError, storage.StorageUnavailable) as exc:
-            logger.error("ocr.extraction_failed", uploaded_file_id=str(fid), error=str(exc))
+            for location in locations
+        ]
+        readings = await asyncio.gather(*(extract_document(reader, pages) for reader in extractors))
+    except (InvoiceExtractionError, storage.StorageUnavailable) as exc:
+        logger.error("ocr.extraction_failed", uploaded_file_id=str(fid), error=str(exc))
+        async with tenant_session(tid, cid) as session:
             await intake_repo.transition_status(session, fid, FileStatus.OCR_FAILED)
-            return
+        return
 
-        reconciled = reconcile(readings)
-        analysis = analyze_invoice(reconciled, company.cif)
-        file_status = (
-            FileStatus.OCR_DONE if analysis.status == STATUS_AUTO_OK else FileStatus.NEEDS_REVIEW
-        )
+    reconciled = reconcile(readings)
+    analysis = analyze_invoice(reconciled, company.cif)
+    file_status = (
+        FileStatus.OCR_DONE if analysis.status == STATUS_AUTO_OK else FileStatus.NEEDS_REVIEW
+    )
 
+    # La extracción y el análisis ya terminaron: se abre una segunda sesión corta para confirmar el
+    # resultado y la transición de estado de forma atómica.
+    async with tenant_session(tid, cid) as session:
         await repository.upsert_extraction(
             session,
             company_id=cid,
@@ -125,7 +138,7 @@ async def run_ocr(
             model=reconciled.model,
             raw=reconciled.raw,
             status=analysis.status,
-            encryption_key=company_encryption_key(get_settings(), tid),
+            encryption_key=company_encryption_key(settings, tid),
         )
         await intake_repo.transition_status(session, fid, file_status)
         logger.info(
@@ -139,8 +152,7 @@ async def run_ocr(
         tid,
         cid,
         fid,
-        content=content,
-        content_type=location.content_type,
+        pages=pages,
         own_cif=company.cif,
         extractor=extractors[0],
         original_reading=reconciled,
@@ -152,8 +164,7 @@ async def run_ocr_comparison(
     company_id: UUID,
     uploaded_file_id: UUID,
     *,
-    content: bytes,
-    content_type: str,
+    pages: list[DocumentPage],
     own_cif: str,
     extractor: InvoiceExtractor,
     original_reading: ExtractedInvoice | None = None,
@@ -176,24 +187,35 @@ async def run_ocr_comparison(
             settings = await settings_repository.get_settings(session)
             if not settings.ocr_experiment_enabled:
                 return
-            if content_type not in SUPPORTED_CONTENT_TYPES:
-                return  # PDF u otro formato no fotografiable: fuera de alcance de dominio (C3).
 
-            # Coste real de CPU/memoria (decodificar + 3 realces + codificar): fuera del event loop,
-            # igual que ya se hace con la descarga de MinIO (auditoría, hallazgo de bloqueo).
-            enhanced_bytes = await asyncio.to_thread(enhance_invoice_image, content, content_type)
+        if not pages or any(page.content_type not in SUPPORTED_CONTENT_TYPES for page in pages):
+            logger.info(
+                "ocr.comparison_unsupported_document", uploaded_file_id=str(uploaded_file_id)
+            )
+            return
 
-            resolved_original: ExtractedInvoice
-            if original_reading is not None:
-                resolved_original = original_reading
-                enhanced_reading = await extractor.extract(enhanced_bytes, ENHANCED_CONTENT_TYPE)
-            else:
-                resolved_original, enhanced_reading = await asyncio.gather(
-                    extractor.extract(content, content_type),
-                    extractor.extract(enhanced_bytes, ENHANCED_CONTENT_TYPE),
-                )
+        # Coste real de CPU/memoria y llamada externa: ambos fuera de la sesión de Postgres.
+        enhanced_pages = [
+            DocumentPage(
+                content=await asyncio.to_thread(
+                    enhance_invoice_image, page.content, page.content_type
+                ),
+                content_type=ENHANCED_CONTENT_TYPE,
+            )
+            for page in pages
+        ]
 
-            verdict = comparison.compare_readings(resolved_original, enhanced_reading, own_cif)
+        resolved_original: ExtractedInvoice
+        if original_reading is not None:
+            resolved_original = original_reading
+            enhanced_reading = await extract_document(extractor, enhanced_pages)
+        else:
+            resolved_original, enhanced_reading = await asyncio.gather(
+                extract_document(extractor, pages), extract_document(extractor, enhanced_pages)
+            )
+
+        verdict = comparison.compare_readings(resolved_original, enhanced_reading, own_cif)
+        async with tenant_session(tenant_id, company_id) as session:
             await comparison_repository.upsert_comparison_run(
                 session,
                 company_id=company_id,

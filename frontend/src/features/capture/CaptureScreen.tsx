@@ -13,10 +13,35 @@ import { fileToJpegBlob } from './normalizeToJpeg'
 import { processCapturedFrame } from './processCapture'
 import type { Direction } from './types'
 import { useCameraStream } from './useCameraStream'
-import { useUploadCapture } from './useUploadCapture'
+import { useUploadBatchCapture, useUploadCapture } from './useUploadCapture'
 
 interface Props {
   onUploaded: (fileId: string, direction: Direction) => void
+}
+
+interface CapturedPage {
+  id: number
+  blob: Blob
+  previewUrl: string
+}
+
+function pageGuidance(pageIndex: number) {
+  if (pageIndex === 0) return 'Página 1: datos fiscales'
+  if (pageIndex === 1) return 'Página 2: importes'
+  return `Página ${pageIndex + 1}: datos complementarios`
+}
+
+function previewUrlFor(blob: Blob) {
+  return typeof URL.createObjectURL === 'function' ? URL.createObjectURL(blob) : ''
+}
+
+function releasePreviewUrl(url: string) {
+  if (url && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url)
+}
+
+function firstVideoTrack(stream: MediaStream | null) {
+  if (!stream) return undefined
+  return stream.getVideoTracks?.()[0] ?? stream.getTracks()[0]
 }
 
 export function CaptureScreen({ onUploaded }: Props) {
@@ -28,13 +53,21 @@ export function CaptureScreen({ onUploaded }: Props) {
   // Invalida resultados tardíos de una cámara o selección anterior antes de que
   // puedan iniciar una subida distinta de la última decisión consciente.
   const operationRef = useRef(0)
+  const pagesRef = useRef<CapturedPage[]>([])
+  const nextPageIdRef = useRef(0)
+  const addingPageRef = useRef(false)
   const [direction, setDirection] = useState<Direction>('recibida')
   const [companyId, setCompanyId] = useState('')
   const [processing, setProcessing] = useState(false)
   const [captureError, setCaptureError] = useState<string | null>(null)
   const [videoReady, setVideoReady] = useState(false)
+  const [multiplePages, setMultiplePages] = useState(false)
+  const [pages, setPages] = useState<CapturedPage[]>([])
+  const [addingPage, setAddingPage] = useState(false)
+  const [torchOn, setTorchOn] = useState(false)
   const companies = useCompanyOptions({ enabled: role === 'tenant_admin' })
   const upload = useUploadCapture()
+  const uploadBatch = useUploadBatchCapture()
   const effectiveCompanyId = resolveEffectiveCompanyId(role, user?.company?.id, companyId)
   const canStart = effectiveCompanyId !== '' && !processing
 
@@ -44,8 +77,13 @@ export function CaptureScreen({ onUploaded }: Props) {
   }, [camera.stream])
 
   useEffect(() => {
+    pagesRef.current = pages
+  }, [pages])
+
+  useEffect(() => {
     return () => {
       operationRef.current += 1
+      pagesRef.current.forEach((page) => releasePreviewUrl(page.previewUrl))
     }
   }, [])
 
@@ -65,42 +103,136 @@ export function CaptureScreen({ onUploaded }: Props) {
     }
   }
 
+  const addPage = (blob: Blob): boolean => {
+    const current = pagesRef.current
+    if (current.length >= 5) {
+      setCaptureError('Ya has añadido el máximo de cinco páginas.')
+      return false
+    }
+    nextPageIdRef.current += 1
+    const next = [...current, { id: nextPageIdRef.current, blob, previewUrl: previewUrlFor(blob) }]
+    pagesRef.current = next
+    setPages(next)
+    return true
+  }
+
+  const stopTorch = async () => {
+    const track = firstVideoTrack(camera.stream)
+    if (!torchOn || !track?.applyConstraints) return
+    try {
+      await track.applyConstraints({ advanced: [{ torch: false } as MediaTrackConstraintSet] })
+    } catch {
+      // Apagar la luz es una limpieza de recursos: un fallo no debe impedir cerrar la cámara.
+    } finally {
+      setTorchOn(false)
+    }
+  }
+
+  const stopCamera = () => {
+    void stopTorch()
+    camera.close()
+  }
+
+  const closeCamera = () => {
+    operationRef.current += 1
+    addingPageRef.current = false
+    setAddingPage(false)
+    stopCamera()
+    setCaptureError(null)
+  }
+
   const handleManualCapture = async () => {
     if (!canStart) return
+    if (multiplePages && (addingPageRef.current || pagesRef.current.length >= 5)) {
+      if (pagesRef.current.length >= 5) {
+        setCaptureError('Ya has añadido el máximo de cinco páginas.')
+        stopCamera()
+      }
+      return
+    }
     const frame = grabVideoFrame(videoRef.current as HTMLVideoElement)
     if (!frame) {
       setVideoReady(false)
       setCaptureError('La cámara aún no está lista. Inténtalo de nuevo.')
+      if (multiplePages) stopCamera()
       return
     }
     const operation = operationRef.current + 1
     operationRef.current = operation
     setCaptureError(null)
-    setProcessing(true)
-    camera.close()
+    if (!multiplePages) setProcessing(true)
+    if (multiplePages) {
+      addingPageRef.current = true
+      setAddingPage(true)
+    }
+    // El frame ya está en memoria: no se necesita mantener cámara ni linterna mientras OpenCV
+    // normaliza la imagen. Evita dejar recursos del móvil activos ante un procesado lento.
+    stopCamera()
     try {
       const analysis = await analyzeFrame(frame)
       if (operationRef.current !== operation) return
       const blob = await processCapturedFrame(frame, analysis.corners)
       if (operationRef.current !== operation) return
-      await uploadBlob(blob, operation)
+      if (multiplePages) {
+        addPage(blob)
+      } else {
+        await uploadBlob(blob, operation)
+      }
     } catch {
       if (operationRef.current === operation) {
         setCaptureError('No se pudo preparar la foto. Inténtalo de nuevo.')
-        setProcessing(false)
+        // La cámara multipágina se cerró justo tras capturar el frame, antes de normalizarlo.
+        if (!multiplePages) setProcessing(false)
+      }
+    } finally {
+      if (multiplePages && operationRef.current === operation) {
+        addingPageRef.current = false
+        setAddingPage(false)
       }
     }
   }
 
   const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+    const files = Array.from(event.target.files ?? [])
     event.target.value = ''
-    if (!file || !canStart) return
+    if (files.length === 0 || !canStart) return
+    if (multiplePages) {
+      if (addingPageRef.current) return
+      const available = 5 - pagesRef.current.length
+      if (available <= 0) {
+        setCaptureError('Ya has añadido el máximo de cinco páginas.')
+        return
+      }
+      const operation = operationRef.current + 1
+      operationRef.current = operation
+      addingPageRef.current = true
+      setAddingPage(true)
+      setCaptureError(null)
+      try {
+        const normalized = await Promise.all(files.slice(0, available).map((file) => fileToJpegBlob(file)))
+        if (operationRef.current !== operation) return
+        normalized.forEach(addPage)
+        if (files.length > available) setCaptureError('Solo se pueden añadir cinco páginas por factura.')
+        stopCamera()
+      } catch {
+        if (operationRef.current === operation) {
+          setCaptureError('No se pudo preparar una de las fotos. Elige imágenes válidas.')
+          stopCamera()
+        }
+      } finally {
+        if (operationRef.current === operation) {
+          addingPageRef.current = false
+          setAddingPage(false)
+        }
+      }
+      return
+    }
+    const [file] = files
     const operation = operationRef.current + 1
     operationRef.current = operation
     setCaptureError(null)
     setProcessing(true)
-    camera.close()
+    stopCamera()
     try {
       const blob = await fileToJpegBlob(file)
       if (operationRef.current !== operation) return
@@ -113,18 +245,13 @@ export function CaptureScreen({ onUploaded }: Props) {
     }
   }
 
-  const closeCamera = () => {
-    operationRef.current += 1
-    camera.close()
-    setCaptureError(null)
-  }
-
-  const openCamera = () => {
+  const openCamera = (forMultiplePages = false) => {
     if (!canStart) {
       setCaptureError('Elige una empresa antes de tomar la foto.')
       return
     }
     setCaptureError(null)
+    setMultiplePages(forMultiplePages)
     camera.open()
   }
 
@@ -134,6 +261,63 @@ export function CaptureScreen({ onUploaded }: Props) {
       return
     }
     fileInputRef.current?.click()
+  }
+
+  const startMultiplePages = () => {
+    if (!canStart) {
+      setCaptureError('Elige una empresa antes de añadir las fotos.')
+      return
+    }
+    setCaptureError(null)
+    setMultiplePages(true)
+    camera.open()
+  }
+
+  const removePage = (index: number) => {
+    const page = pagesRef.current[index]
+    if (!page) return
+    releasePreviewUrl(page.previewUrl)
+    const next = pagesRef.current.filter((_, currentIndex) => currentIndex !== index)
+    pagesRef.current = next
+    setPages(next)
+  }
+
+  const sendPages = async () => {
+    if (pages.length < 2 || processing) return
+    const operation = operationRef.current + 1
+    operationRef.current = operation
+    setCaptureError(null)
+    setProcessing(true)
+    stopCamera()
+    try {
+      const data = await uploadBatch.mutateAsync({
+        blobs: pages.map((page) => page.blob),
+        companyId: effectiveCompanyId,
+        direction,
+      })
+      if (operationRef.current === operation) onUploaded(data.id, direction)
+    } catch {
+      if (operationRef.current === operation) setCaptureError('No se pudo enviar la factura. Inténtalo de nuevo.')
+    } finally {
+      if (operationRef.current === operation) setProcessing(false)
+    }
+  }
+
+  const videoTrack = firstVideoTrack(camera.stream)
+  const capabilities = videoTrack && 'getCapabilities' in videoTrack
+    ? (videoTrack.getCapabilities() as MediaTrackCapabilities)
+    : undefined
+  const torchAvailable = Boolean((capabilities as { torch?: boolean } | undefined)?.torch && videoTrack?.applyConstraints)
+
+  const toggleTorch = async () => {
+    if (!videoTrack?.applyConstraints || !torchAvailable) return
+    const next = !torchOn
+    try {
+      await videoTrack.applyConstraints({ advanced: [{ torch: next } as MediaTrackConstraintSet] })
+      setTorchOn(next)
+    } catch {
+      setTorchOn(false)
+    }
   }
 
   if (role === 'user' && !user?.company) {
@@ -165,12 +349,12 @@ export function CaptureScreen({ onUploaded }: Props) {
   }
 
   return (
-    <section className="mx-auto max-w-xl space-y-4 p-6 text-slate-100">
+    <section className="mx-auto max-w-xl space-y-5 p-6 text-slate-100">
+      {DirectionSelector}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">Capturar factura</h1>
         <Link to={ROUTES.history} className="rounded-md border border-emerald-600 px-3 py-1.5 text-sm font-medium text-emerald-400 hover:bg-emerald-600/10">Ver historial</Link>
       </div>
-      {DirectionSelector}
       {role === 'tenant_admin' && (
         <label className="flex flex-col text-sm text-slate-300">
           Empresa
@@ -183,34 +367,72 @@ export function CaptureScreen({ onUploaded }: Props) {
       {captureError && <p role="alert" className="text-sm text-red-400">{captureError}</p>}
 
       {camera.status === 'idle' && (
-        <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={openCamera} className="rounded-md bg-emerald-600 px-4 py-3 text-base font-semibold text-white">Tomar foto</button>
-          <button type="button" onClick={openFilePicker} className="rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100">Subir archivo</button>
+        <div className="space-y-5">
+          <div className="flex justify-center">
+            <button type="button" onClick={() => openCamera()} className="h-36 w-36 rounded-full bg-emerald-600 text-lg font-semibold text-white shadow-lg shadow-emerald-950/40 hover:bg-emerald-500">Tomar foto</button>
+          </div>
+          <div className="flex justify-center gap-3">
+            <button type="button" onClick={openFilePicker} className="rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100">Subir archivo</button>
+            <button type="button" onClick={startMultiplePages} className="rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100">Varias hojas</button>
+          </div>
         </div>
       )}
 
+      {multiplePages && pages.length > 0 && camera.status === 'idle' && (
+        <MultiPagePanel pages={pages} onRemove={removePage} onAdd={() => openCamera(true)} onSelectFiles={openFilePicker} onSend={() => void sendPages()} />
+      )}
+
       {camera.status !== 'idle' && (
-        <div role="dialog" aria-modal="true" aria-label="Cámara para capturar factura" className="fixed inset-0 z-50 flex min-h-screen flex-col bg-slate-950 p-4 text-slate-100">
-          <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-4">
+        <div role="dialog" aria-modal="true" aria-label="Cámara para capturar factura" className="fixed inset-0 z-50 flex min-h-screen flex-col bg-slate-950 p-0 text-slate-100">
+          <div className="relative flex min-h-screen flex-1 flex-col justify-end">
             {camera.status === 'requesting' && <p className="text-center text-slate-300">Pidiendo acceso a la cámara…</p>}
             {camera.status === 'active' && (
-              <div className="relative mx-auto w-full max-w-xl overflow-hidden rounded-lg bg-black">
-                <video ref={videoRef} autoPlay playsInline muted onLoadedData={markVideoReady} onLoadedMetadata={markVideoReady} className="max-h-[70vh] w-full object-contain" />
-                <div data-testid="camera-guide-frame" aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 h-[72vh] max-w-[78vw] -translate-x-1/2 -translate-y-1/2 aspect-[1/1.414] rounded border-4 border-emerald-400 shadow-[0_0_0_9999px_rgb(0_0_0_/_0.35)]" />
-              </div>
+              <>
+                <video ref={videoRef} autoPlay playsInline muted onLoadedData={markVideoReady} onLoadedMetadata={markVideoReady} className="absolute inset-0 h-full w-full object-cover" />
+                <div data-testid="camera-guide-frame" aria-hidden="true" className="pointer-events-none absolute inset-4 rounded border-4 border-emerald-400 shadow-[0_0_0_9999px_rgb(0_0_0_/_0.35)]" />
+                {multiplePages && <p className="absolute left-4 right-4 top-[max(1rem,env(safe-area-inset-top))] rounded bg-slate-950/80 px-3 py-2 text-center text-sm font-medium">{pageGuidance(pages.length)}</p>}
+                {torchAvailable && <button type="button" aria-label="Linterna" onClick={() => void toggleTorch()} className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] rounded-full bg-slate-950/80 px-4 py-2 text-sm font-medium">Linterna{torchOn ? ' encendida' : ''}</button>}
+              </>
             )}
             {camera.status === 'unavailable' && <p className="text-slate-400">{camera.unavailableReason === 'insecure' ? 'La cámara requiere una conexión segura. Puedes subir una foto desde tu dispositivo.' : 'No se pudo acceder a la cámara. Puedes subir una foto desde tu dispositivo.'}</p>}
-            <div className="mx-auto flex w-full max-w-xl flex-wrap gap-3">
-              {camera.status === 'active' && <button type="button" onClick={() => void handleManualCapture()} disabled={!videoReady} className="flex-1 rounded-md bg-emerald-600 px-4 py-4 text-lg font-semibold text-white disabled:opacity-40">{videoReady ? 'Capturar foto' : 'Preparando cámara…'}</button>}
+            <div className="relative z-10 flex w-full flex-wrap gap-3 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-12">
+              {camera.status === 'active' && <button type="button" onClick={() => void handleManualCapture()} disabled={!videoReady || addingPage} className="flex-1 rounded-md bg-emerald-600 px-4 py-4 text-lg font-semibold text-white disabled:opacity-40">{addingPage ? 'Añadiendo página…' : videoReady ? 'Capturar foto' : 'Preparando cámara…'}</button>}
               {camera.status === 'active' && !videoReady && camera.canRetry && <button type="button" onClick={camera.retry} className="rounded-md border border-slate-600 px-4 py-3 font-medium">Reintentar cámara</button>}
               {camera.status !== 'active' && camera.canRetry && <button type="button" onClick={camera.retry} className="rounded-md border border-slate-600 px-4 py-3 font-medium">Reintentar cámara</button>}
-              <button type="button" onClick={openFilePicker} className="rounded-md border border-slate-600 px-4 py-3 font-medium">Subir archivo</button>
+              <button type="button" onClick={openFilePicker} className="rounded-md border border-slate-600 bg-slate-950/70 px-4 py-3 font-medium">Subir archivo</button>
               <button type="button" onClick={closeCamera} className="rounded-md border border-slate-600 px-4 py-3 font-medium">Cerrar cámara</button>
             </div>
           </div>
         </div>
       )}
-      <input ref={fileInputRef} type="file" aria-label="Elige o toma una foto" accept="image/*" onChange={(event) => void handleFileSelected(event)} className="sr-only" />
+      <input ref={fileInputRef} type="file" aria-label="Elige o toma una foto" accept="image/*" multiple={multiplePages} onChange={(event) => void handleFileSelected(event)} className="sr-only" />
+    </section>
+  )
+}
+
+function MultiPagePanel({ pages, onRemove, onAdd, onSelectFiles, onSend }: {
+  pages: CapturedPage[]
+  onRemove: (index: number) => void
+  onAdd: () => void
+  onSelectFiles: () => void
+  onSend: () => void
+}) {
+  return (
+    <section aria-label="Páginas de la factura" className="space-y-3 rounded-lg border border-slate-700 p-4">
+      <p className="text-sm text-slate-300">{pages.length < 2 ? 'Añade la página de importes para poder enviar.' : pages.length < 5 ? 'Puedes añadir datos complementarios si hacen falta.' : 'Has añadido el máximo de cinco páginas.'}</p>
+      <ol className="flex flex-wrap gap-3">
+        {pages.map((page, index) => (
+          <li key={page.id} aria-label={`${pageGuidance(index)} ${index + 1}`} className="relative w-20">
+            <img src={page.previewUrl} alt={`Miniatura página ${index + 1}`} className="h-24 w-20 rounded object-cover" />
+            <button type="button" onClick={() => onRemove(index)} className="mt-1 text-xs text-red-300">Quitar página {index + 1}</button>
+          </li>
+        ))}
+      </ol>
+      <div className="flex flex-wrap gap-3">
+        <button type="button" onClick={onAdd} disabled={pages.length >= 5} className="rounded-md border border-slate-600 px-3 py-2 text-sm disabled:opacity-40">Tomar otra foto</button>
+        <button type="button" onClick={onSelectFiles} disabled={pages.length >= 5} className="rounded-md border border-slate-600 px-3 py-2 text-sm disabled:opacity-40">Añadir desde archivo</button>
+        <button type="button" onClick={onSend} disabled={pages.length < 2} className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Enviar factura</button>
+      </div>
     </section>
   )
 }

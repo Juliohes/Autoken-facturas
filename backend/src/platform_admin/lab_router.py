@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -29,6 +29,20 @@ from platform_admin import lab_service, service
 from reporting.repository import InvoiceRow
 
 router = APIRouter(prefix="/platform/tenants", tags=["platform"])
+
+_BINARY_IMAGE_CONTENT: dict[str, Any] = {
+    "image/jpeg": {"schema": {"type": "string", "format": "binary"}},
+    "image/png": {"schema": {"type": "string", "format": "binary"}},
+}
+_BINARY_DOCUMENT_RESPONSE: dict[int | str, dict[str, Any]] = {
+    200: {
+        "description": "Bytes binarios del documento original autorizado.",
+        "content": {
+            **_BINARY_IMAGE_CONTENT,
+            "application/pdf": {"schema": {"type": "string", "format": "binary"}},
+        },
+    }
+}
 
 AdminTech = Annotated[AdminTechAuthContext, Depends(require_admin_tech())]
 
@@ -143,7 +157,7 @@ def _reading_3_out(reading_3: lab_service.Reading3) -> dict[str, object]:
     }
 
 
-@router.get("/{tenant_id}/invoices/{file_id}/image")
+@router.get("/{tenant_id}/invoices/{file_id}/image", responses=_BINARY_DOCUMENT_RESPONSE)
 async def get_invoice_image(identity: AdminTech, tenant_id: UUID, file_id: UUID) -> Response:
     """Foto original de una factura del tenant elegido, para el botón "Ver" del laboratorio (spec
     C2). Mismo patrón de 404 que el resto de este router (C4/C5)."""

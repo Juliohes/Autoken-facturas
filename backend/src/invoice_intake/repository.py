@@ -23,9 +23,15 @@ from shared.integrity import violates_unique_constraint
 # `tenant_id` de la escritura derivado del contexto de la sesión (coherente con la RLS).
 _TENANT_FROM_CONTEXT = "NULLIF(current_setting('app.tenant_id', true), '')::uuid"
 
-# Nombre del UNIQUE `(company_id, sha256)` (migración 0004): red última de la no-duplicación por
-# empresa, resistente a concurrencia (C14). Traduce su violación a un 409 con el duplicado.
-_COMPANY_SHA256_UNIQUE = "uploaded_files_company_sha256_unique"
+# Nombre de los UNIQUE por empresa+quien sube: red última de la no-duplicación privada, resistente a
+# concurrencia (C14). Traduce su violación a un 409 sin revelar el id de un compañero.
+_DUPLICATE_CONSTRAINTS = frozenset(
+    {
+        "uploaded_files_company_uploader_sha256_unique",
+        "uploaded_file_pages_company_uploader_sha256_unique",
+        "uploaded_file_document_uploader_sha256_unique",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -65,6 +71,16 @@ class UploadedFileLocation:
     content_type: str
 
 
+@dataclass(frozen=True)
+class UploadedFilePageLocation:
+    """Ubicación ordenada de una hoja de documento, incluida la raíz como página 1."""
+
+    page_number: int
+    bucket: str
+    key: str
+    content_type: str
+
+
 async def get_file_location(session: AsyncSession, file_id: UUID) -> UploadedFileLocation | None:
     """Ubicación en MinIO de un fichero de intake, visible en el contexto (RLS), o `None`.
 
@@ -86,6 +102,52 @@ async def get_file_location(session: AsyncSession, file_id: UUID) -> UploadedFil
     return UploadedFileLocation(
         bucket=row.storage_bucket, key=row.storage_key, content_type=row.content_type
     )
+
+
+async def get_document_pages(
+    session: AsyncSession, root_uploaded_file_id: UUID
+) -> list[UploadedFilePageLocation]:
+    """Todas las hojas visibles de un documento, siempre en orden de captura."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT 1 AS page_number, storage_bucket, storage_key, content_type "
+                "FROM uploaded_files WHERE id = :id "
+                "UNION ALL "
+                "SELECT page_number, storage_bucket, storage_key, content_type "
+                "FROM uploaded_file_pages WHERE root_uploaded_file_id = :id "
+                "ORDER BY page_number"
+            ),
+            {"id": str(root_uploaded_file_id)},
+        )
+    ).all()
+    return [
+        UploadedFilePageLocation(
+            page_number=row.page_number,
+            bucket=row.storage_bucket,
+            key=row.storage_key,
+            content_type=row.content_type,
+        )
+        for row in rows
+    ]
+
+
+async def get_page_location(
+    session: AsyncSession, root_uploaded_file_id: UUID, page_number: int
+) -> UploadedFileLocation | None:
+    """Ubicación de una página adicional visible, sin revelar páginas de otro documento."""
+    row = (
+        await session.execute(
+            text(
+                "SELECT storage_bucket, storage_key, content_type FROM uploaded_file_pages "
+                "WHERE root_uploaded_file_id = :id AND page_number = :page_number"
+            ),
+            {"id": str(root_uploaded_file_id), "page_number": page_number},
+        )
+    ).first()
+    if row is None:
+        return None
+    return UploadedFileLocation(row.storage_bucket, row.storage_key, row.content_type)
 
 
 async def get_file_context(session: AsyncSession, file_id: UUID) -> UploadedFileContext | None:
@@ -133,8 +195,8 @@ async def delete_uploaded_file(session: AsyncSession, file_id: UUID) -> None:
 
 
 def is_duplicate_violation(exc: IntegrityError) -> bool:
-    """True si la `IntegrityError` viene del UNIQUE `(company_id, sha256)`, no de otra."""
-    return violates_unique_constraint(exc, _COMPANY_SHA256_UNIQUE)
+    """True si la integridad global de hash de un documento rechazó la escritura."""
+    return any(violates_unique_constraint(exc, constraint) for constraint in _DUPLICATE_CONSTRAINTS)
 
 
 async def company_exists(session: AsyncSession, company_id: UUID) -> bool:
@@ -152,15 +214,41 @@ async def company_exists(session: AsyncSession, company_id: UUID) -> bool:
     return row is not None
 
 
-async def find_duplicate_id(session: AsyncSession, company_id: UUID, sha256: str) -> UUID | None:
-    """Id del fichero de intake existente con ese `(company_id, sha256)`, o `None` si no hay.
+async def find_duplicate_id(
+    session: AsyncSession, company_id: UUID, uploaded_by: UUID, sha256: str
+) -> UUID | None:
+    """Id propio existente con ese `(company_id, uploaded_by, sha256)`, o `None` si no hay.
 
     Alimenta el `duplicate_of` del 409 (dedup previo al antivirus y captura de la carrera).
     """
     row = (
         await session.execute(
-            text("SELECT id FROM uploaded_files WHERE company_id = :cid AND sha256 = :sha LIMIT 1"),
-            {"cid": str(company_id), "sha": sha256},
+            text(
+                "SELECT id FROM uploaded_files WHERE company_id = :cid "
+                "AND uploaded_by = :uploaded_by "
+                "AND sha256 = :sha LIMIT 1"
+            ),
+            {"cid": str(company_id), "uploaded_by": str(uploaded_by), "sha": sha256},
+        )
+    ).first()
+    return row.id if row is not None else None
+
+
+async def find_document_duplicate_id(
+    session: AsyncSession, company_id: UUID, uploaded_by: UUID, sha256: str
+) -> UUID | None:
+    """Documento propio que ya contiene esos bytes, incluso si están en una hoja secundaria."""
+    row = (
+        await session.execute(
+            text(
+                "SELECT id FROM uploaded_files WHERE company_id = :cid "
+                "AND uploaded_by = :uploaded_by "
+                "AND sha256 = :sha "
+                "UNION ALL "
+                "SELECT root_uploaded_file_id AS id FROM uploaded_file_pages "
+                "WHERE company_id = :cid AND uploaded_by = :uploaded_by AND sha256 = :sha LIMIT 1"
+            ),
+            {"cid": str(company_id), "uploaded_by": str(uploaded_by), "sha": sha256},
         )
     ).first()
     return row.id if row is not None else None
@@ -215,4 +303,41 @@ async def insert_uploaded_file(
         status=row.status,
         scan_status=row.scan_status,
         created_at=row.created_at,
+    )
+
+
+async def insert_uploaded_file_page(
+    session: AsyncSession,
+    *,
+    root_uploaded_file_id: UUID,
+    company_id: UUID,
+    uploaded_by: UUID,
+    page_number: int,
+    storage_bucket: str,
+    storage_key: str,
+    content_type: str,
+    size_bytes: int,
+    sha256: str,
+) -> None:
+    """Inserta una hoja secundaria bajo la raíz ya creada, en la misma transacción."""
+    await session.execute(
+        text(
+            "INSERT INTO uploaded_file_pages "
+            "(root_uploaded_file_id, company_id, uploaded_by, page_number, storage_bucket, "
+            "storage_key, "
+            "content_type, size_bytes, sha256) VALUES "
+            "(:root, :company_id, :uploaded_by, :page_number, :bucket, :key, :content_type, "
+            ":size_bytes, :sha256)"
+        ),
+        {
+            "root": str(root_uploaded_file_id),
+            "company_id": str(company_id),
+            "uploaded_by": str(uploaded_by),
+            "page_number": page_number,
+            "bucket": storage_bucket,
+            "key": storage_key,
+            "content_type": content_type,
+            "size_bytes": size_bytes,
+            "sha256": sha256,
+        },
     )

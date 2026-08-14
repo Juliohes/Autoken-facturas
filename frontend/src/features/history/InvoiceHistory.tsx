@@ -1,14 +1,12 @@
-// Pantalla de historial (S2.6): lista de solo lectura de las facturas confirmadas
-// de los últimos 7 días del usuario, la más reciente primero. Orquesta el hook de
-// datos y la presentación de cada fila; sin lógica de negocio aquí (vive en el
-// backend, que ya filtra/ordena/acota). Comportamientos C7-C9 de la spec.
-import { formatCurrency } from '../../shared/format'
+// El historial S6.12 refleja envíos aceptados, incluso mientras el OCR está pendiente o ha fallado.
 import { useInvoiceHistory } from './useInvoiceHistory'
 import type { HistoryEntry } from './types'
 
-const DIRECTION_LABEL: Record<string, string> = {
-  recibida: 'Recibida',
-  emitida: 'Emitida',
+const STATUS_LABEL: Record<string, string> = {
+  pending_ocr: 'Pendiente de OCR',
+  ocr_failed: 'OCR no completado',
+  needs_review: 'Pendiente de comprobación',
+  confirmed: 'Confirmada',
 }
 
 export function InvoiceHistory() {
@@ -26,10 +24,12 @@ export function InvoiceHistory() {
     )
   }
 
-  const entries = history.data?.entries ?? []
+  // La API ya ordena y acota; el corte visual evita que una respuesta degradada muestre más de los
+  // veinte envíos que define S6.12.
+  const entries = (history.data?.entries ?? []).slice(0, 20)
 
   if (entries.length === 0) {
-    return <p className="p-6 text-slate-400">No hay facturas en los últimos 7 días.</p>
+    return <p className="p-6 text-slate-400">Todavía no has enviado ninguna factura.</p>
   }
 
   return (
@@ -48,15 +48,15 @@ function HistoryRow({ entry }: { entry: HistoryEntry }) {
   return (
     <li data-testid="history-row" className="flex items-center justify-between gap-3 py-3">
       <div className="min-w-0">
-        <p className="truncate font-medium">{entry.counterparty_name ?? '—'}</p>
-        <p className="text-sm text-slate-400">
-          {entry.issue_date ?? '—'} · {DIRECTION_LABEL[entry.direction] ?? entry.direction}
-        </p>
+        <p className="font-medium">Factura enviada</p>
+        <time dateTime={entry.created_at} className="text-sm text-slate-400">{formatCreatedAt(entry.created_at)}</time>
       </div>
-      <div className="shrink-0 text-right">
-        <p className="font-semibold">{formatCurrency(entry.total_amount)}</p>
-        <p className="text-sm text-slate-400">{entry.counterparty_cif_status}</p>
-      </div>
+      <p className="shrink-0 text-right text-sm text-slate-400">{STATUS_LABEL[entry.status] ?? entry.status}</p>
     </li>
   )
+}
+
+function formatCreatedAt(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('es-ES')
 }
