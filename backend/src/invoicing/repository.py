@@ -588,7 +588,4 @@ async def list_history(
             },
         )
     ).all()
-    return [
-        HistoryEntry(id=row.id, status=row.status, created_at=row.created_at)
-        for row in rows
-    ]
+    return [HistoryEntry(id=row.id, status=row.status, created_at=row.created_at) for row in rows]

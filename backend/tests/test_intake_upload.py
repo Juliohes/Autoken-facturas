@@ -176,8 +176,7 @@ async def test_c6_fichero_infectado_se_rechaza_sin_rastro(authapi: Api) -> None:
     assert resp.status_code == 422, resp.text
     assert await count_uploaded_files(dsns, company_id=company_id) == 0
     assert not await object_exists(
-        dsns,
-        tenant_id=tenant_id, company_id=company_id, sha256=_sha256(EICAR_JPEG)
+        dsns, tenant_id=tenant_id, company_id=company_id, sha256=_sha256(EICAR_JPEG)
     )
 
 

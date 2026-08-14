@@ -88,8 +88,7 @@ async def test_c3_purgar_borra_el_fichero_subido_y_su_objeto_en_minio(authapi: A
     uploaded = await fetch_uploaded_file(dsns, file_id=file_id)
     assert uploaded is not None
     assert await object_exists(
-        dsns,
-        tenant_id=tenant_id, company_id=company_id, sha256=uploaded["sha256"]
+        dsns, tenant_id=tenant_id, company_id=company_id, sha256=uploaded["sha256"]
     )
     token = await token_for(client, email="admin@ilex.es", hostname="ilex.localhost")
 
@@ -98,8 +97,7 @@ async def test_c3_purgar_borra_el_fichero_subido_y_su_objeto_en_minio(authapi: A
     assert resp.status_code == 200, resp.text
     assert await fetch_uploaded_file(dsns, file_id=file_id) is None
     assert not await object_exists(
-        dsns,
-        tenant_id=tenant_id, company_id=company_id, sha256=uploaded["sha256"]
+        dsns, tenant_id=tenant_id, company_id=company_id, sha256=uploaded["sha256"]
     )
 
 

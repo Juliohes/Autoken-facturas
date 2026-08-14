@@ -297,7 +297,6 @@ class Settings(BaseSettings):
     # debe poner además su propia cota (defensa en profundidad).
     max_request_body_bytes: int = 16 * 1024 * 1024
 
-
     # --- Worker OCR S2.3 (jobs, arq) -----------------------------------------------------------
     # Cola de arq en la que la API encola `run_ocr` tras una subida aceptada y de la que el worker
     # consume. No es secreto; se comparte el mismo Redis que el resto de la app.
