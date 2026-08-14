@@ -39,26 +39,18 @@ _TENANT_FROM_CONTEXT = "NULLIF(current_setting('app.tenant_id', true), '')::uuid
 # resistente a la carrera de dos confirmaciones concurrentes (C9). Traduce su violación a un 409.
 _UPLOADED_FILE_UNIQUE = "invoices_uploaded_file_unique"
 
-# Ventana móvil del historial (S2.6 spec §2/§4): facturas confirmadas en los últimos N días.
-HISTORY_WINDOW_DAYS = 7
-
-# Cota defensiva de resultados del historial (S2.6 spec §4): la ventana de 7 días ya acota el
-# volumen; esta cota es la red última contra una lista sin fin.
-HISTORY_LIMIT = 200
+# El historial privado es una vista operativa de los últimos documentos aceptados, no un listado
+# contable de facturas confirmadas. La cota es parte del contrato S6.12.
+HISTORY_LIMIT = 20
 
 
 @dataclass(frozen=True)
 class HistoryEntry:
-    """Una entrada del historial de facturas confirmadas (S2.6, spec §2)."""
+    """Una entrada sin PII del historial de documentos aceptados (S6.12)."""
 
     id: UUID
-    issue_date: date | None
-    direction: str
-    counterparty_tax_id: str | None
-    counterparty_name: str | None
-    counterparty_cif_status: str
-    total_amount: Decimal | None
-    confirmed_at: datetime
+    status: str
+    created_at: datetime
 
 
 @dataclass(frozen=True)
@@ -572,53 +564,31 @@ async def list_edits(
 
 
 async def list_history(
-    session: AsyncSession, *, encryption_key: str, confirmed_by: UUID | None = None
+    session: AsyncSession, *, uploaded_by: UUID | None = None
 ) -> list[HistoryEntry]:
-    """Facturas confirmadas de los últimos 7 días del contexto (S2.6), la más reciente primero.
+    """Últimos documentos aceptados del contexto, la más reciente primero (S6.12).
 
-    Sin filtro de `tenant_id`/`company_id` por parámetro: la RLS de dos niveles de `invoices`
-    (migración 0007) ya acota el resultado al contexto de la sesión (spec §4, anti-cruce de
-    tenants). Excluye `is_test` (regla 3) y aplica la cota defensiva `HISTORY_LIMIT`; si se alcanza,
-    se registra (spec §5: nunca se trunca en silencio como si fuera todo).
-
-    `confirmed_by` (2026-08-02, cumplimiento): tercer nivel, dentro de la propia empresa — un
-    `user` solo debe ver lo que confirmó él mismo, aunque comparta empresa con otro `user` y la RLS
-    los deje pasar a ambos. `None` (uso de `tenant_admin`) mantiene el comportamiento original: toda
-    la empresa/tenant de la sesión.
+    La RLS de `uploaded_files` acota tenant y empresa. `uploaded_by` añade la frontera por usuario
+    para empleados; `None` conserva la vista de asesoría del administrador. Excluye solo las raíces
+    ligadas a factura de prueba y ordena también por id para un corte estable con igual timestamp.
     """
     rows = (
         await session.execute(
             text(
-                "SELECT id, issue_date, direction, "
-                " pgp_sym_decrypt(counterparty_tax_id, :key)::text AS counterparty_tax_id, "
-                " pgp_sym_decrypt(counterparty_name, :key)::text AS counterparty_name, "
-                " counterparty_cif_status, total_amount, confirmed_at "
-                "FROM invoices "
-                "WHERE is_test = false AND confirmed_at >= "
-                f"now() - interval '{HISTORY_WINDOW_DAYS} days' "
-                "AND ((:confirmed_by)::uuid IS NULL OR confirmed_by = (:confirmed_by)::uuid) "
-                "ORDER BY confirmed_at DESC "
+                "SELECT f.id, f.status, f.created_at FROM uploaded_files f "
+                "WHERE ((:uploaded_by)::uuid IS NULL OR f.uploaded_by = (:uploaded_by)::uuid) "
+                "AND NOT EXISTS (SELECT 1 FROM invoices i "
+                "                WHERE i.uploaded_file_id = f.id AND i.is_test = true) "
+                "ORDER BY f.created_at DESC, f.id DESC "
                 "LIMIT :limit"
             ),
             {
                 "limit": HISTORY_LIMIT,
-                "key": encryption_key,
-                "confirmed_by": str(confirmed_by) if confirmed_by is not None else None,
+                "uploaded_by": str(uploaded_by) if uploaded_by is not None else None,
             },
         )
     ).all()
-    if len(rows) == HISTORY_LIMIT:
-        logger.warning("invoice_history.limit_reached", limit=HISTORY_LIMIT)
     return [
-        HistoryEntry(
-            id=row.id,
-            issue_date=row.issue_date,
-            direction=row.direction,
-            counterparty_tax_id=row.counterparty_tax_id,
-            counterparty_name=row.counterparty_name,
-            counterparty_cif_status=row.counterparty_cif_status,
-            total_amount=row.total_amount,
-            confirmed_at=row.confirmed_at,
-        )
+        HistoryEntry(id=row.id, status=row.status, created_at=row.created_at)
         for row in rows
     ]

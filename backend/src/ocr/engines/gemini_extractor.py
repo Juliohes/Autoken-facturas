@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ocr.extraction import ExtractedInvoice, InvoiceExtractionError, InvoiceExtractor
+from ocr.extraction import DocumentPage, ExtractedInvoice, InvoiceExtractionError, InvoiceExtractor
 from ocr.extraction_json import EXTRACTION_PROMPT, parse_structured_invoice
 
 __all__ = [
@@ -75,19 +75,25 @@ class GeminiInvoiceExtractor:
 
     async def extract(self, content: bytes, content_type: str) -> ExtractedInvoice:
         """Manda el documento a Gemini pidiendo JSON y lo normaliza a `ExtractedInvoice`."""
-        if content_type not in _SUPPORTED_CONTENT_TYPES:
-            raise InvoiceExtractionError(
-                f"Tipo de contenido no soportado por el motor: {content_type}"
-            )
+        return await self.extract_pages([DocumentPage(content, content_type)])
+
+    async def extract_pages(self, pages: list[DocumentPage]) -> ExtractedInvoice:
+        """Manda todas las imágenes ordenadas en una sola petición al modelo."""
+        if not pages:
+            raise InvoiceExtractionError("El documento no contiene páginas")
+        if any(page.content_type not in _SUPPORTED_CONTENT_TYPES for page in pages):
+            raise InvoiceExtractionError("Tipo de contenido no soportado por el motor")
 
         from google.genai import types
 
-        part = types.Part.from_bytes(data=content, mime_type=content_type)
+        parts = [
+            types.Part.from_bytes(data=page.content, mime_type=page.content_type) for page in pages
+        ]
         config = types.GenerateContentConfig(temperature=0.0, response_mime_type="application/json")
         try:
             client = self._engine.ensure_client()
             response = await client.aio.models.generate_content(
-                model=self._model, contents=[part, self._prompt], config=config
+                model=self._model, contents=[*parts, self._prompt], config=config
             )
         except Exception as exc:  # frontera del proveedor: nada crudo cruza al llamador
             raise InvoiceExtractionError(f"Gemini falló al extraer la factura: {exc}") from exc

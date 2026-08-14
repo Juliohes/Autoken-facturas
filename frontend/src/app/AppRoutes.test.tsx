@@ -222,7 +222,7 @@ describe('AppRoutes (S4.9)', () => {
 
     // Sin facturas mockeadas, `InvoiceHistory` muestra su estado vacío (sin encabezado propio):
     // basta para confirmar que la navegación llegó de verdad a `/historial`.
-    expect(await screen.findByText('No hay facturas en los últimos 7 días.')).toBeInTheDocument()
+    expect(await screen.findByText('Todavía no has enviado ninguna factura.')).toBeInTheDocument()
   })
 
   it('S2.2 decisión 1: la ruta de inicio de user es /capturar, no /historial', async () => {

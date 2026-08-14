@@ -1153,6 +1153,21 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   extra para aprobar la propia foto. Mientras trabaja aparece "Procesando factura..." y después llega la
   pantalla donde se revisan los datos que entendió la IA. Subir un archivo sigue el mismo recorrido directo.
 
+### S6.12 — Varias fotos para una sola factura e historial privado (14/08/2026)
+Ahora una factura de varias páginas se puede fotografiar por partes: primero los datos fiscales, después los
+importes y, si hace falta, hasta tres fotos más. La aplicación las guarda como un único expediente y la IA recibe
+todas juntas, en orden, para completar una única factura. Ninguna foto extra crea otra factura ni se pierde en el
+camino.
+
+La cámara ocupa casi toda la pantalla del móvil para acercar mejor el documento. La linterna aparece solo en los
+teléfonos que realmente permiten controlarla desde el navegador. Tras cada foto de una factura larga se muestran
+miniaturas: se puede quitar una foto equivocada, añadir otra o enviar el conjunto cuando haya al menos dos.
+
+El historial ahora enseña a cada empleado exactamente sus últimos 20 envíos, incluso si la IA sigue trabajando o
+falló. Un compañero no puede ver ni descubrir que existe una foto ajena, aunque trabaje para la misma empresa. El
+administrador de la asesoría conserva su vista completa para poder dar soporte. Antes de cerrar se comprobaron
+estos límites intentando cruzarlos entre usuarios, empresas y asesorías diferentes.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

@@ -38,7 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ocr import ranking_repository
 from ocr.analysis import analyze_invoice
-from ocr.extraction import ExtractedInvoice, InvoiceExtractor
+from ocr.extraction import DocumentPage, ExtractedInvoice, InvoiceExtractor, extract_document
 from ocr.scoring import score_analysis, serialize_reading
 from platform_admin import settings_repository
 from shared.config import get_settings
@@ -55,8 +55,7 @@ async def run_ocr_ranking(
     company_id: UUID,
     uploaded_file_id: UUID,
     *,
-    content: bytes,
-    content_type: str,
+    pages: list[DocumentPage],
     own_cif: str,
     extractors: list[InvoiceExtractor],
     default_reading: ExtractedInvoice | None = None,
@@ -81,29 +80,23 @@ async def run_ocr_ranking(
             if not extractors and default_reading is None:
                 return
 
-            encryption_key = tenant_encryption_key(get_settings(), tenant_id)
+        encryption_key = tenant_encryption_key(get_settings(), tenant_id)
+        readings_to_persist: list[ExtractedInvoice] = []
+        if default_reading is not None:
+            readings_to_persist.append(default_reading)
 
-            if default_reading is not None:
-                await _persist(
-                    session,
-                    company_id,
-                    uploaded_file_id,
-                    own_cif,
-                    default_reading,
-                    encryption_key,
-                )
+        # Los proveedores pueden tardar segundos y cobrar dinero: no retienen una conexión del pool.
+        readings = await asyncio.gather(
+            *(extract_document(engine, pages) for engine in extractors), return_exceptions=True
+        )
+        for reading in readings:
+            if isinstance(reading, BaseException):
+                logger.error("ranking.engine_failed", uploaded_file_id=str(uploaded_file_id))
+                continue
+            readings_to_persist.append(reading)
 
-            readings = await asyncio.gather(
-                *(engine.extract(content, content_type) for engine in extractors),
-                return_exceptions=True,
-            )
-            for reading in readings:
-                if isinstance(reading, BaseException):
-                    logger.error(
-                        "ranking.engine_failed",
-                        uploaded_file_id=str(uploaded_file_id),
-                    )
-                    continue
+        async with tenant_session(tenant_id, company_id) as session:
+            for reading in readings_to_persist:
                 await _persist(
                     session, company_id, uploaded_file_id, own_cif, reading, encryption_key
                 )

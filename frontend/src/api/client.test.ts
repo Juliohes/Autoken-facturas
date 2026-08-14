@@ -26,7 +26,7 @@ const { fetchMock } = vi.hoisted(() => {
 })
 
 import * as tokenStore from './tokenStore'
-import { api } from './client'
+import { api, postMultipart } from './client'
 
 // `tokenStore.refreshOnce()` llama a `fetch('/api/v1/auth/refresh', ...)` directamente (a
 // propósito, fuera del cliente `api`, para no entrar en bucle con su propio middleware) — a ese
@@ -62,6 +62,47 @@ describe('api client middleware (S4.9)', () => {
     })
 
     await api.GET('/api/v1/health')
+  })
+
+  it('envía multipart con el token en memoria sin depender de un cast del contrato JSON generado', async () => {
+    tokenStore.setToken('mi-token')
+    fetchMock.mockImplementationOnce(async (path: string, init: RequestInit) => {
+      expect(path).toBe('/api/v1/uploads/batch')
+      expect(init.method).toBe('POST')
+      expect(init.headers).toBeInstanceOf(Headers)
+      expect((init.headers as Headers).get('Authorization')).toBe('Bearer mi-token')
+      expect(init.body).toBeInstanceOf(FormData)
+      return new Response(null, { status: 201 })
+    })
+
+    await postMultipart('/api/v1/uploads/batch', new FormData())
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('recupera la sesión y reintenta una subida multipart con el nuevo token', async () => {
+    tokenStore.setToken('caducado')
+    let uploadCalls = 0
+    fetchMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/api/v1/auth/refresh') {
+        return new Response(JSON.stringify({ access_token: 'nuevo', token_type: 'bearer' }), { status: 200 })
+      }
+      if (path === '/api/v1/uploads') {
+        uploadCalls += 1
+        if (uploadCalls === 1) {
+          expect((init?.headers as Headers).get('Authorization')).toBe('Bearer caducado')
+          return new Response(null, { status: 401 })
+        }
+        expect((init?.headers as Headers).get('Authorization')).toBe('Bearer nuevo')
+        return new Response(null, { status: 201 })
+      }
+      throw new Error(`ruta no esperada: ${path}`)
+    })
+
+    const response = await postMultipart('/api/v1/uploads', new FormData())
+
+    expect(response.status).toBe(201)
+    expect(uploadCalls).toBe(2)
   })
 
   it('C7: un 401 dispara un refresh y reintenta la petición original con el token nuevo', async () => {

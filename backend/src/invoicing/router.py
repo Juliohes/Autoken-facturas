@@ -193,39 +193,29 @@ async def confirm_upload(identity: Reviewer, file_id: UUID, body: ConfirmIn) -> 
 
 
 class HistoryEntryOut(BaseModel):
-    """Una entrada del historial de facturas confirmadas (S2.6, spec §2)."""
+    """Una entrada privada de historial, sin PII de contraparte (S6.12)."""
 
     id: UUID
-    issue_date: date | None
-    direction: str
-    counterparty_tax_id: str | None
-    counterparty_name: str | None
-    counterparty_cif_status: str
-    total_amount: Decimal | None
-    confirmed_at: datetime
+    status: str
+    created_at: datetime
 
 
 class HistoryOut(BaseModel):
-    """Respuesta de `GET /invoices/history`: lista, más reciente primero (spec §2/§3)."""
+    """Respuesta de `GET /invoices/history`: últimos envíos, más reciente primero."""
 
     entries: list[HistoryEntryOut]
 
 
 @invoices_router.get("/history")
 async def invoice_history(identity: HistoryViewer) -> HistoryOut:
-    """Facturas confirmadas de los últimos 7 días del contexto del usuario (S2.6). Solo lectura."""
+    """Últimos documentos aceptados del contexto del usuario (S6.12). Solo lectura."""
     entries = await service.history(identity)
     return HistoryOut(
         entries=[
             HistoryEntryOut(
                 id=entry.id,
-                issue_date=entry.issue_date,
-                direction=entry.direction,
-                counterparty_tax_id=entry.counterparty_tax_id,
-                counterparty_name=entry.counterparty_name,
-                counterparty_cif_status=entry.counterparty_cif_status,
-                total_amount=entry.total_amount,
-                confirmed_at=entry.confirmed_at,
+                status=entry.status,
+                created_at=entry.created_at,
             )
             for entry in entries
         ]

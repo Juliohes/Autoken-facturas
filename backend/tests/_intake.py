@@ -141,6 +141,20 @@ async def count_uploaded_files(
         await conn.close()
 
 
+async def count_uploaded_file_pages(dsns: dict[str, str], *, root_uploaded_file_id: str) -> int:
+    """Número de páginas secundarias persistidas bajo una raíz."""
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        return int(
+            await conn.fetchval(
+                "SELECT count(*) FROM uploaded_file_pages WHERE root_uploaded_file_id = $1",
+                root_uploaded_file_id,
+            )
+        )
+    finally:
+        await conn.close()
+
+
 async def audit_entries(dsns: dict[str, str], *, action: str, entity_id: str) -> int:
     """Número de entradas en `audit_log` con una acción y entidad dadas."""
     conn = await asyncpg.connect(dsns["admin"])
@@ -155,14 +169,23 @@ async def audit_entries(dsns: dict[str, str], *, action: str, entity_id: str) ->
         await conn.close()
 
 
-async def object_exists(*, tenant_id: str, company_id: str, sha256: str) -> bool:
-    """¿Existe el objeto en MinIO? (import perezoso del almacén de producción, solo en verde).
-
-    Usa las funciones dueñas del formato bucket/clave (`storage.bucket_for`/`key_for`), única fuente
-    de la convención de layout: el helper no la duplica.
-    """
+async def object_exists(
+    dsns: dict[str, str], *, tenant_id: str, company_id: str, sha256: str
+) -> bool:
+    """¿Existe el objeto asociado al hash en MinIO, sin asumir una clave compartida por hash."""
     from invoice_intake import storage
 
-    bucket = storage.bucket_for(tenant_id)
-    key = storage.key_for(company_id, sha256)
-    return storage.object_exists(bucket, key)
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        row = await conn.fetchrow(
+            "SELECT storage_bucket, storage_key FROM uploaded_files "
+            "WHERE company_id = $1 AND sha256 = $2 "
+            "UNION ALL "
+            "SELECT storage_bucket, storage_key FROM uploaded_file_pages "
+            "WHERE company_id = $1 AND sha256 = $2 LIMIT 1",
+            company_id,
+            sha256,
+        )
+    finally:
+        await conn.close()
+    return row is not None and storage.object_exists(row["storage_bucket"], row["storage_key"])

@@ -16,6 +16,31 @@ const AUTH_EXCLUDED_PATHS = new Set([
   '/api/v1/auth/logout',
 ])
 
+type MultipartPath = '/api/v1/uploads' | '/api/v1/uploads/batch'
+
+/**
+ * Envía ficheros multipart sin forzar un `FormData` a través del tipo JSON que FastAPI publica
+ * en OpenAPI. Mantiene la misma autenticación y recuperación de sesión que el cliente generado.
+ */
+export async function postMultipart(path: MultipartPath, body: FormData): Promise<Response> {
+  const headers = new Headers()
+  const token = getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  let response = await fetch(path, { method: 'POST', headers, body })
+  if (response.status !== 401) return response
+
+  const newToken = await refreshOnce()
+  if (!newToken) {
+    notifyUnauthorized()
+    return response
+  }
+
+  headers.set('Authorization', `Bearer ${newToken}`)
+  response = await fetch(path, { method: 'POST', headers, body })
+  return response
+}
+
 // El body de una Request solo puede leerse una vez; `fetch(request)` lo consume al enviarlo. Para
 // poder reconstruir la petición original tras un refresh (C7), se guarda una copia sin usar en
 // `onRequest`, indexada por el `id` que openapi-fetch asigna a cada llamada.

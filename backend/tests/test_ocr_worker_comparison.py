@@ -22,6 +22,7 @@ from tests._ocr import (
     real_jpeg_bytes,
     run_ocr,
     seed_uploaded_file,
+    seed_uploaded_file_page,
     set_ocr_experiment_enabled,
 )
 
@@ -166,3 +167,39 @@ async def test_c9_aislamiento_por_tenant(authapi: Api) -> None:
 
     assert await comparison_runs_visible_as_tenant(dsns, tenant_id=tenant_a) == 1
     assert await comparison_runs_visible_as_tenant(dsns, tenant_id=tenant_b) == 0
+
+
+async def test_comparativa_multipagina_entrega_todas_las_paginas_al_extractor(authapi: Api) -> None:
+    """La comparativa no degrada un lote a su raíz: original y realzada conservan las dos hojas."""
+    _client, dsns = authapi
+    await set_ocr_experiment_enabled(dsns, True)
+    tenant_id, company_id, file_id = await _seed(
+        dsns, slug="comparison-multipage", content=real_jpeg_bytes()
+    )
+    await seed_uploaded_file_page(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        root_uploaded_file_id=file_id,
+        page_number=2,
+        content=real_jpeg_bytes() + b"-second-page",
+    )
+    calls: list[int] = []
+
+    class PageExtractor:
+        async def extract(self, _content: bytes, _content_type: str):
+            raise AssertionError("un documento multipágina no puede caer al contrato de una raíz")
+
+        async def extract_pages(self, pages):
+            calls.append(len(pages))
+            return build_extracted()
+
+    await run_ocr(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        file_id=file_id,
+        extractor=PageExtractor(),
+    )
+
+    assert calls == [2, 2]
+    assert await count_comparison_runs(dsns, file_id=file_id) == 1

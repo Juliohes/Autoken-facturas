@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, cast, runtime_checkable
 
 __all__ = [
     "Confidence",
@@ -25,8 +25,10 @@ __all__ = [
     "ExtractedTaxId",
     "ExtractedTaxLine",
     "ExtractedInvoice",
+    "DocumentPage",
     "InvoiceExtractor",
     "InvoiceExtractionError",
+    "extract_document",
     "serialize_tax_lines",
 ]
 
@@ -94,6 +96,14 @@ class ExtractedInvoice:
     raw: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class DocumentPage:
+    """Una hoja ya descargada del documento, conservando inequívocamente su orden."""
+
+    content: bytes
+    content_type: str
+
+
 def serialize_tax_lines(invoice: ExtractedInvoice) -> list[dict[str, str]]:
     """Tramos a JSON-friendly: los importes como `str` para no perder precisión decimal en jsonb.
 
@@ -122,3 +132,20 @@ class InvoiceExtractor(Protocol):
     async def extract(self, content: bytes, content_type: str) -> ExtractedInvoice:
         """Lee el documento y devuelve los campos de oro; `InvoiceExtractionError` al fallar."""
         ...
+
+async def extract_document(
+    extractor: InvoiceExtractor, pages: list[DocumentPage]
+) -> ExtractedInvoice:
+    """Llama al contrato multipágina o falla de forma explícita, nunca degrada a página 1.
+
+    Mantiene la compatibilidad de los dobles históricos para documentos simples. Para dos o más
+    páginas un extractor antiguo sin `extract_pages` es un error del proveedor, no una omisión.
+    """
+    if not pages:
+        raise InvoiceExtractionError("El documento no contiene páginas")
+    extract_pages = getattr(extractor, "extract_pages", None)
+    if callable(extract_pages):
+        return cast(ExtractedInvoice, await extract_pages(pages))
+    if len(pages) == 1:
+        return await extractor.extract(pages[0].content, pages[0].content_type)
+    raise InvoiceExtractionError("El extractor no admite documentos multipágina")

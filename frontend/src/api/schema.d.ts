@@ -423,6 +423,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/uploads/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Batch
+         * @description Acepta de dos a cinco imágenes como un único documento multipágina (S6.12).
+         *
+         *     La dirección se valida aquí porque forma parte del contrato de captura. La confirmación
+         *     existente sigue siendo quien la persiste, igual que en una subida simple.
+         */
+        post: operations["upload_batch_api_v1_uploads_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/uploads/{file_id}/download-url": {
         parameters: {
             query?: never;
@@ -463,6 +486,26 @@ export interface paths {
          *     Misma autorización que `download-url` (403/404).
          */
         get: operations["download_image_api_v1_uploads__file_id__image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/uploads/{file_id}/pages/{page_number}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Page Image
+         * @description Bytes de una hoja secundaria, con la misma privacidad por usuario que la raíz (S6.12).
+         */
+        get: operations["download_page_image_api_v1_uploads__file_id__pages__page_number__image_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -540,7 +583,7 @@ export interface paths {
         };
         /**
          * Invoice History
-         * @description Facturas confirmadas de los últimos 7 días del contexto del usuario (S2.6). Solo lectura.
+         * @description Últimos documentos aceptados del contexto del usuario (S6.12). Solo lectura.
          */
         get: operations["invoice_history_api_v1_invoices_history_get"];
         put?: never;
@@ -1153,6 +1196,21 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_batch_api_v1_uploads_batch_post */
+        Body_upload_batch_api_v1_uploads_batch_post: {
+            /** Files */
+            files: string[];
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "recibida" | "emitida";
+        };
         /** Body_upload_file_api_v1_uploads_post */
         Body_upload_file_api_v1_uploads_post: {
             /** File */
@@ -1468,7 +1526,7 @@ export interface components {
         };
         /**
          * HistoryEntryOut
-         * @description Una entrada del historial de facturas confirmadas (S2.6, spec §2).
+         * @description Una entrada privada de historial, sin PII de contraparte (S6.12).
          */
         HistoryEntryOut: {
             /**
@@ -1476,27 +1534,17 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Issue Date */
-            issue_date: string | null;
-            /** Direction */
-            direction: string;
-            /** Counterparty Tax Id */
-            counterparty_tax_id: string | null;
-            /** Counterparty Name */
-            counterparty_name: string | null;
-            /** Counterparty Cif Status */
-            counterparty_cif_status: string;
-            /** Total Amount */
-            total_amount: string | null;
+            /** Status */
+            status: string;
             /**
-             * Confirmed At
+             * Created At
              * Format: date-time
              */
-            confirmed_at: string;
+            created_at: string;
         };
         /**
          * HistoryOut
-         * @description Respuesta de `GET /invoices/history`: lista, más reciente primero (spec §2/§3).
+         * @description Respuesta de `GET /invoices/history`: últimos envíos, más reciente primero.
          */
         HistoryOut: {
             /** Entries */
@@ -2604,6 +2652,39 @@ export interface operations {
             };
         };
     };
+    upload_batch_api_v1_uploads_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_batch_api_v1_uploads_batch_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_url_api_v1_uploads__file_id__download_url_get: {
         parameters: {
             query?: never;
@@ -2646,13 +2727,48 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description Bytes binarios del documento original autorizado. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "application/pdf": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_page_image_api_v1_uploads__file_id__pages__page_number__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+                page_number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bytes binarios de la imagen original autorizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
                 };
             };
             /** @description Validation Error */

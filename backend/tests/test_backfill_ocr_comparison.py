@@ -8,8 +8,12 @@ fuera de esta tarea (spec §5/§6): aquí solo se prueba que el descubrimiento s
 
 from __future__ import annotations
 
+from uuid import UUID
+
+import pytest
+
 from jobs.ocr_backfill import run_backfill
-from ocr.backfill_repository import list_backfill_candidates
+from ocr.backfill_repository import BackfillCandidate, list_backfill_candidates
 from shared.db import platform_session
 from tests._dbtest import seed_company, seed_tenant, seed_user
 from tests._intake import PDF, PDF_CT
@@ -21,6 +25,7 @@ from tests._ocr import (
     real_jpeg_bytes,
     run_ocr,
     seed_uploaded_file,
+    seed_uploaded_file_page,
     set_ocr_experiment_enabled,
 )
 
@@ -95,3 +100,35 @@ async def test_c13_modo_simulacion_no_llama_al_lector_ni_escribe(authapi: Api) -
     assert summary.candidates >= 1
     assert summary.processed == 0
     assert await count_comparison_runs(dsns, file_id=file_id) == 0
+
+
+async def test_backfill_comparativa_descarga_todas_las_paginas_del_documento(
+    authapi: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """El backfill no puede pasar la raíz a la comparativa olvidando páginas secundarias."""
+    from jobs import ocr_backfill
+
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed_file(
+        dsns, slug="bf-multipage", content=real_jpeg_bytes()
+    )
+    await seed_uploaded_file_page(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        root_uploaded_file_id=file_id,
+        page_number=2,
+        content=real_jpeg_bytes() + b"-page-2",
+    )
+    received_pages: list[int] = []
+
+    async def capture(*_args: object, pages, **_kwargs: object) -> None:
+        received_pages.append(len(pages))
+
+    monkeypatch.setattr(ocr_backfill, "run_ocr_comparison", capture)
+    await ocr_backfill._process_candidate(
+        BackfillCandidate(UUID(tenant_id), UUID(company_id), UUID(file_id)),
+        extractor=make_extractor(build_extracted()),
+    )
+
+    assert received_pages == [2]

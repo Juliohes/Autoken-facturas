@@ -63,7 +63,9 @@ async def test_c1_subir_imagen_valida(authapi: Api) -> None:
     assert body["status"] == "pending_ocr"
     assert body["scan_status"] == "clean"
     assert await count_uploaded_files(dsns, company_id=company_id) == 1
-    assert await object_exists(tenant_id=tenant_id, company_id=company_id, sha256=_sha256(JPEG))
+    assert await object_exists(
+        dsns, tenant_id=tenant_id, company_id=company_id, sha256=_sha256(JPEG)
+    )
 
 
 async def test_c2_subir_pdf_valido(authapi: Api) -> None:
@@ -174,6 +176,7 @@ async def test_c6_fichero_infectado_se_rechaza_sin_rastro(authapi: Api) -> None:
     assert resp.status_code == 422, resp.text
     assert await count_uploaded_files(dsns, company_id=company_id) == 0
     assert not await object_exists(
+        dsns,
         tenant_id=tenant_id, company_id=company_id, sha256=_sha256(EICAR_JPEG)
     )
 
@@ -350,7 +353,9 @@ async def test_c12b_fallo_al_registrar_no_deja_objeto_huerfano(
 
     assert resp.status_code >= 500, resp.text
     assert await count_uploaded_files(dsns, company_id=company_id) == 0
-    assert not await object_exists(tenant_id=tenant_id, company_id=company_id, sha256=_sha256(JPEG))
+    assert not await object_exists(
+        dsns, tenant_id=tenant_id, company_id=company_id, sha256=_sha256(JPEG)
+    )
 
 
 async def test_c13_subida_aceptada_deja_rastro_en_audit_log(authapi: Api) -> None:

@@ -297,6 +297,7 @@ class Settings(BaseSettings):
     # debe poner además su propia cota (defensa en profundidad).
     max_request_body_bytes: int = 16 * 1024 * 1024
 
+
     # --- Worker OCR S2.3 (jobs, arq) -----------------------------------------------------------
     # Cola de arq en la que la API encola `run_ocr` tras una subida aceptada y de la que el worker
     # consume. No es secreto; se comparte el mismo Redis que el resto de la app.
@@ -350,6 +351,16 @@ class Settings(BaseSettings):
     def trusted_proxy_set(self) -> frozenset[str]:
         """`trusted_proxies` como conjunto de IPs (o `{'*'}`); vacío si no hay ninguno."""
         return frozenset(item.strip() for item in self.trusted_proxies.split(",") if item.strip())
+
+    @property
+    def max_batch_upload_body_bytes(self) -> int:
+        """Cota del multipart multipágina: cinco límites individuales y 1 MiB de envoltorio.
+
+        Se deriva, no se duplica como una env var independiente: elevar `MAX_UPLOAD_BYTES` mantiene
+        automáticamente la promesa de que un lote admite cinco páginas máximas, sin abrir rutas
+        ajenas a ese máximo.
+        """
+        return 5 * self.max_upload_bytes + 1024 * 1024
 
 
 def require_strong_backup_encryption_key(settings: Settings) -> None:

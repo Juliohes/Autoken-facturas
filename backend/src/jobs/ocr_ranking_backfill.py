@@ -23,7 +23,7 @@ from companies.service import tenant_encryption_key as company_encryption_key
 from invoice_intake import repository as intake_repo
 from invoice_intake import storage
 from jobs.ocr_ranking import run_ocr_ranking
-from ocr.extraction import InvoiceExtractor
+from ocr.extraction import DocumentPage, InvoiceExtractor
 from ocr.ranking_backfill_repository import (
     RankingBackfillCandidate,
     list_ranking_backfill_candidates,
@@ -54,8 +54,8 @@ async def _process_candidate(
 ) -> None:
     """Descarga el fichero y dispara el ranking por el mismo camino que el job en vivo."""
     async with tenant_session(candidate.tenant_id, candidate.company_id) as session:
-        location = await intake_repo.get_file_location(session, candidate.uploaded_file_id)
-        if location is None:
+        locations = await intake_repo.get_document_pages(session, candidate.uploaded_file_id)
+        if not locations:
             logger.warning(
                 "ranking_backfill.file_not_found",
                 uploaded_file_id=str(candidate.uploaded_file_id),
@@ -72,13 +72,18 @@ async def _process_candidate(
             )
             return
 
-    content = await asyncio.to_thread(storage.get_object, location.bucket, location.key)
+    pages = [
+        DocumentPage(
+            content=await asyncio.to_thread(storage.get_object, location.bucket, location.key),
+            content_type=location.content_type,
+        )
+        for location in locations
+    ]
     await run_ocr_ranking(
         candidate.tenant_id,
         candidate.company_id,
         candidate.uploaded_file_id,
-        content=content,
-        content_type=location.content_type,
+        pages=pages,
         own_cif=company.cif,
         extractors=extractors,
     )

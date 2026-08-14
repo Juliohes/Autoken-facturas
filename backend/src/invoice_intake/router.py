@@ -10,7 +10,7 @@ de `invoice_intake.service` a la respuesta HTTP. No contiene SQL ni reglas de ne
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, UploadFile
@@ -31,6 +31,26 @@ Uploader = Annotated[AuthContext, Depends(require_roles(Role.USER, Role.TENANT_A
 
 # Mismo conjunto de roles que `Uploader`; nombre propio porque descargar no es "subir" (S2.7).
 Downloader = Uploader
+
+_BINARY_IMAGE_CONTENT: dict[str, Any] = {
+    "image/jpeg": {"schema": {"type": "string", "format": "binary"}},
+    "image/png": {"schema": {"type": "string", "format": "binary"}},
+}
+_BINARY_IMAGE_RESPONSE: dict[int | str, dict[str, Any]] = {
+    200: {
+        "description": "Bytes binarios de la imagen original autorizada.",
+        "content": _BINARY_IMAGE_CONTENT,
+    }
+}
+_BINARY_DOCUMENT_RESPONSE: dict[int | str, dict[str, Any]] = {
+    200: {
+        "description": "Bytes binarios del documento original autorizado.",
+        "content": {
+            **_BINARY_IMAGE_CONTENT,
+            "application/pdf": {"schema": {"type": "string", "format": "binary"}},
+        },
+    }
+}
 
 
 class UploadOut(BaseModel):
@@ -126,6 +146,77 @@ async def upload_file(
     )
 
 
+@router.post("/batch", status_code=201)
+async def upload_batch(
+    identity: Uploader,
+    files: list[UploadFile],
+    company_id: Annotated[UUID, Form()],
+    direction: Annotated[Literal["recibida", "emitida"], Form()],
+) -> UploadOut:
+    """Acepta de dos a cinco imágenes como un único documento multipágina (S6.12).
+
+    La dirección se valida aquí porque forma parte del contrato de captura. La confirmación
+    existente sigue siendo quien la persiste, igual que en una subida simple.
+    """
+    del direction
+    member_company_id = identity.company.id if identity.company is not None else None
+    try:
+        await service.authorize_upload(
+            tenant_id=identity.tenant_id,
+            role=identity.role,
+            member_company_id=member_company_id,
+            company_id=company_id,
+        )
+    except service.NotAMember as exc:
+        raise HTTPException(status_code=403, detail="No perteneces a la empresa destino") from exc
+    except service.CompanyNotInContext as exc:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada") from exc
+
+    if not 2 <= len(files) <= 5:
+        raise HTTPException(
+            status_code=422, detail="Un documento requiere entre dos y cinco páginas"
+        )
+    max_bytes = get_settings().max_upload_bytes
+    contents: list[bytes] = []
+    for file in files:
+        content = await file.read(max_bytes + 1)
+        if len(content) > max_bytes:
+            raise HTTPException(
+                status_code=413, detail=f"El fichero supera el tamaño máximo ({max_bytes} bytes)"
+            )
+        contents.append(content)
+    try:
+        record = await service.create_upload_batch(
+            session=identity.session,
+            tenant_id=identity.tenant_id,
+            user_id=identity.user_id,
+            company_id=company_id,
+            contents=contents,
+        )
+    except service.EmptyFile as exc:
+        raise HTTPException(status_code=422, detail="El fichero está vacío") from exc
+    except service.UnsupportedMediaType as exc:
+        raise HTTPException(status_code=415, detail="Tipo de fichero no admitido") from exc
+    except scanner.ScanInfected as exc:
+        raise HTTPException(status_code=422, detail="El fichero no supera el antivirus") from exc
+    except scanner.ScannerUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Antivirus no disponible, reintenta") from exc
+    except storage.StorageUnavailable as exc:
+        raise HTTPException(
+            status_code=503, detail="Almacenamiento no disponible, reintenta"
+        ) from exc
+    return UploadOut(
+        id=record.id,
+        company_id=record.company_id,
+        content_type=record.content_type,
+        size_bytes=record.size_bytes,
+        sha256=record.sha256,
+        status=record.status,
+        scan_status=record.scan_status,
+        created_at=record.created_at,
+    )
+
+
 class DownloadUrlOut(BaseModel):
     """URL firmada de descarga de un fichero (respuesta 200, S2.7)."""
 
@@ -148,10 +239,10 @@ async def download_url(identity: Downloader, file_id: UUID) -> DownloadUrlOut:
             actor_user_id=identity.user_id,
             actor_role=identity.role,
         )
+    except service.PrivateFileNotVisible as exc:
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
     except service.FileForbidden as exc:
-        raise HTTPException(
-            status_code=403, detail="No perteneces a la empresa del fichero"
-        ) from exc
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
     except service.FileNotVisible as exc:
         raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
     except storage.StorageUnavailable as exc:
@@ -161,7 +252,7 @@ async def download_url(identity: Downloader, file_id: UUID) -> DownloadUrlOut:
     return DownloadUrlOut(url=url, expires_in=service.DOWNLOAD_URL_TTL_SECONDS)
 
 
-@router.get("/{file_id}/image")
+@router.get("/{file_id}/image", responses=_BINARY_DOCUMENT_RESPONSE)
 async def download_image(identity: Downloader, file_id: UUID) -> Response:
     """Bytes reales del fichero de intake (2026-08-01), vía la API — no una redirección a MinIO.
 
@@ -178,11 +269,33 @@ async def download_image(identity: Downloader, file_id: UUID) -> Response:
             actor_user_id=identity.user_id,
             actor_role=identity.role,
         )
+    except service.PrivateFileNotVisible as exc:
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
     except service.FileForbidden as exc:
-        raise HTTPException(
-            status_code=403, detail="No perteneces a la empresa del fichero"
-        ) from exc
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
     except service.FileNotVisible as exc:
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
+    except storage.StorageUnavailable as exc:
+        raise HTTPException(
+            status_code=503, detail="Almacenamiento no disponible, reintenta"
+        ) from exc
+    return Response(content=content, media_type=content_type)
+
+
+@router.get("/{file_id}/pages/{page_number}/image", responses=_BINARY_IMAGE_RESPONSE)
+async def download_page_image(identity: Downloader, file_id: UUID, page_number: int) -> Response:
+    """Bytes de una hoja secundaria, con la misma privacidad por usuario que la raíz (S6.12)."""
+    try:
+        content, content_type = await service.get_page_download_bytes(
+            identity.session,
+            tenant_id=identity.tenant_id,
+            root_file_id=file_id,
+            page_number=page_number,
+            actor_user_id=identity.user_id,
+            actor_role=identity.role,
+        )
+    except (service.FileForbidden, service.FileNotVisible) as exc:
+        # Para páginas, también la empresa hermana devuelve 404: una URL no debe ser un oráculo.
         raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
     except storage.StorageUnavailable as exc:
         raise HTTPException(

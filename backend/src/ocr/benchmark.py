@@ -61,7 +61,7 @@ import structlog
 from ocr.analysis import InvoiceAnalysis, analyze_invoice
 from ocr.benchmark_repository import upsert_benchmark_result
 from ocr.benchmark_scoring import score_combination
-from ocr.extraction import ExtractedInvoice, InvoiceExtractor
+from ocr.extraction import DocumentPage, ExtractedInvoice, InvoiceExtractor, extract_document
 from ocr.preprocess.clahe import CLAHE_CONTENT_TYPE, clahe_invoice_image
 from ocr.preprocess.enhance import (
     ENHANCED_CONTENT_TYPE,
@@ -94,8 +94,7 @@ class _Variant:
     falló (`error` relleno): ninguna combinación de esa variante llega a llamar a ningún motor."""
 
     name: str
-    content: bytes | None
-    content_type: str | None
+    pages: list[DocumentPage] | None
     error: str | None
 
 
@@ -121,8 +120,9 @@ async def run_benchmark(
     company_id: UUID,
     uploaded_file_id: UUID,
     *,
-    content: bytes,
-    content_type: str,
+    content: bytes | None = None,
+    content_type: str | None = None,
+    pages: list[DocumentPage] | None = None,
     truth: Mapping[str, object],
     own_cif: str,
     ocr_experiment_enabled: bool,
@@ -139,8 +139,14 @@ async def run_benchmark(
     """
     if not ocr_experiment_enabled or not extractors:
         return
+    if pages is None:
+        if content is None or content_type is None:
+            raise ValueError("El benchmark requiere páginas o contenido individual")
+        pages = [DocumentPage(content, content_type)]
+    if not pages:
+        raise ValueError("El benchmark requiere al menos una página")
     try:
-        for variant in await _build_variants(content, content_type):
+        for variant in await _build_variants(pages):
             await _run_variant(
                 tenant_id,
                 company_id=company_id,
@@ -156,19 +162,19 @@ async def run_benchmark(
             raise
 
 
-async def _build_variants(content: bytes, content_type: str) -> list[_Variant]:
+async def _build_variants(pages: list[DocumentPage]) -> list[_Variant]:
     """Genera las 3 variantes de imagen. Formato no fotografiable (p. ej. PDF, spec §2): las 3 son
     el mismo buffer, sin transformar -- ni `enhanced` ni `clahe` se intentan sobre un PDF. Foto:
     `original` siempre disponible; `enhanced`/`clahe` se generan a partir del ORIGINAL (nunca uno a
     partir del otro, spec §5.1) -- un fallo al generarlas se aísla (ver docstring del módulo)."""
-    if content_type not in SUPPORTED_CONTENT_TYPES:
+    if any(page.content_type not in SUPPORTED_CONTENT_TYPES for page in pages):
         return [
-            _Variant(_VARIANT_ORIGINAL, content, content_type, None),
-            _Variant(_VARIANT_ENHANCED, content, content_type, None),
-            _Variant(_VARIANT_CLAHE, content, content_type, None),
+            _Variant(_VARIANT_ORIGINAL, pages, None),
+            _Variant(_VARIANT_ENHANCED, pages, None),
+            _Variant(_VARIANT_CLAHE, pages, None),
         ]
 
-    variants = [_Variant(_VARIANT_ORIGINAL, content, content_type, None)]
+    variants = [_Variant(_VARIANT_ORIGINAL, pages, None)]
     for name, builder, result_content_type in (
         (_VARIANT_ENHANCED, enhance_invoice_image, ENHANCED_CONTENT_TYPE),
         (_VARIANT_CLAHE, clahe_invoice_image, CLAHE_CONTENT_TYPE),
@@ -176,11 +182,17 @@ async def _build_variants(content: bytes, content_type: str) -> list[_Variant]:
         try:
             # Coste real de CPU (decodificar + realce/CLAHE + codificar): fuera del event loop,
             # mismo criterio que `jobs.ocr`/`jobs.ocr.run_ocr_comparison`.
-            generated = await asyncio.to_thread(builder, content, content_type)
-            variants.append(_Variant(name, generated, result_content_type, None))
+            generated = [
+                DocumentPage(
+                    content=await asyncio.to_thread(builder, page.content, page.content_type),
+                    content_type=result_content_type,
+                )
+                for page in pages
+            ]
+            variants.append(_Variant(name, generated, None))
         except Exception:  # noqa: BLE001  (preprocesado: se aísla, no aborta el benchmark)
             logger.error("benchmark.variant_generation_failed", variant=name)
-            variants.append(_Variant(name, None, None, "variant_generation_failed"))
+            variants.append(_Variant(name, None, "variant_generation_failed"))
     return variants
 
 
@@ -198,7 +210,7 @@ async def _run_variant(
     Postgres abierta) y los persiste al final, en una sesión corta abierta solo para eso -- ver
     docstring del módulo para el motivo (auditoría, hallazgo de patrones: agotamiento del pool de
     conexiones)."""
-    if variant.content is None or variant.content_type is None:
+    if variant.pages is None:
         # La variante no llegó a generarse: fila de error por motor, sin llamar a ningún proveedor
         # (C2, generalizado a un fallo de preprocesado) -- no hace falta ningún `gather`.
         results: list[tuple[str, _CombinationResult]] = [
@@ -220,10 +232,10 @@ async def _run_variant(
             for engine_name, _ in extractors
         ]
     else:
-        content, content_type = variant.content, variant.content_type
+        pages = variant.pages
         gathered = await asyncio.gather(
             *(
-                _run_combination(engine_name, extractor, content, content_type, own_cif, truth)
+                _run_combination(engine_name, extractor, pages, own_cif, truth)
                 for engine_name, extractor in extractors
             )
         )
@@ -259,8 +271,7 @@ def _encryption_key_for(tenant_id: UUID) -> str:
 async def _run_combination(
     engine_name: str,
     extractor: InvoiceExtractor,
-    content: bytes,
-    content_type: str,
+    pages: list[DocumentPage],
     own_cif: str,
     truth: Mapping[str, object],
 ) -> _CombinationResult:
@@ -269,7 +280,7 @@ async def _run_combination(
     started = time.monotonic()
     try:
         extracted = await asyncio.wait_for(
-            extractor.extract(content, content_type), timeout=_COMBINATION_TIMEOUT_SECONDS
+            extract_document(extractor, pages), timeout=_COMBINATION_TIMEOUT_SECONDS
         )
         duration_ms = _elapsed_ms(started)
         analysis = analyze_invoice(extracted, own_cif)

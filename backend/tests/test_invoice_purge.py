@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import httpx
 
+from invoice_intake import storage
 from tests._auth import USER_PASSWORD_HASH
 from tests._dbtest import seed_company, seed_tenant, seed_user
-from tests._intake import audit_entries, object_exists, seed_tenant_admin, token_for
+from tests._intake import JPEG, audit_entries, object_exists, seed_tenant_admin, token_for
 from tests._invoicing import (
     auth,
     fetch_invoice_by_id,
@@ -19,6 +20,7 @@ from tests._invoicing import (
     fetch_uploaded_file,
     seed_invoice,
 )
+from tests._ocr import seed_uploaded_file, seed_uploaded_file_page
 
 Api = tuple[httpx.AsyncClient, dict[str, str]]
 
@@ -86,6 +88,7 @@ async def test_c3_purgar_borra_el_fichero_subido_y_su_objeto_en_minio(authapi: A
     uploaded = await fetch_uploaded_file(dsns, file_id=file_id)
     assert uploaded is not None
     assert await object_exists(
+        dsns,
         tenant_id=tenant_id, company_id=company_id, sha256=uploaded["sha256"]
     )
     token = await token_for(client, email="admin@ilex.es", hostname="ilex.localhost")
@@ -95,8 +98,48 @@ async def test_c3_purgar_borra_el_fichero_subido_y_su_objeto_en_minio(authapi: A
     assert resp.status_code == 200, resp.text
     assert await fetch_uploaded_file(dsns, file_id=file_id) is None
     assert not await object_exists(
+        dsns,
         tenant_id=tenant_id, company_id=company_id, sha256=uploaded["sha256"]
     )
+
+
+async def test_purgar_un_documento_multipagina_borra_las_paginas_secundarias_en_minio(
+    authapi: Api,
+) -> None:
+    """La cascada SQL borra las filas y la limpieza post-commit recibe todo el lote."""
+    client, dsns = authapi
+    tenant_id, admin_id = await seed_tenant_admin(dsns, slug="ilex", email="admin@ilex.es")
+    company_id = await _company_for(dsns, tenant_id=tenant_id)
+    root_id = await seed_uploaded_file(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        uploaded_by=admin_id,
+        content=JPEG + b"-root-purge-pages",
+        status="confirmed",
+    )
+    page_bucket, page_key = await seed_uploaded_file_page(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        root_uploaded_file_id=root_id,
+        page_number=2,
+        content=JPEG + b"-page-purge-pages",
+    )
+    await seed_invoice(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        is_test=True,
+        confirmed_by=admin_id,
+        uploaded_file_id=root_id,
+    )
+    token = await token_for(client, email="admin@ilex.es", hostname="ilex.localhost")
+
+    response = await client.post(URL, headers=auth(token, "ilex.localhost"))
+
+    assert response.status_code == 200, response.text
+    assert not storage.object_exists(page_bucket, page_key)
 
 
 async def test_c4_purgar_deja_una_entrada_de_auditoria_por_factura(authapi: Api) -> None:

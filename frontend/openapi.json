@@ -719,6 +719,48 @@
         }
       }
     },
+    "/api/v1/uploads/batch": {
+      "post": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Upload Batch",
+        "description": "Acepta de dos a cinco im\u00e1genes como un \u00fanico documento multip\u00e1gina (S6.12).\n\nLa direcci\u00f3n se valida aqu\u00ed porque forma parte del contrato de captura. La confirmaci\u00f3n\nexistente sigue siendo quien la persiste, igual que en una subida simple.",
+        "operationId": "upload_batch_api_v1_uploads_batch_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_batch_api_v1_uploads_batch_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/uploads/{file_id}/download-url": {
       "get": {
         "tags": [
@@ -785,10 +827,85 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Bytes binarios del documento original autorizado.",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{file_id}/pages/{page_number}/image": {
+      "get": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Download Page Image",
+        "description": "Bytes de una hoja secundaria, con la misma privacidad por usuario que la ra\u00edz (S6.12).",
+        "operationId": "download_page_image_api_v1_uploads__file_id__pages__page_number__image_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          },
+          {
+            "name": "page_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Page Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bytes binarios de la imagen original autorizada.",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
@@ -967,7 +1084,7 @@
           "invoicing"
         ],
         "summary": "Invoice History",
-        "description": "Facturas confirmadas de los \u00faltimos 7 d\u00edas del contexto del usuario (S2.6). Solo lectura.",
+        "description": "\u00daltimos documentos aceptados del contexto del usuario (S6.12). Solo lectura.",
         "operationId": "invoice_history_api_v1_invoices_history_get",
         "responses": {
           "200": {
@@ -2467,6 +2584,38 @@
         ],
         "title": "Body_import_companies_api_v1_companies_import_post"
       },
+      "Body_upload_batch_api_v1_uploads_batch_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "recibida",
+              "emitida"
+            ],
+            "title": "Direction"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "company_id",
+          "direction"
+        ],
+        "title": "Body_upload_batch_api_v1_uploads_batch_post"
+      },
       "Body_upload_file_api_v1_uploads_post": {
         "properties": {
           "file": {
@@ -3267,79 +3416,24 @@
             "format": "uuid",
             "title": "Id"
           },
-          "issue_date": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Issue Date"
-          },
-          "direction": {
+          "status": {
             "type": "string",
-            "title": "Direction"
+            "title": "Status"
           },
-          "counterparty_tax_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Counterparty Tax Id"
-          },
-          "counterparty_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Counterparty Name"
-          },
-          "counterparty_cif_status": {
-            "type": "string",
-            "title": "Counterparty Cif Status"
-          },
-          "total_amount": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Total Amount"
-          },
-          "confirmed_at": {
+          "created_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Confirmed At"
+            "title": "Created At"
           }
         },
         "type": "object",
         "required": [
           "id",
-          "issue_date",
-          "direction",
-          "counterparty_tax_id",
-          "counterparty_name",
-          "counterparty_cif_status",
-          "total_amount",
-          "confirmed_at"
+          "status",
+          "created_at"
         ],
         "title": "HistoryEntryOut",
-        "description": "Una entrada del historial de facturas confirmadas (S2.6, spec \u00a72)."
+        "description": "Una entrada privada de historial, sin PII de contraparte (S6.12)."
       },
       "HistoryOut": {
         "properties": {
@@ -3356,7 +3450,7 @@
           "entries"
         ],
         "title": "HistoryOut",
-        "description": "Respuesta de `GET /invoices/history`: lista, m\u00e1s reciente primero (spec \u00a72/\u00a73)."
+        "description": "Respuesta de `GET /invoices/history`: \u00faltimos env\u00edos, m\u00e1s reciente primero."
       },
       "ImportReportOut": {
         "properties": {

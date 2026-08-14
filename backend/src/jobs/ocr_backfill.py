@@ -27,7 +27,7 @@ from invoice_intake import storage
 from jobs.ocr import run_ocr_comparison
 from ocr.backfill_repository import BackfillCandidate, list_backfill_candidates
 from ocr.engines.gemini_extractor import build_default_extractor
-from ocr.extraction import InvoiceExtractor
+from ocr.extraction import DocumentPage, InvoiceExtractor
 from shared.config import get_settings
 from shared.db import platform_session, tenant_session
 
@@ -51,8 +51,8 @@ async def _fetch_candidates() -> list[BackfillCandidate]:
 async def _process_candidate(candidate: BackfillCandidate, *, extractor: InvoiceExtractor) -> None:
     """Descarga el fichero y dispara la comparativa por el mismo camino que el job en vivo."""
     async with tenant_session(candidate.tenant_id, candidate.company_id) as session:
-        location = await intake_repo.get_file_location(session, candidate.uploaded_file_id)
-        if location is None:
+        locations = await intake_repo.get_document_pages(session, candidate.uploaded_file_id)
+        if not locations:
             logger.warning(
                 "backfill.file_not_found", uploaded_file_id=str(candidate.uploaded_file_id)
             )
@@ -66,13 +66,18 @@ async def _process_candidate(candidate: BackfillCandidate, *, extractor: Invoice
             logger.warning("backfill.company_not_found", company_id=str(candidate.company_id))
             return
 
-    content = await asyncio.to_thread(storage.get_object, location.bucket, location.key)
+    pages = [
+        DocumentPage(
+            content=await asyncio.to_thread(storage.get_object, location.bucket, location.key),
+            content_type=location.content_type,
+        )
+        for location in locations
+    ]
     await run_ocr_comparison(
         candidate.tenant_id,
         candidate.company_id,
         candidate.uploaded_file_id,
-        content=content,
-        content_type=location.content_type,
+        pages=pages,
         own_cif=company.cif,
         extractor=extractor,
     )

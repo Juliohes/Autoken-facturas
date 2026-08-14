@@ -771,4 +771,26 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
 - Un `tenant_admin` debe elegir empresa antes de abrir cámara o selector; un `user` conserva la empresa fija.
   Los resultados asíncronos tardíos no pueden sustituir una captura posterior ni subir tras desmontar. 310
   pruebas frontend, `tsc`, lint sin errores y build verdes; auditoría adversarial sin bloqueantes. Pendiente
-  obligatorio: prueba manual Android/iPhone real.
+   obligatorio: prueba manual Android/iPhone real.
+
+### 11.17 S6.12 — Captura profesional multipágina e historial privado (implementada, 2026-08-14)
+
+- **Decisión de flujo de Julio:** el selector segmentado `Recibida`/`Emitida` abre el panel; `Tomar foto` es la
+  acción circular central y `Subir archivo`/`Varias hojas` quedan como acciones secundarias. Ambas cámaras usan
+  la misma vista completa, marco cercano al borde y linterna solo cuando navegador+lente la soportan. Tras cada
+  foto multipágina se vuelve a las miniaturas para quitarla o continuar, sin cámara/linterna retenidas durante
+  el procesado.
+- **Documento multipágina:** dos a cinco fotos son un único documento con una raíz estable y páginas privadas
+  ordenadas. Se valida, escanea y almacena cada hoja; un fallo deja cero filas u objetos accesibles y se encola
+  un solo OCR tras el commit. OCR, comparación, ranking, benchmark y sus backfills reciben el documento completo
+  en orden, nunca solo la primera foto. La purga y el export de tenant incluyen todas las páginas.
+- **Privacidad reforzada:** un `user` ve exactamente sus 20 últimos documentos aceptados, incluidos pendientes o
+  fallidos, y nunca los de un compañero aunque compartan empresa. El `tenant_admin` conserva la vista de su
+  asesoría. La deduplicación es por autor: dos compañeros pueden enviar los mismos bytes sin recibir un 409 que
+  revele el documento o UUID del otro; las rutas de imagen y descarga devuelven 404 neutro fuera de autorización.
+- **Auditoría de 3 lentes:** se corrigieron antes de cierre hallazgos altos de encolado antes de commit, carrera
+  entre lotes/MinIO, OCR retroactivo monofoto, export y purga incompletos, límite multipart, retención de
+  conexiones de BD durante OCR, contrato OpenAPI binario y oráculo de deduplicación. Verificación focal: 127
+  pruebas backend contra Postgres/Redis/MinIO/ClamAV reales, 326 frontend, `ruff`/`mypy`/`tsc` y build verdes.
+  La suite backend completa se detiene en el primer test de backup porque el host no tiene `pg_dump`; no es una
+  regresión de S6.12. Pendiente obligatorio: prueba manual Android/iPhone real, incluida linterna.

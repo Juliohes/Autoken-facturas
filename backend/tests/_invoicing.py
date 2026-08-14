@@ -229,6 +229,7 @@ async def seed_invoice(
     tax_lines: list[dict] | None = None,
     confirmed_by: str | None = None,
     own_tax_id_missing: bool = False,
+    uploaded_file_id: str | None = None,
 ) -> str:
     """Inserta una factura confirmada directamente (S2.6/S3.1), con los campos elegidos.
 
@@ -249,7 +250,7 @@ async def seed_invoice(
     # `uploaded_files` chocaría si dos facturas de la misma empresa reusaran el JPEG por defecto.
     from tests._intake import JPEG, JPEG_CT  # noqa: PLC0415
 
-    file_id = await seed_uploaded_file(
+    file_id = uploaded_file_id or await seed_uploaded_file(
         dsns,
         tenant_id=tenant_id,
         company_id=company_id,
