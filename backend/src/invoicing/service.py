@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
@@ -53,6 +53,7 @@ from tenancy.constants import Role
 
 # Estados del fichero desde los que se puede revisar/confirmar (spec §2/§5): ya hay datos del OCR.
 _CONFIRMABLE_STATES = frozenset({FileStatus.OCR_DONE.value, FileStatus.NEEDS_REVIEW.value})
+_PROCESSING_STATES = frozenset({FileStatus.PENDING_OCR.value, FileStatus.PROCESSING.value})
 
 AUDIT_ACTION_CONFIRM = "invoice.confirm"
 _AUDIT_ENTITY = "invoice"
@@ -180,6 +181,7 @@ class ReviewData:
     # Motivos por los que el servidor bloquearía el guardado (mismas guardas que `confirm`): la
     # pantalla deshabilita el botón si NO está vacía. Lista vacía = confirmable (S2.4 §2, C13).
     blocking_reasons: list[str]
+    direction: str | None
 
 
 @dataclass(frozen=True)
@@ -201,6 +203,7 @@ class HistoryItem:
     id: UUID
     status: str
     created_at: datetime
+    direction: str | None
 
 
 @dataclass(frozen=True)
@@ -407,6 +410,7 @@ async def build_review_data(
         },
         warnings=warnings,
         blocking_reasons=_blocking_reasons(verdict, extraction.own_tax_id_present, role),
+        direction=None,
     )
 
 
@@ -418,7 +422,7 @@ async def review(identity: AuthContext, file_id: UUID) -> ReviewData:
     """
     file_ctx = await _load_file(identity, file_id)
     if file_ctx.status not in _CONFIRMABLE_STATES:
-        if file_ctx.status == FileStatus.PENDING_OCR.value:
+        if file_ctx.status in _PROCESSING_STATES:
             raise PendingOcr
         raise NotConfirmable
     ocr_key = tenant_encryption_key(get_settings(), identity.tenant_id)
@@ -426,9 +430,10 @@ async def review(identity: AuthContext, file_id: UUID) -> ReviewData:
     if extraction is None:
         raise NotConfirmable
 
-    return await build_review_data(
+    data = await build_review_data(
         identity.session, identity.tenant_id, file_ctx.company_id, extraction, identity.role
     )
+    return replace(data, direction=file_ctx.direction)
 
 
 async def draft_counterparty_verdict(
@@ -440,7 +445,7 @@ async def draft_counterparty_verdict(
     """Devuelve la validación del borrador actual sin reutilizar el veredicto del OCR (S6.10 C6)."""
     file_ctx = await _load_file(identity, file_id)
     if file_ctx.status not in _CONFIRMABLE_STATES:
-        if file_ctx.status == FileStatus.PENDING_OCR.value:
+        if file_ctx.status in _PROCESSING_STATES:
             raise PendingOcr
         raise NotConfirmable
     ocr_key = tenant_encryption_key(get_settings(), identity.tenant_id)
@@ -465,6 +470,8 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
     """
     file_ctx = await _load_file(identity, file_id)
     if file_ctx.status not in _CONFIRMABLE_STATES:
+        if file_ctx.status in _PROCESSING_STATES:
+            raise PendingOcr
         raise NotConfirmable
     if await repository.invoice_exists_for_file(identity.session, file_id):
         raise AlreadyConfirmed
@@ -472,6 +479,9 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
     extraction = await ocr_repo.get_extraction(identity.session, file_id, encryption_key=ocr_key)
     if extraction is None:
         raise NotConfirmable
+    # La captura manda sobre el body cuando ya existe. Para documentos anteriores a S6.13 la
+    # dirección sigue siendo nula y el valor explícito del humano conserva la compatibilidad.
+    command = replace(command, direction=file_ctx.direction or command.direction)
 
     # Guardas locales baratas y deterministas ANTES de la reverificación (que puede tocar red L3):
     # un usuario que no acepta la responsabilidad o sin el CIF propio no dispara lookups externos.
@@ -622,7 +632,12 @@ async def history(identity: AuthContext) -> list[HistoryItem]:
         uploaded_by=identity.user_id if identity.role == Role.USER else None,
     )
     return [
-        HistoryItem(id=entry.id, status=entry.status, created_at=entry.created_at)
+        HistoryItem(
+            id=entry.id,
+            status=entry.status,
+            created_at=entry.created_at,
+            direction=entry.direction,
+        )
         for entry in entries
     ]
 

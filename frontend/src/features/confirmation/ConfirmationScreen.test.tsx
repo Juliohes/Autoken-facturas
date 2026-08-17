@@ -3,10 +3,12 @@
 // de cada escenario (sin navegador ni backend reales; jsdom).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { api } from '../../api/client'
+import type { Direction } from '../capture/types'
 import { ConfirmationScreen, RESPONSIBILITY_NOTICE } from './ConfirmationScreen'
 import { PendingOcrError } from './useReview'
 import type { ReviewResponse } from './types'
@@ -36,17 +38,18 @@ function makeReview(over: Partial<ReviewResponse> = {}): ReviewResponse {
     own: { cif: 'A11111111', name: 'Mi Empresa SL' },
     warnings: [],
     blocking_reasons: [],
+    direction: 'recibida',
     ...over,
   }
 }
 
-function renderScreen() {
+function renderScreen(direction?: Direction) {
   const onConfirmed = vi.fn()
   const onRetry = vi.fn()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <ConfirmationScreen fileId="file-1" onConfirmed={onConfirmed} onRetry={onRetry} />
+      <ConfirmationScreen fileId="file-1" onConfirmed={onConfirmed} onRetry={onRetry} direction={direction} />
     </QueryClientProvider>,
   )
   return { onConfirmed, onRetry }
@@ -159,7 +162,7 @@ describe('ConfirmationScreen (S2.4)', () => {
       }),
       error: undefined,
     })
-    const { onConfirmed } = renderScreen()
+    const { onConfirmed } = renderScreen('recibida')
     await waitFor(() => expect(onConfirmed).not.toHaveBeenCalled())
     expect(await screen.findByTestId('counterparty-verdict')).toHaveAttribute('data-tone', 'error')
 
@@ -509,9 +512,11 @@ describe('ConfirmationScreen (S2.4)', () => {
     })
 
     render(
-      <QueryClientProvider client={client}>
-        <ConfirmationScreen fileId="file-1" onConfirmed={vi.fn()} onRetry={vi.fn()} />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <ConfirmationScreen fileId="file-1" onConfirmed={vi.fn()} onRetry={vi.fn()} />
+        </QueryClientProvider>
+      </MemoryRouter>,
     )
 
     // Se muestra el spinner de procesamiento
@@ -519,6 +524,56 @@ describe('ConfirmationScreen (S2.4)', () => {
 
     // Eventualmente carga el formulario de confirmación con éxito tras el reintento de QueryClient
     expect(await screen.findByLabelText('Importe total', {}, { timeout: 3000 })).toBeInTheDocument()
+  })
+
+  it('S6.13 C1: un OCR que supera 67 segundos sigue siendo una factura guardada y permite volver al historial', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes('/auth/me')) return Promise.resolve({ data: { id: 'u1', email: 'user@ilex.es', role: 'user', tenant: 'ilex', company: { id: 'c1' } }, error: undefined })
+      return Promise.resolve({
+        data: undefined,
+        error: { detail: 'La factura todavía se está procesando con IA' },
+        response: { status: 409 } as unknown as Response,
+      })
+    })
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={new QueryClient()}>
+          <ConfirmationScreen fileId="file-1" onConfirmed={vi.fn()} onRetry={vi.fn()} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Leyendo la factura...')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Volver al historial' })).toHaveAttribute('href', '/historial')
+  })
+
+  it('S6.13 C3: usa la dirección persistida por el backend al confirmar una factura retomada', async () => {
+    getMock.mockResolvedValue({ data: makeReview({ direction: 'emitida' }), error: undefined })
+    const { onConfirmed } = renderScreen()
+    const user = userEvent.setup()
+
+    await screen.findByLabelText('Importe total')
+    await acceptResponsibility(user)
+    await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
+
+    await waitFor(() => expect(postMock).toHaveBeenCalledWith(
+      '/api/v1/uploads/{file_id}/confirm',
+      expect.objectContaining({ body: expect.objectContaining({ direction: 'emitida' }) }),
+    ))
+    expect(onConfirmed).toHaveBeenCalledOnce()
+  })
+
+  it('S6.13 C3: una dirección histórica null se pregunta explícitamente y nunca se inventa', async () => {
+    getMock.mockResolvedValue({ data: makeReview({ direction: null }), error: undefined })
+    renderScreen()
+    const user = userEvent.setup()
+
+    await screen.findByText('Elige si la factura es recibida o emitida antes de guardar.')
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+
+    await user.click(screen.getByRole('radio', { name: 'Emitida' }))
+    await acceptResponsibility(user)
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeEnabled()
   })
 
   it('muestra el error genérico sin reintentar si el 409 es permanente (ocr_failed, ya confirmado)', async () => {

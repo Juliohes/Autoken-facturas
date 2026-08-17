@@ -23,6 +23,7 @@ class FileStatus(StrEnum):
     """
 
     PENDING_OCR = "pending_ocr"
+    PROCESSING = "processing"
     OCR_DONE = "ocr_done"
     NEEDS_REVIEW = "needs_review"
     OCR_FAILED = "ocr_failed"

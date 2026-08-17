@@ -23,8 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from invoice_intake import mime, repository, scanner, storage
+from invoice_intake.image import validate_image
 from jobs import queue
 from shared.audit import write_audit
+from shared.config import get_settings
 from shared.db import tenant_session
 from tenancy.constants import Role
 
@@ -81,6 +83,10 @@ class PrivateFileNotVisible(FileNotVisible):
 
 class InvalidPageCount(IntakeError):
     """Un documento multipágina debe contener de dos a cinco imágenes (-> 422)."""
+
+
+class OcrRetryUnavailable(IntakeError):
+    """El documento no está en un estado fallido que se pueda reintentar (-> 409)."""
 
 
 @dataclass(frozen=True)
@@ -244,6 +250,32 @@ async def get_page_download_bytes(
     return content, location.content_type
 
 
+async def prepare_ocr_retry(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    file_id: UUID,
+    actor_user_id: UUID,
+    actor_role: str,
+) -> repository.UploadedFileContext:
+    """Autoriza un reintento sin revelar archivos ajenos y exige un fallo OCR real."""
+    ctx = await authorize_file_access(
+        session,
+        tenant_id=tenant_id,
+        file_id=file_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+    )
+    if ctx.status != "ocr_failed":
+        raise OcrRetryUnavailable
+    return ctx
+
+
+async def retry_ocr(session: AsyncSession, file_id: UUID) -> bool:
+    """Reabre atómicamente un fallo OCR para que el worker lo pueda reclamar otra vez."""
+    return await repository.retry_ocr(session, file_id)
+
+
 async def delete_uploaded_file_row(
     session: AsyncSession, file_id: UUID
 ) -> list[repository.UploadedFileLocation]:
@@ -309,7 +341,13 @@ def schedule_bucket_cleanup(session: AsyncSession, bucket: str) -> None:
 
 
 async def create_upload(
-    *, session: AsyncSession, tenant_id: UUID, user_id: UUID, company_id: UUID, content: bytes
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    user_id: UUID,
+    company_id: UUID,
+    content: bytes,
+    direction: str | None = None,
 ) -> repository.UploadedFileRecord:
     """Verifica y persiste el fichero de intake (o no deja nada). Devuelve la fila creada (201).
 
@@ -324,6 +362,9 @@ async def create_upload(
     if not mime.is_allowed(real_mime):
         raise UnsupportedMediaType
     assert real_mime is not None  # `is_allowed(None)` es False: aquí el MIME está determinado
+    await asyncio.to_thread(
+        validate_image, content, real_mime, max_pixels=get_settings().max_upload_image_pixels
+    )
 
     sha256 = _sha256(content)
     bucket = storage.bucket_for(tenant_id)
@@ -353,6 +394,7 @@ async def create_upload(
         key=key,
         content_type=real_mime,
         size_bytes=len(content),
+        direction=direction,
     )
     _enqueue_ocr_after_commit(session, tenant_id, company_id, record.id)
     return record
@@ -365,6 +407,7 @@ async def create_upload_batch(
     user_id: UUID,
     company_id: UUID,
     contents: list[bytes],
+    direction: str,
 ) -> repository.UploadedFileRecord:
     """Persiste de dos a cinco imágenes como un único documento raíz y sus hojas secundarias.
 
@@ -382,6 +425,9 @@ async def create_upload_batch(
         content_type = mime.sniff_mime(content)
         if content_type not in {"image/jpeg", "image/png"}:
             raise UnsupportedMediaType
+        await asyncio.to_thread(
+            validate_image, content, content_type, max_pixels=get_settings().max_upload_image_pixels
+        )
         sha256 = _sha256(content)
         if sha256 in seen_hashes:
             raise DuplicateUpload(UUID(int=0))
@@ -427,6 +473,7 @@ async def create_upload_batch(
             content_type=first.content_type,
             size_bytes=len(first.content),
             sha256=first.sha256,
+            direction=direction,
         )
         for page_number, (page, location) in enumerate(
             zip(prepared[1:], locations[1:], strict=True), start=2
@@ -475,6 +522,7 @@ async def _persist_or_compensate(
     key: str,
     content_type: str,
     size_bytes: int,
+    direction: str | None,
 ) -> repository.UploadedFileRecord:
     """Inserta el registro + la traza en la transacción de la petición; compensa si algo falla.
 
@@ -493,6 +541,7 @@ async def _persist_or_compensate(
             content_type=content_type,
             size_bytes=size_bytes,
             sha256=sha256,
+            direction=direction,
         )
         await write_audit(
             session,

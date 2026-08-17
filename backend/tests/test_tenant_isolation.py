@@ -56,6 +56,7 @@ _PROTECTED_ROUTES = {
     ("POST", f"{API}/companies/import"),
     ("POST", f"{API}/uploads"),
     ("POST", f"{API}/uploads/batch"),
+    ("POST", f"{API}/uploads/{{file_id}}/retry-ocr"),
     ("GET", f"{API}/uploads/{{file_id}}/download-url"),
     ("GET", f"{API}/uploads/{{file_id}}/image"),
     ("GET", f"{API}/uploads/{{file_id}}/pages/{{page_number}}/image"),
@@ -134,6 +135,7 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ("GET", f"{API}/uploads/{dummy_id}/image", {}),
         ("GET", f"{API}/uploads/{dummy_id}/pages/2/image", {}),
         ("GET", f"{API}/uploads/{dummy_id}/review", {}),
+        ("POST", f"{API}/uploads/{dummy_id}/retry-ocr", {}),
         (
             "POST",
             f"{API}/uploads/{dummy_id}/counterparty-verdict",

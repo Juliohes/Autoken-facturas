@@ -3,18 +3,21 @@
 // cada escenario (sin navegador ni backend reales; jsdom).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
-import { api } from '../../api/client'
+import { api, postJson } from '../../api/client'
 import { InvoiceHistory } from './InvoiceHistory'
 import type { HistoryEntry } from './types'
 
 vi.mock('../../api/client', () => ({
-  api: { GET: vi.fn() },
+  api: { GET: vi.fn() }, postJson: vi.fn(),
 }))
 
 type AsyncMock = Mock<(...args: never[]) => Promise<unknown>>
 const getMock = api.GET as unknown as AsyncMock
+const postJsonMock = postJson as unknown as AsyncMock
 
 function makeEntry(over: Partial<HistoryEntry> = {}): HistoryEntry {
   return {
@@ -29,16 +32,44 @@ function renderScreen() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <InvoiceHistory />
+      <MemoryRouter><InvoiceHistory /></MemoryRouter>
     </QueryClientProvider>,
   )
 }
 
 beforeEach(() => {
   getMock.mockReset()
+  postJsonMock.mockReset()
 })
 
 describe('InvoiceHistory (S6.12)', () => {
+  it('S6.13 C2: muestra progreso, revisión o reintento seguro según el estado recuperable', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        entries: [
+          makeEntry({ id: 'pending', status: 'pending_ocr' }),
+          makeEntry({ id: 'processing', status: 'processing' }),
+          makeEntry({ id: 'done', status: 'ocr_done', direction: 'emitida' }),
+          makeEntry({ id: 'review', status: 'needs_review', direction: 'recibida' }),
+          makeEntry({ id: 'failed', status: 'ocr_failed' }),
+        ],
+      },
+      error: undefined,
+    })
+    postJsonMock.mockResolvedValue({ response: new Response(null, { status: 202 }) })
+    renderScreen()
+    const user = userEvent.setup()
+
+    const rows = await screen.findAllByTestId('history-row')
+    expect(within(rows[0]).getByRole('link', { name: 'Ver progreso' })).toHaveAttribute('href', '/confirmar/pending')
+    expect(within(rows[1]).getByText('Procesando OCR')).toBeInTheDocument()
+    expect(within(rows[2]).getByRole('link', { name: 'Revisar factura' })).toHaveAttribute('href', '/confirmar/done')
+    expect(within(rows[3]).getByRole('link', { name: 'Revisar factura' })).toHaveAttribute('href', '/confirmar/review')
+
+    await user.click(within(rows[4]).getByRole('button', { name: 'Reintentar lectura' }))
+
+    expect(postJsonMock).toHaveBeenCalledWith('/api/v1/uploads/failed/retry-ocr')
+  })
   it('C11: muestra los envíos privados con su fecha de creación y estado, sin PII ni dirección ausente', async () => {
     getMock.mockResolvedValue({
       data: {

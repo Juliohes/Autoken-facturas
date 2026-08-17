@@ -23,17 +23,27 @@ from __future__ import annotations
 
 import asyncpg
 import httpx
+from PIL import Image
 
 from tests._auth import USER_PASSWORD, USER_PASSWORD_HASH, bearer, host, login
 from tests._dbtest import seed_company, seed_membership, seed_tenant, seed_user
 
 UPLOADS = "/api/v1/uploads"
 
-# --- Bytes de ficheros de prueba (válidos por número mágico, mínimos) ----------------------------
-# JPEG: cabecera JFIF (FF D8 FF E0 ... ) + relleno + marcador de fin (FF D9). Sniff -> image/jpeg.
-JPEG = bytes.fromhex("ffd8ffe000104a46494600010100000100010000") + b"\x00" * 64 + b"\xff\xd9"
-# PNG: firma de 8 bytes + IHDR mínimo. Sniff -> image/png.
-PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452") + b"\x00" * 32
+
+# --- Bytes de ficheros de prueba (válidos estructuralmente) --------------------------------------
+# S6.13 valida JPEG/PNG con Pillow además de su número mágico. Los fixtures deben ser imágenes que
+# un decodificador real acepta, no solo cabeceras que pasan `filetype.guess`.
+def _image_bytes(format_name: str) -> bytes:
+    import io
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (100, 60), "white").save(buffer, format=format_name)
+    return buffer.getvalue()
+
+
+JPEG = _image_bytes("JPEG")
+PNG = _image_bytes("PNG")
 # PDF: cabecera %PDF + fin. Sniff -> application/pdf.
 PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
 # No es imagen ni PDF (cabecera de ejecutable PE). Debe rechazarse por MIME real (415).

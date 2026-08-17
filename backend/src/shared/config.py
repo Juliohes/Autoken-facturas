@@ -289,6 +289,9 @@ class Settings(BaseSettings):
     # Tamaño máximo del fichero de intake (se rechaza con 413 antes de procesarlo). No es una regla
     # de dominio: es un guardarraíl anti-DoS configurable. Por defecto 15 MiB.
     max_upload_bytes: int = 15 * 1024 * 1024
+    # Una imagen aparentemente pequeña puede expandirse a cientos de MiB al decodificarla. Este
+    # límite se comprueba por dimensiones antes de cargar píxeles en Pillow.
+    max_upload_image_pixels: int = 40_000_000
 
     # Cota del tamaño total del CUERPO de la petición (issue #66): un middleware la rechaza con 413
     # por `Content-Length` ANTES de que Starlette/python-multipart vuelque el cuerpo a disco
@@ -301,6 +304,14 @@ class Settings(BaseSettings):
     # Cola de arq en la que la API encola `run_ocr` tras una subida aceptada y de la que el worker
     # consume. No es secreto; se comparte el mismo Redis que el resto de la app.
     ocr_queue_name: str = "autoken:queue:ocr"
+    ocr_claim_lease_seconds: int = 10 * 60
+    ocr_provider_timeout_seconds: int = 8 * 60
+    ocr_recovery_batch_size: int = 100
+    intake_rate_limit_window_seconds: int = 60
+    intake_uploads_per_user: int = 20
+    intake_uploads_per_tenant: int = 100
+    ocr_retries_per_user: int = 5
+    ocr_retries_per_tenant: int = 25
 
     # Antivirus (fail-closed, ADR-0015). `virus_scanner_backend` fuerza el backend (`signature` o
     # `clamd`); sin fijar, se usa el scanner de firma en dev/CI (detecta EICAR en proceso, sin red)

@@ -1,5 +1,12 @@
 import type { components } from '../../api/schema'
+import type { Direction } from '../capture/types'
 
 // S6.12 publica solo metadatos operativos de los envíos: nunca datos de contraparte.
-export type HistoryEntry = components['schemas']['HistoryEntryOut']
-export type HistoryResponse = components['schemas']['HistoryOut']
+// `direction` y los estados S6.13 son opcionales hasta regenerar OpenAPI; su ausencia representa
+// histórico previo y se pide a la persona, nunca se rellena con un valor inventado.
+export type HistoryEntry = components['schemas']['HistoryEntryOut'] & {
+  direction?: Direction | null
+}
+export type HistoryResponse = Omit<components['schemas']['HistoryOut'], 'entries'> & {
+  entries: HistoryEntry[]
+}

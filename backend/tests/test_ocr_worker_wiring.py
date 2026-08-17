@@ -29,7 +29,13 @@ async def test_worker_settings_estan_cableados() -> None:
     """`WorkerSettings` expone lo que arq lee: task registrado, guard de arranque, cola y Redis."""
     from jobs.worker import WorkerSettings, run_benchmark_batch_task, run_ocr_task, startup
 
-    assert run_ocr_task in WorkerSettings.functions
+    # S6.13 envuelve `run_ocr_task` en `func(...)` (timeout inferior al lease del claim, un único
+    # intento automático): ya no es el objeto función pelado dentro de `functions`.
+    ocr = next(
+        item for item in WorkerSettings.functions if getattr(item, "name", None) == "run_ocr_task"
+    )
+    assert ocr.coroutine is run_ocr_task
+    assert ocr.max_tries == 1
     assert WorkerSettings.on_startup is startup  # guard ADR-0014 en el arranque del worker
     assert WorkerSettings.queue_name
     assert WorkerSettings.redis_settings is not None

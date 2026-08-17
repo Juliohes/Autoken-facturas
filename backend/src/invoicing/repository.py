@@ -51,6 +51,7 @@ class HistoryEntry:
     id: UUID
     status: str
     created_at: datetime
+    direction: str | None
 
 
 @dataclass(frozen=True)
@@ -575,7 +576,7 @@ async def list_history(
     rows = (
         await session.execute(
             text(
-                "SELECT f.id, f.status, f.created_at FROM uploaded_files f "
+                "SELECT f.id, f.status, f.created_at, f.direction FROM uploaded_files f "
                 "WHERE ((:uploaded_by)::uuid IS NULL OR f.uploaded_by = (:uploaded_by)::uuid) "
                 "AND NOT EXISTS (SELECT 1 FROM invoices i "
                 "                WHERE i.uploaded_file_id = f.id AND i.is_test = true) "
@@ -588,4 +589,12 @@ async def list_history(
             },
         )
     ).all()
-    return [HistoryEntry(id=row.id, status=row.status, created_at=row.created_at) for row in rows]
+    return [
+        HistoryEntry(
+            id=row.id,
+            status=row.status,
+            created_at=row.created_at,
+            direction=row.direction,
+        )
+        for row in rows
+    ]

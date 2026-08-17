@@ -94,7 +94,7 @@ export function CaptureScreen({ onUploaded }: Props) {
 
   const uploadBlob = async (blob: Blob, operation: number) => {
     try {
-      const data = await upload.mutateAsync({ blob, companyId: effectiveCompanyId })
+      const data = await upload.mutateAsync({ blob, companyId: effectiveCompanyId, direction })
       if (operationRef.current === operation) onUploaded(data.id, direction)
     } catch {
       if (operationRef.current === operation) setCaptureError('No se pudo subir la foto. Inténtalo de nuevo.')

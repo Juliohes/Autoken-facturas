@@ -3,7 +3,10 @@
 // la lógica (color de confianza, botón habilitado, body del confirm) vive en
 // módulos puros aparte (sin monolito). Comportamientos C1-C12 de la spec.
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
+import { ROUTES } from '../../app/routes'
+import type { Direction } from '../capture/types'
 import { useCurrentUser } from '../identity/useCurrentUser'
 import { CounterpartyVerdictBlock } from './CounterpartyVerdictBlock'
 import { FieldRow } from './FieldRow'
@@ -30,12 +33,11 @@ interface Props {
   fileId: string
   onConfirmed: () => void
   onRetry: () => void
-  /** Recibida/Emitida elegida en la captura (S2.2); sin captura de por medio (navegación directa a
-   * esta URL), se mantiene el valor por defecto de siempre. */
-  direction?: 'recibida' | 'emitida'
+  /** Dirección elegida en la captura; la persistida por el backend siempre tiene prioridad. */
+  direction?: Direction
 }
 
-export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction = 'recibida' }: Props) {
+export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction }: Props) {
   const review = useReview(fileId)
 
   if (review.isLoading) {
@@ -49,6 +51,7 @@ export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction = '
         <p className="text-sm text-slate-400">
           {isPendingOcr ? null : 'Espera un momento, por favor.'}
         </p>
+        {isPendingOcr && <Link to={ROUTES.history} className="text-sm text-emerald-400">Volver al historial</Link>}
       </div>
     )
   }
@@ -75,7 +78,7 @@ export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction = '
       review={review.data}
       onConfirmed={onConfirmed}
       onRetry={onRetry}
-      direction={direction}
+      direction={review.data.direction === undefined ? direction ?? null : review.data.direction}
     />
   )
 }
@@ -85,7 +88,7 @@ interface FormProps {
   review: ReviewResponse
   onConfirmed: () => void
   onRetry: () => void
-  direction: 'recibida' | 'emitida'
+  direction: Direction | null
 }
 
 /** Formulario propiamente dicho: se monta con los datos ya cargados. */
@@ -98,6 +101,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
   const [ownTaxIdExceptionAccepted, setOwnTaxIdExceptionAccepted] = useState(false)
   const [serverVerdict, setServerVerdict] = useState<CounterpartyVerdict | null>(null)
   const [serverBlockingReasons, setServerBlockingReasons] = useState<string[] | null>(null)
+  const [selectedDirection, setSelectedDirection] = useState<Direction | null>(direction)
   const isAdmin = currentUser.data?.role === 'tenant_admin'
   const isUser = currentUser.data?.role === 'user'
   const draftVerdict = useDraftCounterpartyVerdict({
@@ -139,7 +143,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
     responsibilityAccepted,
     submitting: confirm.isPending,
     ownTaxIdExceptionAccepted: isUser && ownTaxIdExceptionAccepted,
-  })
+  }) && selectedDirection !== null
 
   const hasImbalance = review.warnings.includes(WARNING_IMBALANCE)
   // 2026-08-08 (petición de Julio): sin caja "CIF de contraparte verificado" — un check verde
@@ -152,10 +156,9 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
   const missingOwnTaxId = review.blocking_reasons.includes(BLOCKING_REASONS.ownTaxIdMissing)
 
   const handleConfirm = () => {
-    // `direction` llega de la selección Recibida/Emitida de S2.2; por defecto "recibida" si se
-    // navega aquí sin pasar por la captura (flujo del CIF de contraparte de §11.8).
+    if (!selectedDirection) return
     const body = formStateToConfirmBody(form, {
-      direction,
+      direction: selectedDirection,
       responsibilityAccepted,
       ownTaxIdExceptionAccepted: isUser && ownTaxIdExceptionAccepted,
       isTest: isAdmin && isTest,
@@ -174,6 +177,17 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
   return (
     <section className="mx-auto max-w-xl space-y-6 p-6 text-slate-100">
       <h1 className="text-xl font-semibold">Revisar y confirmar</h1>
+
+      {direction === null && (
+        <fieldset className="space-y-2 rounded-md border border-amber-500/60 p-4">
+          <legend className="px-1 text-sm font-medium text-amber-200">Dirección de la factura</legend>
+          <p className="text-sm text-amber-100">Elige si la factura es recibida o emitida antes de guardar.</p>
+          <div className="flex gap-3">
+            <label><input type="radio" name="historical-direction" checked={selectedDirection === 'recibida'} onChange={() => setSelectedDirection('recibida')} /> Recibida</label>
+            <label><input type="radio" name="historical-direction" checked={selectedDirection === 'emitida'} onChange={() => setSelectedDirection('emitida')} /> Emitida</label>
+          </div>
+        </fieldset>
+      )}
 
       {/* Enmienda S6.1 §8 (2026-08-08, tras probar con Julio): 4 secciones siempre visibles, en
           vez de "3-4 campos siempre visibles + resto plegado". Solo tramos de IVA e IRPF
