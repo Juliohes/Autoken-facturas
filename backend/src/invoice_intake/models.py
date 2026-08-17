@@ -37,6 +37,10 @@ class UploadedFile(Base):
 
     __tablename__ = "uploaded_files"
     __table_args__ = (
+        CheckConstraint(
+            "direction IS NULL OR direction IN ('recibida', 'emitida')",
+            name="uploaded_files_direction_check",
+        ),
         UniqueConstraint(
             "company_id",
             "uploaded_by",
