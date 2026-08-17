@@ -259,5 +259,10 @@ async def test_s6_7_el_ocr_principal_no_dispara_el_ranking_legado(authapi: Api) 
         extractor=default_extractor,
     )
 
-    assert default_extractor.calls == 1
+    # Con el interruptor ON, la comparativa original-vs-realzada (S2.9/S2.10) reutiliza el MISMO
+    # extractor inyectado para su segunda lectura ("enhanced") — eso es una llamada legítima de
+    # esta tarea, no del ranking legado. El ranking legado (S4.8) llamaría a un extractor POR CADA
+    # motor configurado (varios objetos distintos); aquí solo hay un único extractor y solo se
+    # espera su segunda invocación desde la comparativa, nunca una tercera.
+    assert default_extractor.calls == 2
     assert await count_ranking_entries(dsns, file_id=file_id) == 0

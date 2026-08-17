@@ -63,11 +63,12 @@ async def test_c13_lista_solo_los_ficheros_elegibles(authapi: Api) -> None:
         dsns, slug="bf-elegible", status="needs_review"
     )
     tenant_ya, c_ya, f_ya = await _seed_file(
-        dsns, slug="bf-ya-comparado", status="ocr_done", content=real_jpeg_bytes()
+        dsns, slug="bf-ya-comparado", status="pending_ocr", content=real_jpeg_bytes()
     )
 
     # `bf-ya-comparado` ya tiene una comparativa vigente (interruptor ON al procesarla): no debe
-    # reaparecer como candidato.
+    # reaparecer como candidato. Se siembra en `pending_ocr` (S6.13): `run_ocr` solo procesa un
+    # fichero si puede reclamarlo, y el claim exige ese estado de entrada real.
     await set_ocr_experiment_enabled(dsns, True)
     await run_ocr(
         tenant_id=tenant_ya,
