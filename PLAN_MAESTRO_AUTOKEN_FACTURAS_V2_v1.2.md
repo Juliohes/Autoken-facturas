@@ -809,3 +809,16 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
   tenant para subida/reintento; logs OCR sin texto externo; aislamiento del reintento incluido en el gate. La
   función global de recuperación usa `autoken_definer`, `search_path` cerrado y grants mínimos, nunca el
   superusuario de migración.
+- **Auditoría de 3 lentes (SOLID, arquitectura, patrones+seguridad), 4 hallazgos altos corregidos antes de
+  cerrar**: el nuevo `retry-ocr` faltaba en el gate anti-cruce y devolvía 500 (no 404) ante un fichero de
+  empresa hermana; el recuperador podía reencolar el mismo pendiente en cada ciclo sin marca de despacho,
+  arriesgando inundar la cola de un tenant caído; un lease vencido podía cerrarse igualmente si no se
+  comprobaba su expiración en el propio `UPDATE` de cierre; la función `SECURITY DEFINER` de recuperación
+  quedaba con el propietario de la migración (superusuario en despliegue real) en vez de `autoken_definer`.
+  Corregidos con fencing por expiración, `FOR UPDATE SKIP LOCKED` + marca `ocr_recovery_enqueued_at`, y
+  ownership/grants mínimos explícitos. 900 tests de backend en verde (los 8 de `test_backup_restore.py`
+  siguen fuera de alcance de este host, sin `pg_dump`/`pg_restore`), 332 de frontend, ruff/mypy/alembic
+  check verdes. PR #157, desplegado y verificado en real en `setex`/`ilex`/`panel-staging`: migración 0039
+  aplicada, worker con el cron `recover_ocr_task` corriendo cada minuto sin error, `/metrics` publicando
+  `autoken_ocr_documents` con datos reales, y la factura que disparó el aviso de Julio confirmada en
+  `needs_review` (nunca perdida ni duplicada).
