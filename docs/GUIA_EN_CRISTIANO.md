@@ -1178,6 +1178,11 @@ recuperador que vuelve a poner en marcha una lectura si un reinicio la deja espe
 demasiado grandes se rechazan antes de guardarse, y los reintentos siguen respetando que nadie pueda descubrir
 ni tocar facturas ajenas.
 
+Ya está desplegado y comprobado de verdad: el recuperador corre cada minuto sin fallos, el termómetro
+(`/metrics`) publica cuántas facturas están pendientes/procesando/atascadas/fallidas, y la factura concreta
+que motivó el aviso de Julio quedó confirmada como "pendiente de comprobación" (nunca perdida ni cobrada dos
+veces).
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
