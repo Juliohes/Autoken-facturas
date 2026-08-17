@@ -20,6 +20,7 @@ export class UploadCaptureError extends Error {
 export interface UploadCaptureInput {
   blob: Blob
   companyId: string
+  direction: Direction
 }
 
 export interface UploadBatchCaptureInput {
@@ -30,12 +31,26 @@ export interface UploadBatchCaptureInput {
 
 type UploadResult = Pick<components['schemas']['UploadOut'], 'id'>
 
+interface DuplicateUploadResponse {
+  duplicate_of: string
+}
+
 function isUploadResult(value: unknown): value is UploadResult {
   return value !== null && typeof value === 'object' && 'id' in value && typeof value.id === 'string'
 }
 
+function isDuplicateUploadResponse(value: unknown): value is DuplicateUploadResponse {
+  return value !== null
+    && typeof value === 'object'
+    && 'duplicate_of' in value
+    && typeof value.duplicate_of === 'string'
+}
+
 async function readUploadResult(response: Response): Promise<UploadResult> {
   const body: unknown = await response.json().catch(() => undefined)
+  // El backend solo revela `duplicate_of` para el propio documento autorizado. Una respuesta de
+  // subida perdida que se reintenta llega aquí como 409 y permite retomar el original sin duplicar.
+  if (response.status === 409 && isDuplicateUploadResponse(body)) return { id: body.duplicate_of }
   if (!response.ok || !isUploadResult(body)) {
     throw new UploadCaptureError(describeUploadError(response.status, errorDetail(body)))
   }
@@ -44,10 +59,11 @@ async function readUploadResult(response: Response): Promise<UploadResult> {
 
 export function useUploadCapture() {
   return useMutation({
-    mutationFn: async ({ blob, companyId }: UploadCaptureInput) => {
+    mutationFn: async ({ blob, companyId, direction }: UploadCaptureInput) => {
       const formData = new FormData()
       formData.append('file', blob, 'captura.jpg')
       formData.append('company_id', companyId)
+      formData.append('direction', direction)
 
       return readUploadResult(await postMultipart('/api/v1/uploads', formData))
     },

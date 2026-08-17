@@ -10,7 +10,7 @@ de `invoice_intake.service` a la respuesta HTTP. No contiene SQL ni reglas de ne
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, UploadFile
@@ -19,8 +19,11 @@ from pydantic import BaseModel
 
 from identity.authz import require_roles
 from identity.dependencies import AuthContext
+from identity.ratelimit import intake_attempt_exceeds
 from invoice_intake import scanner, service, storage
+from invoice_intake.image import InvalidImage
 from shared.config import get_settings
+from shared.redis import get_redis
 from tenancy.constants import Role
 
 router = APIRouter(prefix="/uploads", tags=["intake"])
@@ -64,6 +67,7 @@ class UploadOut(BaseModel):
     status: str
     scan_status: str
     created_at: datetime
+    direction: Literal["recibida", "emitida"] | None
 
 
 async def duplicate_upload_handler(_request: Request, exc: Exception) -> JSONResponse:
@@ -82,6 +86,7 @@ async def upload_file(
     identity: Uploader,
     file: UploadFile,
     company_id: Annotated[UUID, Form()],
+    direction: Annotated[Literal["recibida", "emitida"] | None, Form()] = None,
 ) -> UploadOut:
     """Sube un fichero de factura a una empresa. Ver spec S2.1 para los códigos (201/4xx/503).
 
@@ -102,7 +107,19 @@ async def upload_file(
     except service.CompanyNotInContext as exc:
         raise HTTPException(status_code=404, detail="Empresa no encontrada") from exc
 
-    max_bytes = get_settings().max_upload_bytes
+    settings = get_settings()
+    if await intake_attempt_exceeds(
+        get_redis(),
+        kind="upload",
+        tenant_id=str(identity.tenant_id),
+        user_id=str(identity.user_id),
+        max_per_user=settings.intake_uploads_per_user,
+        max_per_tenant=settings.intake_uploads_per_tenant,
+        window_seconds=settings.intake_rate_limit_window_seconds,
+    ):
+        raise HTTPException(status_code=429, detail="Demasiadas subidas. Espera un minuto.")
+
+    max_bytes = settings.max_upload_bytes
     # Lectura acotada: como mucho `max_bytes + 1` bytes en memoria; si sobra, excede el tope (413),
     # sin materializar de golpe un fichero gigante ni caerse con un 500 (spec S2.1 C5).
     content = await file.read(max_bytes + 1)
@@ -118,11 +135,16 @@ async def upload_file(
             user_id=identity.user_id,
             company_id=company_id,
             content=content,
+            direction=direction,
         )
     except service.EmptyFile as exc:
         raise HTTPException(status_code=422, detail="El fichero está vacío") from exc
     except service.UnsupportedMediaType as exc:
         raise HTTPException(status_code=415, detail="Tipo de fichero no admitido") from exc
+    except InvalidImage as exc:
+        raise HTTPException(
+            status_code=422, detail="La imagen no es válida o supera el límite"
+        ) from exc
     except scanner.ScanInfected as exc:
         raise HTTPException(status_code=422, detail="El fichero no supera el antivirus") from exc
     except scanner.ScannerUnavailable as exc:
@@ -143,6 +165,7 @@ async def upload_file(
         status=record.status,
         scan_status=record.scan_status,
         created_at=record.created_at,
+        direction=cast(Literal["recibida", "emitida"] | None, record.direction),
     )
 
 
@@ -158,7 +181,6 @@ async def upload_batch(
     La dirección se valida aquí porque forma parte del contrato de captura. La confirmación
     existente sigue siendo quien la persiste, igual que en una subida simple.
     """
-    del direction
     member_company_id = identity.company.id if identity.company is not None else None
     try:
         await service.authorize_upload(
@@ -176,7 +198,18 @@ async def upload_batch(
         raise HTTPException(
             status_code=422, detail="Un documento requiere entre dos y cinco páginas"
         )
-    max_bytes = get_settings().max_upload_bytes
+    settings = get_settings()
+    if await intake_attempt_exceeds(
+        get_redis(),
+        kind="upload",
+        tenant_id=str(identity.tenant_id),
+        user_id=str(identity.user_id),
+        max_per_user=settings.intake_uploads_per_user,
+        max_per_tenant=settings.intake_uploads_per_tenant,
+        window_seconds=settings.intake_rate_limit_window_seconds,
+    ):
+        raise HTTPException(status_code=429, detail="Demasiadas subidas. Espera un minuto.")
+    max_bytes = settings.max_upload_bytes
     contents: list[bytes] = []
     for file in files:
         content = await file.read(max_bytes + 1)
@@ -192,11 +225,16 @@ async def upload_batch(
             user_id=identity.user_id,
             company_id=company_id,
             contents=contents,
+            direction=direction,
         )
     except service.EmptyFile as exc:
         raise HTTPException(status_code=422, detail="El fichero está vacío") from exc
     except service.UnsupportedMediaType as exc:
         raise HTTPException(status_code=415, detail="Tipo de fichero no admitido") from exc
+    except InvalidImage as exc:
+        raise HTTPException(
+            status_code=422, detail="La imagen no es válida o supera el límite"
+        ) from exc
     except scanner.ScanInfected as exc:
         raise HTTPException(status_code=422, detail="El fichero no supera el antivirus") from exc
     except scanner.ScannerUnavailable as exc:
@@ -214,7 +252,47 @@ async def upload_batch(
         status=record.status,
         scan_status=record.scan_status,
         created_at=record.created_at,
+        direction=cast(Literal["recibida", "emitida"] | None, record.direction),
     )
+
+
+class OcrRetryOut(BaseModel):
+    status: Literal["pending_ocr"]
+
+
+@router.post("/{file_id}/retry-ocr", status_code=202)
+async def retry_ocr(identity: Uploader, file_id: UUID) -> OcrRetryOut:
+    """Reencola de forma autorizada una lectura que terminó en fallo, sin volver a subir bytes."""
+    try:
+        ctx = await service.prepare_ocr_retry(
+            identity.session,
+            tenant_id=identity.tenant_id,
+            file_id=file_id,
+            actor_user_id=identity.user_id,
+            actor_role=identity.role,
+        )
+    except (service.FileForbidden, service.FileNotVisible) as exc:
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
+    except service.OcrRetryUnavailable as exc:
+        raise HTTPException(
+            status_code=409, detail="La lectura OCR no se puede reintentar"
+        ) from exc
+
+    settings = get_settings()
+    if await intake_attempt_exceeds(
+        get_redis(),
+        kind="retry",
+        tenant_id=str(identity.tenant_id),
+        user_id=str(identity.user_id),
+        max_per_user=settings.ocr_retries_per_user,
+        max_per_tenant=settings.ocr_retries_per_tenant,
+        window_seconds=settings.intake_rate_limit_window_seconds,
+    ):
+        raise HTTPException(status_code=429, detail="Demasiados reintentos OCR. Espera un minuto.")
+    if not await service.retry_ocr(identity.session, file_id):
+        raise HTTPException(status_code=409, detail="La lectura OCR no se puede reintentar")
+    service._enqueue_ocr_after_commit(identity.session, identity.tenant_id, ctx.company_id, file_id)
+    return OcrRetryOut(status="pending_ocr")
 
 
 class DownloadUrlOut(BaseModel):

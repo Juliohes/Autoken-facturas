@@ -6,6 +6,7 @@
 // entrada (`useReview`) es el único que hace el cast desde la respuesta cruda.
 
 import type { components } from '../../api/schema'
+import type { Direction } from '../capture/types'
 
 /** Confianza del OCR por campo: alta/media/baja o ausente (spec §2). */
 export type Confidence = 'alta' | 'media' | 'baja' | null
@@ -53,6 +54,9 @@ export interface ReviewResponse {
   own: OwnIdentity
   warnings: string[]
   blocking_reasons: string[]
+  // S6.13: el contrato generado aún no contiene este campo. `null` significa histórico previo que
+  // requiere elección explícita, no una dirección por defecto.
+  direction?: Direction | null
 }
 
 /** Motivos de bloqueo que el servidor reimpone en `confirm` (spec §2). */

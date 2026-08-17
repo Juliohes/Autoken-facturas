@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -46,6 +46,7 @@ class UploadedFileRecord:
     status: str
     scan_status: str
     created_at: datetime
+    direction: str | None
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ class UploadedFileContext:
     company_id: UUID
     status: str
     uploaded_by: UUID
+    direction: str | None
 
 
 @dataclass(frozen=True)
@@ -160,14 +162,21 @@ async def get_file_context(session: AsyncSession, file_id: UUID) -> UploadedFile
     """
     row = (
         await session.execute(
-            text("SELECT id, company_id, status, uploaded_by FROM uploaded_files WHERE id = :id"),
+            text(
+                "SELECT id, company_id, status, uploaded_by, direction "
+                "FROM uploaded_files WHERE id = :id"
+            ),
             {"id": str(file_id)},
         )
     ).first()
     if row is None:
         return None
     return UploadedFileContext(
-        id=row.id, company_id=row.company_id, status=row.status, uploaded_by=row.uploaded_by
+        id=row.id,
+        company_id=row.company_id,
+        status=row.status,
+        uploaded_by=row.uploaded_by,
+        direction=row.direction,
     )
 
 
@@ -182,6 +191,91 @@ async def transition_status(session: AsyncSession, file_id: UUID, status: FileSt
         text("UPDATE uploaded_files SET status = :status WHERE id = :id"),
         {"status": status.value, "id": str(file_id)},
     )
+
+
+async def claim_ocr(
+    session: AsyncSession, file_id: UUID, company_id: UUID, *, lease_seconds: int
+) -> UUID | None:
+    """Reserva el documento para un worker, o ``None`` si otro claim vigente ya es dueño.
+
+    El token aleatorio es el fencing token: toda escritura final debe incluirlo, de modo que un
+    worker que despertó tras expirar su lease no puede sobrescribir al propietario nuevo.
+    """
+    token = uuid4()
+    row = (
+        await session.execute(
+            text(
+                "UPDATE uploaded_files SET status = :processing, ocr_claim_token = :token, "
+                "ocr_claim_expires_at = now() + (:lease_seconds * interval '1 second') "
+                "WHERE id = :id AND company_id = :company_id AND (status = :pending "
+                "OR (status = :processing AND ocr_claim_expires_at < now())) "
+                "RETURNING ocr_claim_token"
+            ),
+            {
+                "id": str(file_id),
+                "company_id": str(company_id),
+                "token": str(token),
+                "lease_seconds": lease_seconds,
+                "pending": FileStatus.PENDING_OCR.value,
+                "processing": FileStatus.PROCESSING.value,
+            },
+        )
+    ).first()
+    return row.ocr_claim_token if row is not None else None
+
+
+async def claim_is_current(session: AsyncSession, file_id: UUID, token: UUID) -> bool:
+    """Comprueba y bloquea el claim actual antes de escribir resultados cercados."""
+    row = (
+        await session.execute(
+            text(
+                "SELECT 1 FROM uploaded_files WHERE id = :id AND status = :processing "
+                "AND ocr_claim_token = :token AND ocr_claim_expires_at >= now() FOR UPDATE"
+            ),
+            {"id": str(file_id), "processing": FileStatus.PROCESSING.value, "token": str(token)},
+        )
+    ).first()
+    return row is not None
+
+
+async def finish_claim(
+    session: AsyncSession, file_id: UUID, token: UUID, status: FileStatus
+) -> bool:
+    """Cierra solo el claim que sigue siendo dueño y limpia sus metadatos transitorios."""
+    row = (
+        await session.execute(
+            text(
+                "UPDATE uploaded_files SET status = :status, ocr_claim_token = NULL, "
+                "ocr_claim_expires_at = NULL WHERE id = :id AND status = :processing "
+                "AND ocr_claim_token = :token AND ocr_claim_expires_at >= now() RETURNING id"
+            ),
+            {
+                "id": str(file_id),
+                "token": str(token),
+                "status": status.value,
+                "processing": FileStatus.PROCESSING.value,
+            },
+        )
+    ).first()
+    return row is not None
+
+
+async def retry_ocr(session: AsyncSession, file_id: UUID) -> bool:
+    """Devuelve un OCR fallido a pendiente, sin permitir resetear estados terminales."""
+    row = (
+        await session.execute(
+            text(
+                "UPDATE uploaded_files SET status = :pending, ocr_claim_token = NULL, "
+                "ocr_claim_expires_at = NULL WHERE id = :id AND status = :failed RETURNING id"
+            ),
+            {
+                "id": str(file_id),
+                "pending": FileStatus.PENDING_OCR.value,
+                "failed": FileStatus.OCR_FAILED.value,
+            },
+        )
+    ).first()
+    return row is not None
 
 
 async def delete_uploaded_file(session: AsyncSession, file_id: UUID) -> None:
@@ -264,6 +358,7 @@ async def insert_uploaded_file(
     content_type: str,
     size_bytes: int,
     sha256: str,
+    direction: str | None = None,
 ) -> UploadedFileRecord:
     """Inserta el fichero de intake en el tenant del contexto (`pending_ocr` + `scan_status=clean`).
 
@@ -277,11 +372,11 @@ async def insert_uploaded_file(
             text(
                 f"INSERT INTO uploaded_files "
                 f"(tenant_id, company_id, uploaded_by, storage_bucket, storage_key, "
-                f" content_type, size_bytes, sha256) "
+                f" content_type, size_bytes, sha256, direction) "
                 f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :uploaded_by, :bucket, :key, "
-                f" :content_type, :size_bytes, :sha256) "
+                f" :content_type, :size_bytes, :sha256, :direction) "
                 f"RETURNING id, company_id, content_type, size_bytes, sha256, "
-                f"          status, scan_status, created_at"
+                f"          status, scan_status, created_at, direction"
             ),
             {
                 "company_id": str(company_id),
@@ -291,6 +386,7 @@ async def insert_uploaded_file(
                 "content_type": content_type,
                 "size_bytes": size_bytes,
                 "sha256": sha256,
+                "direction": direction,
             },
         )
     ).one()
@@ -303,6 +399,7 @@ async def insert_uploaded_file(
         status=row.status,
         scan_status=row.scan_status,
         created_at=row.created_at,
+        direction=row.direction,
     )
 
 

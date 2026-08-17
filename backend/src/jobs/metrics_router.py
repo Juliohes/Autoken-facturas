@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Response
 from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, Gauge, generate_latest
 
 from jobs.monitoring import ocr_queue_health
+from jobs.ocr_recovery import read_ocr_recovery_metrics
 from shared.config import Settings, get_settings
 
 router = APIRouter(tags=["observability"])
@@ -26,6 +27,11 @@ router = APIRouter(tags=["observability"])
 ocr_queue_depth = Gauge(
     "autoken_ocr_queue_depth",
     "Trabajos OCR pendientes (aún no empezados) en la cola de arq",
+)
+ocr_documents = Gauge(
+    "autoken_ocr_documents",
+    "Documentos OCR por estado operativo, instantánea durable sin PII",
+    ["state"],
 )
 
 _OLDEST_PENDING_METRIC = b"autoken_ocr_queue_oldest_pending_seconds"
@@ -55,8 +61,17 @@ def _render_oldest_pending_line(age_seconds: float) -> bytes:
 async def metrics(settings: Annotated[Settings, Depends(get_settings)]) -> Response:
     """Peticiones HTTP + salud de la cola OCR, en formato de texto Prometheus."""
     health = await ocr_queue_health(settings)
+    recovery = await read_ocr_recovery_metrics()
     if health is not None:
         ocr_queue_depth.set(health.depth)
+    if recovery is not None:
+        for state, value in (
+            ("pending", recovery.pending),
+            ("processing", recovery.processing),
+            ("abandoned", recovery.abandoned),
+            ("failed", recovery.failed),
+        ):
+            ocr_documents.labels(state=state).set(value)
 
     body = generate_latest(REGISTRY)
     if health is not None and health.oldest_pending_age_seconds is not None:

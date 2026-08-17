@@ -14,14 +14,15 @@ desde un mensaje encolado, así que ese invariante es tan crítico como en la AP
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
-from arq import func
+from arq import cron, func
 from arq.connections import RedisSettings
 
 from jobs.ocr import run_ocr
 from jobs.ocr_benchmark import run_ocr_benchmark_task
 from jobs.ocr_benchmark_batch import run_benchmark_batch_task
+from jobs.ocr_recovery import recover_ocr_task
 from shared.config import get_settings
 from shared.db import get_engine
 from shared.db_security import assert_runtime_role_cannot_bypass_rls
@@ -50,13 +51,20 @@ class WorkerSettings:
     """Ajustes que arq lee para arrancar el worker (`arq jobs.worker.WorkerSettings`)."""
 
     functions = [
-        run_ocr_task,
+        func(
+            run_ocr_task,
+            timeout=_settings.ocr_provider_timeout_seconds + 30,
+            max_tries=1,
+        ),
+        recover_ocr_task,
         run_ocr_benchmark_task,
         # Un lote autorizado puede tardar más que el timeout por defecto de ARQ (5 min): 30
         # facturas x 18 lecturas. Un solo intento automático evita reejecutar y volver a cobrar un
         # lote parcial; cualquier relanzamiento posterior queda explícito y visible en el panel.
         func(run_benchmark_batch_task, timeout=4 * 60 * 60, max_tries=1),
     ]
+    # arq no publica tipos completos para `cron`; la firma es la misma que las tasks registradas.
+    cron_jobs = [cron(cast(Any, recover_ocr_task), second=0)]
     on_startup = startup
     queue_name = _settings.ocr_queue_name
     redis_settings = RedisSettings.from_dsn(_settings.redis_url)

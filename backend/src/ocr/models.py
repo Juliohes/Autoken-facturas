@@ -21,6 +21,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -88,6 +89,22 @@ class OcrExtraction(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class OcrRecoveryMetrics(Base):
+    """Última instantánea global del recuperador OCR (S6.13), solo contadores sin PII."""
+
+    __tablename__ = "ocr_recovery_metrics"
+    __table_args__ = (CheckConstraint("id", name="ocr_recovery_metrics_singleton_check"),)
+
+    id: Mapped[bool] = mapped_column(Boolean, primary_key=True, server_default="true")
+    pending: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    processing: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    abandoned: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    failed: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 

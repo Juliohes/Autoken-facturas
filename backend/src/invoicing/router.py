@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated, Literal, NoReturn
+from typing import Annotated, Literal, NoReturn, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -132,6 +132,7 @@ async def review_upload(identity: Reviewer, file_id: UUID) -> dict[str, object]:
         "own": data.own,
         "warnings": data.warnings,
         "blocking_reasons": data.blocking_reasons,
+        "direction": data.direction,
     }
 
 
@@ -198,6 +199,7 @@ class HistoryEntryOut(BaseModel):
     id: UUID
     status: str
     created_at: datetime
+    direction: Literal["recibida", "emitida"] | None
 
 
 class HistoryOut(BaseModel):
@@ -216,6 +218,7 @@ async def invoice_history(identity: HistoryViewer) -> HistoryOut:
                 id=entry.id,
                 status=entry.status,
                 created_at=entry.created_at,
+                direction=cast(Literal["recibida", "emitida"] | None, entry.direction),
             )
             for entry in entries
         ]

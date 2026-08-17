@@ -44,6 +44,12 @@ class UploadedFile(Base):
             name="uploaded_files_company_uploader_sha256_unique",
         ),
         Index("ix_uploaded_files_tenant", "tenant_id", "id"),
+        Index(
+            "ix_uploaded_files_ocr_recovery",
+            "status",
+            "ocr_claim_expires_at",
+            "ocr_recovery_enqueued_at",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -64,6 +70,14 @@ class UploadedFile(Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending_ocr")
+    direction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ocr_claim_token: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
+    ocr_claim_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ocr_recovery_enqueued_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     scan_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="clean")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

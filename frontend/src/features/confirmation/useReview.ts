@@ -39,13 +39,9 @@ export function useReview(fileId: string) {
       // (spec §2). Único punto de cast de la feature.
       return data as unknown as ReviewResponse
     },
-    retry: (failureCount, err) => {
-      if (err instanceof PendingOcrError) {
-        // Reintenta de fondo sutilmente mientras procese con la IA (hasta 45 veces, i.e. ~67 segundos)
-        return failureCount < 45
-      }
-      return false // No reintentar otros fallos (403, 404, etc.)
-    },
+    // La aceptación de la subida es definitiva y el OCR no tiene fecha de caducidad visual. Solo
+    // el 409 transitorio sigue consultando; 403/404/409 permanentes siguen sin reintento.
+    retry: (_failureCount, err) => err instanceof PendingOcrError,
     retryDelay: 1500, // Reintenta cada 1.5 segundos
   })
 }

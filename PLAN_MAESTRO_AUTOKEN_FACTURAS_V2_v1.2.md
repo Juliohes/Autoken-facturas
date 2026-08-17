@@ -793,4 +793,19 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
   conexiones de BD durante OCR, contrato OpenAPI binario y oráculo de deduplicación. Verificación focal: 127
   pruebas backend contra Postgres/Redis/MinIO/ClamAV reales, 326 frontend, `ruff`/`mypy`/`tsc` y build verdes.
   La suite backend completa se detiene en el primer test de backup porque el host no tiene `pg_dump`; no es una
-  regresión de S6.12. Pendiente obligatorio: prueba manual Android/iPhone real, incluida linterna.
+   regresión de S6.12. Pendiente obligatorio: prueba manual Android/iPhone real, incluida linterna.
+
+### 11.18 S6.13 — Captura OCR recuperable y segura (hotfix, 2026-08-17)
+
+- **Incidente reproducido:** una foto aceptada (`201`) podía tardar más de los 67 segundos de espera de la UI;
+  el usuario recibía un error falso aunque el worker terminase después. El historial mostraba el documento sin
+  permitir retomar la revisión. Se separan explícitamente aceptación de subida y resultado OCR: la UI informa
+  que la factura ya está guardada, espera sin límite artificial y permite retomarla desde el historial.
+- **Fiabilidad:** la dirección Recibida/Emitida se persiste desde intake; `pending_ocr -> processing` usa claim
+  temporal con token de fencing, timeout inferior al lease y transición final cercada. Un recuperador acotado
+  vuelve a encolar pendientes o claims vencidos y publica métricas agregadas, sin PII. Un fallo de proveedor o
+  configuración termina en `ocr_failed` y puede reintentarse sin resubir el fichero.
+- **Seguridad:** validación estructural JPEG/PNG previa a antivirus, almacenamiento y OCR; límites por usuario y
+  tenant para subida/reintento; logs OCR sin texto externo; aislamiento del reintento incluido en el gate. La
+  función global de recuperación usa `autoken_definer`, `search_path` cerrado y grants mínimos, nunca el
+  superusuario de migración.

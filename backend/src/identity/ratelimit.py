@@ -64,6 +64,10 @@ def _counterparty_draft_key(tenant_id: str, user_id: str) -> str:
     return f"counterparty:draft:{tenant_id}:{user_id}"
 
 
+def _intake_key(kind: str, tenant_id: str, subject_id: str) -> str:
+    return f"intake:{kind}:{tenant_id}:{subject_id}"
+
+
 async def _at_or_above(redis: aioredis.Redis, key: str, threshold: int) -> bool:
     """True si el contador de `key` ya alcanzó o superó `threshold` dentro de su ventana vigente."""
     count = await redis.get(key)
@@ -146,3 +150,21 @@ async def draft_counterparty_attempt_exceeds(
     """Limita la consulta de borrador por identidad, sin castigar a otros usuarios del tenant."""
     count = await _record_hit(redis, _counterparty_draft_key(tenant_id, user_id), window_seconds)
     return count > max_attempts
+
+
+async def intake_attempt_exceeds(
+    redis: aioredis.Redis,
+    *,
+    kind: str,
+    tenant_id: str,
+    user_id: str,
+    max_per_user: int,
+    max_per_tenant: int,
+    window_seconds: int,
+) -> bool:
+    """Limita intake/OCR por usuario y tenant antes de recursos costosos (S6.13)."""
+    user_count = await _record_hit(
+        redis, _intake_key(kind, tenant_id, f"user:{user_id}"), window_seconds
+    )
+    tenant_count = await _record_hit(redis, _intake_key(kind, tenant_id, "tenant"), window_seconds)
+    return user_count > max_per_user or tenant_count > max_per_tenant

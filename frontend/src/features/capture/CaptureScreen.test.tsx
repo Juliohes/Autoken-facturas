@@ -140,6 +140,34 @@ describe('CaptureScreen (S6.11)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/elige una empresa/i)
   })
 
+  it('S6.13 C3: la subida simple incluye la dirección elegida para que sobreviva al OCR y a una reapertura', async () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    successfulUpload()
+    renderScreen()
+    const user = userEvent.setup()
+    const file = new File(['imagen'], 'factura.jpg', { type: 'image/jpeg' })
+
+    await user.click(screen.getByRole('radio', { name: 'Emitida' }))
+    await user.upload(screen.getByLabelText('Elige o toma una foto'), file)
+
+    await waitFor(() => expect(postMultipartMock).toHaveBeenCalledOnce())
+    const body = postMultipartMock.mock.calls[0][1]
+    expect(body.get('direction')).toBe('emitida')
+  })
+
+  it('S6.13 C1/C5: un duplicado propio conduce al documento original en vez de afirmar que la foto se perdió', async () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    postMultipartMock.mockResolvedValueOnce(new Response(JSON.stringify({ duplicate_of: 'file-original' }), { status: 409 }))
+    const { onUploaded } = renderScreen()
+    const user = userEvent.setup()
+    const file = new File(['imagen'], 'factura.jpg', { type: 'image/jpeg' })
+
+    await user.upload(screen.getByLabelText('Elige o toma una foto'), file)
+
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-original', 'recibida'))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('C2: la cámara activa ocupa la pantalla y ofrece guía A4, Capturar foto y Cerrar cámara', () => {
     useSessionMock.mockReturnValue(USER_SESSION)
     useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })

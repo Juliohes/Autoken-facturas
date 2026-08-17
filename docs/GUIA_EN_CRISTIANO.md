@@ -1168,6 +1168,16 @@ falló. Un compañero no puede ver ni descubrir que existe una foto ajena, aunqu
 administrador de la asesoría conserva su vista completa para poder dar soporte. Antes de cerrar se comprobaron
 estos límites intentando cruzarlos entre usuarios, empresas y asesorías diferentes.
 
+### S6.13 — Una factura guardada no vuelve a parecer perdida (17/08/2026)
+Una foto y la lectura de la IA son dos pasos distintos. Antes, si la IA tardaba más de un minuto, la pantalla se
+rendía y parecía que la foto se había perdido aunque ya estuviera guardada. Ahora avisa claramente de que la
+factura está dentro, permite cerrar la pantalla y retomarla desde el historial cuando la IA termine.
+
+También se añadió una reserva para que dos trabajadores no lean ni cobren dos veces la misma factura, y un
+recuperador que vuelve a poner en marcha una lectura si un reinicio la deja esperando. Las fotos corruptas o
+demasiado grandes se rechazan antes de guardarse, y los reintentos siguen respetando que nadie pueda descubrir
+ni tocar facturas ajenas.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

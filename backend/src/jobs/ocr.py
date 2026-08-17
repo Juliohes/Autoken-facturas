@@ -23,7 +23,6 @@ ni invertir la dirección de dependencias jobs->ocr).
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
 from uuid import UUID
 
 import structlog
@@ -40,7 +39,6 @@ from ocr.engines.gemini_extractor import build_default_extractor
 from ocr.extraction import (
     DocumentPage,
     ExtractedInvoice,
-    InvoiceExtractionError,
     InvoiceExtractor,
     extract_document,
     serialize_tax_lines,
@@ -73,29 +71,32 @@ async def run_ocr(
     """
     tid, cid, fid = UUID(str(tenant_id)), UUID(str(company_id)), UUID(str(uploaded_file_id))
     settings = get_settings()
-    # Fan-out de extractores: hoy N=1 (una sola lectura), pero modelado como secuencia para que el
-    # árbitro por campo reconcilie N>1 sin reescribir el job (ADR-0016). NUNCA se repite el MISMO
-    # motor: la secuencia crecerá con motores DISTINTOS cuando el CIF de contraparte lo exija.
-    extractors: Sequence[InvoiceExtractor] = [extractor or build_default_extractor(settings)]
-
-    # La sesión solo protege la lectura coherente de metadatos. MinIO y proveedores externos nunca
-    # deben retener una conexión o una transacción del tenant.
+    # El claim se toma ANTES de construir el proveedor o descargar bytes: un mensaje duplicado no
+    # puede consumir cuota. El token se exige también al persistir para cercar un lease vencido.
     async with tenant_session(tid, cid) as session:
+        claim_token = await intake_repo.claim_ocr(
+            session, fid, cid, lease_seconds=settings.ocr_claim_lease_seconds
+        )
+        if claim_token is None:
+            return
         locations = await intake_repo.get_document_pages(session, fid)
         if not locations:
-            # Sin fila visible no hay estado que transicionar; se registra y se abandona.
-            logger.error("ocr.file_not_found", uploaded_file_id=str(fid), tenant_id=str(tid))
+            await intake_repo.finish_claim(session, fid, claim_token, FileStatus.OCR_FAILED)
+            logger.error("ocr.file_not_found", uploaded_file_id=str(fid))
             return
 
         company = await companies_repo.get_company(
             session, cid, encryption_key=company_encryption_key(settings, tid)
         )
         if company is None:
-            logger.error("ocr.company_not_found", company_id=str(cid), tenant_id=str(tid))
-            await intake_repo.transition_status(session, fid, FileStatus.OCR_FAILED)
+            logger.error("ocr.company_not_found", uploaded_file_id=str(fid))
+            await intake_repo.finish_claim(session, fid, claim_token, FileStatus.OCR_FAILED)
             return
 
     try:
+        # Fan-out de extractores: hoy N=1, pero se conserva la secuencia para que el árbitro por
+        # campo pueda crecer con motores distintos sin reescribir el job.
+        extractors: list[InvoiceExtractor] = [extractor or build_default_extractor(settings)]
         pages = [
             DocumentPage(
                 content=await asyncio.to_thread(storage.get_object, location.bucket, location.key),
@@ -103,22 +104,24 @@ async def run_ocr(
             )
             for location in locations
         ]
-        readings = await asyncio.gather(*(extract_document(reader, pages) for reader in extractors))
-    except (InvoiceExtractionError, storage.StorageUnavailable) as exc:
-        logger.error("ocr.extraction_failed", uploaded_file_id=str(fid), error=str(exc))
-        async with tenant_session(tid, cid) as session:
-            await intake_repo.transition_status(session, fid, FileStatus.OCR_FAILED)
+        readings = await asyncio.wait_for(
+            asyncio.gather(*(extract_document(reader, pages) for reader in extractors)),
+            timeout=settings.ocr_provider_timeout_seconds,
+        )
+        reconciled = reconcile(readings)
+        analysis = analyze_invoice(reconciled, company.cif)
+        file_status = (
+            FileStatus.OCR_DONE if analysis.status == STATUS_AUTO_OK else FileStatus.NEEDS_REVIEW
+        )
+    except Exception as exc:  # noqa: BLE001 - configuración, MinIO y proveedor dejan salida segura
+        await _fail_claim(tid, cid, fid, claim_token, exc)
         return
-
-    reconciled = reconcile(readings)
-    analysis = analyze_invoice(reconciled, company.cif)
-    file_status = (
-        FileStatus.OCR_DONE if analysis.status == STATUS_AUTO_OK else FileStatus.NEEDS_REVIEW
-    )
 
     # La extracción y el análisis ya terminaron: se abre una segunda sesión corta para confirmar el
     # resultado y la transición de estado de forma atómica.
     async with tenant_session(tid, cid) as session:
+        if not await intake_repo.claim_is_current(session, fid, claim_token):
+            return
         await repository.upsert_extraction(
             session,
             company_id=cid,
@@ -140,7 +143,8 @@ async def run_ocr(
             status=analysis.status,
             encryption_key=company_encryption_key(settings, tid),
         )
-        await intake_repo.transition_status(session, fid, file_status)
+        if not await intake_repo.finish_claim(session, fid, claim_token, file_status):
+            return  # el fencing evita que un worker vencido sobrescriba un claim nuevo
         logger.info(
             "ocr.extraction_done",
             uploaded_file_id=str(fid),
@@ -156,6 +160,19 @@ async def run_ocr(
         own_cif=company.cif,
         extractor=extractors[0],
         original_reading=reconciled,
+    )
+
+
+async def _fail_claim(
+    tenant_id: UUID, company_id: UUID, file_id: UUID, claim_token: UUID, error: Exception
+) -> None:
+    """Marca el claim todavía vigente como fallido sin propagar contenido externo a logs."""
+    async with tenant_session(tenant_id, company_id) as session:
+        await intake_repo.finish_claim(session, file_id, claim_token, FileStatus.OCR_FAILED)
+    logger.error(
+        "ocr.processing_failed",
+        uploaded_file_id=str(file_id),
+        failure_type=type(error).__name__,
     )
 
 

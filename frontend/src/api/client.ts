@@ -17,6 +17,9 @@ const AUTH_EXCLUDED_PATHS = new Set([
 ])
 
 type MultipartPath = '/api/v1/uploads' | '/api/v1/uploads/batch'
+// Contrato S6.13 pendiente de que el backend publique OpenAPI actualizado. Se acota la ruta en
+// origen para no aceptar URLs arbitrarias mientras `schema.d.ts` aún no la puede describir.
+type RetryOcrPath = `/api/v1/uploads/${string}/retry-ocr`
 
 /**
  * Envía ficheros multipart sin forzar un `FormData` a través del tipo JSON que FastAPI publica
@@ -38,6 +41,29 @@ export async function postMultipart(path: MultipartPath, body: FormData): Promis
 
   headers.set('Authorization', `Bearer ${newToken}`)
   response = await fetch(path, { method: 'POST', headers, body })
+  return response
+}
+
+/**
+ * Llamada sin body al reintento OCR. Sustituir por `api.POST` al regenerar `schema.d.ts` con S6.13.
+ * Conserva el mismo refresh transparente que la subida multipart.
+ */
+export async function postJson(path: RetryOcrPath): Promise<Response> {
+  const headers = new Headers()
+  const token = getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  let response = await fetch(path, { method: 'POST', headers })
+  if (response.status !== 401) return response
+
+  const newToken = await refreshOnce()
+  if (!newToken) {
+    notifyUnauthorized()
+    return response
+  }
+
+  headers.set('Authorization', `Bearer ${newToken}`)
+  response = await fetch(path, { method: 'POST', headers })
   return response
 }
 
