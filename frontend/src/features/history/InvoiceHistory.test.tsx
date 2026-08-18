@@ -24,6 +24,9 @@ function makeEntry(over: Partial<HistoryEntry> = {}): HistoryEntry {
     id: 'inv-1',
     status: 'pending_ocr',
     created_at: '2026-08-14T10:30:00Z',
+    // `direction` es requerida (nullable) en el contrato desde que se regeneró el OpenAPI en S6.14;
+    // `null` representa el histórico previo a S6.13 (la pantalla pide la dirección, nunca la inventa).
+    direction: null,
     ...over,
   }
 }

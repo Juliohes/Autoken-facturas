@@ -268,9 +268,7 @@ async def upload_batch(
     )
 
 
-def _log_capture_sharpness(
-    sharpness_score: str | None, *, file_id: UUID, company_id: UUID
-) -> None:
+def _log_capture_sharpness(sharpness_score: str | None, *, file_id: UUID, company_id: UUID) -> None:
     """Telemetría S6.14 C8: loguea la nitidez de la captura si el cliente la mandó.
 
     Cruda, tal cual llegó (string): NO se parsea ni se valida — es una métrica de calidad de
