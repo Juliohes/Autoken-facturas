@@ -866,3 +866,13 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
   (`openapi.json` + `schema.d.ts`) regenerado — arrastraba además el endpoint `retry-ocr` de S6.13, ahora
   sincronizado. Verificación real en dispositivo (Android/iPhone) y repetición del benchmark S6.7 con
   fotos en resolución correcta (Fase 2): pendientes, autorizadas.
+- **CI (PR #159, squash-mergeado a develop):** dos fallos que la verificación local no había capturado,
+  corregidos en un segundo commit: ruff **format** (distinto de `ruff check`) sobre el import de
+  `structlog` reordenado, y `tsc -b` (el comando real del workflow, más estricto que un `tsc --noEmit`
+  suelto) exigiendo `direction` obligatoria-nullable en `HistoryEntry` tras regenerar el OpenAPI.
+  Lección registrada: la verificación local previa al PR debe usar los comandos EXACTOS de la CI
+  (`ruff format --check`, `npm run typecheck`). Tras el fix, los 5 checks requeridos en verde.
+- **Desplegado y verificado en real (2026-08-18)** en `setex`/`ilex`/`panel-staging`: sin migración de
+  BD (los estados son `Text` sin CHECK), rebuild de `api`/`worker`/`frontend`, health OK en los tres
+  dominios, worker arrancado con las 5 funciones y el cron `recover_ocr_task` corriendo, y el bundle
+  servido (`index-B9p5tQjr.js`) contiene el código nuevo (`capture_unreadable`/"Repetir foto").
