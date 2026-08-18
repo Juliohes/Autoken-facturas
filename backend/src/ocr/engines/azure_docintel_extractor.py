@@ -148,7 +148,15 @@ class AzureDocIntelInvoiceExtractor:
         if value is None:
             return None
         name = self._string_value(fields.get(name_field))
-        return ExtractedTaxId(value=value, name=name, confidence=self._confidence(field))
+        # Limitación conocida de este motor (S6.14): Azure Document Intelligence da UNA confianza
+        # por campo (`VendorTaxId`/`CustomerTaxId`), no distingue "confianza del valor" de
+        # "confianza del nombre asociado" como sí permite ahora el dominio (`ExtractedTaxId`,
+        # S6.14). A falta de una señal separada del proveedor, se usa la misma confianza calculada
+        # para ambos — más fiel que inventar una segunda señal que Azure no da.
+        confidence = self._confidence(field)
+        return ExtractedTaxId(
+            value=value, name=name, value_confidence=confidence, name_confidence=confidence
+        )
 
     @staticmethod
     def _string_value(field: Any) -> str | None:

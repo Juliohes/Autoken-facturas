@@ -48,12 +48,18 @@ EXTRACTION_PROMPT = (
     '  "invoice_number_confidence": "alta"|"media"|"baja",\n'
     '  "tax_lines": [{"base": number, "rate": number, "cuota": number}],\n'
     '  "tax_ids": [{"value": "CIF/NIF"|null, "name": string|null, '
-    '"confidence": "alta"|"media"|"baja"}]\n'
+    '"value_confidence": "alta"|"media"|"baja", '
+    '"name_confidence": "alta"|"media"|"baja"}]\n'
     "}\n"
     "Reglas: transcribe fielmente los identificadores fiscales (CIF/NIF) y el número de factura "
     "tal como aparecen; si un dato es ilegible, ponlo a null y baja su confianza. No corrijas ni "
     "inventes valores. Pon un objeto en tax_ids por cada identificador fiscal que aparezca en la "
-    "factura."
+    "factura. Para cada identificador fiscal, prioriza SIEMPRE la razón social LEGAL que aparece "
+    "junto al CIF/NIF (p. ej. en el encabezado fiscal o membrete formal) sobre un nombre "
+    "comercial o el texto de un logo, si difieren entre sí. Si detectas esa ambigüedad (el nombre "
+    "del logo no coincide con la razón social junto al identificador fiscal), baja la "
+    "name_confidence de ese identificador aunque el value_confidence del CIF sea alto: son "
+    "señales independientes, evalúa cada una por separado."
 )
 
 
@@ -85,7 +91,8 @@ def parse_structured_invoice(payload: str | None, *, engine: str, model: str) ->
             ExtractedTaxId(
                 value=_as_str(tid.get("value")),
                 name=_as_str(tid.get("name")),
-                confidence=_as_confidence(tid.get("confidence")),
+                value_confidence=_as_confidence(tid.get("value_confidence")),
+                name_confidence=_as_confidence(tid.get("name_confidence")),
             )
             for tid in data.get("tax_ids") or []
         )

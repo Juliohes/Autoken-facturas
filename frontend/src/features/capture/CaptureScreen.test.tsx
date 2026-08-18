@@ -48,9 +48,13 @@ const FAKE_FRAME = { width: 10, height: 10, data: new Uint8ClampedArray(400) } a
 const FAKE_BLOB = new Blob(['fake-jpeg'], { type: 'image/jpeg' })
 const CORNERS = [{ x: 1, y: 1 }, { x: 9, y: 1 }, { x: 9, y: 9 }, { x: 1, y: 9 }]
 
-function renderScreen(onUploaded = vi.fn(), cameraReady = true) {
+function renderScreen(onUploaded = vi.fn(), cameraReady = true, locationState?: Record<string, unknown>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const screenTree = () => <MemoryRouter><QueryClientProvider client={client}><CaptureScreen onUploaded={onUploaded} /></QueryClientProvider></MemoryRouter>
+  const screenTree = () => (
+    <MemoryRouter initialEntries={[{ pathname: '/capturar', state: locationState }]}>
+      <QueryClientProvider client={client}><CaptureScreen onUploaded={onUploaded} /></QueryClientProvider>
+    </MemoryRouter>
+  )
   const view = render(screenTree())
   if (cameraReady) {
     const video = document.querySelector('video')
@@ -85,6 +89,21 @@ beforeEach(() => {
 })
 
 describe('CaptureScreen (S6.11)', () => {
+  // spec: docs/specs/S6.14-captura-alta-resolucion-y-confianza-nombre.md, C7
+  it('S6.14 C7: con un mensaje en el estado de navegación, lo muestra como aviso visible', () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    renderScreen(vi.fn(), true, { message: 'La foto no se pudo leer. Repite la captura.' })
+
+    expect(screen.getByText('La foto no se pudo leer. Repite la captura.')).toBeInTheDocument()
+  })
+
+  it('S6.14 C7: sin mensaje en el estado de navegación, no muestra ningún aviso', () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    renderScreen()
+
+    expect(screen.queryByTestId('capture-redirect-message')).not.toBeInTheDocument()
+  })
+
   it('S6.12 C1: el selector de dirección es el primer control y prioriza la foto sobre las acciones secundarias', () => {
     useSessionMock.mockReturnValue(USER_SESSION)
     renderScreen()
@@ -164,7 +183,7 @@ describe('CaptureScreen (S6.11)', () => {
 
     await user.upload(screen.getByLabelText('Elige o toma una foto'), file)
 
-    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-original', 'recibida'))
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-original', 'recibida', false))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -440,7 +459,63 @@ describe('CaptureScreen (S6.11)', () => {
     await user.click(screen.getByRole('button', { name: 'Enviar factura' }))
 
     await waitFor(() => expect(postMultipartMock).toHaveBeenCalledOnce())
-    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'emitida'))
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'emitida', false))
+  })
+
+  // spec: docs/specs/S6.14-captura-alta-resolucion-y-confianza-nombre.md, C8
+  it('S6.14 C8: con nitidez baja (varianza del Laplaciano < umbral), onUploaded recibe lowSharpness=true', async () => {
+    successfulUpload()
+    analyzeFrameMock.mockResolvedValueOnce({ sharpness: 50, corners: CORNERS })
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+    const { onUploaded } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida', true))
+  })
+
+  it('S6.14 C8: con nitidez alta, onUploaded recibe lowSharpness=false', async () => {
+    successfulUpload()
+    analyzeFrameMock.mockResolvedValueOnce({ sharpness: 200, corners: CORNERS })
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+    const { onUploaded } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida', false))
+  })
+
+  it('S6.14 C8: el FormData de la subida incluye sharpness_score (nitidez calculada en cliente)', async () => {
+    successfulUpload()
+    analyzeFrameMock.mockResolvedValueOnce({ sharpness: 123.4, corners: CORNERS })
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+    renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+
+    await waitFor(() => expect(postMultipartMock).toHaveBeenCalledOnce())
+    const body = postMultipartMock.mock.calls[0][1]
+    expect(body.get('sharpness_score')).toBe('123.4')
+  })
+
+  it('S6.14 C8: sin análisis de cliente (selector de archivo), el FormData omite sharpness_score', async () => {
+    successfulUpload()
+    useSessionMock.mockReturnValue(USER_SESSION)
+    renderScreen()
+    const user = userEvent.setup()
+    const file = new File(['contenido'], 'foto.jpg', { type: 'image/jpeg' })
+
+    await user.upload(screen.getByLabelText(/elige o toma una foto/i), file)
+
+    await waitFor(() => expect(postMultipartMock).toHaveBeenCalledOnce())
+    const body = postMultipartMock.mock.calls[0][1]
+    expect(body.get('sharpness_score')).toBeNull()
   })
 
   it('C3: Capturar foto apaga la cámara, normaliza y sube directamente sin revisión', async () => {
@@ -454,7 +529,7 @@ describe('CaptureScreen (S6.11)', () => {
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
 
     await waitFor(() => expect(processCapturedFrameMock).toHaveBeenCalledWith(FAKE_FRAME, CORNERS))
-    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida'))
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida', false))
     expect(close).toHaveBeenCalled()
     expect(screen.queryByRole('heading', { name: 'Revisar foto' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Usar esta foto' })).not.toBeInTheDocument()
@@ -470,7 +545,7 @@ describe('CaptureScreen (S6.11)', () => {
     await user.click(screen.getByRole('radio', { name: 'Emitida' }))
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
 
-    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'emitida'))
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'emitida', false))
   })
 
   it('C4: el selector normaliza y envía el archivo sin revisión intermedia', async () => {
@@ -483,7 +558,7 @@ describe('CaptureScreen (S6.11)', () => {
     await user.upload(screen.getByLabelText(/elige o toma una foto/i), file)
 
     await waitFor(() => expect(fileToJpegBlobMock).toHaveBeenCalledWith(file))
-    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida'))
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida', false))
     expect(screen.queryByRole('heading', { name: 'Revisar foto' })).not.toBeInTheDocument()
   })
 

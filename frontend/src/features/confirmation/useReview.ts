@@ -10,10 +10,24 @@ import type { ReviewResponse } from './types'
 // (`ocr_failed`, ya confirmado), que el backend responde con un `detail` distinto.
 const PENDING_OCR_DETAIL = 'La factura todavía se está procesando con IA'
 
+// Mismo texto que el backend responde para el estado `capture_unreadable` (S6.14 C7): la imagen en
+// sí es el problema (extracción ilegible), no un campo dudoso concreto — se repite la foto, nunca
+// se abre un formulario de revisión con campos vacíos.
+const CAPTURE_UNREADABLE_DETAIL = 'La foto no se pudo leer, repite la captura'
+
 export class PendingOcrError extends Error {
   constructor() {
     super(PENDING_OCR_DETAIL)
     this.name = 'PendingOcrError'
+  }
+}
+
+/** A diferencia de `PendingOcrError`, permanente: no merece la pena reintentar leer la MISMA
+ * imagen (S6.14 C7), solo repetir la captura. */
+export class CaptureUnreadableError extends Error {
+  constructor() {
+    super(CAPTURE_UNREADABLE_DETAIL)
+    this.name = 'CaptureUnreadableError'
   }
 }
 
@@ -24,6 +38,11 @@ export function useReview(fileId: string) {
       const { data, error, response } = await api.GET('/api/v1/uploads/{file_id}/review', {
         params: { path: { file_id: fileId } },
       })
+      // 409 de captura ilegible: permanente, distinto del "ocr_failed" genérico (C7) — se detecta
+      // ANTES que el `throw` genérico de abajo, igual que `PendingOcrError`.
+      if (response?.status === 409 && (error as { detail?: unknown })?.detail === CAPTURE_UNREADABLE_DETAIL) {
+        throw new CaptureUnreadableError()
+      }
       // 409 con el `detail` de `PendingOcr`: el worker aún no ha terminado, reintento de fondo.
       // Otro 409 (`ocr_failed`, ya confirmado) es permanente: cae al `throw` genérico de abajo,
       // sin esperar los reintentos.

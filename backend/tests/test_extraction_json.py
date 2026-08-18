@@ -26,7 +26,14 @@ _VALID_PAYLOAD = {
     "invoice_number": "F-2026-001",
     "invoice_number_confidence": "alta",
     "tax_lines": [{"base": 100.0, "rate": 21.0, "cuota": 21.0}],
-    "tax_ids": [{"value": "B06183446", "name": "Mi Empresa SL", "confidence": "alta"}],
+    "tax_ids": [
+        {
+            "value": "B06183446",
+            "name": "Mi Empresa SL",
+            "value_confidence": "alta",
+            "name_confidence": "alta",
+        }
+    ],
 }
 
 
@@ -39,6 +46,50 @@ def test_parsea_un_json_valido_a_extracted_invoice() -> None:
     assert invoice.total_amount == Decimal("121.0")
     assert invoice.tax_ids[0].value == "B06183446"
     assert invoice.tax_lines[0].cuota == Decimal("21.0")
+
+
+def test_s6_14_c4_parsea_confianza_del_valor_y_del_nombre_por_separado() -> None:
+    """spec: S6.14 C4 — `value_confidence`/`name_confidence` de cada `tax_id`, no una combinada."""
+    payload = dict(
+        _VALID_PAYLOAD,
+        tax_ids=[
+            {
+                "value": "A39031620",
+                "name": "Comercial del logo SL",
+                "value_confidence": "alta",
+                "name_confidence": "baja",
+            }
+        ],
+    )
+    invoice = parse_structured_invoice(json.dumps(payload), engine="claude-vertex", model="x")
+    assert invoice.tax_ids[0].value_confidence == "alta"
+    assert invoice.tax_ids[0].name_confidence == "baja"
+
+
+def test_s6_14_c4_confianza_de_nombre_desconocida_cae_a_baja() -> None:
+    """Igual que `total_confidence`: una etiqueta no reconocida en `name_confidence` -> "baja"."""
+    payload = dict(
+        _VALID_PAYLOAD,
+        tax_ids=[
+            {
+                "value": "A39031620",
+                "name": "Proveedor SA",
+                "value_confidence": "alta",
+                "name_confidence": "segura",
+            }
+        ],
+    )
+    invoice = parse_structured_invoice(json.dumps(payload), engine="gpt-5.1", model="x")
+    assert invoice.tax_ids[0].name_confidence == "baja"
+
+
+def test_s6_14_c5_el_prompt_indica_priorizar_la_razon_social_legal() -> None:
+    """spec: S6.14 C5 — el prompt debe distinguir razón social legal de nombre comercial."""
+    from ocr.extraction_json import EXTRACTION_PROMPT
+
+    assert "razón social" in EXTRACTION_PROMPT.lower()
+    assert "value_confidence" in EXTRACTION_PROMPT
+    assert "name_confidence" in EXTRACTION_PROMPT
 
 
 def test_campo_no_legible_queda_null_no_inventado() -> None:

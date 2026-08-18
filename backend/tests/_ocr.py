@@ -9,12 +9,13 @@ Contrato que el `implementer` debe respetar (lo fija esta fase roja):
   (coroutine invocable directa en test; sin arq). Fija el contexto de tenant (RLS) desde los ids.
 - Extractor: `ocr.extraction.InvoiceExtractor` con `async extract(content, content_type)`
   -> `ExtractedInvoice`; lanza `ocr.extraction.InvoiceExtractionError` ante fallo del proveedor.
-  Tipos: `ExtractedInvoice`, `ExtractedTaxId(value, name, confidence)`,
-  `ExtractedTaxLine(base, rate, cuota)`;
-  `confidence` ∈ {"alta","media","baja"}; un campo no legible = `value` None.
+  Tipos: `ExtractedInvoice`, `ExtractedTaxId(value, name, value_confidence, name_confidence)`
+  (S6.14: confianza del CIF separada de la del nombre), `ExtractedTaxLine(base, rate, cuota)`;
+  la confianza ∈ {"alta","media","baja"}; un campo no legible = `value` None.
 - Persistencia: tabla `ocr_extractions` (una vigente por `uploaded_file_id`), RLS de dos niveles.
 - Estados del `uploaded_file`: `pending_ocr` -> `ocr_done` (todo alto y válido) / `needs_review`
-  (dudoso/no leído/validación KO/CIF propio ausente) / `ocr_failed` (el extractor falló).
+  (dudoso/no leído/validación KO/CIF propio ausente) / `ocr_failed` (el extractor falló) /
+  `capture_unreadable` (S6.14: el motor respondió, pero la imagen en sí es el problema).
 - Contraparte = el identificador leído que NO es el CIF propio (propio conocido desde `companies`).
 """
 
@@ -139,6 +140,8 @@ def build_extracted(
     counterparty_cif: str | None = COUNTERPARTY_CIF,
     counterparty_name: str | None = "Proveedor SA",
     counterparty_conf: str = "alta",
+    counterparty_value_conf: str | None = None,
+    counterparty_name_conf: str | None = None,
     issue_date: date | None = date(2026, 5, 10),
     net: Decimal | None = Decimal("100.00"),
     tax: Decimal | None = Decimal("21.00"),
@@ -161,16 +164,28 @@ def build_extracted(
 
     `invoice_number_confidence`/`net_confidence`/`tax_confidence` caen a `confidence` si no se
     pasan explícitos (spec S6.1, Áreas A/F: número de factura, base imponible e IVA total pasan a
-    ser campos de oro con confianza propia, igual que fecha/total)."""
+    ser campos de oro con confianza propia, igual que fecha/total).
+
+    `counterparty_value_conf`/`counterparty_name_conf` (S6.14): confianza del CIF y del nombre de
+    la contraparte por separado; caen a `counterparty_conf` (mismo valor para ambas) si no se pasan
+    explícitos, para no romper los tests existentes que solo conocían una confianza combinada."""
     from ocr.extraction import ExtractedInvoice, ExtractedTaxId, ExtractedTaxLine
 
     tax_ids: list = []
     if own_cif is not None:
-        tax_ids.append(ExtractedTaxId(value=own_cif, name=own_name, confidence="alta"))
+        # El CIF propio no se puntúa (se inyecta, no se lee): confianza alta fija en ambos campos.
+        tax_ids.append(
+            ExtractedTaxId(
+                value=own_cif, name=own_name, value_confidence="alta", name_confidence="alta"
+            )
+        )
     if counterparty_cif is not None:
         tax_ids.append(
             ExtractedTaxId(
-                value=counterparty_cif, name=counterparty_name, confidence=counterparty_conf
+                value=counterparty_cif,
+                name=counterparty_name,
+                value_confidence=counterparty_value_conf or counterparty_conf,
+                name_confidence=counterparty_name_conf or counterparty_conf,
             )
         )
     tax_lines = (

@@ -17,9 +17,12 @@ class FileStatus(StrEnum):
     """Estados del ciclo de vida de un fichero de intake (`uploaded_files.status`).
 
     `pending_ocr` (recién subido, S2.1) -> `ocr_done` (OCR con todo alto y válido) / `needs_review`
-    (algo dudoso/no leído/validación KO) / `ocr_failed` (el motor falló). El worker (S2.3) es quien
-    hace la transición desde `pending_ocr`. Al confirmar (S2.5), un fichero en `ocr_done`/
-    `needs_review` pasa a `confirmed` (ya tiene factura persistida).
+    (algo dudoso/no leído/validación KO) / `ocr_failed` (el motor falló) / `capture_unreadable`
+    (S6.14: el motor respondió pero la imagen en sí es el problema — repetir la foto, no abrir un
+    formulario de revisión con campos vacíos). El worker (S2.3/S6.14) es quien hace la transición
+    desde `pending_ocr`. Al confirmar (S2.5), un fichero en `ocr_done`/`needs_review` pasa a
+    `confirmed` (ya tiene factura persistida); `capture_unreadable` NUNCA es confirmable (no entra
+    en `invoicing.service._CONFIRMABLE_STATES`), igual que `ocr_failed`.
     """
 
     PENDING_OCR = "pending_ocr"
@@ -27,4 +30,5 @@ class FileStatus(StrEnum):
     OCR_DONE = "ocr_done"
     NEEDS_REVIEW = "needs_review"
     OCR_FAILED = "ocr_failed"
+    CAPTURE_UNREADABLE = "capture_unreadable"
     CONFIRMED = "confirmed"

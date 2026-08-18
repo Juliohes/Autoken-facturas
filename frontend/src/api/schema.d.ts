@@ -415,6 +415,10 @@ export interface paths {
          * @description Sube un fichero de factura a una empresa. Ver spec S2.1 para los códigos (201/4xx/503).
          *
          *     Orden: pertenencia (403/404) -> tamaño (413) -> el servicio hace el resto (415/422/409/503/201).
+         *
+         *     `sharpness_score` (S6.14 C8): nitidez de la captura calculada en cliente (varianza del
+         *     Laplaciano), string opcional. Es TELEMETRÍA, no dato de dominio: no se persiste ni se valida
+         *     (un valor raro no rompe la subida); solo se loguea como métrica de calidad de captura.
          */
         post: operations["upload_file_api_v1_uploads_post"];
         delete?: never;
@@ -438,8 +442,31 @@ export interface paths {
          *
          *     La dirección se valida aquí porque forma parte del contrato de captura. La confirmación
          *     existente sigue siendo quien la persiste, igual que en una subida simple.
+         *
+         *     `sharpness_score` (S6.14 C8): misma telemetría opcional que en la subida simple (hoy el cliente
+         *     no calcula una nitidez de conjunto para varias páginas; el campo se admite igual).
          */
         post: operations["upload_batch_api_v1_uploads_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/uploads/{file_id}/retry-ocr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Ocr
+         * @description Reencola de forma autorizada una lectura que terminó en fallo, sin volver a subir bytes.
+         */
+        post: operations["retry_ocr_api_v1_uploads__file_id__retry_ocr_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1210,6 +1237,8 @@ export interface components {
              * @enum {string}
              */
             direction: "recibida" | "emitida";
+            /** Sharpness Score */
+            sharpness_score?: string | null;
         };
         /** Body_upload_file_api_v1_uploads_post */
         Body_upload_file_api_v1_uploads_post: {
@@ -1220,6 +1249,10 @@ export interface components {
              * Format: uuid
              */
             company_id: string;
+            /** Direction */
+            direction?: ("recibida" | "emitida") | null;
+            /** Sharpness Score */
+            sharpness_score?: string | null;
         };
         /** Body_upload_logo_api_v1_platform_tenants_logo_post */
         Body_upload_logo_api_v1_platform_tenants_logo_post: {
@@ -1541,6 +1574,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Direction */
+            direction: ("recibida" | "emitida") | null;
         };
         /**
          * HistoryOut
@@ -1830,6 +1865,14 @@ export interface components {
             /** Is Admin Tech */
             is_admin_tech: boolean;
         };
+        /** OcrRetryOut */
+        OcrRetryOut: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "pending_ocr";
+        };
         /**
          * PanelOut
          * @description Respuesta de `GET /reporting/invoices`: una página del panel (spec §2).
@@ -2059,6 +2102,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Direction */
+            direction: ("recibida" | "emitida") | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -2685,6 +2730,37 @@ export interface operations {
             };
         };
     };
+    retry_ocr_api_v1_uploads__file_id__retry_ocr_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OcrRetryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_url_api_v1_uploads__file_id__download_url_get: {
         parameters: {
             query?: never;
@@ -2733,6 +2809,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": unknown;
                     "image/jpeg": string;
                     "image/png": string;
                     "application/pdf": string;
@@ -2767,6 +2844,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": unknown;
                     "image/jpeg": string;
                     "image/png": string;
                 };
@@ -3562,13 +3640,16 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description Bytes binarios del documento original autorizado. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": unknown;
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "application/pdf": string;
                 };
             };
             /** @description Validation Error */

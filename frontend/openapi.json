@@ -683,7 +683,7 @@
           "intake"
         ],
         "summary": "Upload File",
-        "description": "Sube un fichero de factura a una empresa. Ver spec S2.1 para los c\u00f3digos (201/4xx/503).\n\nOrden: pertenencia (403/404) -> tama\u00f1o (413) -> el servicio hace el resto (415/422/409/503/201).",
+        "description": "Sube un fichero de factura a una empresa. Ver spec S2.1 para los c\u00f3digos (201/4xx/503).\n\nOrden: pertenencia (403/404) -> tama\u00f1o (413) -> el servicio hace el resto (415/422/409/503/201).\n\n`sharpness_score` (S6.14 C8): nitidez de la captura calculada en cliente (varianza del\nLaplaciano), string opcional. Es TELEMETR\u00cdA, no dato de dominio: no se persiste ni se valida\n(un valor raro no rompe la subida); solo se loguea como m\u00e9trica de calidad de captura.",
         "operationId": "upload_file_api_v1_uploads_post",
         "requestBody": {
           "content": {
@@ -725,7 +725,7 @@
           "intake"
         ],
         "summary": "Upload Batch",
-        "description": "Acepta de dos a cinco im\u00e1genes como un \u00fanico documento multip\u00e1gina (S6.12).\n\nLa direcci\u00f3n se valida aqu\u00ed porque forma parte del contrato de captura. La confirmaci\u00f3n\nexistente sigue siendo quien la persiste, igual que en una subida simple.",
+        "description": "Acepta de dos a cinco im\u00e1genes como un \u00fanico documento multip\u00e1gina (S6.12).\n\nLa direcci\u00f3n se valida aqu\u00ed porque forma parte del contrato de captura. La confirmaci\u00f3n\nexistente sigue siendo quien la persiste, igual que en una subida simple.\n\n`sharpness_score` (S6.14 C8): misma telemetr\u00eda opcional que en la subida simple (hoy el cliente\nno calcula una nitidez de conjunto para varias p\u00e1ginas; el campo se admite igual).",
         "operationId": "upload_batch_api_v1_uploads_batch_post",
         "requestBody": {
           "content": {
@@ -744,6 +744,50 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{file_id}/retry-ocr": {
+      "post": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Retry Ocr",
+        "description": "Reencola de forma autorizada una lectura que termin\u00f3 en fallo, sin volver a subir bytes.",
+        "operationId": "retry_ocr_api_v1_uploads__file_id__retry_ocr_post",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OcrRetryOut"
                 }
               }
             }
@@ -829,6 +873,9 @@
           "200": {
             "description": "Bytes binarios del documento original autorizado.",
             "content": {
+              "application/json": {
+                "schema": {}
+              },
               "image/jpeg": {
                 "schema": {
                   "type": "string",
@@ -895,6 +942,9 @@
           "200": {
             "description": "Bytes binarios de la imagen original autorizada.",
             "content": {
+              "application/json": {
+                "schema": {}
+              },
               "image/jpeg": {
                 "schema": {
                   "type": "string",
@@ -2224,10 +2274,28 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Bytes binarios del documento original autorizado.",
             "content": {
               "application/json": {
                 "schema": {}
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
@@ -2606,6 +2674,17 @@
               "emitida"
             ],
             "title": "Direction"
+          },
+          "sharpness_score": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharpness Score"
           }
         },
         "type": "object",
@@ -2627,6 +2706,32 @@
             "type": "string",
             "format": "uuid",
             "title": "Company Id"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "recibida",
+                  "emitida"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
+          },
+          "sharpness_score": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharpness Score"
           }
         },
         "type": "object",
@@ -3424,13 +3529,29 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "recibida",
+                  "emitida"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
           }
         },
         "type": "object",
         "required": [
           "id",
           "status",
-          "created_at"
+          "created_at",
+          "direction"
         ],
         "title": "HistoryEntryOut",
         "description": "Una entrada privada de historial, sin PII de contraparte (S6.12)."
@@ -4278,6 +4399,20 @@
         "title": "MeOut",
         "description": "Respuesta de `GET /auth/me` (S1.6 C5/C6), tipada para que el cliente autogenerado la use\nsin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado).\n\n`tenant`/`company` son `null` para un `platform_admin` (sin tenant, hotfix S4.10) adem\u00e1s del\ncaso ya existente de `company=null` para un `tenant_admin`. `is_admin_tech` (S4.10): siempre\n`False` salvo para un `platform_admin` con el flag activado (nunca desde la aplicaci\u00f3n)."
       },
+      "OcrRetryOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "pending_ocr",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "OcrRetryOut"
+      },
       "PanelOut": {
         "properties": {
           "items": {
@@ -4824,6 +4959,21 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "recibida",
+                  "emitida"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
           }
         },
         "type": "object",
@@ -4835,7 +4985,8 @@
           "sha256",
           "status",
           "scan_status",
-          "created_at"
+          "created_at",
+          "direction"
         ],
         "title": "UploadOut",
         "description": "Fichero de intake creado (respuesta 201)."

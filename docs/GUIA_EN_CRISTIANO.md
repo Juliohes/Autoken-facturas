@@ -1183,6 +1183,39 @@ Ya está desplegado y comprobado de verdad: el recuperador corre cada minuto sin
 que motivó el aviso de Julio quedó confirmada como "pendiente de comprobación" (nunca perdida ni cobrada dos
 veces).
 
+### S6.14 — Fotos más nítidas y una IA que dice "estoy segura del CIF, no tanto del nombre" (18/08/2026)
+Julio detectó dos cosas al usar la app: la foto no se hacía con la máxima resolución del móvil, y la IA se
+equivocaba más de la cuenta en el nombre del proveedor. Las pruebas con las 29 facturas reales confirmaron
+el diagnóstico: la IA acierta la fecha el 100% de las veces y los importes el 99%, pero el nombre del
+proveedor solo el 59%.
+
+¿Por qué fallaba el nombre? Porque la IA daba una única nota de confianza para "CIF + nombre" juntos, y no
+podía decir "del CIF estoy segura, del nombre no tanto". Además, a veces el logo de la factura dice una
+cosa ("Bar Manolo") y la razón social legal que acompaña al CIF dice otra ("Hostelería Manolo SL").
+
+Qué se ha hecho (todo gratis, sin gastar más en IA):
+- La cámara ahora pide al móvil la mayor resolución que pueda dar, y si el recorte automático del papel
+  sale pequeño (porque la foto se hizo de lejos), se amplía antes de subirla.
+- El detector de bordes del papel aguanta mejor sombras y esquinas imperfectas (antes, una sombra podía
+  hacer que no encontrara el documento).
+- La IA ahora da DOS notas de confianza separadas: una para el CIF y otra para el nombre. Ser estrictos
+  con el CIF (que tiene efectos fiscales) pero flexibles con el nombre (que se corrige de un vistazo)
+  evita que la app mande a revisión facturas que están bien.
+- Se le dice a la IA explícitamente: "si el logo y la razón social legal difieren, quédate con la legal".
+- Si una comprobación matemática detecta que un CIF o un total no cuadran, la app ya no muestra ese dato
+  como "leído con confianza alta": lo baja a "dudoso" antes de enseñarlo.
+- Si una foto sale tan mal que no se lee ni el proveedor, ni el total ni la fecha, la app ya no abre un
+  formulario lleno de huecos vacíos: dice "la foto no se pudo leer" y devuelve directamente a la cámara
+  para repetirla. En el historial esas facturas aparecen con su propia etiqueta y un enlace "Repetir
+  foto".
+- La app mide lo borrosa que está cada foto y, si sale movida, avisa (sin bloquear): "revisa bien los
+  datos antes de confirmar".
+
+Antes de cerrarlo, tres revisiones independientes encontraron y corrigieron un fallo que habría roto la
+verificación automática de GitHub y varios comentarios del código que no contaban la verdad. Pendiente:
+probarlo con móviles reales y repetir la medición de aciertos con fotos ya nítidas, para ver si el nombre
+del proveedor mejora como se espera.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

@@ -24,7 +24,14 @@ _VALID_PAYLOAD = {
     "net_amount": 100.0,
     "tax_amount": 21.0,
     "tax_lines": [{"base": 100.0, "rate": 21.0, "cuota": 21.0}],
-    "tax_ids": [{"value": "A39031620", "name": "Proveedor SA", "confidence": "alta"}],
+    "tax_ids": [
+        {
+            "value": "A39031620",
+            "name": "Proveedor SA",
+            "value_confidence": "alta",
+            "name_confidence": "alta",
+        }
+    ],
 }
 
 

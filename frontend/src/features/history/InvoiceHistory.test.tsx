@@ -24,6 +24,9 @@ function makeEntry(over: Partial<HistoryEntry> = {}): HistoryEntry {
     id: 'inv-1',
     status: 'pending_ocr',
     created_at: '2026-08-14T10:30:00Z',
+    // `direction` es requerida (nullable) en el contrato desde que se regeneró el OpenAPI en S6.14;
+    // `null` representa el histórico previo a S6.13 (la pantalla pide la dirección, nunca la inventa).
+    direction: null,
     ...over,
   }
 }
@@ -70,6 +73,20 @@ describe('InvoiceHistory (S6.12)', () => {
 
     expect(postJsonMock).toHaveBeenCalledWith('/api/v1/uploads/failed/retry-ocr')
   })
+  // spec: docs/specs/S6.14-captura-alta-resolucion-y-confianza-nombre.md, C7
+  it('S6.14 C7: un estado capture_unreadable muestra su propia etiqueta y enlaza directo a /capturar', async () => {
+    getMock.mockResolvedValue({
+      data: { entries: [makeEntry({ id: 'unreadable', status: 'capture_unreadable' })] },
+      error: undefined,
+    })
+    renderScreen()
+
+    const rows = await screen.findAllByTestId('history-row')
+    expect(within(rows[0]).getByText('No se pudo leer, repite la foto')).toBeInTheDocument()
+    // Directo a /capturar (no a la revisión, para evitar el salto extra de C7).
+    expect(within(rows[0]).getByRole('link', { name: /repetir/i })).toHaveAttribute('href', '/capturar')
+  })
+
   it('C11: muestra los envíos privados con su fecha de creación y estado, sin PII ni dirección ausente', async () => {
     getMock.mockResolvedValue({
       data: {

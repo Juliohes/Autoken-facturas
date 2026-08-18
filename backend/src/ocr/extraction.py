@@ -50,14 +50,24 @@ def is_low(confidence: Confidence) -> bool:
 
 @dataclass(frozen=True)
 class ExtractedTaxId:
-    """Un identificador fiscal leído en la factura: valor, razón social y confianza de lectura.
+    """Un identificador fiscal leído en la factura: valor, razón social y su confianza de lectura.
 
     `value` a `None` es un identificador no legible (regla anti-alucinación): se marca, no se crea.
+
+    S6.14: la confianza del VALOR (CIF/NIF) y la del NOMBRE asociado se conocen por separado
+    (`value_confidence`/`name_confidence`), en vez de una única confianza combinada. Motivo (dato
+    empírico del bench S6.7, 29 facturas reales): el CIF acierta el 89,66% de las veces y el nombre
+    solo el 58,62% — una sola confianza combinada no permite decir "seguro del CIF, dudoso del
+    nombre", y el nombre comercial de un logo puede no coincidir con la razón social legal junto al
+    CIF sin que el motor lo señale. El enrutado a revisión (`ocr.analysis`) exige confianza alta en
+    el CIF (impacto fiscal real) pero acepta media en el nombre (corrección visual barata, sin
+    validación externa).
     """
 
     value: str | None
     name: str | None
-    confidence: Confidence
+    value_confidence: Confidence
+    name_confidence: Confidence
 
 
 @dataclass(frozen=True)
