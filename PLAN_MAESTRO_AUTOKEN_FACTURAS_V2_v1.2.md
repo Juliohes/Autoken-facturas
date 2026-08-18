@@ -822,3 +822,47 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
   aplicada, worker con el cron `recover_ocr_task` corriendo cada minuto sin error, `/metrics` publicando
   `autoken_ocr_documents` con datos reales, y la factura que disparó el aviso de Julio confirmada en
   `needs_review` (nunca perdida ni duplicada).
+
+### 11.19 S6.14 — Captura en alta resolución y confianza separada del nombre (2026-08-18)
+
+- **Origen:** reporte real de Julio ("no veo que haga la foto con la máxima resolución posible" + "se ha
+  equivocado mucho en la lectura") + benchmark real S6.7 (29 facturas de Setex): todos los campos ≥89,66%
+  de acierto salvo el **nombre de contraparte (58,62%)**. Investigación previa con 4 agentes expertos;
+  spec aprobada por Julio con Fase 1 ya y Fase 2 (benchmark con fotos en resolución correcta) autorizada.
+- **Fase 1 construida (cero coste de proveedor):** (C1) la cámara pide la mayor resolución al navegador
+  con `ideal` (nunca `exact`/`min`, sin `OverconstrainedError`); (C2) el recorte del documento nunca sale
+  por debajo de un suelo de 2200px de lado largo (escala cúbica hacia arriba, nunca reduce); (C3) la
+  detección de bordes deriva el umbral de Canny de la propia imagen (Otsu) + cierre morfológico + fallback
+  `convexHull`/`minAreaRect` si `approxPolyDP` no da 4 vértices; (C4) `ExtractedTaxId` separa
+  `value_confidence` (CIF) de `name_confidence` (nombre): el enrutado exige alta en el CIF (impacto fiscal)
+  pero acepta media en el nombre (corrección visual barata); (C5) el prompt prioriza la razón social legal
+  junto al CIF sobre el nombre comercial del logo y baja `name_confidence` ante esa ambigüedad; (C6) una
+  validación determinista fallida (mód-23, cuadre) degrada la confianza PERSISTIDA/MOSTRADA a "baja", no
+  solo el enrutado (sin tocar el `ExtractedInvoice` original, trazabilidad para el laboratorio S6.2);
+  (C7) nueva captura ilegible (`hard_fail` en extracción -> `capture_unreadable` en fichero): los 3 campos
+  fundamentales sin leer a la vez, o el 100% de los campos con valor en "baja" -> redirect a `/capturar`
+  con mensaje, nunca un formulario de campos vacíos ni reintento de la MISMA imagen (retry-ocr sigue
+  reservado a `ocr_failed`); (C8) la nitidez (varianza del Laplaciano, ya calculada en cliente) viaja como
+  telemetría no bloqueante (`sharpness_score` en el FormData, logueada truncada a 64 chars, nunca
+  persistida ni validada) y, si es baja, aviso de una sola vez en la revisión (enmienda §5 de la spec:
+  efímero por decisión de diseño, no reaparece al recargar).
+- **Limitación documentada:** Azure DocIntel da una sola confianza por campo; se usa la misma para
+  `value_confidence`/`name_confidence` (más fiel que inventar una señal que el proveedor no da).
+- **Auditoría de 3 lentes (SOLID, arquitectura, patrones+seguridad): 1 ALTO bloqueante corregido**
+  (import de `structlog` mal ordenado en `invoice_intake/router.py`, ruff I001 -> CI en rojo, arreglado
+  con `ruff --fix`) + 1 medio corregido (guarda de estado triplicada en `invoicing/service.py` extraída a
+  `_raise_unless_confirmable`, la cascada `CaptureUnreadable -> PendingOcr -> NotConfirmable` escrita una
+  sola vez) + 6 bajos corregidos (comentarios que citaban una aceptación inexistente de la spec -> spec
+  §5 enmendada con la decisión real; comentarios desactualizados en `documentEdges.ts`, `_ocr.py`,
+  `ocr/models.py`; `sharpness_score` truncado a 64 chars contra hinchado de logs; justificación obsoleta
+  del FormData manual en `useUploadCapture.ts` tras regenerar el OpenAPI). Avisos aceptados y
+  documentados: nomenclatura `hard_fail` (extracción) vs `capture_unreadable` (fichero) — renombrarla
+  exigiría migrar el valor persistido; el fallback `minAreaRect` de C3 hace que casi cualquier blob
+  grande produzca esquinas (mandado por la spec; riesgo de recortes erróneos en silencio a vigilar en el
+  benchmark de la Fase 2); la enumeración de pares valor/confianza aparece en 3 sitios de `analysis.py`
+  pero con condiciones heterogéneas por campo (un iterador común tendría un solo consumidor real).
+- **Verificación:** 933 tests de backend en verde (suite completa; los 8 de `test_backup_restore.py`
+  siguen fuera de alcance de este host), 349 de frontend, ruff/mypy/tsc/eslint verdes; OpenAPI
+  (`openapi.json` + `schema.d.ts`) regenerado — arrastraba además el endpoint `retry-ocr` de S6.13, ahora
+  sincronizado. Verificación real en dispositivo (Android/iPhone) y repetición del benchmark S6.7 con
+  fotos en resolución correcta (Fase 2): pendientes, autorizadas.

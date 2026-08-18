@@ -4,6 +4,12 @@ import { useEffect, useRef, useState } from 'react'
 
 const CAMERA_REQUEST_TIMEOUT_MS = 10_000
 
+// Preferencia de resolución alta (S6.14 C1): SIEMPRE `ideal`, nunca `exact`/`min` — un dispositivo
+// que no soporte esto sigue negociando la resolución que su hardware permita, sin lanzar
+// `OverconstrainedError`. Sin `aspectRatio`: no se fuerza, la persona puede encuadrar en horizontal
+// o vertical.
+const RESOLUTION_HINT = { width: { ideal: 4096 }, height: { ideal: 2160 } }
+
 export type CameraStatus = 'idle' | 'requesting' | 'active' | 'unavailable'
 
 export interface CameraStreamState {
@@ -53,14 +59,14 @@ export function useCameraStream(): CameraStreamState {
         let media: MediaStream
         try {
           media = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { exact: 'environment' } },
+            video: { facingMode: { exact: 'environment' }, ...RESOLUTION_HINT },
             audio: false,
           })
         } catch (error) {
           // Solo la ausencia de lente trasera permite probar otra cámara. Repetir una petición tras
           // un permiso denegado no ayuda al usuario y puede provocar dos avisos del navegador.
           if (!(error instanceof DOMException) || !['OverconstrainedError', 'NotFoundError'].includes(error.name)) throw error
-          media = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          media = await navigator.mediaDevices.getUserMedia({ video: { ...RESOLUTION_HINT }, audio: false })
         }
         if (cancelled || timedOut || requestIdRef.current !== attempt) {
           stop(media)

@@ -88,8 +88,11 @@ function CaptureRoute() {
   const navigate = useNavigate()
   return (
     <CaptureScreen
-      onUploaded={(fileId, direction) =>
-        navigate(ROUTES.confirmation(fileId), { state: { direction } })
+      onUploaded={(fileId, direction, lowSharpness) =>
+        // `lowSharpness` viaja como estado de navegación efímero (S6.14 C8), mismo patrón ya usado
+        // para `direction` antes de S6.13: es un aviso informativo de una sola vez, no un dato
+        // persistente ni crítico, así que no reaparece si se recarga o se reabre más tarde.
+        navigate(ROUTES.confirmation(fileId), { state: { direction, lowSharpness } })
       }
     />
   )

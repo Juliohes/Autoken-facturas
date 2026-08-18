@@ -44,7 +44,8 @@ class OcrExtraction(Base):
     """Campos extraídos y validados de una factura, ligados a su `uploaded_file`.
 
     Aislada por `tenant_id` (RLS S1.1) y por empresa `company_id` (segundo nivel). El estado global
-    (`auto_ok`/`needs_review`) enruta la factura a confirmación directa o a revisión (S2.4).
+    (`auto_ok`/`needs_review`/`hard_fail` — S6.14: captura ilegible, la imagen es el problema)
+    enruta la factura a confirmación directa, a revisión (S2.4) o a repetir la foto (S6.14 C7).
     """
 
     __tablename__ = "ocr_extractions"

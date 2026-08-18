@@ -14,6 +14,9 @@ const STATUS_LABEL: Record<string, string> = {
   ocr_failed: 'OCR no completado',
   needs_review: 'Pendiente de comprobación',
   confirmed: 'Confirmada',
+  // S6.14 C7: estado propio, distinguible de "pendiente de revisión" y de "fallo de OCR" — no
+  // admite reintentar leer la MISMA imagen (a diferencia de `ocr_failed`), solo repetir la foto.
+  capture_unreadable: 'No se pudo leer, repite la foto',
 }
 
 export function InvoiceHistory() {
@@ -76,6 +79,10 @@ function HistoryRow({ entry }: { entry: HistoryEntry }) {
         <p>{STATUS_LABEL[entry.status] ?? entry.status}</p>
         {pendingState && <Link to={ROUTES.confirmation(entry.id)} state={confirmationState} className="text-emerald-400">Ver progreso</Link>}
         {reviewState && <Link to={ROUTES.confirmation(entry.id)} state={confirmationState} className="text-emerald-400">Revisar factura</Link>}
+        {/* S6.14 C7: directo a /capturar, sin pasar por la revisión (evita el salto extra). */}
+        {entry.status === 'capture_unreadable' && (
+          <Link to={ROUTES.capture} className="text-emerald-400">Repetir foto</Link>
+        )}
         {entry.status === 'ocr_failed' && (
           <button type="button" onClick={() => retryOcr.mutate()} disabled={retryOcr.isPending} className="text-emerald-400 disabled:opacity-40">
             {retryOcr.isPending ? 'Reintentando lectura…' : 'Reintentar lectura'}

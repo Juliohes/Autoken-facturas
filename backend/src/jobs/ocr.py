@@ -33,7 +33,7 @@ from invoice_intake import repository as intake_repo
 from invoice_intake import storage
 from invoice_intake.constants import FileStatus
 from ocr import comparison, comparison_repository, repository
-from ocr.analysis import STATUS_AUTO_OK, analyze_invoice
+from ocr.analysis import STATUS_AUTO_OK, STATUS_HARD_FAIL, analyze_invoice
 from ocr.arbiter import reconcile
 from ocr.engines.gemini_extractor import build_default_extractor
 from ocr.extraction import (
@@ -110,9 +110,15 @@ async def run_ocr(
         )
         reconciled = reconcile(readings)
         analysis = analyze_invoice(reconciled, company.cif)
-        file_status = (
-            FileStatus.OCR_DONE if analysis.status == STATUS_AUTO_OK else FileStatus.NEEDS_REVIEW
-        )
+        # S6.14: `hard_fail` (captura ilegible) transiciona a un estado propio -- repetir la foto,
+        # no abrir un formulario de revisión con campos vacíos. La extracción se persiste igual que
+        # siempre (trazabilidad/laboratorio admin-tech, S6.2): solo cambia el `FileStatus` destino.
+        if analysis.status == STATUS_HARD_FAIL:
+            file_status = FileStatus.CAPTURE_UNREADABLE
+        elif analysis.status == STATUS_AUTO_OK:
+            file_status = FileStatus.OCR_DONE
+        else:
+            file_status = FileStatus.NEEDS_REVIEW
     except Exception as exc:  # noqa: BLE001 - configuración, MinIO y proveedor dejan salida segura
         await _fail_claim(tid, cid, fid, claim_token, exc)
         return

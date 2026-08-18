@@ -49,10 +49,13 @@ describe('useCameraStream (S6.9)', () => {
 
     await waitFor(() => expect(screen.getByText('active')).toBeInTheDocument())
     expect(getUserMedia).toHaveBeenNthCalledWith(1, {
-      video: { facingMode: { exact: 'environment' } },
+      video: { facingMode: { exact: 'environment' }, width: { ideal: 4096 }, height: { ideal: 2160 } },
       audio: false,
     })
-    expect(getUserMedia).toHaveBeenNthCalledWith(2, { video: true, audio: false })
+    expect(getUserMedia).toHaveBeenNthCalledWith(2, {
+      video: { width: { ideal: 4096 }, height: { ideal: 2160 } },
+      audio: false,
+    })
   })
 
   it('C1: si el navegador informa que no hay lente trasera, prueba una cámara compatible', async () => {
@@ -64,7 +67,31 @@ describe('useCameraStream (S6.9)', () => {
     await act(async () => camera?.open())
 
     await waitFor(() => expect(screen.getByText('active')).toBeInTheDocument())
-    expect(getUserMedia).toHaveBeenNthCalledWith(2, { video: true, audio: false })
+    expect(getUserMedia).toHaveBeenNthCalledWith(2, {
+      video: { width: { ideal: 4096 }, height: { ideal: 2160 } },
+      audio: false,
+    })
+  })
+
+  it('S6.14 C1: la resolución pedida es siempre "ideal", nunca "exact"/"min", en ambos intentos', async () => {
+    const { stream } = fakeStream()
+    getUserMedia.mockRejectedValueOnce(new DOMException('sin trasera', 'OverconstrainedError'))
+    getUserMedia.mockResolvedValueOnce(stream)
+    let camera: CameraStreamState | null = null
+    render(<CameraProbe onChange={(state) => { camera = state }} />)
+    await act(async () => camera?.open())
+
+    await waitFor(() => expect(screen.getByText('active')).toBeInTheDocument())
+    for (const call of getUserMedia.mock.calls) {
+      const constraints = call[0] as { video: MediaTrackConstraints }
+      expect(constraints.video).toMatchObject({ width: { ideal: 4096 }, height: { ideal: 2160 } })
+      const width = constraints.video.width as Record<string, unknown>
+      const height = constraints.video.height as Record<string, unknown>
+      expect(width).not.toHaveProperty('exact')
+      expect(width).not.toHaveProperty('min')
+      expect(height).not.toHaveProperty('exact')
+      expect(height).not.toHaveProperty('min')
+    }
   })
 
   it('C7: si se deniega el permiso, no abre una segunda solicitud y ofrece recuperación', async () => {

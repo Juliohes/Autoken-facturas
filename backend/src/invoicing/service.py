@@ -84,6 +84,16 @@ class PendingOcr(NotConfirmable):
     """
 
 
+class CaptureUnreadable(NotConfirmable):
+    """El fichero quedó en `capture_unreadable` (S6.14): la imagen en sí es el problema (-> 409).
+
+    Subclase de `NotConfirmable` (mismo patrón que `PendingOcr`): un caso PERMANENTE y distinto de
+    `ocr_failed` (el motor sí respondió, solo que sin nada aprovechable) y de un simple
+    `needs_review` (aquí no hay formulario que abrir con campos vacíos, spec C7): el frontend debe
+    explicar que hay que repetir la foto, no ofrecer revisar ni reintentar leer la MISMA imagen.
+    """
+
+
 class AlreadyConfirmed(InvoicingError):
     """Ya hay una factura para ese fichero (una factura por fichero) (-> 409)."""
 
@@ -316,6 +326,24 @@ async def _load_file(identity: AuthContext, file_id: UUID) -> intake_repo.Upload
         raise FileNotVisible from exc
 
 
+def _raise_unless_confirmable(status: str) -> None:
+    """Lanza la excepción que corresponde a un fichero NO confirmable (cascada S6.14).
+
+    Tres estados posibles, cada uno con su excepción (y su `detail` HTTP) propios:
+    `capture_unreadable` (S6.14, permanente: repetir la foto) -> `CaptureUnreadable`;
+    `pending_ocr`/`processing` (transitorio: el worker sigue) -> `PendingOcr`; cualquier otro
+    (`ocr_failed`, ya confirmado) -> `NotConfirmable`. El orden entre las dos primeras ramas es
+    indiferente (sus conjuntos de estados son disjuntos); lo que SÍ es estructural es que
+    `CaptureUnreadable`/`PendingOcr` sean subclases de `NotConfirmable` y se listen antes que ella
+    en `_ERROR_STATUS` del router (first-match por isinstance).
+    """
+    if status == FileStatus.CAPTURE_UNREADABLE.value:
+        raise CaptureUnreadable
+    if status in _PROCESSING_STATES:
+        raise PendingOcr
+    raise NotConfirmable
+
+
 def _balance_ok(
     lines: list[TaxLine], total: Decimal | None, irpf: Decimal | None = None
 ) -> bool | None:
@@ -422,9 +450,7 @@ async def review(identity: AuthContext, file_id: UUID) -> ReviewData:
     """
     file_ctx = await _load_file(identity, file_id)
     if file_ctx.status not in _CONFIRMABLE_STATES:
-        if file_ctx.status in _PROCESSING_STATES:
-            raise PendingOcr
-        raise NotConfirmable
+        _raise_unless_confirmable(file_ctx.status)
     ocr_key = tenant_encryption_key(get_settings(), identity.tenant_id)
     extraction = await ocr_repo.get_extraction(identity.session, file_id, encryption_key=ocr_key)
     if extraction is None:
@@ -445,9 +471,7 @@ async def draft_counterparty_verdict(
     """Devuelve la validación del borrador actual sin reutilizar el veredicto del OCR (S6.10 C6)."""
     file_ctx = await _load_file(identity, file_id)
     if file_ctx.status not in _CONFIRMABLE_STATES:
-        if file_ctx.status in _PROCESSING_STATES:
-            raise PendingOcr
-        raise NotConfirmable
+        _raise_unless_confirmable(file_ctx.status)
     ocr_key = tenant_encryption_key(get_settings(), identity.tenant_id)
     if await ocr_repo.get_extraction(identity.session, file_id, encryption_key=ocr_key) is None:
         raise NotConfirmable
@@ -470,9 +494,7 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
     """
     file_ctx = await _load_file(identity, file_id)
     if file_ctx.status not in _CONFIRMABLE_STATES:
-        if file_ctx.status in _PROCESSING_STATES:
-            raise PendingOcr
-        raise NotConfirmable
+        _raise_unless_confirmable(file_ctx.status)
     if await repository.invoice_exists_for_file(identity.session, file_id):
         raise AlreadyConfirmed
     ocr_key = tenant_encryption_key(get_settings(), identity.tenant_id)

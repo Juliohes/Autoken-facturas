@@ -2,8 +2,8 @@
 // o repite la foto. Orquesta los hooks de datos y los componentes de presentación;
 // la lógica (color de confianza, botón habilitado, body del confirm) vive en
 // módulos puros aparte (sin monolito). Comportamientos C1-C12 de la spec.
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { ROUTES } from '../../app/routes'
 import type { Direction } from '../capture/types'
@@ -15,7 +15,7 @@ import { isConfirmEnabled } from './confirmGate'
 import { formStateToConfirmBody, initialFormState, type ConfirmFormState } from './formState'
 import { availableTaxRates, taxRateLabel } from './taxLines'
 import { ConfirmRejectedError, useConfirm } from './useConfirm'
-import { useReview, PendingOcrError } from './useReview'
+import { useReview, CaptureUnreadableError, PendingOcrError } from './useReview'
 import { useDraftCounterpartyVerdict } from './useDraftCounterpartyVerdict'
 import {
   BLOCKING_REASONS,
@@ -37,8 +37,25 @@ interface Props {
   direction?: Direction
 }
 
+// Mensaje mostrado en la pantalla de captura tras el redirect de C7 (constante compartida para no
+// desincronizar el `navigate` de aquí con lo que espera `CaptureScreen.tsx`).
+const CAPTURE_UNREADABLE_MESSAGE = 'La foto no se pudo leer. Repite la captura.'
+
 export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction }: Props) {
   const review = useReview(fileId)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const isCaptureUnreadable = review.failureReason instanceof CaptureUnreadableError
+
+  // C7: una captura ilegible nunca abre un formulario con campos vacíos ni el error genérico de
+  // "No se pudo abrir esta factura" — se explica y se vuelve a capturar automáticamente.
+  useEffect(() => {
+    if (isCaptureUnreadable) {
+      navigate(ROUTES.capture, { state: { message: CAPTURE_UNREADABLE_MESSAGE } })
+    }
+  }, [isCaptureUnreadable, navigate])
+
+  if (isCaptureUnreadable) return null
 
   if (review.isLoading) {
     const isPendingOcr = review.failureReason instanceof PendingOcrError
@@ -72,6 +89,13 @@ export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction }: 
     )
   }
 
+  // S6.14 C8: aviso no bloqueante de una sola vez, vía estado de navegación efímero (mismo patrón
+  // que `direction` antes de S6.13) — si se recarga o se reabre desde el historial más tarde, el
+  // estado ya no está y el aviso no reaparece. Decisión de diseño propia (no explícita en la spec,
+  // enmendada en su §5): persistir la nitidez para que el aviso reapareciera siempre sería
+  // sobredimensionar lo que es solo telemetría.
+  const lowSharpness = (location.state as { lowSharpness?: boolean } | null)?.lowSharpness === true
+
   return (
     <ConfirmationForm
       fileId={fileId}
@@ -79,6 +103,7 @@ export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction }: 
       onConfirmed={onConfirmed}
       onRetry={onRetry}
       direction={review.data.direction === undefined ? direction ?? null : review.data.direction}
+      lowSharpness={lowSharpness}
     />
   )
 }
@@ -89,10 +114,12 @@ interface FormProps {
   onConfirmed: () => void
   onRetry: () => void
   direction: Direction | null
+  /** S6.14 C8: aviso no bloqueante, nunca impide confirmar. */
+  lowSharpness: boolean
 }
 
 /** Formulario propiamente dicho: se monta con los datos ya cargados. */
-function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: FormProps) {
+function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, lowSharpness }: FormProps) {
   const confirm = useConfirm(fileId)
   const currentUser = useCurrentUser()
   const [form, setForm] = useState<ConfirmFormState>(() => initialFormState(review))
@@ -177,6 +204,17 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction }: F
   return (
     <section className="mx-auto max-w-xl space-y-6 p-6 text-slate-100">
       <h1 className="text-xl font-semibold">Revisar y confirmar</h1>
+
+      {/* S6.14 C8: aviso no bloqueante de nitidez, solo en esta primera visita (estado de
+          navegación efímero, se pierde al recargar — decisión de diseño propia, spec §5). */}
+      {lowSharpness && (
+        <p
+          data-testid="warning-low-sharpness"
+          className="rounded-md border border-yellow-500 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200"
+        >
+          Esta foto puede estar borrosa. Revisa bien los datos antes de confirmar.
+        </p>
+      )}
 
       {direction === null && (
         <fieldset className="space-y-2 rounded-md border border-amber-500/60 p-4">

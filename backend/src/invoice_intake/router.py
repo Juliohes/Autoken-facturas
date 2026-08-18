@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -87,10 +88,15 @@ async def upload_file(
     file: UploadFile,
     company_id: Annotated[UUID, Form()],
     direction: Annotated[Literal["recibida", "emitida"] | None, Form()] = None,
+    sharpness_score: Annotated[str | None, Form()] = None,
 ) -> UploadOut:
     """Sube un fichero de factura a una empresa. Ver spec S2.1 para los códigos (201/4xx/503).
 
     Orden: pertenencia (403/404) -> tamaño (413) -> el servicio hace el resto (415/422/409/503/201).
+
+    `sharpness_score` (S6.14 C8): nitidez de la captura calculada en cliente (varianza del
+    Laplaciano), string opcional. Es TELEMETRÍA, no dato de dominio: no se persiste ni se valida
+    (un valor raro no rompe la subida); solo se loguea como métrica de calidad de captura.
     """
     # El servicio recibe primitivos (no el `AuthContext`, acoplado a FastAPI): el router es la única
     # capa que conoce la identidad HTTP y extrae de ella lo que la lógica de dominio necesita.
@@ -156,6 +162,7 @@ async def upload_file(
     # `service.DuplicateUpload` NO se captura aquí: propaga al manejador de la app (409 con
     # `duplicate_of`) para que la dependencia deshaga antes la transacción de la petición.
 
+    _log_capture_sharpness(sharpness_score, file_id=record.id, company_id=company_id)
     return UploadOut(
         id=record.id,
         company_id=record.company_id,
@@ -175,11 +182,15 @@ async def upload_batch(
     files: list[UploadFile],
     company_id: Annotated[UUID, Form()],
     direction: Annotated[Literal["recibida", "emitida"], Form()],
+    sharpness_score: Annotated[str | None, Form()] = None,
 ) -> UploadOut:
     """Acepta de dos a cinco imágenes como un único documento multipágina (S6.12).
 
     La dirección se valida aquí porque forma parte del contrato de captura. La confirmación
     existente sigue siendo quien la persiste, igual que en una subida simple.
+
+    `sharpness_score` (S6.14 C8): misma telemetría opcional que en la subida simple (hoy el cliente
+    no calcula una nitidez de conjunto para varias páginas; el campo se admite igual).
     """
     member_company_id = identity.company.id if identity.company is not None else None
     try:
@@ -243,6 +254,7 @@ async def upload_batch(
         raise HTTPException(
             status_code=503, detail="Almacenamiento no disponible, reintenta"
         ) from exc
+    _log_capture_sharpness(sharpness_score, file_id=record.id, company_id=company_id)
     return UploadOut(
         id=record.id,
         company_id=record.company_id,
@@ -253,6 +265,30 @@ async def upload_batch(
         scan_status=record.scan_status,
         created_at=record.created_at,
         direction=cast(Literal["recibida", "emitida"] | None, record.direction),
+    )
+
+
+def _log_capture_sharpness(
+    sharpness_score: str | None, *, file_id: UUID, company_id: UUID
+) -> None:
+    """Telemetría S6.14 C8: loguea la nitidez de la captura si el cliente la mandó.
+
+    Cruda, tal cual llegó (string): NO se parsea ni se valida — es una métrica de calidad de
+    captura, no un dato de dominio; nunca se persiste en BD ni condiciona la subida. Se trunca a
+    64 caracteres: va cruda a los logs, y un valor arbitrariamente largo los hincharía sin
+    beneficio (una nitidez real cabe con mucho).
+
+    El logger se resuelve EN CADA LLAMADA (no a nivel de módulo): la app configura structlog con
+    `cache_logger_on_first_use=True` (`shared/logging.py`), y un proxy de módulo quedaría
+    congelado con la primera configuración que viera — rompiendo la captura de logs en tests.
+    """
+    if sharpness_score is None:
+        return
+    structlog.get_logger("invoice_intake").info(
+        "invoice_intake.upload.sharpness_score",
+        sharpness_score=sharpness_score[:64],
+        file_id=str(file_id),
+        company_id=str(company_id),
     )
 
 

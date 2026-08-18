@@ -21,12 +21,21 @@ export interface UploadCaptureInput {
   blob: Blob
   companyId: string
   direction: Direction
+  /** S6.14 C8: nitidez calculada en cliente (varianza del Laplaciano), solo telemetría del lado
+   * servidor — nunca bloquea ni retrasa la subida. `null`/ausente cuando no hay análisis (p. ej.
+   * selector de fichero sin cámara): se omite del `FormData`, no se manda un `0` inventado. */
+  sharpnessScore?: number | null
 }
 
 export interface UploadBatchCaptureInput {
   blobs: Blob[]
   companyId: string
   direction: Direction
+  /** Ver `UploadCaptureInput.sharpnessScore`; una factura de varias páginas no tiene una nitidez
+   * de conjunto agregada hoy (decisión documentada en `CaptureScreen.tsx::sendPages`), así que en
+   * la práctica este camino no la manda, pero el hook la admite igual por si un llamante futuro sí
+   * calcula una. */
+  sharpnessScore?: number | null
 }
 
 type UploadResult = Pick<components['schemas']['UploadOut'], 'id'>
@@ -57,13 +66,22 @@ async function readUploadResult(response: Response): Promise<UploadResult> {
   return body
 }
 
+// FormData solo admite `string`/`Blob`: la nitidez cruda (puede llevar decimales) viaja como
+// string. `postMultipart` no pasa por el cliente OpenAPI generado (multipart sin tipar por
+// endpoint), así que el campo se añade a mano aunque el schema.d.ts ya lo conozca. Ausente/`null`
+// -> se omite el campo, nunca se manda un `0` inventado (S6.14 C8).
+function appendSharpnessScore(formData: FormData, sharpnessScore: number | null | undefined) {
+  if (typeof sharpnessScore === 'number') formData.append('sharpness_score', String(sharpnessScore))
+}
+
 export function useUploadCapture() {
   return useMutation({
-    mutationFn: async ({ blob, companyId, direction }: UploadCaptureInput) => {
+    mutationFn: async ({ blob, companyId, direction, sharpnessScore }: UploadCaptureInput) => {
       const formData = new FormData()
       formData.append('file', blob, 'captura.jpg')
       formData.append('company_id', companyId)
       formData.append('direction', direction)
+      appendSharpnessScore(formData, sharpnessScore)
 
       return readUploadResult(await postMultipart('/api/v1/uploads', formData))
     },
@@ -72,11 +90,12 @@ export function useUploadCapture() {
 
 export function useUploadBatchCapture() {
   return useMutation({
-    mutationFn: async ({ blobs, companyId, direction }: UploadBatchCaptureInput): Promise<UploadResult> => {
+    mutationFn: async ({ blobs, companyId, direction, sharpnessScore }: UploadBatchCaptureInput): Promise<UploadResult> => {
       const formData = new FormData()
       blobs.forEach((blob, index) => formData.append('files', blob, `pagina-${index + 1}.jpg`))
       formData.append('company_id', companyId)
       formData.append('direction', direction)
+      appendSharpnessScore(formData, sharpnessScore)
 
       return readUploadResult(await postMultipart('/api/v1/uploads/batch', formData))
     },

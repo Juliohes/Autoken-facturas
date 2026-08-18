@@ -1,13 +1,14 @@
 // Captura directa S6.11: la persona decide dirección y empresa antes de abrir la
 // cámara. Tras disparar, normaliza y sube sin una revisión que interrumpa el flujo.
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 import { ROUTES } from '../../app/routes'
 import { useCompanyOptions } from '../companies/useCompanyOptions'
 import { useSession } from '../session/SessionProvider'
 import { analyzeFrame } from './analyzeFrame'
 import { resolveEffectiveCompanyId } from './captureSelectors'
+import { DEFAULT_SHARPNESS_THRESHOLD } from './captureLoop'
 import { grabVideoFrame } from './grabVideoFrame'
 import { fileToJpegBlob } from './normalizeToJpeg'
 import { processCapturedFrame } from './processCapture'
@@ -16,7 +17,9 @@ import { useCameraStream } from './useCameraStream'
 import { useUploadBatchCapture, useUploadCapture } from './useUploadCapture'
 
 interface Props {
-  onUploaded: (fileId: string, direction: Direction) => void
+  /** `lowSharpness` (S6.14 C8): aviso informativo de una sola vez para la pantalla de confirmación,
+   * nunca un bloqueo. Reutiliza el mismo umbral ya calibrado en `captureLoop.ts`. */
+  onUploaded: (fileId: string, direction: Direction, lowSharpness: boolean) => void
 }
 
 interface CapturedPage {
@@ -47,6 +50,10 @@ function firstVideoTrack(stream: MediaStream | null) {
 export function CaptureScreen({ onUploaded }: Props) {
   const { user } = useSession()
   const role = user?.role
+  // S6.14 C7: mensaje de una sola vez cuando se llega aquí redirigido tras una "captura ilegible"
+  // (`ConfirmationScreen.tsx`), vía estado de navegación efímero (mismo patrón que `lowSharpness`).
+  const location = useLocation()
+  const redirectMessage = (location.state as { message?: string } | null)?.message ?? null
   const camera = useCameraStream()
   const videoRef = useRef<HTMLVideoElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -92,10 +99,13 @@ export function CaptureScreen({ onUploaded }: Props) {
     setVideoReady(Boolean(video && video.videoWidth > 0 && video.videoHeight > 0))
   }
 
-  const uploadBlob = async (blob: Blob, operation: number) => {
+  const uploadBlob = async (blob: Blob, operation: number, sharpnessScore: number | null) => {
+    // Aviso no bloqueante (S6.14 C8): un análisis ausente (p. ej. selector de archivo, sin cámara)
+    // no cuenta como "baja nitidez" — solo se avisa cuando SÍ hay una puntuación y es baja.
+    const lowSharpness = sharpnessScore !== null && sharpnessScore < DEFAULT_SHARPNESS_THRESHOLD
     try {
-      const data = await upload.mutateAsync({ blob, companyId: effectiveCompanyId, direction })
-      if (operationRef.current === operation) onUploaded(data.id, direction)
+      const data = await upload.mutateAsync({ blob, companyId: effectiveCompanyId, direction, sharpnessScore })
+      if (operationRef.current === operation) onUploaded(data.id, direction, lowSharpness)
     } catch {
       if (operationRef.current === operation) setCaptureError('No se pudo subir la foto. Inténtalo de nuevo.')
     } finally {
@@ -176,7 +186,7 @@ export function CaptureScreen({ onUploaded }: Props) {
       if (multiplePages) {
         addPage(blob)
       } else {
-        await uploadBlob(blob, operation)
+        await uploadBlob(blob, operation, analysis.sharpness)
       }
     } catch {
       if (operationRef.current === operation) {
@@ -236,7 +246,9 @@ export function CaptureScreen({ onUploaded }: Props) {
     try {
       const blob = await fileToJpegBlob(file)
       if (operationRef.current !== operation) return
-      await uploadBlob(blob, operation)
+      // Sin análisis de nitidez (selector de fichero, sin cámara ni `analyzeFrame`): `null`, nunca
+      // un aviso inventado de "baja nitidez" (S6.14 C8).
+      await uploadBlob(blob, operation, null)
     } catch {
       if (operationRef.current === operation) {
         setCaptureError('No se pudo preparar la foto. Elige otra imagen.')
@@ -295,7 +307,10 @@ export function CaptureScreen({ onUploaded }: Props) {
         companyId: effectiveCompanyId,
         direction,
       })
-      if (operationRef.current === operation) onUploaded(data.id, direction)
+      // Decisión de diseño (S6.14 C8): una factura de varias páginas no tiene una única nitidez de
+      // conjunto (cada página se capturó/normalizó por separado, sin acumular su análisis); en vez
+      // de inventar un agregado, este camino nunca avisa de baja nitidez.
+      if (operationRef.current === operation) onUploaded(data.id, direction, false)
     } catch {
       if (operationRef.current === operation) setCaptureError('No se pudo enviar la factura. Inténtalo de nuevo.')
     } finally {
@@ -363,6 +378,11 @@ export function CaptureScreen({ onUploaded }: Props) {
             {(companies.data ?? []).map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
           </select>
         </label>
+      )}
+      {redirectMessage && (
+        <p data-testid="capture-redirect-message" className="rounded-md border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+          {redirectMessage}
+        </p>
       )}
       {captureError && <p role="alert" className="text-sm text-red-400">{captureError}</p>}
 

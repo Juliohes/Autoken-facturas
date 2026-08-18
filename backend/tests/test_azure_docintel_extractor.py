@@ -71,6 +71,23 @@ async def test_c6_traduce_los_campos_reconocidos() -> None:
     assert invoice.tax_lines == ()  # Azure no da desglose de IVA por tipo (ver docstring)
 
 
+async def test_s6_14_azure_usa_la_misma_confianza_para_valor_y_nombre() -> None:
+    """S6.14: Azure no distingue confianza de valor vs de nombre (limitación conocida del motor,
+    ver docstring de `_tax_id`) -- ambos campos deben llevar la MISMA confianza calculada."""
+    fields = {
+        "VendorTaxId": _field(value_string="A39031620", confidence=0.95),
+        "VendorName": _field(value_string="Proveedor SA", confidence=0.95),
+    }
+    extractor = _extractor_with_result(_fake_result(fields))
+
+    invoice = await extractor.extract(b"x", "image/png")
+
+    assert len(invoice.tax_ids) == 1
+    tax_id = invoice.tax_ids[0]
+    assert tax_id.value_confidence == "alta"
+    assert tax_id.name_confidence == "alta"
+
+
 async def test_s6_1_c1_traduce_el_numero_de_factura() -> None:
     """spec: S6.1 C1 — `InvoiceId` de Azure (`prebuilt-invoice`) -> `invoice_number` + confianza."""
     fields = {"InvoiceId": _field(value_string="F-2026-001", confidence=0.95)}

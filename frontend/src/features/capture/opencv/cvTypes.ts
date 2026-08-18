@@ -19,6 +19,13 @@ export interface CvSize {
   height: number
 }
 
+/** Rectángulo rotado devuelto por `cv.minAreaRect` (S6.14 C3): objeto plano, no un `Mat`. */
+export interface CvRotatedRect {
+  center: { x: number; y: number }
+  size: { width: number; height: number }
+  angle: number
+}
+
 export interface CvModule {
   Mat: new (...args: unknown[]) => CvMat
   MatVector: new () => { size(): number; get(i: number): CvMat; delete(): void }
@@ -27,6 +34,10 @@ export interface CvModule {
   GaussianBlur(src: CvMat, dst: CvMat, ksize: CvSize, sigmaX: number): void
   Laplacian(src: CvMat, dst: CvMat, ddepth: number): void
   meanStdDev(src: CvMat, mean: CvMat, stddev: CvMat): void
+  /** Umbral de la imagen; devuelve el umbral calculado (relevante con `THRESH_OTSU`). */
+  threshold(src: CvMat, dst: CvMat, thresh: number, maxval: number, type: number): number
+  morphologyEx(src: CvMat, dst: CvMat, op: number, kernel: CvMat): void
+  getStructuringElement(shape: number, ksize: CvSize): CvMat
   Canny(src: CvMat, dst: CvMat, threshold1: number, threshold2: number): void
   findContours(
     src: CvMat,
@@ -38,13 +49,21 @@ export interface CvModule {
   approxPolyDP(curve: CvMat, approxCurve: CvMat, epsilon: number, closed: boolean): void
   arcLength(curve: CvMat, closed: boolean): number
   contourArea(contour: CvMat): number
+  /** `returnPoints=true` (S6.14 C3): la envolvente convexa como puntos, no como índices. */
+  convexHull(points: CvMat, hull: CvMat, clockwise?: boolean, returnPoints?: boolean): void
+  minAreaRect(points: CvMat): CvRotatedRect
   matFromArray(rows: number, cols: number, type: number, data: number[]): CvMat
   getPerspectiveTransform(src: CvMat, dst: CvMat): CvMat
-  warpPerspective(src: CvMat, dst: CvMat, M: CvMat, dsize: CvSize): void
+  warpPerspective(src: CvMat, dst: CvMat, M: CvMat, dsize: CvSize, flags?: number): void
   Size: new (width: number, height: number) => CvSize
   CV_64F: number
   CV_32FC2: number
   COLOR_RGBA2GRAY: number
   RETR_LIST: number
   CHAIN_APPROX_SIMPLE: number
+  THRESH_BINARY: number
+  THRESH_OTSU: number
+  MORPH_CLOSE: number
+  MORPH_RECT: number
+  INTER_CUBIC: number
 }

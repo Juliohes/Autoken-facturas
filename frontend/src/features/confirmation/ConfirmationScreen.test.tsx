@@ -3,14 +3,15 @@
 // de cada escenario (sin navegador ni backend reales; jsdom).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
+import { ROUTES } from '../../app/routes'
 import { api } from '../../api/client'
 import type { Direction } from '../capture/types'
 import { ConfirmationScreen, RESPONSIBILITY_NOTICE } from './ConfirmationScreen'
-import { PendingOcrError } from './useReview'
+import { CaptureUnreadableError, PendingOcrError } from './useReview'
 import type { ReviewResponse } from './types'
 
 vi.mock('../../api/client', () => ({
@@ -43,14 +44,19 @@ function makeReview(over: Partial<ReviewResponse> = {}): ReviewResponse {
   }
 }
 
-function renderScreen(direction?: Direction) {
+// S6.14: `ConfirmationScreen` lee `location.state?.lowSharpness` y navega con `useNavigate` ante
+// una captura ilegible (C7/C8), así que necesita contexto de Router incluso en los tests que no
+// ejercitan ninguno de esos dos comportamientos.
+function renderScreen(direction?: Direction, locationState?: Record<string, unknown>) {
   const onConfirmed = vi.fn()
   const onRetry = vi.fn()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
-    <QueryClientProvider client={client}>
-      <ConfirmationScreen fileId="file-1" onConfirmed={onConfirmed} onRetry={onRetry} direction={direction} />
-    </QueryClientProvider>,
+    <MemoryRouter initialEntries={[{ pathname: '/confirmar/file-1', state: locationState }]}>
+      <QueryClientProvider client={client}>
+        <ConfirmationScreen fileId="file-1" onConfirmed={onConfirmed} onRetry={onRetry} direction={direction} />
+      </QueryClientProvider>
+    </MemoryRouter>,
   )
   return { onConfirmed, onRetry }
 }
@@ -606,9 +612,11 @@ describe('ConfirmationScreen (S2.4)', () => {
     })
 
     render(
-      <QueryClientProvider client={client}>
-        <ConfirmationScreen fileId="file-1" onConfirmed={vi.fn()} onRetry={vi.fn()} />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <ConfirmationScreen fileId="file-1" onConfirmed={vi.fn()} onRetry={vi.fn()} />
+        </QueryClientProvider>
+      </MemoryRouter>,
     )
 
     // Error inmediato, no el spinner de "procesando" (no es un caso transitorio: no debe reintentar)
@@ -617,6 +625,89 @@ describe('ConfirmationScreen (S2.4)', () => {
     )
     expect(screen.queryByText('Leyendo la factura...')).not.toBeInTheDocument()
     expect(reviewCallCount).toBe(1)
+  })
+})
+
+// spec: docs/specs/S6.14-captura-alta-resolucion-y-confianza-nombre.md
+describe('ConfirmationScreen — S6.14 alta resolución y aviso de nitidez', () => {
+  it('C8: con lowSharpness=true en el estado de navegación, muestra un aviso no bloqueante de nitidez', async () => {
+    renderScreen(undefined, { lowSharpness: true })
+
+    expect(await screen.findByText(/foto puede estar borrosa/i)).toBeInTheDocument()
+    // No bloqueante: el botón de confirmar sigue disponible (aunque deshabilitado por la
+    // responsabilidad, no por este aviso).
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeInTheDocument()
+  })
+
+  it('C8: sin lowSharpness en el estado de navegación, no muestra ningún aviso de nitidez', async () => {
+    renderScreen()
+
+    await screen.findByLabelText('Importe total')
+    expect(screen.queryByText(/foto puede estar borrosa/i)).not.toBeInTheDocument()
+  })
+
+  it('C7: cuando la revisión falla con "captura ilegible" (409), navega a /capturar con un mensaje', async () => {
+    getMock.mockResolvedValue({
+      data: undefined,
+      error: { detail: 'La foto no se pudo leer, repite la captura' },
+      response: { status: 409 } as unknown as Response,
+    })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    function CaptureRouteStub() {
+      const location = useLocation()
+      const message = (location.state as { message?: string } | null)?.message
+      return <p data-testid="capture-route-stub">{message}</p>
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/confirmar/file-1']}>
+        <QueryClientProvider client={client}>
+          <Routes>
+            <Route
+              path="/confirmar/:fileId"
+              element={<ConfirmationScreen fileId="file-1" onConfirmed={vi.fn()} onRetry={vi.fn()} />}
+            />
+            <Route path={ROUTES.capture} element={<CaptureRouteStub />} />
+          </Routes>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByTestId('capture-route-stub')).toHaveTextContent(
+      'La foto no se pudo leer. Repite la captura.',
+    )
+    // Nunca abre el formulario con campos vacíos (C7): sin "Importe total" en pantalla.
+    expect(screen.queryByLabelText('Importe total')).not.toBeInTheDocument()
+  })
+
+  it('C7: "captura ilegible" no dispara el error genérico ("No se pudo abrir esta factura")', async () => {
+    getMock.mockResolvedValue({
+      data: undefined,
+      error: { detail: 'La foto no se pudo leer, repite la captura' },
+      response: { status: 409 } as unknown as Response,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/confirmar/file-1']}>
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <Routes>
+            <Route
+              path="/confirmar/:fileId"
+              element={<ConfirmationScreen fileId="file-1" onConfirmed={vi.fn()} onRetry={vi.fn()} />}
+            />
+            <Route path={ROUTES.capture} element={<p>Pantalla de captura</p>} />
+          </Routes>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Pantalla de captura')
+    expect(screen.queryByText('No se pudo abrir esta factura. Inténtalo de nuevo.')).not.toBeInTheDocument()
+  })
+
+  it('CaptureUnreadableError es distinguible de PendingOcrError (no reintenta)', () => {
+    expect(new CaptureUnreadableError()).not.toBeInstanceOf(PendingOcrError)
   })
 })
 
