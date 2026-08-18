@@ -909,6 +909,30 @@
   al título, sin esperar también al logo) — cambiado a `findByRole` (con reintento), verificado en
   verde 5 veces seguidas. 295 tests de frontend, todos en verde, tsc/eslint limpios. Desplegado y
   verificado en los tres dominios reales.
+- **NOTA (2026-08-18): este resumen quedó desactualizado entre el 10 y el 18/08** — las tareas
+  S6.8/S6.9 (laboratorio completo + captura fiable), S6.10 (captura manual y CIF auditable), S6.11
+  (envío directo desde cámara), S6.12 (captura multipágina e historial privado) y S6.13 (OCR
+  recuperable y seguro, hotfix) están SOLO en el PLAN MAESTRO (§11.12-§11.18) y en
+  `docs/GUIA_EN_CRISTIANO.md`. Leer ahí, no aquí.
+- **S6.14 (captura en alta resolución + confianza separada del nombre) cerrada (18/08/2026), PR
+  #159**: origen en un reporte real de Julio (foto sin máxima resolución + errores de lectura) y en
+  el benchmark S6.7 (nombre de contraparte: 58,62% de acierto, el campo débil). Fase 1 sin coste de
+  proveedor: cámara a resolución `ideal`; suelo de 2200px en el recorte; bordes con Otsu + cierre
+  morfológico + fallbacks `convexHull`/`minAreaRect`; `ExtractedTaxId` con `value_confidence` (CIF)
+  separada de `name_confidence` (nombre) — enrutado estricto en el CIF, flexible con el nombre;
+  prompt que prioriza la razón social legal sobre el logo; una validación determinista fallida
+  degrada la confianza persistida/mostrada (no solo el enrutado); nueva "captura ilegible"
+  (`hard_fail` -> `capture_unreadable`, estado propio del fichero: redirect a `/capturar`, nunca
+  formulario vacío, `retry-ocr` sigue reservado a `ocr_failed`); nitidez del cliente como telemetría
+  no bloqueante (`sharpness_score`, logueada truncada, nunca persistida) + aviso efímero de una sola
+  vez si es baja (spec §5 enmendada con esa decisión). Auditoría de 3 lentes: 1 alto (ruff I001,
+  bloqueaba CI) + 1 medio (guarda triplicada extraída a `_raise_unless_confirmable`) + 6 bajos
+  corregidos; avisos aceptados documentados en el plan §11.19. CI del PR: 2 fallos no capturados en
+  local (ruff **format** vs `check`; `tsc -b` vs `tsc --noEmit` suelto) — lección: verificar en local
+  con los comandos EXACTOS de la CI. 933 tests backend + 349 frontend en verde. Desplegado y
+  verificado en real (sin migración de BD): health OK en los 3 dominios, worker con el cron de
+  recuperación corriendo, bundle nuevo servido. Pendiente (autorizado, Fase 2): prueba en
+  Android/iPhone real y repetición del benchmark S6.7 con fotos ya nítidas.
 
 ---
 
