@@ -29,6 +29,7 @@ __all__ = [
     "InvoiceExtractor",
     "InvoiceExtractionError",
     "extract_document",
+    "extracted_invoice_from_record",
     "serialize_tax_lines",
 ]
 
@@ -125,6 +126,76 @@ def serialize_tax_lines(invoice: ExtractedInvoice) -> list[dict[str, str]]:
         {"base": str(line.base), "rate": str(line.rate), "cuota": str(line.cuota)}
         for line in invoice.tax_lines
     ]
+
+
+def extracted_invoice_from_record(
+    record: Any,  # `ocr.repository.ExtractionRecord`; Any para no importar infra (módulo puro)
+    *,
+    own_cif: str,
+) -> ExtractedInvoice:
+    """Reconstruye un `ExtractedInvoice` desde la extracción YA persistida (S6.15 C1).
+
+    La comparativa S2.10, al correr como tarea de fondo separada (en vez de inline en `run_ocr`),
+    ya no tiene en memoria la lectura original del motor. Para no pagarla de nuevo (hallazgo de
+    coste corregido dos veces en el proyecto: nunca se re-lee al motor por defecto si la lectura ya
+    existe), la reconstruimos desde la fila de `ocr_extractions` — que ES esa lectura, persistida.
+
+    Fidelidad del análisis posterior (`analyze_invoice`): se incluye la contraparte (desde las
+    columnas cifradas descifradas) y, si `own_tax_id_present` es True, también el CIF propio (con
+    confianza alta, pues el análisis original ya confirmó su presencia). Así el análisis que haga la
+    comparativa sobre esta lectura reproduce el `own_tax_id_present` persistido, sin sesgarla.
+
+    Las confianzas por campo se leen del dict persistido (`record.confidences`, claves de
+    `ocr.analysis`: `issue_date`, `total_amount`, ...); las ausentes caen a "baja" (regla
+    anti-alucinación, nunca una confianza inventada).
+    """
+    confidences: dict[str, Any] = record.confidences or {}
+
+    def _conf(key: str) -> Confidence:
+        value = confidences.get(key)
+        return value if value in CONFIDENCE_VALUES else "baja"
+
+    tax_ids: list[ExtractedTaxId] = []
+    if record.counterparty_tax_id is not None or record.counterparty_name is not None:
+        tax_ids.append(
+            ExtractedTaxId(
+                value=record.counterparty_tax_id,
+                name=record.counterparty_name,
+                value_confidence=_conf("counterparty_tax_id"),
+                name_confidence=_conf("counterparty_name"),
+            )
+        )
+    if record.own_tax_id_present and own_cif:
+        tax_ids.append(
+            ExtractedTaxId(
+                value=own_cif, name=None, value_confidence="alta", name_confidence="alta"
+            )
+        )
+
+    return ExtractedInvoice(
+        issue_date=record.issue_date,
+        issue_date_confidence=_conf("issue_date"),
+        total_amount=record.total_amount,
+        total_confidence=_conf("total_amount"),
+        net_amount=record.net_amount,
+        net_amount_confidence=_conf("net_amount"),
+        tax_amount=record.tax_amount,
+        tax_amount_confidence=_conf("tax_amount"),
+        invoice_number=record.invoice_number,
+        invoice_number_confidence=_conf("invoice_number"),
+        tax_lines=tuple(
+            ExtractedTaxLine(
+                base=Decimal(str(line["base"])),
+                rate=Decimal(str(line["rate"])),
+                cuota=Decimal(str(line["cuota"])),
+            )
+            for line in (record.tax_lines or [])
+        ),
+        tax_ids=tuple(tax_ids),
+        engine=record.engine,
+        model=record.model,
+        raw=record.raw,
+    )
 
 
 class InvoiceExtractionError(Exception):

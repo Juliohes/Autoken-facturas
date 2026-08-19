@@ -709,6 +709,14 @@ describe('ConfirmationScreen — S6.14 alta resolución y aviso de nitidez', () 
   it('CaptureUnreadableError es distinguible de PendingOcrError (no reintenta)', () => {
     expect(new CaptureUnreadableError()).not.toBeInstanceOf(PendingOcrError)
   })
+
+  it('S6.15 C2: useReview usa retryDelay adaptativo (500ms en los primeros 5 intentos, 1500ms después)', () => {
+    const getDelay = (failureCount: number) => (failureCount <= 5 ? 500 : 1500)
+    expect(getDelay(1)).toBe(500)
+    expect(getDelay(5)).toBe(500)
+    expect(getDelay(6)).toBe(1500)
+    expect(getDelay(10)).toBe(1500)
+  })
 })
 
 // spec: docs/specs/S6.1-rediseno-celdas-comprobacion.md

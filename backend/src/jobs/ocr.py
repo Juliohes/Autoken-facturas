@@ -23,6 +23,7 @@ ni invertir la dirección de dependencias jobs->ocr).
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -32,6 +33,7 @@ from companies.service import tenant_encryption_key as company_encryption_key
 from invoice_intake import repository as intake_repo
 from invoice_intake import storage
 from invoice_intake.constants import FileStatus
+from jobs.queue import enqueue_ocr_comparison
 from ocr import comparison, comparison_repository, repository
 from ocr.analysis import STATUS_AUTO_OK, STATUS_HARD_FAIL, analyze_invoice
 from ocr.arbiter import reconcile
@@ -54,6 +56,23 @@ from shared.config import get_settings
 from shared.db import tenant_session
 
 logger = structlog.get_logger(__name__)
+
+
+async def _download_pages(locations: list[Any]) -> list[DocumentPage]:
+    """Descarga las páginas del documento del almacén EN PARALELO (S6.15 C3).
+
+    `asyncio.gather` conserva el orden de las tareas lanzadas, así que el orden de las páginas (que
+    importa al motor y al árbitro en multipágina) se mantiene aunque se descarguen a la vez. Cada
+    descarga es bloqueante (MinIO SDK síncrono), por eso va en `asyncio.to_thread`.
+    """
+
+    async def _one(location: Any) -> DocumentPage:
+        return DocumentPage(
+            content=await asyncio.to_thread(storage.get_object, location.bucket, location.key),
+            content_type=location.content_type,
+        )
+
+    return list(await asyncio.gather(*(_one(location) for location in locations)))
 
 
 async def run_ocr(
@@ -93,17 +112,19 @@ async def run_ocr(
             await intake_repo.finish_claim(session, fid, claim_token, FileStatus.OCR_FAILED)
             return
 
+        # S6.15 C1: se lee el interruptor AQUÍ (misma sesión ya abierta, una consulta barata sobre
+        # una fila única) para NO encolar una comparativa cuando el experimento está apagado (coste
+        # cero, spec §5). La task de fondo lo vuelve a comprobar (defensa en profundidad, igual que
+        # el benchmark S6.7): el interruptor pudo apagarse entre el encolado y la ejecución.
+        experiment_enabled = (
+            await settings_repository.get_settings(session)
+        ).ocr_experiment_enabled
+
     try:
         # Fan-out de extractores: hoy N=1, pero se conserva la secuencia para que el árbitro por
         # campo pueda crecer con motores distintos sin reescribir el job.
         extractors: list[InvoiceExtractor] = [extractor or build_default_extractor(settings)]
-        pages = [
-            DocumentPage(
-                content=await asyncio.to_thread(storage.get_object, location.bucket, location.key),
-                content_type=location.content_type,
-            )
-            for location in locations
-        ]
+        pages = await _download_pages(locations)
         readings = await asyncio.wait_for(
             asyncio.gather(*(extract_document(reader, pages) for reader in extractors)),
             timeout=settings.ocr_provider_timeout_seconds,
@@ -158,15 +179,74 @@ async def run_ocr(
             file_status=file_status.value,
         )
 
-    await run_ocr_comparison(
-        tid,
-        cid,
-        fid,
-        pages=pages,
-        own_cif=company.cif,
-        extractor=extractors[0],
-        original_reading=reconciled,
-    )
+    # S6.15 C1: la comparativa experimental (S2.10) NO corre inline aquí. El resultado principal ya
+    # está persistido y disponible para el usuario; ejecutarla en este mismo job retendría el hueco
+    # del worker ~15s más por factura (una segunda llamada al motor), retrasando a la siguiente en
+    # cola. Se encola como tarea de fondo propia y este job TERMINA, liberando su hueco. Solo se
+    # encola con el experimento encendido (coste cero apagado, spec §5); la task lo re-comprueba.
+    if experiment_enabled:
+        await enqueue_ocr_comparison(tid, cid, fid)
+
+
+async def run_ocr_comparison_task(
+    ctx: dict[str, Any],  # noqa: ARG001  (firma arq: `ctx` no se usa, igual que en `run_ocr_task`)
+    tenant_id: str,
+    company_id: str,
+    uploaded_file_id: str,
+    *,
+    extractor: InvoiceExtractor | None = None,
+) -> None:
+    """Task arq de la comparativa original-vs-realzada (S2.10), separada del job principal (S6.15).
+
+    Re-descarga las páginas del almacén (las tareas arq reciben solo IDs, no bytes) y reconstruye la
+    lectura original desde la extracción YA persistida por el job principal — nunca se vuelve a
+    pagar una lectura al motor por defecto (hallazgo de coste ya corregido dos veces). Solo la
+    imagen realzada se lee de nuevo (es la llamada que el experimento mide).
+
+    `extractor` inyectable (los tests pasan un doble); si es `None`, usa el motor real por defecto.
+    Nunca propaga una excepción (experimento de fondo): un fallo se registra y se traga.
+    """
+    from ocr.extraction import extracted_invoice_from_record  # noqa: PLC0415
+
+    tid, cid, fid = UUID(tenant_id), UUID(company_id), UUID(uploaded_file_id)
+    settings = get_settings()
+    try:
+        async with tenant_session(tid, cid) as session:
+            settings_row = await settings_repository.get_settings(session)
+            if not settings_row.ocr_experiment_enabled:
+                return
+            record = await repository.get_extraction(
+                session, fid, encryption_key=company_encryption_key(settings, tid)
+            )
+            if record is None:
+                # El resultado principal aún no es visible (ventana de carrera del encolado tras el
+                # commit, mismo guardarraíl ya tolerado en el proyecto): se registra y se abandona.
+                logger.error("ocr_comparison.extraction_not_found", uploaded_file_id=str(fid))
+                return
+            company = await companies_repo.get_company(
+                session, cid, encryption_key=company_encryption_key(settings, tid)
+            )
+            if company is None:
+                logger.error("ocr_comparison.company_not_found", uploaded_file_id=str(fid))
+                return
+            locations = await intake_repo.get_document_pages(session, fid)
+        if not locations:
+            logger.error("ocr_comparison.file_not_found", uploaded_file_id=str(fid))
+            return
+
+        original_reading = extracted_invoice_from_record(record, own_cif=company.cif)
+        pages = await _download_pages(locations)
+        await run_ocr_comparison(
+            tid,
+            cid,
+            fid,
+            pages=pages,
+            own_cif=company.cif,
+            extractor=extractor or build_default_extractor(settings),
+            original_reading=original_reading,
+        )
+    except Exception:  # noqa: BLE001  (experimento de fondo: nunca tumba al worker)
+        logger.error("ocr_comparison.task_failed", uploaded_file_id=str(fid))
 
 
 async def _fail_claim(
