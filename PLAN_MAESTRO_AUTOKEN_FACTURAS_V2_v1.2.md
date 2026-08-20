@@ -897,3 +897,21 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
 - **Verificación:** 6 tests nuevos dedicados en verde contra Postgres/Redis/MinIO reales; suite completa
   de backend (939 tests) y frontend (ConfirmationScreen) en verde; auditoría de 3 lentes (SOLID, arquitectura,
   patrones+seguridad) con veredictos **LIMPIO** en las tres dimensiones; ruff / mypy / tsc / eslint limpios.
+
+### 11.21 Corrección IRPF separado del IVA (2026-08-20)
+
+- **Origen:** una factura con retención del 19% se estaba representando dentro de `tax_lines`, porque el
+  contrato JSON del OCR no tenía campos propios de IRPF. Eso mezclaba una retención con el IVA y podía
+  desvirtuar el cuadre mostrado al usuario.
+- **Cambio:** `ExtractedInvoice` y `EXTRACTION_PROMPT` incorporan `irpf_rate`/`irpf_amount` y sus
+  confianzas. Los tipos de IVA aceptados por el parser son únicamente 21%, 10%, 4% y 0%; un tipo fuera
+  de ese conjunto se rechaza como respuesta inválida, nunca se guarda como IVA. El árbitro, el worker y
+  `ocr_extractions` conservan los campos separados mediante la migración `0040_ocr_irpf_fields`.
+- **Revisión y confirmación:** `GET /uploads/{file_id}/review` expone ambos campos y sus confianzas; la
+  pantalla inicializa automáticamente la casilla editable del IRPF. El cuadre usa la fórmula
+  `base + IVA - IRPF = total`, y `POST /confirm` mantiene el importe en `invoices.irpf_amount`.
+- **Verificación:** tests puros de extracción/análisis y frontend focalizado en verde; `mypy` sobre `src` sin
+  errores nuevos, `ruff`, `tsc` y `eslint` sin errores. Los dos E2E nuevos pasaron contra Postgres, Redis y
+  un MinIO temporal aislado. Después se desplegó en la VPS real: `0040_ocr_irpf_fields` aplicada, imágenes
+  actuales de API/worker/frontend reconstruidas y health de `setex.autoken.es` OK. La factura subida antes
+  de ese despliegue conserva una lectura antigua sin campos IRPF y debe volver a procesarse.

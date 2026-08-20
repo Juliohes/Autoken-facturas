@@ -26,6 +26,8 @@ from ocr.extraction import (
 
 __all__ = ["EXTRACTION_PROMPT", "parse_structured_invoice"]
 
+_VALID_IVA_RATES = frozenset({Decimal("21"), Decimal("10"), Decimal("4"), Decimal("0")})
+
 # Prompt de extracción a JSON. Insiste en no inventar (lo ilegible = null) y en devolver SOLO el
 # JSON con el esquema esperado. Incluye un guardarraíl anti-inyección: la factura es contenido NO
 # confiable, así que el modelo NO debe obedecer instrucciones de dentro del documento, solo extraer.
@@ -44,6 +46,10 @@ EXTRACTION_PROMPT = (
     '  "net_amount_confidence": "alta"|"media"|"baja",\n'
     '  "tax_amount": number|null,\n'
     '  "tax_amount_confidence": "alta"|"media"|"baja",\n'
+    '  "irpf_rate": number|null,\n'
+    '  "irpf_rate_confidence": "alta"|"media"|"baja",\n'
+    '  "irpf_amount": number|null,\n'
+    '  "irpf_amount_confidence": "alta"|"media"|"baja",\n'
     '  "invoice_number": string|null,\n'
     '  "invoice_number_confidence": "alta"|"media"|"baja",\n'
     '  "tax_lines": [{"base": number, "rate": number, "cuota": number}],\n'
@@ -51,7 +57,11 @@ EXTRACTION_PROMPT = (
     '"value_confidence": "alta"|"media"|"baja", '
     '"name_confidence": "alta"|"media"|"baja"}]\n'
     "}\n"
-    "Reglas: transcribe fielmente los identificadores fiscales (CIF/NIF) y el número de factura "
+    "Reglas: los únicos tipos de IVA válidos en tax_lines son 21%, 10%, 4% o 0%. No pongas una "
+    "retención de IRPF en tax_lines ni la confundas con IVA: cualquier retención (por ejemplo, "
+    "19%) debe ir en irpf_rate e irpf_amount, y debe restarse del total. Si no hay retención o no "
+    "es legible, usa null en esos campos. Transcribe fielmente los identificadores fiscales "
+    "(CIF/NIF) y el número de factura "
     "tal como aparecen; si un dato es ilegible, ponlo a null y baja su confianza. No corrijas ni "
     "inventes valores. Pon un objeto en tax_ids por cada identificador fiscal que aparezca en la "
     "factura. Para cada identificador fiscal, prioriza SIEMPRE la razón social LEGAL que aparece "
@@ -78,15 +88,7 @@ def parse_structured_invoice(payload: str | None, *, engine: str, model: str) ->
         raise InvoiceExtractionError(f"Respuesta de {engine} no es JSON válido: {exc}") from exc
 
     try:
-        tax_lines = tuple(
-            ExtractedTaxLine(
-                base=_as_decimal(line.get("base")),
-                rate=_as_decimal(line.get("rate")),
-                cuota=_as_decimal(line.get("cuota")),
-            )
-            for line in data.get("tax_lines") or []
-            if line.get("base") is not None and line.get("cuota") is not None
-        )
+        tax_lines = _parse_tax_lines(data.get("tax_lines"))
         tax_ids = tuple(
             ExtractedTaxId(
                 value=_as_str(tid.get("value")),
@@ -105,6 +107,10 @@ def parse_structured_invoice(payload: str | None, *, engine: str, model: str) ->
             net_amount_confidence=_as_confidence(data.get("net_amount_confidence")),
             tax_amount=_as_optional_decimal(data.get("tax_amount")),
             tax_amount_confidence=_as_confidence(data.get("tax_amount_confidence")),
+            irpf_rate=_as_optional_decimal(data.get("irpf_rate")),
+            irpf_rate_confidence=_as_confidence(data.get("irpf_rate_confidence")),
+            irpf_amount=_as_optional_decimal(data.get("irpf_amount")),
+            irpf_amount_confidence=_as_confidence(data.get("irpf_amount_confidence")),
             invoice_number=_as_str(data.get("invoice_number")),
             invoice_number_confidence=_as_confidence(data.get("invoice_number_confidence")),
             tax_lines=tax_lines,
@@ -131,6 +137,31 @@ def _as_confidence(value: object) -> Confidence:
         if normalized == "media":
             return "media"
     return "baja"
+
+
+def _parse_tax_lines(value: object) -> tuple[ExtractedTaxLine, ...]:
+    """Parsea solo tramos de IVA del contrato español; una retención no puede entrar aquí."""
+    lines: list[ExtractedTaxLine] = []
+    raw_lines = value if isinstance(value, list) else []
+    for line in raw_lines:
+        if not isinstance(line, dict):
+            raise ValueError("Cada tramo de IVA debe ser un objeto")
+        if line.get("base") is None or line.get("cuota") is None:
+            continue
+        rate = _as_decimal(line.get("rate"))
+        if rate not in _VALID_IVA_RATES:
+            raise ValueError(
+                f"Tipo de IVA no permitido: {rate}. Las retenciones deben ir en "
+                "irpf_rate/irpf_amount"
+            )
+        lines.append(
+            ExtractedTaxLine(
+                base=_as_decimal(line.get("base")),
+                rate=rate,
+                cuota=_as_decimal(line.get("cuota")),
+            )
+        )
+    return tuple(lines)
 
 
 def _as_str(value: object) -> str | None:

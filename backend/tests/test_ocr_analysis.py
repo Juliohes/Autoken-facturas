@@ -140,6 +140,30 @@ def test_c6_validacion_ok_no_degrada() -> None:
     assert analysis.confidences["total_amount"] == "alta"
 
 
+def test_irpf_se_resta_en_el_cuadre_y_no_convierte_la_retencion_en_iva() -> None:
+    invoice = build_extracted(
+        total=Decimal("102.00"), irpf_rate=Decimal("19"), irpf_amount=Decimal("19.00")
+    )
+
+    analysis = analyze_invoice(invoice, OWN_CIF)
+
+    assert analysis.validations["totals"]["valid"] is True
+    assert analysis.status == STATUS_AUTO_OK
+
+
+def test_irpf_con_confianza_baja_enruta_a_revision() -> None:
+    invoice = build_extracted(
+        total=Decimal("102.00"),
+        irpf_rate=Decimal("19"),
+        irpf_amount=Decimal("19.00"),
+        irpf_amount_confidence="baja",
+    )
+
+    analysis = analyze_invoice(invoice, OWN_CIF)
+
+    assert analysis.status == STATUS_NEEDS_REVIEW
+
+
 # --- C7: captura ilegible (hard_fail) -------------------------------------------------------------
 
 

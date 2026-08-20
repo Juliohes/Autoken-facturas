@@ -30,6 +30,8 @@ function makeReview(over: Partial<ReviewResponse> = {}): ReviewResponse {
       net_amount: '82.64',
       tax_amount: '17.36',
       invoice_number: 'F-2026-001',
+      irpf_rate: null,
+      irpf_amount: null,
       counterparty_tax_id: 'B12345678',
       counterparty_name: 'Proveedor SL',
       tax_lines: [],
@@ -840,6 +842,19 @@ describe('ConfirmationScreen — S6.1 rediseño de celdas de comprobación', () 
     expect(irpfInput).toHaveValue('')
     const details = screen.getByTestId('irpf-details')
     expect(details).toContainElement(irpfInput)
+  })
+
+  it('muestra automáticamente el IRPF extraído por la IA y lo deja editable', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({
+        fields: { ...makeReview().fields, irpf_rate: '19', irpf_amount: '19.00' },
+      }),
+      error: undefined,
+    })
+
+    renderScreen()
+
+    expect(await screen.findByLabelText('IRPF (retención)')).toHaveValue('19,00')
   })
 
   it('C15: el IRPF sigue siendo editable dentro de su desplegable', async () => {

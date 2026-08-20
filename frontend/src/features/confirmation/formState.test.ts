@@ -13,6 +13,8 @@ function baseFields(overrides: Partial<ReviewFields> = {}): ReviewFields {
     net_amount: '100.00',
     tax_amount: '21.45',
     invoice_number: 'F-2026-001',
+    irpf_rate: null,
+    irpf_amount: null,
     counterparty_tax_id: 'A39031620',
     counterparty_name: 'Proveedor SA',
     tax_lines: [],
@@ -41,6 +43,14 @@ describe('reviewToFormState — formato con coma decimal (spec: S6.1 C16)', () =
     expect(form.total_amount).toBe('121,45')
     expect(form.net_amount).toBe('100,00')
     expect(form.tax_amount).toBe('21,45')
+  })
+
+  it('vuelca el IRPF leído por el OCR en su casilla editable', () => {
+    const form = reviewToFormState(
+      baseFields({ irpf_rate: '19', irpf_amount: '19.00' }),
+    )
+
+    expect(form.irpf_amount).toBe('19,00')
   })
 
   it('un valor sin parte decimal no gana una coma superflua', () => {

@@ -98,6 +98,10 @@ class ExtractedInvoice:
     net_amount_confidence: Confidence
     tax_amount: Decimal | None
     tax_amount_confidence: Confidence
+    irpf_rate: Decimal | None
+    irpf_rate_confidence: Confidence
+    irpf_amount: Decimal | None
+    irpf_amount_confidence: Confidence
     invoice_number: str | None
     invoice_number_confidence: Confidence
     tax_lines: tuple[ExtractedTaxLine, ...]
@@ -181,6 +185,10 @@ def extracted_invoice_from_record(
         net_amount_confidence=_conf("net_amount"),
         tax_amount=record.tax_amount,
         tax_amount_confidence=_conf("tax_amount"),
+        irpf_rate=record.irpf_rate,
+        irpf_rate_confidence=_conf("irpf_rate"),
+        irpf_amount=record.irpf_amount,
+        irpf_amount_confidence=_conf("irpf_amount"),
         invoice_number=record.invoice_number,
         invoice_number_confidence=_conf("invoice_number"),
         tax_lines=tuple(

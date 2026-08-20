@@ -934,6 +934,15 @@
   recuperación corriendo, bundle nuevo servido. Pendiente (autorizado, Fase 2): prueba en
   Android/iPhone real y repetición del benchmark S6.7 con fotos ya nítidas.
 
+- **Corrección IRPF separado del IVA (2026-08-20)**: el contrato JSON del OCR incorpora
+  `irpf_rate`/`irpf_amount` y sus confianzas; el parser solo acepta IVA 21/10/4/0 y rechaza una
+  retención mezclada en `tax_lines`. Persistencia nueva en `ocr_extractions` (migración 0040),
+  propagación a `review` y precarga de la casilla IRPF en confirmación; el cuadre resta la retención.
+  Tests puros, frontend y E2E contra Postgres/Redis/MinIO temporal en verde. Desplegado en la VPS real:
+  migración 0040 aplicada e imágenes actuales de API/worker/frontend reconstruidas; health de Setex OK.
+  La factura subida antes del despliegue conserva la lectura antigua y debe volver a procesarse. Detalle
+  técnico en el Plan Maestro §11.21.
+
 ---
 
 ## Estado histórico (previo a la reconciliación — Fase 0)

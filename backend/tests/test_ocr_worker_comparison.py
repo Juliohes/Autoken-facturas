@@ -8,6 +8,7 @@ con un extractor doble inyectado (nunca se llama a Gemini de verdad) y el interr
 
 from __future__ import annotations
 
+from jobs.ocr import run_ocr_comparison_task
 from tests._dbtest import seed_company, seed_tenant, seed_user
 from tests._intake import PDF, PDF_CT
 from tests._ocr import (
@@ -66,12 +67,14 @@ async def test_c2_interruptor_encendido_genera_la_comparativa(authapi: Api) -> N
     await set_ocr_experiment_enabled(dsns, True)
     tenant_id, company_id, file_id = await _seed(dsns, slug="c2", content=real_jpeg_bytes())
 
+    extractor = make_extractor(build_extracted())
     await run_ocr(
         tenant_id=tenant_id,
         company_id=company_id,
         file_id=file_id,
-        extractor=make_extractor(build_extracted()),
+        extractor=extractor,
     )
+    await run_ocr_comparison_task({}, tenant_id, company_id, file_id, extractor=extractor)
 
     row = await fetch_comparison_run(dsns, file_id=file_id)
     assert row is not None
@@ -123,12 +126,14 @@ async def test_c5_fallo_de_la_comparativa_no_afecta_al_resultado_principal(autha
     tenant_id, company_id, file_id = await _seed(dsns, slug="c5", content=real_jpeg_bytes())
     buena = build_extracted()
 
+    extractor = make_comparison_extractor(original=buena, enhanced=buena, error_on="enhanced")
     await run_ocr(
         tenant_id=tenant_id,
         company_id=company_id,
         file_id=file_id,
-        extractor=make_comparison_extractor(original=buena, enhanced=buena, error_on="enhanced"),
+        extractor=extractor,
     )
+    await run_ocr_comparison_task({}, tenant_id, company_id, file_id, extractor=extractor)
 
     assert await count_comparison_runs(dsns, file_id=file_id) == 0
     assert await file_status(dsns, file_id=file_id) == "ocr_done"
@@ -141,12 +146,14 @@ async def test_c8_reprocesar_no_duplica_la_comparativa(authapi: Api) -> None:
     tenant_id, company_id, file_id = await _seed(dsns, slug="c8", content=real_jpeg_bytes())
 
     for _ in range(2):
+        extractor = make_extractor(build_extracted())
         await run_ocr(
             tenant_id=tenant_id,
             company_id=company_id,
             file_id=file_id,
-            extractor=make_extractor(build_extracted()),
+            extractor=extractor,
         )
+        await run_ocr_comparison_task({}, tenant_id, company_id, file_id, extractor=extractor)
 
     assert await count_comparison_runs(dsns, file_id=file_id) == 1
 
@@ -158,12 +165,14 @@ async def test_c9_aislamiento_por_tenant(authapi: Api) -> None:
     tenant_a, company_a, file_a = await _seed(dsns, slug="c9a", content=real_jpeg_bytes())
     tenant_b, _company_b, _file_b = await _seed(dsns, slug="c9b", content=real_jpeg_bytes())
 
+    extractor = make_extractor(build_extracted())
     await run_ocr(
         tenant_id=tenant_a,
         company_id=company_a,
         file_id=file_a,
-        extractor=make_extractor(build_extracted()),
+        extractor=extractor,
     )
+    await run_ocr_comparison_task({}, tenant_a, company_a, file_a, extractor=extractor)
 
     assert await comparison_runs_visible_as_tenant(dsns, tenant_id=tenant_a) == 1
     assert await comparison_runs_visible_as_tenant(dsns, tenant_id=tenant_b) == 0
@@ -200,6 +209,7 @@ async def test_comparativa_multipagina_entrega_todas_las_paginas_al_extractor(au
         file_id=file_id,
         extractor=PageExtractor(),
     )
+    await run_ocr_comparison_task({}, tenant_id, company_id, file_id, extractor=PageExtractor())
 
     assert calls == [2, 2]
     assert await count_comparison_runs(dsns, file_id=file_id) == 1

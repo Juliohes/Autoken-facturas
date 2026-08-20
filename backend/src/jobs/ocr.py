@@ -158,6 +158,8 @@ async def run_ocr(
             net_amount=reconciled.net_amount,
             tax_amount=reconciled.tax_amount,
             invoice_number=reconciled.invoice_number,
+            irpf_rate=reconciled.irpf_rate,
+            irpf_amount=reconciled.irpf_amount,
             tax_lines=serialize_tax_lines(reconciled),
             counterparty_tax_id=analysis.counterparty_tax_id,
             counterparty_name=analysis.counterparty_name,

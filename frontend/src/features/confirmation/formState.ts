@@ -47,7 +47,7 @@ export function reviewToFormState(fields: ReviewFields): ConfirmFormState {
     net_amount: toAmountInputValue(fields.net_amount),
     tax_amount: toAmountInputValue(fields.tax_amount),
     total_amount: toAmountInputValue(fields.total_amount),
-    irpf_amount: '',
+    irpf_amount: toAmountInputValue(fields.irpf_amount),
     tax_lines: (fields.tax_lines ?? []).map(taxLineToForm),
   }
 }

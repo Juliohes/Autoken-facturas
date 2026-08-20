@@ -19,6 +19,7 @@ Módulo PURO (sin I/O): recibe un `ExtractedInvoice` ya reconciliado y el **CIF 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any
 
 from ocr.extraction import (
@@ -96,7 +97,9 @@ def analyze_invoice(invoice: ExtractedInvoice, own_cif: str) -> InvoiceAnalysis:
             TaxLine(base=line.base, iva_pct=line.rate, cuota=line.cuota)
             for line in invoice.tax_lines
         ]
-        check = check_invoice_totals(lines, invoice.total_amount)
+        check = check_invoice_totals(
+            lines, invoice.total_amount, irpf_cuota=invoice.irpf_amount or Decimal(0)
+        )
         totals = {VALIDATION_FIELD_VALID: check.valid, "reason": check.reason}
 
     # Mismas claves que `fields` en la respuesta de `review` (`invoicing.service.review`):
@@ -115,6 +118,8 @@ def analyze_invoice(invoice: ExtractedInvoice, own_cif: str) -> InvoiceAnalysis:
         "invoice_number": invoice.invoice_number_confidence,
         "net_amount": invoice.net_amount_confidence,
         "tax_amount": invoice.tax_amount_confidence,
+        "irpf_rate": invoice.irpf_rate_confidence if invoice.irpf_rate is not None else None,
+        "irpf_amount": invoice.irpf_amount_confidence if invoice.irpf_amount is not None else None,
     }
 
     # S6.14 C6: una validación determinista fallida degrada la confianza PERSISTIDA/MOSTRADA, no
@@ -201,6 +206,10 @@ def _needs_review(
         return True
     if invoice.tax_amount is None or is_low(invoice.tax_amount_confidence):
         return True
+    if invoice.irpf_rate is not None and is_low(invoice.irpf_rate_confidence):
+        return True
+    if invoice.irpf_amount is not None and is_low(invoice.irpf_amount_confidence):
+        return True
     if not own_present:  # el CIF propio no aparece (anti-foto-equivocada)
         return True
     if mod23 is not None and not mod23["valid"]:  # mód-23 KO
@@ -233,6 +242,10 @@ def _is_capture_unreadable(invoice: ExtractedInvoice, counterparty: ExtractedTax
         confidences_with_value.append(invoice.net_amount_confidence)
     if invoice.tax_amount is not None:
         confidences_with_value.append(invoice.tax_amount_confidence)
+    if invoice.irpf_rate is not None:
+        confidences_with_value.append(invoice.irpf_rate_confidence)
+    if invoice.irpf_amount is not None:
+        confidences_with_value.append(invoice.irpf_amount_confidence)
     if invoice.invoice_number is not None:
         confidences_with_value.append(invoice.invoice_number_confidence)
     if counterparty is not None:
