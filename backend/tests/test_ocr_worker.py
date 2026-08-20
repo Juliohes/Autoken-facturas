@@ -7,6 +7,7 @@ CI). Fase roja: `jobs.ocr.run_ocr` y `ocr.extraction` aún no existen.
 
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 from decimal import Decimal
 
@@ -63,6 +64,31 @@ async def test_c1_factura_legible_pasa_a_ocr_done(authapi: Api) -> None:
     assert row["own_tax_id_present"] is True
     assert row["status"] == "auto_ok"
     assert await file_status(dsns, file_id=file_id) == "ocr_done"
+
+
+async def test_irpf_del_ocr_se_persiste_fuera_de_tax_lines(authapi: Api) -> None:
+    """Una retención del 19% se conserva como IRPF y el cuadre resta su importe del total."""
+    _client, dsns = authapi
+    tenant_id, company_id, file_id = await _seed(dsns, slug="ocr-irpf")
+
+    await run_ocr(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        file_id=file_id,
+        extractor=make_extractor(
+            build_extracted(
+                total=Decimal("102.00"),
+                irpf_rate=Decimal("19"),
+                irpf_amount=Decimal("19.00"),
+            )
+        ),
+    )
+
+    row = await fetch_extraction(dsns, file_id=file_id)
+    assert row["irpf_rate"] == 19
+    assert row["irpf_amount"] == 19
+    assert json.loads(row["tax_lines"]) == [{"base": "100.00", "rate": "21", "cuota": "21.00"}]
+    assert row["status"] == "auto_ok"
 
 
 async def test_el_ocr_cierra_la_sesion_antes_de_minio_y_del_extractor(

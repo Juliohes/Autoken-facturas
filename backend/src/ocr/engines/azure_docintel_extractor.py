@@ -130,6 +130,11 @@ class AzureDocIntelInvoiceExtractor:
             net_amount_confidence=self._confidence(fields.get("SubTotal")),
             tax_amount=self._currency_value(fields.get("TotalTax")),
             tax_amount_confidence=self._confidence(fields.get("TotalTax")),
+            # `prebuilt-invoice` no ofrece una retención IRPF española fiable; no se inventa.
+            irpf_rate=None,
+            irpf_rate_confidence="baja",
+            irpf_amount=None,
+            irpf_amount_confidence="baja",
             # `InvoiceId`: campo nativo de `prebuilt-invoice` para el número de factura (S6.1).
             invoice_number=self._string_value(fields.get("InvoiceId")),
             invoice_number_confidence=self._confidence(fields.get("InvoiceId")),

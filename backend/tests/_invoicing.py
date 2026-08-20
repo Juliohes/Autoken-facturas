@@ -74,6 +74,8 @@ async def seed_extraction(
     total: str = "121.00",
     net: str = "100.00",
     tax: str = "21.00",
+    irpf_rate: str | None = None,
+    irpf_amount: str | None = None,
     status: str = "needs_review",
     invoice_number: str | None = None,
     confidences: dict[str, str] | None = None,
@@ -91,12 +93,14 @@ async def seed_extraction(
     try:
         await conn.execute(
             "INSERT INTO ocr_extractions (id, tenant_id, company_id, uploaded_file_id, issue_date, "
-            "total_amount, net_amount, tax_amount, invoice_number, tax_lines, counterparty_tax_id, "
+            "total_amount, net_amount, tax_amount, invoice_number, irpf_rate, irpf_amount, "
+            "tax_lines, "
+            "counterparty_tax_id, "
             "counterparty_name, "
             "own_tax_id_present, confidences, validations, engine, model, raw, status) VALUES "
-            "($1,$2,$3,$4,$5::date,$6::numeric,$7::numeric,$8::numeric,$9,$10::jsonb,"
-            "pgp_sym_encrypt($11,$15),pgp_sym_encrypt($12,$15),$13,"
-            "$14::jsonb,'{}'::jsonb,'fake','fake-1','{}'::jsonb,$16)",
+            "($1,$2,$3,$4,$5::date,$6::numeric,$7::numeric,$8::numeric,$9,$10::numeric,$11::numeric,$12::jsonb,"
+            "pgp_sym_encrypt($13,$17),pgp_sym_encrypt($14,$17),$15,"
+            "$16::jsonb,'{}'::jsonb,'fake','fake-1','{}'::jsonb,$18)",
             str(uuid4()),
             tenant_id,
             company_id,
@@ -106,6 +110,8 @@ async def seed_extraction(
             net,
             tax,
             invoice_number,
+            irpf_rate,
+            irpf_amount,
             json.dumps([{"base": net, "rate": "21", "cuota": tax}]),
             counterparty_tax_id,
             counterparty_name,
@@ -129,6 +135,11 @@ async def seed_confirmable(
     counterparty_cif: str = COUNTERPARTY_CIF,
     counterparty_name: str = "Prov SA",
     own_present: bool = True,
+    total: str = "121.00",
+    net: str = "100.00",
+    tax: str = "21.00",
+    irpf_rate: str | None = None,
+    irpf_amount: str | None = None,
     seed_master: bool = True,
     file_status: str = "needs_review",
     invoice_number: str | None = None,
@@ -162,6 +173,11 @@ async def seed_confirmable(
         counterparty_tax_id=counterparty_cif,
         counterparty_name=counterparty_name,
         own_tax_id_present=own_present,
+        total=total,
+        net=net,
+        tax=tax,
+        irpf_rate=irpf_rate,
+        irpf_amount=irpf_amount,
         invoice_number=invoice_number,
         confidences=confidences,
     )
@@ -188,6 +204,7 @@ def confirm_body(
     total: str = "121.00",
     net: str = "100.00",
     tax: str = "21.00",
+    irpf_amount: str | None = None,
     tax_lines: list | None = None,
     issue_date: str = "2026-05-10",
     direction: str = "recibida",
@@ -203,6 +220,7 @@ def confirm_body(
         "net_amount": net,
         "tax_amount": tax,
         "total_amount": total,
+        "irpf_amount": irpf_amount,
         "tax_lines": tax_lines if tax_lines is not None else DEFAULT_TAX_LINES,
         "responsibility_accepted": responsibility_accepted,
         "is_test": is_test,

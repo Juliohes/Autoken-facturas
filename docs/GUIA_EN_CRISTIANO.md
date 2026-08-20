@@ -1216,6 +1216,50 @@ verificación automática de GitHub y varios comentarios del código que no cont
 probarlo con móviles reales y repetir la medición de aciertos con fotos ya nítidas, para ver si el nombre
 del proveedor mejora como se espera.
 
+### IRPF separado del IVA en la lectura automática (2026-08-20)
+Se corrigió un caso importante de las facturas de profesionales: una retención de IRPF, por ejemplo del 19%,
+no es IVA y no debe aparecer como un tramo de IVA. La IA recibe ahora dos casillas propias para el tipo de
+retención y su importe, además de sus niveles de confianza. La aplicación rechaza como tramo cualquier tipo de
+IVA que no sea 21%, 10%, 4% o 0%, para no guardar una retención mezclada con el IVA por error.
+
+Estos datos viajan desde la respuesta de la IA, pasan por el trabajador que procesa la factura y se guardan
+separados en la base de datos. Al abrir la pantalla de comprobación, el importe del IRPF ya aparece rellenado en
+su casilla y se resta al comprobar la cuenta de la factura: base imponible + IVA - IRPF = total. La persona puede
+corregirlo antes de confirmar, y la factura definitiva conserva el importe separado del IVA.
+
+### S6.15 — Quitar la espera muerta del OCR (latencia percibida sin tocar el motor, 2026-08-19)
+Julio reportó que el tiempo que tardaba la IA en mostrar el resultado era inaceptable. Como el motor principal
+(Gemini Flash) ya es rápido pero tiene un tiempo irreducible de ~15 segundos, esta iteración se centró en
+**quitar las esperas muertas del sistema** sin tocar la precisión ni cambiar de modelo:
+
+1. **Liberar al camarero (el worker)**: antes, tras terminar de leer una factura, el sistema hacía una segunda
+   lectura experimental en el mismo momento, reteniendo al trabajador 15 segundos extra antes de poder atender al
+   siguiente usuario. Ahora esa comparativa corre como una tarea de fondo separada; el trabajador queda libre al
+   instante.
+2. **Preguntar con más ganas al principio**: la pantalla de comprobación antes preguntaba "¿ya está?" cada 1,5
+   segundos fijos. Ahora pregunta cada 0,5 segundos al principio (cuando es más probable que termine pronto) y
+   luego se relaja a 1,5s — detecta el resultado antes y da sensación de mayor inmediatez.
+3. **Descargar a la vez**: las páginas de una factura de varias hojas ahora se descargan del servidor en paralelo
+   (todas a la vez) en vez de una tras otra, reduciendo la espera al de la página más lenta.
+4. **Corta si se cuelga**: si un proveedor externo se queda colgado, el sistema ya no espera hasta 8 minutos
+   para liberar el hueco: corta a los 2,5 minutos y marca un fallo reintentable.
+
+Todo ello verificado con 6 tests nuevos y triple control de calidad (auditoría de 3 lentes), dejando el terreno
+preparado para investigar Mistral a fondo en la siguiente fase.
+
+### Corrección del IRPF separado del IVA (20/08/2026)
+
+Se corrigió un problema por el que una retención, por ejemplo del 19%, podía confundirse con una línea de
+IVA. Ahora la inteligencia artificial recibe instrucciones para guardar el porcentaje y el importe del IRPF
+en sus propias casillas, y la pantalla de confirmación los muestra separados. El total se comprueba como:
+base imponible + IVA - IRPF.
+
+La corrección también necesitaba actualizar la estructura de la base de datos. Al probar una factura real se
+descubrió que la aplicación publicada todavía usaba una versión anterior, aunque el código nuevo ya estaba
+preparado. Se aplicó la migración, se reconstruyeron API, trabajador OCR y frontend, y se comprobó que el
+servicio real de Setex está sano. La factura que se hubiera subido antes de ese momento conserva la lectura
+antigua; las nuevas ya pasan por el circuito corregido.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

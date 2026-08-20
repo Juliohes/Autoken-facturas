@@ -61,6 +61,9 @@ export function useReview(fileId: string) {
     // La aceptación de la subida es definitiva y el OCR no tiene fecha de caducidad visual. Solo
     // el 409 transitorio sigue consultando; 403/404/409 permanentes siguen sin reintento.
     retry: (_failureCount, err) => err instanceof PendingOcrError,
-    retryDelay: 1500, // Reintenta cada 1.5 segundos
+    // S6.15 C2 (polling adaptativo): reintentos más frecuentes al principio (500ms en los primeros
+    // 5 intentos) para detectar el resultado en cuanto el worker termina, y se espacian a 1500ms
+    // después para no saturar el servidor si la factura tarda.
+    retryDelay: (failureCount) => (failureCount <= 5 ? 500 : 1500),
   })
 }

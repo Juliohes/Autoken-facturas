@@ -876,3 +876,42 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
   BD (los estados son `Text` sin CHECK), rebuild de `api`/`worker`/`frontend`, health OK en los tres
   dominios, worker arrancado con las 5 funciones y el cron `recover_ocr_task` corriendo, y el bundle
   servido (`index-B9p5tQjr.js`) contiene el código nuevo (`capture_unreadable`/"Repetir foto").
+
+### 11.20 S6.15 — Quitar la espera muerta del OCR (latencia percibida sin tocar el motor, 2026-08-19)
+
+- **Origen:** reporte real de Julio ("el tiempo que tarda la IA en mostrar el resultado es inaceptable") +
+  análisis de latencia con agentes y datos reales de la tabla `ocr_benchmark_results`.
+- **Alcance aprobado (4 palancas de espera muerta, sin tocar el motor ni la precisión):**
+  1. **C1 (comparativa experimental fuera del job principal):** la comparativa original-vs-realzada (S2.10)
+     ya no corre inline dentro de `run_ocr` (lo que retenía el slot del worker ~15s más por factura con una
+     segunda llamada a Gemini). Ahora se encola como tarea arq propia (`run_ocr_comparison_task`) y
+     `run_ocr` termina al persistir el resultado principal. La task re-descarga las páginas y reconstruye la
+     lectura original desde la extracción ya persistida (coste 1 llamada extra, sin duplicar lecturas).
+  2. **C2 (polling adaptativo frontend):** `useReview.ts` pasa de un intervalo fijo de 1500ms a 500ms en los
+     primeros 5 reintentos y 1500ms después — reduce la latencia de detección y mejora la sensación de inmediatez.
+  3. **C3 (descarga MinIO en paralelo):** las páginas de una factura multipágina (S6.12) se descargan del
+     almacén a la vez (`asyncio.gather` + `asyncio.to_thread`), conservando estrictamente el orden.
+  4. **C4 (timeouts acotados):** `ocr_provider_timeout_seconds` bajado de 8 min (480s) a 150s (suficiente para
+     el pico de 52s de Gemini Flash medido en producción, evitando que un proveedor colgado bloquee el slot
+     del worker 8 minutos); `ocr_claim_lease_seconds` ajustado a 5 min (coherente con el timeout).
+- **Verificación:** 6 tests nuevos dedicados en verde contra Postgres/Redis/MinIO reales; suite completa
+  de backend (939 tests) y frontend (ConfirmationScreen) en verde; auditoría de 3 lentes (SOLID, arquitectura,
+  patrones+seguridad) con veredictos **LIMPIO** en las tres dimensiones; ruff / mypy / tsc / eslint limpios.
+
+### 11.21 Corrección IRPF separado del IVA (2026-08-20)
+
+- **Origen:** una factura con retención del 19% se estaba representando dentro de `tax_lines`, porque el
+  contrato JSON del OCR no tenía campos propios de IRPF. Eso mezclaba una retención con el IVA y podía
+  desvirtuar el cuadre mostrado al usuario.
+- **Cambio:** `ExtractedInvoice` y `EXTRACTION_PROMPT` incorporan `irpf_rate`/`irpf_amount` y sus
+  confianzas. Los tipos de IVA aceptados por el parser son únicamente 21%, 10%, 4% y 0%; un tipo fuera
+  de ese conjunto se rechaza como respuesta inválida, nunca se guarda como IVA. El árbitro, el worker y
+  `ocr_extractions` conservan los campos separados mediante la migración `0040_ocr_irpf_fields`.
+- **Revisión y confirmación:** `GET /uploads/{file_id}/review` expone ambos campos y sus confianzas; la
+  pantalla inicializa automáticamente la casilla editable del IRPF. El cuadre usa la fórmula
+  `base + IVA - IRPF = total`, y `POST /confirm` mantiene el importe en `invoices.irpf_amount`.
+- **Verificación:** tests puros de extracción/análisis y frontend focalizado en verde; `mypy` sobre `src` sin
+  errores nuevos, `ruff`, `tsc` y `eslint` sin errores. Los dos E2E nuevos pasaron contra Postgres, Redis y
+  un MinIO temporal aislado. Después se desplegó en la VPS real: `0040_ocr_irpf_fields` aplicada, imágenes
+  actuales de API/worker/frontend reconstruidas y health de `setex.autoken.es` OK. La factura subida antes
+  de ese despliegue conserva una lectura antigua sin campos IRPF y debe volver a procesarse.

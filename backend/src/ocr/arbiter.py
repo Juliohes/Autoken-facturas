@@ -30,6 +30,7 @@ def reconcile(candidates: Sequence[ExtractedInvoice]) -> ExtractedInvoice:
     """Reconcilia las lecturas de los extractores en un `ExtractedInvoice` (con N=1, identidad).
 
     - Campos con confianza propia (`issue_date`, `total_amount`, `net_amount`, `tax_amount`,
+      `irpf_rate`, `irpf_amount`,
       `invoice_number`, spec S6.1): gana la lectura NO nula de mayor confianza; si todas son nulas,
       se conserva la nula de mayor confianza declarada.
     - Resto de campos (tramos, identificadores, metadatos): salen de la lectura primaria (la de
@@ -44,6 +45,8 @@ def reconcile(candidates: Sequence[ExtractedInvoice]) -> ExtractedInvoice:
     total = _best_scalar(candidates, "total_amount", "total_confidence")
     net = _best_scalar(candidates, "net_amount", "net_amount_confidence")
     tax = _best_scalar(candidates, "tax_amount", "tax_amount_confidence")
+    irpf_rate = _best_scalar(candidates, "irpf_rate", "irpf_rate_confidence")
+    irpf_amount = _best_scalar(candidates, "irpf_amount", "irpf_amount_confidence")
     invoice_number = _best_scalar(candidates, "invoice_number", "invoice_number_confidence")
     primary = _primary(candidates)
 
@@ -56,6 +59,10 @@ def reconcile(candidates: Sequence[ExtractedInvoice]) -> ExtractedInvoice:
         net_amount_confidence=net.confidence,
         tax_amount=tax.value,  # type: ignore[arg-type]
         tax_amount_confidence=tax.confidence,
+        irpf_rate=irpf_rate.value,  # type: ignore[arg-type]
+        irpf_rate_confidence=irpf_rate.confidence,
+        irpf_amount=irpf_amount.value,  # type: ignore[arg-type]
+        irpf_amount_confidence=irpf_amount.confidence,
         invoice_number=invoice_number.value,  # type: ignore[arg-type]
         invoice_number_confidence=invoice_number.confidence,
         tax_lines=primary.tax_lines,

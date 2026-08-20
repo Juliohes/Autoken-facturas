@@ -23,6 +23,10 @@ _VALID_PAYLOAD = {
     "net_amount_confidence": "alta",
     "tax_amount": 21.0,
     "tax_amount_confidence": "alta",
+    "irpf_rate": 19.0,
+    "irpf_rate_confidence": "alta",
+    "irpf_amount": 19.0,
+    "irpf_amount_confidence": "alta",
     "invoice_number": "F-2026-001",
     "invoice_number_confidence": "alta",
     "tax_lines": [{"base": 100.0, "rate": 21.0, "cuota": 21.0}],
@@ -46,6 +50,8 @@ def test_parsea_un_json_valido_a_extracted_invoice() -> None:
     assert invoice.total_amount == Decimal("121.0")
     assert invoice.tax_ids[0].value == "B06183446"
     assert invoice.tax_lines[0].cuota == Decimal("21.0")
+    assert invoice.irpf_rate == Decimal("19.0")
+    assert invoice.irpf_amount == Decimal("19.0")
 
 
 def test_s6_14_c4_parsea_confianza_del_valor_y_del_nombre_por_separado() -> None:
@@ -122,6 +128,38 @@ def test_s6_1_c25_parsea_confianza_propia_de_base_imponible_e_iva() -> None:
     )
     assert invoice.net_amount_confidence == "alta"
     assert invoice.tax_amount_confidence == "alta"
+
+
+def test_irpf_se_parsea_separado_de_los_tramos_de_iva() -> None:
+    payload = dict(
+        _VALID_PAYLOAD,
+        tax_lines=[{"base": 100.0, "rate": 21.0, "cuota": 21.0}],
+        irpf_rate=19.0,
+        irpf_amount=19.0,
+    )
+
+    invoice = parse_structured_invoice(json.dumps(payload), engine="gemini-3-flash", model="x")
+
+    assert [line.rate for line in invoice.tax_lines] == [Decimal("21.0")]
+    assert invoice.irpf_rate == Decimal("19.0")
+    assert invoice.irpf_amount == Decimal("19.0")
+
+
+def test_el_prompt_separa_irpf_y_restringe_los_tipos_de_iva() -> None:
+    from ocr.extraction_json import EXTRACTION_PROMPT
+
+    prompt = EXTRACTION_PROMPT.lower()
+    assert "irpf_rate" in EXTRACTION_PROMPT
+    assert "irpf_amount" in EXTRACTION_PROMPT
+    assert "retención" in prompt
+    assert "21%, 10%, 4% o 0%" in prompt
+
+
+def test_un_tipo_de_iva_invalido_no_se_guarda_como_tramo() -> None:
+    payload = dict(_VALID_PAYLOAD, tax_lines=[{"base": 100, "rate": 19, "cuota": 19}])
+
+    with pytest.raises(InvoiceExtractionError, match="Tipo de IVA no permitido"):
+        parse_structured_invoice(json.dumps(payload), engine="gemini-3-flash", model="x")
 
 
 def test_respuesta_vacia_da_error_tipado() -> None:

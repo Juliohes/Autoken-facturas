@@ -365,16 +365,18 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
           onChange={(v) => set({ total_amount: v })}
         />
 
-        {/* S6.1 C13-C15: IRPF en su propio desplegable; sigue sin ser un campo de oro leído por IA
-            (manual, como siempre), vacío de verdad si no hay retención. */}
+        {/* IRPF separado del IVA: si la IA lo leyó, el importe aparece ya cargado y sigue siendo
+            editable; si no existe, el campo queda vacío y no se inventa nada. */}
         <details data-testid="irpf-details" className="rounded-md border border-slate-700 p-3">
-          <summary className="cursor-pointer text-sm text-slate-300">IRPF</summary>
+          <summary className="cursor-pointer text-sm text-slate-300">
+            IRPF{form.irpf_amount && review.fields.irpf_rate ? ` (${review.fields.irpf_rate}%)` : ''}
+          </summary>
           <div className="mt-3">
             <FieldRow
               name="irpf_amount"
               label="IRPF (retención)"
               value={form.irpf_amount}
-              scored={false}
+              confidence={conf('irpf_amount')}
               onChange={(v) => set({ irpf_amount: v })}
             />
           </div>

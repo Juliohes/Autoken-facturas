@@ -403,6 +403,39 @@ async def test_s6_1_c25_review_expone_confianza_de_base_imponible_e_iva(authapi:
     assert "tax_amount" in confidences
 
 
+async def test_irpf_extraido_aparece_en_revision_y_se_confirma_separado_del_iva(
+    authapi: Api,
+) -> None:
+    """La retención OCR llega a la casilla IRPF y no se mezcla con los tramos de IVA."""
+    client, dsns = authapi
+    s = await seed_confirmable(
+        dsns,
+        client,
+        total="102.00",
+        irpf_rate="19.00",
+        irpf_amount="19.00",
+        confidences={"irpf_rate": "alta", "irpf_amount": "alta"},
+    )
+
+    review = await client.get(review_url(s["file_id"]), headers=auth(s["token"]))
+    assert review.status_code == 200, review.text
+    body = review.json()
+    assert body["fields"]["irpf_rate"] == "19.00"
+    assert body["fields"]["irpf_amount"] == "19.00"
+    assert body["confidences"]["irpf_amount"] == "alta"
+    assert [line["rate"] for line in body["fields"]["tax_lines"]] == ["21"]
+
+    confirmed = await client.post(
+        confirm_url(s["file_id"]),
+        headers=auth(s["token"]),
+        json=confirm_body(total="102.00", irpf_amount="19.00"),
+    )
+    assert confirmed.status_code == 201, confirmed.text
+    invoice = await fetch_invoice(dsns, file_id=s["file_id"])
+    assert invoice["irpf_amount"] == 19
+    assert invoice["balance_ok"] is True
+
+
 async def test_c13_review_acotado_al_tenant_y_empresa(authapi: Api) -> None:
     """C13: GET review de un fichero de otro tenant -> 404; sin pertenencia -> 403."""
     client, dsns = authapi

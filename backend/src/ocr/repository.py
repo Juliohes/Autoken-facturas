@@ -38,10 +38,12 @@ _TENANT_FROM_CONTEXT = "NULLIF(current_setting('app.tenant_id', true), '')::uuid
 _UPSERT = text(
     f"INSERT INTO ocr_extractions "
     f"(tenant_id, company_id, uploaded_file_id, issue_date, total_amount, net_amount, tax_amount, "
-    f" invoice_number, tax_lines, counterparty_tax_id, counterparty_name, own_tax_id_present, "
+    f" invoice_number, irpf_rate, irpf_amount, tax_lines, counterparty_tax_id, counterparty_name, "
+    f" own_tax_id_present, "
     f" confidences, validations, engine, model, raw, status) "
     f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :uploaded_file_id, :issue_date, :total_amount, "
-    f" :net_amount, :tax_amount, :invoice_number, CAST(:tax_lines AS jsonb), "
+    f" :net_amount, :tax_amount, :invoice_number, :irpf_rate, :irpf_amount, "
+    f" CAST(:tax_lines AS jsonb), "
     f" pgp_sym_encrypt(:counterparty_tax_id, "
     f" :key), pgp_sym_encrypt(:counterparty_name, :key), :own_tax_id_present, "
     f" CAST(:confidences AS jsonb), "
@@ -49,7 +51,8 @@ _UPSERT = text(
     f"ON CONFLICT (uploaded_file_id) DO UPDATE SET "
     f" issue_date = EXCLUDED.issue_date, total_amount = EXCLUDED.total_amount, "
     f" net_amount = EXCLUDED.net_amount, tax_amount = EXCLUDED.tax_amount, "
-    f" invoice_number = EXCLUDED.invoice_number, "
+    f" invoice_number = EXCLUDED.invoice_number, irpf_rate = EXCLUDED.irpf_rate, "
+    f" irpf_amount = EXCLUDED.irpf_amount, "
     f" tax_lines = EXCLUDED.tax_lines, counterparty_tax_id = EXCLUDED.counterparty_tax_id, "
     f" counterparty_name = EXCLUDED.counterparty_name, "
     f" own_tax_id_present = EXCLUDED.own_tax_id_present, confidences = EXCLUDED.confidences, "
@@ -76,6 +79,8 @@ class ExtractionRecord:
     net_amount: Decimal | None
     tax_amount: Decimal | None
     invoice_number: str | None
+    irpf_rate: Decimal | None
+    irpf_amount: Decimal | None
     tax_lines: list[dict[str, Any]]
     counterparty_tax_id: str | None
     counterparty_name: str | None
@@ -101,6 +106,7 @@ async def get_extraction(
         await session.execute(
             text(
                 "SELECT issue_date, total_amount, net_amount, tax_amount, invoice_number, "
+                "irpf_rate, irpf_amount, "
                 "tax_lines, "
                 "pgp_sym_decrypt(counterparty_tax_id, :key)::text AS counterparty_tax_id, "
                 "pgp_sym_decrypt(counterparty_name, :key)::text AS counterparty_name, "
@@ -118,6 +124,8 @@ async def get_extraction(
         net_amount=row.net_amount,
         tax_amount=row.tax_amount,
         invoice_number=row.invoice_number,
+        irpf_rate=row.irpf_rate,
+        irpf_amount=row.irpf_amount,
         tax_lines=list(row.tax_lines),
         counterparty_tax_id=row.counterparty_tax_id,
         counterparty_name=row.counterparty_name,
@@ -140,6 +148,8 @@ async def upsert_extraction(
     net_amount: Decimal | None,
     tax_amount: Decimal | None,
     invoice_number: str | None,
+    irpf_rate: Decimal | None,
+    irpf_amount: Decimal | None,
     tax_lines: list[dict[str, Any]],
     counterparty_tax_id: str | None,
     counterparty_name: str | None,
@@ -163,6 +173,8 @@ async def upsert_extraction(
             "net_amount": net_amount,
             "tax_amount": tax_amount,
             "invoice_number": invoice_number,
+            "irpf_rate": irpf_rate,
+            "irpf_amount": irpf_amount,
             "tax_lines": json.dumps(tax_lines),
             "counterparty_tax_id": counterparty_tax_id,
             "counterparty_name": counterparty_name,

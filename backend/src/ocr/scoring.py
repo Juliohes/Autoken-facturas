@@ -51,6 +51,8 @@ def serialize_reading(invoice: ExtractedInvoice, analysis: InvoiceAnalysis) -> d
         "total_amount": str(invoice.total_amount) if invoice.total_amount is not None else None,
         "net_amount": str(invoice.net_amount) if invoice.net_amount is not None else None,
         "tax_amount": str(invoice.tax_amount) if invoice.tax_amount is not None else None,
+        "irpf_rate": str(invoice.irpf_rate) if invoice.irpf_rate is not None else None,
+        "irpf_amount": str(invoice.irpf_amount) if invoice.irpf_amount is not None else None,
         "tax_lines": serialize_tax_lines(invoice),
         "invoice_number": invoice.invoice_number,
         "counterparty_tax_id": analysis.counterparty_tax_id,

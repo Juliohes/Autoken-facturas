@@ -26,6 +26,9 @@ _OCR_TASK = "run_ocr_task"
 # S6.7 (benchmark real de variante x motor): task independiente del OCR principal, encolada al
 # confirmar (C1), no al subir -- la verdad contra la que se puntúa solo existe tras confirmar.
 _OCR_BENCHMARK_TASK = "run_ocr_benchmark_task"
+# S6.15 (C1): la comparativa experimental original-vs-realzada (S2.10) corre como tarea de fondo
+# PROPIA, no inline dentro de `run_ocr`, para no retener el hueco del worker tras el resultado.
+_OCR_COMPARISON_TASK = "run_ocr_comparison_task"
 # S6.7 Área C: task del lote retroactivo (panel de plataforma), encolada por
 # `platform_admin.benchmark_batch_service.start_backfill` -- un único `batch_run_id`, no una tríada
 # tenant/company/file (el lote descubre sus propios candidatos A TRAVÉS de todos los tenants).
@@ -79,6 +82,25 @@ async def enqueue_ocr(
     await _enqueue(
         _OCR_TASK,
         "ocr.enqueue_failed",
+        str(tenant_id),
+        str(company_id),
+        str(uploaded_file_id),
+        identifier=str(uploaded_file_id),
+    )
+
+
+async def enqueue_ocr_comparison(
+    tenant_id: str | UUID, company_id: str | UUID, uploaded_file_id: str | UUID
+) -> None:
+    """Encola `run_ocr_comparison_task(tenant_id, company_id, file_id)` (S6.15 C1), best-effort.
+
+    Mismo criterio que `enqueue_ocr_benchmark`: la comparativa es un experimento de fondo; un fallo
+    de infraestructura del encolado se registra y se traga, nunca se propaga al flujo del OCR
+    principal (cuyo resultado ya está persistido y disponible para el usuario).
+    """
+    await _enqueue(
+        _OCR_COMPARISON_TASK,
+        "ocr_comparison.enqueue_failed",
         str(tenant_id),
         str(company_id),
         str(uploaded_file_id),

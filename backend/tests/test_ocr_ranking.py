@@ -22,6 +22,7 @@ from tests._ocr import (
     make_counting_extractor,
     make_extractor,
     ranking_entries_visible_as_tenant,
+    real_jpeg_bytes,
     run_ocr,
     seed_uploaded_file,
     seed_uploaded_file_page,
@@ -246,18 +247,28 @@ async def test_ranking_multipagina_procesa_todas_las_hojas(authapi: Api) -> None
 
 async def test_s6_7_el_ocr_principal_no_dispara_el_ranking_legado(authapi: Api) -> None:
     """S6.7 conserva el código legado, pero lo retira del fan-out del OCR principal."""
+    from jobs.ocr import run_ocr_comparison_task
+
     _client, dsns = authapi
     await set_ocr_experiment_enabled(dsns, True)
-    tenant_id, company_id, file_id = await _seed(dsns, slug="rk-c2-nodup")
+    tenant_id, company_id, file_id = await _seed(
+        dsns, slug="rk-c2-nodup", content=real_jpeg_bytes()
+    )
 
     default_extractor = make_counting_extractor(build_extracted(engine="gemini-3-flash"))
 
-    await run_ocr(
-        tenant_id=tenant_id,
-        company_id=company_id,
-        file_id=file_id,
-        extractor=default_extractor,
-    )
+    try:
+        await run_ocr(
+            tenant_id=tenant_id,
+            company_id=company_id,
+            file_id=file_id,
+            extractor=default_extractor,
+        )
+        await run_ocr_comparison_task(
+            {}, tenant_id, company_id, file_id, extractor=default_extractor
+        )
+    finally:
+        await set_ocr_experiment_enabled(dsns, False)
 
     # Con el interruptor ON, la comparativa original-vs-realzada (S2.9/S2.10) reutiliza el MISMO
     # extractor inyectado para su segunda lectura ("enhanced") — eso es una llamada legítima de

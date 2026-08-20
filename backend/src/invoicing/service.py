@@ -414,7 +414,12 @@ async def build_review_data(
     )
 
     warnings: list[str] = []
-    if _balance_ok(extraction_tax_lines(extraction), extraction.total_amount) is False:
+    if (
+        _balance_ok(
+            extraction_tax_lines(extraction), extraction.total_amount, extraction.irpf_amount
+        )
+        is False
+    ):
         warnings.append("descuadre")
     if not extraction.own_tax_id_present:
         warnings.append("cif_propio_ausente")
@@ -425,6 +430,8 @@ async def build_review_data(
             "total_amount": _num(extraction.total_amount),
             "net_amount": _num(extraction.net_amount),
             "tax_amount": _num(extraction.tax_amount),
+            "irpf_rate": _num(extraction.irpf_rate),
+            "irpf_amount": _num(extraction.irpf_amount),
             "invoice_number": extraction.invoice_number,
             "counterparty_tax_id": extraction.counterparty_tax_id,
             "counterparty_name": extraction.counterparty_name,

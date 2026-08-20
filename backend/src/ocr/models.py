@@ -69,6 +69,8 @@ class OcrExtraction(Base):
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     net_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     tax_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    irpf_rate: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    irpf_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     # Sin cifrar (S6.1 C7): mismo criterio que los importes/fecha, no es un dato de identidad.
     invoice_number: Mapped[str | None] = mapped_column(Text, nullable=True)
     tax_lines: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)

@@ -68,15 +68,23 @@ async def test_c13_lista_solo_los_ficheros_elegibles(authapi: Api) -> None:
 
     # `bf-ya-comparado` ya tiene una comparativa vigente (interruptor ON al procesarla): no debe
     # reaparecer como candidato. Se siembra en `pending_ocr` (S6.13): `run_ocr` solo procesa un
-    # fichero si puede reclamarlo, y el claim exige ese estado de entrada real.
+    # fichero si puede reclamarlo, y el claim exige ese estado de entrada real. Desde S6.15 la
+    # comparativa se ejecuta como tarea separada, así que este test la ejecuta explícitamente antes
+    # de descubrir candidatos, igual que haría el worker arq.
+    from jobs.ocr import run_ocr_comparison_task
+
     await set_ocr_experiment_enabled(dsns, True)
-    await run_ocr(
-        tenant_id=tenant_ya,
-        company_id=c_ya,
-        file_id=f_ya,
-        extractor=make_extractor(build_extracted()),
-    )
-    await set_ocr_experiment_enabled(dsns, False)
+    try:
+        extractor = make_extractor(build_extracted())
+        await run_ocr(
+            tenant_id=tenant_ya,
+            company_id=c_ya,
+            file_id=f_ya,
+            extractor=extractor,
+        )
+        await run_ocr_comparison_task({}, tenant_ya, c_ya, f_ya, extractor=extractor)
+    finally:
+        await set_ocr_experiment_enabled(dsns, False)
 
     async with platform_session() as session:
         candidates = await list_backfill_candidates(session)

@@ -19,7 +19,7 @@ from typing import Any, cast
 from arq import cron, func
 from arq.connections import RedisSettings
 
-from jobs.ocr import run_ocr
+from jobs.ocr import run_ocr, run_ocr_comparison_task
 from jobs.ocr_benchmark import run_ocr_benchmark_task
 from jobs.ocr_benchmark_batch import run_benchmark_batch_task
 from jobs.ocr_recovery import recover_ocr_task
@@ -42,6 +42,16 @@ async def run_ocr_task(
     await run_ocr(tenant_id, company_id, uploaded_file_id)
 
 
+async def run_ocr_comparison_task_arq(
+    ctx: dict[str, Any], tenant_id: str, company_id: str, uploaded_file_id: str
+) -> None:
+    """Task de arq: adapta la firma `(ctx, *args)` de arq
+
+    al job de dominio `run_ocr_comparison_task` (S6.15).
+    """
+    await run_ocr_comparison_task(ctx, tenant_id, company_id, uploaded_file_id)
+
+
 async def startup(ctx: dict[str, Any]) -> None:
     """Arranque del worker: aborta (fail-loud) si el rol de conexión puede eludir RLS (ADR-0014)."""
     await assert_runtime_role_cannot_bypass_rls(get_engine())
@@ -53,6 +63,11 @@ class WorkerSettings:
     functions = [
         func(
             run_ocr_task,
+            timeout=_settings.ocr_provider_timeout_seconds + 30,
+            max_tries=1,
+        ),
+        func(
+            run_ocr_comparison_task_arq,
             timeout=_settings.ocr_provider_timeout_seconds + 30,
             max_tries=1,
         ),

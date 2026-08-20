@@ -304,8 +304,10 @@ class Settings(BaseSettings):
     # Cola de arq en la que la API encola `run_ocr` tras una subida aceptada y de la que el worker
     # consume. No es secreto; se comparte el mismo Redis que el resto de la app.
     ocr_queue_name: str = "autoken:queue:ocr"
-    ocr_claim_lease_seconds: int = 10 * 60
-    ocr_provider_timeout_seconds: int = 8 * 60
+    ocr_claim_lease_seconds: int = (
+        5 * 60
+    )  # S6.15 C4: bajado de 10 a 5 min (coherente con timeout de 150s)
+    ocr_provider_timeout_seconds: int = 150  # S6.15 C4: 150s (suficiente para pico de 52s)
     ocr_recovery_batch_size: int = 100
     intake_rate_limit_window_seconds: int = 60
     intake_uploads_per_user: int = 20
