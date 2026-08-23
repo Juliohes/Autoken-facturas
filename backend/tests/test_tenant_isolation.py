@@ -61,9 +61,14 @@ _PROTECTED_ROUTES = {
     ("GET", f"{API}/uploads/{{file_id}}/image"),
     ("GET", f"{API}/uploads/{{file_id}}/pages/{{page_number}}/image"),
     ("GET", f"{API}/uploads/{{file_id}}/review"),
+    ("GET", f"{API}/uploads/{{file_id}}/review-readonly"),
+    ("GET", f"{API}/uploads/{{file_id}}/status"),
+    ("PUT", f"{API}/uploads/{{file_id}}/draft"),
     ("POST", f"{API}/uploads/{{file_id}}/counterparty-verdict"),
     ("POST", f"{API}/uploads/{{file_id}}/confirm"),
     ("GET", f"{API}/invoices/history"),
+    ("GET", f"{API}/invoices/inbox"),
+    ("GET", f"{API}/invoices/pending-supervision"),
     ("PATCH", f"{API}/invoices/{{invoice_id}}"),
     ("GET", f"{API}/invoices/{{invoice_id}}/history"),
     ("POST", f"{API}/invoices/test/purge"),
@@ -94,6 +99,14 @@ _PROTECTED_ROUTES = {
     ("POST", f"{API}/platform/benchmark/backfill"),
     ("GET", f"{API}/platform/benchmark/backfill/status"),
     ("GET", f"{API}/platform/benchmark/ranking"),
+    ("GET", f"{API}/platform/benchmark/ranking/metrics"),
+    ("GET", f"{API}/platform/pending"),
+    ("GET", f"{API}/platform/pending/{{tenant_id}}/{{file_id}}/review-readonly"),
+    ("GET", f"{API}/platform/ocr-policy"),
+    ("PUT", f"{API}/platform/ocr-policy"),
+    ("GET", f"{API}/platform/ocr-lab/settings"),
+    ("PUT", f"{API}/platform/ocr-lab/settings"),
+    ("POST", f"{API}/platform/ocr-lab/promote"),
 }
 
 
@@ -135,6 +148,13 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ("GET", f"{API}/uploads/{dummy_id}/image", {}),
         ("GET", f"{API}/uploads/{dummy_id}/pages/2/image", {}),
         ("GET", f"{API}/uploads/{dummy_id}/review", {}),
+        ("GET", f"{API}/uploads/{dummy_id}/review-readonly", {}),
+        ("GET", f"{API}/uploads/{dummy_id}/status", {}),
+        (
+            "PUT",
+            f"{API}/uploads/{dummy_id}/draft",
+            {"json": {"revision": 0, "direction": "recibida"}},
+        ),
         ("POST", f"{API}/uploads/{dummy_id}/retry-ocr", {}),
         (
             "POST",
@@ -143,6 +163,8 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ),
         ("POST", f"{API}/uploads/{dummy_id}/confirm", {"json": {"direction": "recibida"}}),
         ("GET", f"{API}/invoices/history", {}),
+        ("GET", f"{API}/invoices/inbox", {}),
+        ("GET", f"{API}/invoices/pending-supervision", {}),
         ("PATCH", f"{API}/invoices/{dummy_id}", {"json": {"total_amount": "1.00"}}),
         ("GET", f"{API}/invoices/{dummy_id}/history", {}),
         ("POST", f"{API}/invoices/test/purge", {}),
@@ -185,6 +207,53 @@ def _requests_para_403(dummy_id: str) -> list[tuple[str, str, dict[str, object]]
         ("POST", f"{API}/platform/benchmark/backfill", {"json": {"limit": 10}}),
         ("GET", f"{API}/platform/benchmark/backfill/status", {}),
         ("GET", f"{API}/platform/benchmark/ranking", {}),
+        ("GET", f"{API}/platform/benchmark/ranking/metrics", {}),
+        ("GET", f"{API}/platform/pending", {}),
+        (
+            "GET",
+            f"{API}/platform/pending/{dummy_id}/{dummy_id}/review-readonly",
+            {},
+        ),
+        ("GET", f"{API}/platform/ocr-policy", {}),
+        (
+            "PUT",
+            f"{API}/platform/ocr-policy",
+            {
+                "json": {
+                    "version": 2,
+                    "primary_engine": "gemini-3.5-flash",
+                    "primary_model": "gemini-3.5-flash",
+                    "fallback_enabled": False,
+                    "consensus_mode": "primary_only",
+                }
+            },
+        ),
+        ("GET", f"{API}/platform/ocr-lab/settings", {}),
+        (
+            "PUT",
+            f"{API}/platform/ocr-lab/settings",
+            {
+                "json": {
+                    "lab_visible": False,
+                    "auto_benchmark_enabled": False,
+                    "benchmark_engines": [],
+                    "benchmark_variants": [],
+                }
+            },
+        ),
+        (
+            "POST",
+            f"{API}/platform/ocr-lab/promote",
+            {
+                "json": {
+                    "version": 2,
+                    "primary_engine": "gemini-3.5-flash",
+                    "primary_model": "gemini-3.5-flash",
+                    "fallback_enabled": False,
+                    "consensus_mode": "primary_only",
+                }
+            },
+        ),
     ]
 
 

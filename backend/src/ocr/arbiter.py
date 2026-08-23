@@ -104,9 +104,7 @@ def decide_field(
     ranked = sorted(groups.values(), key=group_score, reverse=True)
     winner = ranked[0]
     winner_score = group_score(winner)
-    runner_score = (
-        group_score(ranked[1]) if len(ranked) > 1 else 0.0
-    )
+    runner_score = group_score(ranked[1]) if len(ranked) > 1 else 0.0
     score = min(1.0, winner_score / max(len(candidates), 1))
     sources = [f"{candidate.engine}:{candidate.model}" for candidate in winner]
     reasons = (

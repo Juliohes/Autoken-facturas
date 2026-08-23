@@ -23,8 +23,7 @@ def test_r037_detalla_cada_tramo_y_el_total() -> None:
 
 def test_r037_un_tipo_iva_no_conocido_se_conserva_y_se_marca() -> None:
     invoice = parse_structured_invoice(
-        '{"schema_version":"1","tax_lines":[{"base":"100","rate":"7.5",'
-        '"quota":"7.5"}]}',
+        '{"schema_version":"1","tax_lines":[{"base":"100","rate":"7.5","quota":"7.5"}]}',
         engine="test",
         model="test-1",
     )

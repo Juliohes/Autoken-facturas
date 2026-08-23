@@ -49,5 +49,7 @@ def test_r047_metricas_no_tienen_tags_de_datos_fiscales() -> None:
 
     assert all(isinstance(metric, (Counter, Gauge, Histogram)) for metric in metrics)
     assert not forbidden.intersection(
-        label for metric in metrics for label in metric._labelnames  # noqa: SLF001
+        label
+        for metric in metrics
+        for label in metric._labelnames  # noqa: SLF001
     )

@@ -71,9 +71,7 @@ class PlatformSettings(Base):
     ocr_consensus_mode: Mapped[str] = mapped_column(
         Text, nullable=False, server_default="primary_only"
     )
-    ocr_lab_visible: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="false"
-    )
+    ocr_lab_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     ocr_auto_benchmark_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )

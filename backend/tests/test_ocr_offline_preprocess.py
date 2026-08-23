@@ -34,8 +34,7 @@ def test_r040_genera_las_cinco_variantes_desde_la_misma_imagen_original() -> Non
 def test_r040_todas_las_variantes_comparten_ground_truth_y_reporte_no_llama_a_ia() -> None:
     truth = {"invoice_number": "F-1", "total_amount": "121.00"}
     readings = {
-        name: {"invoice_number": "F-1", "total_amount": "121.00"}
-        for name in OFFLINE_VARIANTS
+        name: {"invoice_number": "F-1", "total_amount": "121.00"} for name in OFFLINE_VARIANTS
     }
 
     report = build_offline_report(readings, truth)

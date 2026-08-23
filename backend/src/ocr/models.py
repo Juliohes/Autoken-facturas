@@ -125,12 +125,8 @@ class OcrProcessingSample(Base):
             "page_count_bucket IN ('1', '2-5', '6-10', '11+')",
             name="ocr_processing_samples_page_bucket_check",
         ),
-        CheckConstraint(
-            "queue_wait_seconds >= 0", name="ocr_processing_samples_queue_wait_check"
-        ),
-        CheckConstraint(
-            "processing_seconds >= 0", name="ocr_processing_samples_processing_check"
-        ),
+        CheckConstraint("queue_wait_seconds >= 0", name="ocr_processing_samples_queue_wait_check"),
+        CheckConstraint("processing_seconds >= 0", name="ocr_processing_samples_processing_check"),
         Index(
             "ix_ocr_processing_samples_lookup",
             "engine",

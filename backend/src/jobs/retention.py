@@ -18,15 +18,14 @@ from shared.db import platform_session, tenant_session
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(frozen=True)
 class RetentionOutcome:
     expired_pending_count: int
     purge_storage_failures: int
 
 
-async def _increment_metrics(
-    *, expired_count: int, storage_failures: int
-) -> None:
+async def _increment_metrics(*, expired_count: int, storage_failures: int) -> None:
     if expired_count == 0 and storage_failures == 0:
         return
     async with platform_session() as session:
@@ -84,9 +83,7 @@ async def purge_expired_unconfirmed_documents() -> RetentionOutcome:
                 expired_count += 1
         storage_failures += await _remove_locations(locations)
 
-    await _increment_metrics(
-        expired_count=expired_count, storage_failures=storage_failures
-    )
+    await _increment_metrics(expired_count=expired_count, storage_failures=storage_failures)
     return RetentionOutcome(
         expired_pending_count=expired_count,
         purge_storage_failures=storage_failures,

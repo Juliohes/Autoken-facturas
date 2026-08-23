@@ -11,9 +11,7 @@ __all__ = ["BenchmarkMetrics", "calculate_metrics"]
 
 
 # Son los campos cuya exactitud puede cambiar directamente el tratamiento fiscal de la factura.
-_CRITICAL_FIELDS = frozenset(
-    {"counterparty_tax_id", "issue_date", "total_amount", "tax_amount"}
-)
+_CRITICAL_FIELDS = frozenset({"counterparty_tax_id", "issue_date", "total_amount", "tax_amount"})
 _SCALAR_FIELDS = (
     "counterparty_tax_id",
     "counterparty_name",

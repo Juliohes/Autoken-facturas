@@ -27,8 +27,10 @@ async def record_sample(
     """Guarda una muestra sin PII; un fallo de telemetría nunca tumba el OCR."""
     async with platform_session() as session:
         await session.execute(
-            text("SELECT public.record_ocr_processing_sample(:engine, :model, :bucket, :status, "
-                 ":queue_wait, :processing)"),
+            text(
+                "SELECT public.record_ocr_processing_sample(:engine, :model, :bucket, :status, "
+                ":queue_wait, :processing)"
+            ),
             {
                 "engine": engine,
                 "model": model,

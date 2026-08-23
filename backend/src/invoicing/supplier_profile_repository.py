@@ -50,15 +50,19 @@ async def get(
     counterparty_cif_blind_index: str,
 ) -> dict[str, Any] | None:
     row = (
-        await session.execute(
-            _GET,
-            {
-                "tenant_id": tenant_id,
-                "company_id": company_id,
-                "blind_index": counterparty_cif_blind_index,
-            },
+        (
+            await session.execute(
+                _GET,
+                {
+                    "tenant_id": tenant_id,
+                    "company_id": company_id,
+                    "blind_index": counterparty_cif_blind_index,
+                },
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     return dict(row) if row is not None else None
 
 
@@ -73,15 +77,19 @@ async def upsert(
     """Incrementa contadores bajo lock, dentro de la transacción de confirmación."""
     now = datetime.now(UTC)
     row = (
-        await session.execute(
-            _SELECT,
-            {
-                "tenant_id": tenant_id,
-                "company_id": company_id,
-                "blind_index": counterparty_cif_blind_index,
-            },
+        (
+            await session.execute(
+                _SELECT,
+                {
+                    "tenant_id": tenant_id,
+                    "company_id": company_id,
+                    "blind_index": counterparty_cif_blind_index,
+                },
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if row is None:
         await session.execute(
             _INSERT,

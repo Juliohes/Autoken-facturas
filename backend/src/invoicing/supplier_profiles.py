@@ -48,9 +48,7 @@ def build_profile_features(
 ) -> SupplierProfileFeatures:
     """Construye solo patrones agregados, nunca valores históricos completos."""
     correction_counts = Counter(str(correction.field) for correction in corrections)
-    rate_counts = Counter(
-        format(rate.normalize(), "f") for rate in tax_rates if rate.is_finite()
-    )
+    rate_counts = Counter(format(rate.normalize(), "f") for rate in tax_rates if rate.is_finite())
     return SupplierProfileFeatures(
         invoice_number_pattern=_invoice_number_pattern(invoice_number),
         tax_rate_histogram=dict(sorted(rate_counts.items())),

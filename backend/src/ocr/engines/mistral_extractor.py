@@ -131,8 +131,7 @@ def _to_parser_payload(schema: InvoiceExtractionSchema) -> dict[str, Any]:
         "invoice_number": schema.invoice_number,
         "invoice_number_confidence": "baja",
         "tax_lines": [
-            {"base": line.base, "rate": line.rate, "cuota": line.quota}
-            for line in schema.tax_lines
+            {"base": line.base, "rate": line.rate, "cuota": line.quota} for line in schema.tax_lines
         ],
         "tax_ids": [
             {

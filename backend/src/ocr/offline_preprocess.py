@@ -67,9 +67,7 @@ def build_offline_report(
     for variant in OFFLINE_VARIANTS:
         reading = readings.get(variant, {})
         score = score_combination(reading, truth)
-        comparable_accuracy = (
-            score.aciertos / score.comparables if score.comparables else None
-        )
+        comparable_accuracy = score.aciertos / score.comparables if score.comparables else None
         rows.append(
             OfflineVariantRow(
                 variant=variant,

@@ -120,8 +120,7 @@ def _parse_common_schema(
         "irpf_amount": schema.irpf_amount,
         "irpf_amount_confidence": "baja",
         "tax_lines": [
-            {"base": line.base, "rate": line.rate, "cuota": line.quota}
-            for line in schema.tax_lines
+            {"base": line.base, "rate": line.rate, "cuota": line.quota} for line in schema.tax_lines
         ],
         "tax_ids": [
             {
