@@ -9,12 +9,12 @@ Un requisito solo pasa a `DONE` con implementación y evidencia verificable.
 | R-001 | VERIFYING | R-000 | Precedencia recogida en la especificación y la captura existente; falta reconciliación formal. |
 | R-002 | VERIFYING | R-001 | Captura simple y multipágina existen; captura continua queda por verificar contra el maestro. |
 | R-003 | VERIFYING | R-001 | Tipos de captura existentes; falta auditoría contra la taxonomía maestra. |
-| R-004 | TODO | R-003 | — |
-| R-005 | VERIFYING | R-003 | Detector OpenCV existente; falta evidencia completa de candidate scoring. |
-| R-006 | VERIFYING | R-005 | Quality gates existentes; falta reconciliación completa. |
-| R-007 | VERIFYING | R-006 | AUTO/MANUAL y lock de captura existentes; falta cierre formal. |
-| R-008 | VERIFYING | R-005 | Overlay y mensajes existentes; falta cierre formal. |
-| R-009 | VERIFYING | R-005,R-007 | Captura HD y redetección existentes en S6.14. |
+| R-004 | VERIFYING | R-003 | `scanner.worker.ts`, `scannerProtocol.ts` y `useScannerEngine.ts`; máximo un análisis en vuelo, descarte de frames ocupados y guardia de resultados obsoletos. Test de comportamiento, suite frontend y build pasan; falta validación en navegador/dispositivo real. |
+| R-005 | VERIFYING | R-003 | Detector OpenCV con scoring de área, rectangularidad, convexidad, centrado, continuidad, margen y aspecto; prior de confianza por método. 9 tests OpenCV pasan; falta validación con imágenes reales de dispositivo. |
+| R-006 | VERIFYING | R-005 | `qualityGate.ts` puro con razones explícitas para documento, confianza, tamaño, clipping, nitidez, exposición, perspectiva y estabilidad. 10 tests de comportamiento pasan. |
+| R-007 | VERIFYING | R-006 | Máquina `AUTO/MANUAL` y lock compartido en `captureLoop.ts`; el lock también protege la captura manual real. 3 tests R-007 pasan; falta cerrar la UI completa de cambio de modo. |
+| R-008 | VERIFYING | R-005 | `coordinates.ts` compensa explícitamente `object-cover`; `DocumentOverlay.tsx` dibuja guía y polígono SVG con estados. 3 tests de coordenadas, suite frontend y build pasan; falta validación visual en navegador/dispositivo real. |
+| R-009 | VERIFYING | R-005,R-007 | `grabVideoFrame.ts` prioriza `ImageCapture.takePhoto()` con fallback canvas; `analyzeFrame.ts` limita la copia de análisis a 1600 px y escala las esquinas al still original para redetección y warp. 4 tests R-009, suite frontend y build pasan; falta validación en dispositivo real. |
 | R-010 | VERIFYING | R-009 | Preview obligatoria existente. |
 | R-011 | VERIFYING | R-010 | Intake devuelve 201 y OCR es asíncrono; falta reconciliación completa. |
 | R-012 | TODO | R-002,R-011 | — |

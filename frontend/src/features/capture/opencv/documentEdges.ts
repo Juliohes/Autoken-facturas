@@ -1,11 +1,54 @@
-// Detección de bordes del documento + corrección de perspectiva (S2.2 decisiones 4 y 6): busca el
-// contorno candidato de mayor área del frame (el documento, asumiendo que ocupa la mayor parte de
-// la imagen dentro del marco guía) y, si lo encuentra, endereza esa región a un rectángulo "de
-// frente". Las 4 esquinas se recuperan con `approxPolyDP` y, si no da 4 vértices limpios, con
+// Detección de bordes del documento + corrección de perspectiva (S2.2 decisiones 4 y 6): mantiene
+// el pipeline OpenCV y puntúa todos los candidatos para no confundir una superficie grande con la
+// factura. Las 4 esquinas se recuperan con `approxPolyDP` y, si no da 4 vértices limpios, con
 // `convexHull`/`minAreaRect` (S6.14 C3), nunca descartando un candidato válido solo por su forma.
-import type { Corner } from '../types'
+import type { Corner, DetectionMethod } from '../types'
 import type { CvMat, CvModule, CvRotatedRect } from './cvTypes'
 import { orderCorners } from './orderCorners'
+
+export interface CandidateFeatures {
+  areaRatio: number
+  rectangularity: number
+  convexity: number
+  centerScore: number
+  edgeContinuity: number
+  marginScore: number
+  aspectPlausibility: number
+  method: DetectionMethod
+}
+
+export interface DocumentDetection {
+  corners: Corner[] | null
+  confidence: number
+  areaRatio: number
+  method: DetectionMethod
+}
+
+const METHOD_PRIORS: Record<Exclude<DetectionMethod, null>, number> = {
+  approx: 1,
+  hull: 0.85,
+  min_area_rect: 0.6,
+}
+
+const clampUnit = (value: number) => Math.max(0, Math.min(1, value))
+
+/** Score calibrable de candidatos: el área importa, pero no puede ganar por sí sola. */
+export function scoreCandidate(features: CandidateFeatures): number {
+  return clampUnit(
+    0.28 * clampUnit(features.areaRatio)
+      + 0.2 * clampUnit(features.rectangularity)
+      + 0.12 * clampUnit(features.convexity)
+      + 0.1 * clampUnit(features.centerScore)
+      + 0.12 * clampUnit(features.edgeContinuity)
+      + 0.1 * clampUnit(features.marginScore)
+      + 0.08 * clampUnit(features.aspectPlausibility),
+  )
+}
+
+function confidenceFor(features: CandidateFeatures, score: number): number {
+  const prior = features.method === null ? 0 : METHOD_PRIORS[features.method]
+  return clampUnit(score * prior)
+}
 
 // Un contorno que ocupe menos de esto del área total del frame se descarta: evita confundir un
 // objeto pequeño y casual con el documento que se quiere capturar (spec §5, "detección de esquinas
@@ -48,13 +91,18 @@ function cornersFromRotatedRect(rect: CvRotatedRect): Corner[] {
  * cóncavos de ruido) y, si tampoco da 4, usa el rectángulo envolvente rotado (`minAreaRect`) como
  * último recurso — nunca se descarta un candidato con área suficiente solo por su número de
  * vértices. */
-function extractQuadrilateral(cv: CvModule, contour: CvMat): Corner[] | null {
+interface Quadrilateral {
+  corners: Corner[]
+  method: Exclude<DetectionMethod, null>
+}
+
+function extractQuadrilateral(cv: CvModule, contour: CvMat): Quadrilateral | null {
   const approx = new cv.Mat()
   try {
     const perimeter = cv.arcLength(contour, true)
     cv.approxPolyDP(contour, approx, 0.02 * perimeter, true)
     const fromApprox = cornersFromPointMat(approx)
-    if (fromApprox) return fromApprox
+    if (fromApprox) return { corners: fromApprox, method: 'approx' }
 
     const hull = new cv.Mat()
     const hullApprox = new cv.Mat()
@@ -63,19 +111,63 @@ function extractQuadrilateral(cv: CvModule, contour: CvMat): Corner[] | null {
       const hullPerimeter = cv.arcLength(hull, true)
       cv.approxPolyDP(hull, hullApprox, 0.02 * hullPerimeter, true)
       const fromHull = cornersFromPointMat(hullApprox)
-      if (fromHull) return fromHull
+      if (fromHull) return { corners: fromHull, method: 'hull' }
     } finally {
       hull.delete()
       hullApprox.delete()
     }
 
-    return cornersFromRotatedRect(cv.minAreaRect(contour))
+    return { corners: cornersFromRotatedRect(cv.minAreaRect(contour)), method: 'min_area_rect' }
   } finally {
     approx.delete()
   }
 }
 
-export function detectDocumentCorners(cv: CvModule, imageData: ImageData): Corner[] | null {
+function candidateFeatures(
+  cv: CvModule,
+  contour: CvMat,
+  corners: Corner[],
+  method: Exclude<DetectionMethod, null>,
+  areaRatio: number,
+  imageWidth: number,
+  imageHeight: number,
+): CandidateFeatures {
+  const rect = cv.minAreaRect(contour)
+  const rectArea = Math.max(1, rect.size.width * rect.size.height)
+  const contourPerimeter = Math.max(1, cv.arcLength(contour, true))
+  const polygonPerimeter = corners.reduce((sum, corner, index) => {
+    const next = corners[(index + 1) % corners.length]
+    return sum + distance(corner, next)
+  }, 0)
+  const hull = new cv.Mat()
+  try {
+    cv.convexHull(contour, hull, false, true)
+    const hullArea = Math.max(1, cv.contourArea(hull))
+    const center = corners.reduce((sum, corner) => ({ x: sum.x + corner.x, y: sum.y + corner.y }), { x: 0, y: 0 })
+    center.x /= corners.length
+    center.y /= corners.length
+    const centerDistance = Math.hypot(center.x - imageWidth / 2, center.y - imageHeight / 2)
+    const maxCenterDistance = Math.max(1, Math.hypot(imageWidth / 2, imageHeight / 2))
+    const minimumMargin = Math.min(...corners.map(({ x, y }) => Math.min(x, imageWidth - x, y, imageHeight - y)))
+    const marginScale = Math.max(1, Math.min(imageWidth, imageHeight) * 0.1)
+    const aspect = Math.max(rect.size.width, rect.size.height) / Math.max(1, Math.min(rect.size.width, rect.size.height))
+
+    return {
+      areaRatio,
+      rectangularity: clampUnit(cv.contourArea(contour) / rectArea),
+      convexity: clampUnit(cv.contourArea(contour) / hullArea),
+      centerScore: clampUnit(1 - centerDistance / maxCenterDistance),
+      edgeContinuity: clampUnit(polygonPerimeter / contourPerimeter),
+      marginScore: clampUnit(minimumMargin / marginScale),
+      aspectPlausibility: aspect < 0.5 ? clampUnit(aspect / 0.5) : aspect > 2.2 ? clampUnit(2.2 / aspect) : 1,
+      method,
+    }
+  } finally {
+    hull.delete()
+  }
+}
+
+export function detectDocument(cv: CvModule, imageData: ImageData): DocumentDetection {
   const src = cv.matFromImageData(imageData)
   const gray = new cv.Mat()
   const blurred = new cv.Mat()
@@ -100,23 +192,30 @@ export function detectDocumentCorners(cv: CvModule, imageData: ImageData): Corne
     cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
 
     const frameArea = imageData.width * imageData.height
-    let best: Corner[] | null = null
-    let bestArea = 0
+    let best: { corners: Corner[]; features: CandidateFeatures; score: number } | null = null
 
     for (let i = 0; i < contours.size(); i++) {
       const contour = contours.get(i)
       try {
         const area = cv.contourArea(contour)
-        if (area <= bestArea || area / frameArea < MIN_DOCUMENT_AREA_RATIO) continue
-        const points = extractQuadrilateral(cv, contour)
-        if (!points) continue
-        bestArea = area
-        best = points
+        const areaRatio = area / frameArea
+        if (areaRatio < MIN_DOCUMENT_AREA_RATIO) continue
+        const candidate = extractQuadrilateral(cv, contour)
+        if (!candidate) continue
+        const features = candidateFeatures(cv, contour, candidate.corners, candidate.method, areaRatio, imageData.width, imageData.height)
+        const score = scoreCandidate(features)
+        if (!best || score > best.score) best = { corners: candidate.corners, features, score }
       } finally {
         contour.delete()
       }
     }
-    return best
+    if (!best) return { corners: null, confidence: 0, areaRatio: 0, method: null }
+    return {
+      corners: best.corners,
+      confidence: confidenceFor(best.features, best.score),
+      areaRatio: best.features.areaRatio,
+      method: best.features.method,
+    }
   } finally {
     src.delete()
     gray.delete()
@@ -127,6 +226,10 @@ export function detectDocumentCorners(cv: CvModule, imageData: ImageData): Corne
     hierarchy.delete()
     contours.delete()
   }
+}
+
+export function detectDocumentCorners(cv: CvModule, imageData: ImageData): Corner[] | null {
+  return detectDocument(cv, imageData).corners
 }
 
 /** Distancia euclídea entre 2 esquinas, usada para calcular el tamaño del rectángulo de destino. */

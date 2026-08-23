@@ -8,12 +8,14 @@ import { useCompanyOptions } from '../companies/useCompanyOptions'
 import { useSession } from '../session/SessionProvider'
 import { analyzeFrame } from './analyzeFrame'
 import { resolveEffectiveCompanyId } from './captureSelectors'
-import { DEFAULT_SHARPNESS_THRESHOLD } from './captureLoop'
+import { acquireCaptureLock, DEFAULT_SHARPNESS_THRESHOLD, releaseCaptureLock } from './captureLoop'
+import { DocumentOverlay } from './DocumentOverlay'
 import { grabVideoFrame } from './grabVideoFrame'
 import { fileToJpegBlob } from './normalizeToJpeg'
 import { processCapturedFrame } from './processCapture'
 import type { Direction } from './types'
 import { useCameraStream } from './useCameraStream'
+import { useScannerEngine } from './useScannerEngine'
 import { useUploadBatchCapture, useUploadCapture } from './useUploadCapture'
 
 interface Props {
@@ -65,6 +67,7 @@ export function CaptureScreen({ onUploaded }: Props) {
   const pagesRef = useRef<CapturedPage[]>([])
   const nextPageIdRef = useRef(0)
   const addingPageRef = useRef(false)
+  const captureLockRef = useRef(false)
   const [direction, setDirection] = useState<Direction>('recibida')
   const [companyId, setCompanyId] = useState('')
   const [processing, setProcessing] = useState(false)
@@ -78,7 +81,10 @@ export function CaptureScreen({ onUploaded }: Props) {
   const upload = useUploadCapture()
   const uploadBatch = useUploadBatchCapture()
   const effectiveCompanyId = resolveEffectiveCompanyId(role, user?.company?.id, companyId)
-  const canStart = effectiveCompanyId !== '' && !processing
+  const canStart = effectiveCompanyId !== '' && !processing && !captureLockRef.current
+
+  // El análisis continuo acompaña el encuadre, pero nunca sustituye la decisión manual de disparar.
+  const { analysis: liveAnalysis } = useScannerEngine(videoRef.current, { enabled: scannerV2Enabled && videoReady })
 
   useEffect(() => {
     setVideoReady(false)
@@ -162,8 +168,10 @@ export function CaptureScreen({ onUploaded }: Props) {
       }
       return
     }
-    const frame = grabVideoFrame(videoRef.current as HTMLVideoElement)
+    if (!acquireCaptureLock(captureLockRef)) return
+    const frame = await grabVideoFrame(videoRef.current as HTMLVideoElement)
     if (!frame) {
+      releaseCaptureLock(captureLockRef)
       setVideoReady(false)
       setCaptureError('La cámara aún no está lista. Inténtalo de nuevo.')
       if (multiplePages) stopCamera()
@@ -197,6 +205,7 @@ export function CaptureScreen({ onUploaded }: Props) {
         if (!multiplePages) setProcessing(false)
       }
     } finally {
+      releaseCaptureLock(captureLockRef)
       if (multiplePages && operationRef.current === operation) {
         addingPageRef.current = false
         setAddingPage(false)
@@ -413,6 +422,12 @@ export function CaptureScreen({ onUploaded }: Props) {
               <>
                 <video ref={videoRef} autoPlay playsInline muted onLoadedData={markVideoReady} onLoadedMetadata={markVideoReady} className="absolute inset-0 h-full w-full object-cover" />
                 <div data-testid="camera-guide-frame" aria-hidden="true" className="pointer-events-none absolute inset-4 rounded border-4 border-emerald-400 shadow-[0_0_0_9999px_rgb(0_0_0_/_0.35)]" />
+                <DocumentOverlay
+                  corners={liveAnalysis?.corners ?? null}
+                  sourceWidth={videoRef.current?.videoWidth ?? 0}
+                  sourceHeight={videoRef.current?.videoHeight ?? 0}
+                  state={liveAnalysis?.corners ? liveAnalysis.detectionConfidence !== undefined && liveAnalysis.detectionConfidence >= 0.75 && (liveAnalysis.areaRatio ?? 0) >= 0.3 ? 'good' : 'detected' : 'none'}
+                />
                 {multiplePages && <p className="absolute left-4 right-4 top-[max(1rem,env(safe-area-inset-top))] rounded bg-slate-950/80 px-3 py-2 text-center text-sm font-medium">{pageGuidance(pages.length)}</p>}
                 {torchAvailable && <button type="button" aria-label="Linterna" onClick={() => void toggleTorch()} className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] rounded-full bg-slate-950/80 px-4 py-2 text-sm font-medium">Linterna{torchOn ? ' encendida' : ''}</button>}
               </>

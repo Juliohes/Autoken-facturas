@@ -1561,6 +1561,59 @@ y dos tests seguían usando nombres o datos de contratos que ya habían cambiado
 migración compatible, respuestas HTTP precisas y tests actualizados; el comportamiento de negocio no se
 relajó ni se expusieron datos entre asesorías.
 
+### Scanner en segundo plano (R-004, 23/08/2026)
+
+La cámara ya puede analizar continuamente una versión pequeña de la imagen sin bloquear la pantalla:
+ese trabajo se ejecuta en un **Web Worker**, que es un ayudante separado del hilo que dibuja la interfaz.
+El coordinador solo permite una imagen pendiente a la vez; si llega otra mientras el ayudante está ocupado,
+se descarta en lugar de acumular una cola que haría que el análisis fuese antiguo. Además, cada petición lleva
+un número y se ignoran las respuestas atrasadas de peticiones anteriores.
+
+El navegador usa `requestVideoFrameCallback` cuando lo ofrece y un temporizador como alternativa cuando no.
+El worker también deja preparado el protocolo para analizar una imagen fija y procesar la imagen final. La
+suite frontend completa (371 tests) y el build pasan; queda probar la experiencia en un navegador y teléfono
+reales.
+
+### Detector y puerta de calidad (R-005/R-006, 23/08/2026)
+
+El detector ya no elige automáticamente el contorno más grande. Compara cada candidato por tamaño,
+forma rectangular, convexidad, posición en el centro, continuidad del borde, distancia a los márgenes y
+proporción razonable de una factura. También indica qué método encontró las esquinas y cuánta confianza
+merece ese resultado.
+
+La puerta de calidad es una comprobación separada que decide por qué una imagen todavía no está lista para
+AUTO: no hay documento, tiene poca confianza, es pequeño, está cortado, borroso, oscuro, quemado, demasiado
+inclinado o se está moviendo. Solo devuelve `ready` cuando todas las señales cumplen sus umbrales.
+
+### Máquina AUTO/MANUAL y lock de captura (R-007, 23/08/2026)
+
+La captura tiene una máquina de estados preparada para pasar por escaneando, estabilización, armado AUTO,
+captura, procesado, preview, subida y aceptación. Cambiar entre AUTO y MANUAL borra la estabilidad anterior.
+Además, un lock compartido impide que dos toques rápidos creen dos procesados o dos subidas de la misma foto.
+La UI completa para cambiar de modo queda pendiente de la siguiente iteración.
+
+### Polígono de la factura en pantalla (R-008, 23/08/2026)
+
+La cámara ahora puede dibujar encima del vídeo las cuatro esquinas que ha encontrado. El cálculo tiene en
+cuenta que `object-cover` agranda la imagen hasta llenar la pantalla y recorta los lados sobrantes; por eso
+el polígono no se desplaza ni se deforma en un móvil vertical. Se usa un SVG ligero, no un canvas que redibuje
+la pantalla completa continuamente.
+
+Cuando aún no hay detección se muestra una guía tenue; cuando hay detección aparece el amarillo y, cuando la
+confianza y el tamaño son suficientes, se intensifica. Las esquinas del preview reducido se convierten de
+nuevo a la resolución original del vídeo antes de dibujarse.
+
+### Captura HD y redetección final (R-009, 23/08/2026)
+
+Al pulsar «Capturar foto», el navegador intenta obtener una fotografía de la cámara con su resolución
+real mediante `ImageCapture`, en vez de quedarse necesariamente con el fotograma pequeño que se estaba
+viendo en pantalla. Si el navegador no ofrece esa función, se usa el canvas como alternativa compatible.
+
+Para no gastar OpenCV trabajando con una imagen enorme, se crea una copia de análisis de hasta 1600 píxeles
+de lado largo. Las esquinas encontradas en esa copia se devuelven a las coordenadas del still HD original
+antes de recortar y enderezar. De esta forma el polígono del preview sirve de orientación, pero la foto final
+se vuelve a comprobar sobre la imagen que realmente se va a guardar.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
