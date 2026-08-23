@@ -1544,6 +1544,14 @@ que la lista de tenants piloto contenga UUIDs válidos y que staging tenga sus s
 ningún secreto. Si falla, el despliegue se detiene antes de probar con usuarios reales; aun pasando, todavía
 hay que comprobar conectividad y ejecutar el canario funcional.
 
+### Esquema ORM y migraciones alineados (R-051, 23/08/2026)
+
+El robot de CI también comprueba que los modelos que usa el programa y la estructura real de la base de
+datos cuentan la misma historia. Se corrigieron varias diferencias de descripción: metadatos de auditoría,
+contadores de retención, restricciones de proveedor e índices y restricciones de las muestras ETA del OCR.
+No se cambió información ni se deshizo ninguna migración: se hizo que el mapa que usa el programa refleje
+correctamente el archivador que las migraciones ya construyen.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

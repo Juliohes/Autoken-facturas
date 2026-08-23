@@ -262,6 +262,7 @@ class SupplierProfile(Base):
             "counterparty_cif_blind_index",
             name="supplier_profiles_scope_unique",
         ),
+        CheckConstraint("confirmations >= 0", name="supplier_profiles_confirmations_check"),
     )
 
     id: Mapped[UUID] = mapped_column(
