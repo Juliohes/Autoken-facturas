@@ -343,7 +343,9 @@ async def retry_ocr(identity: Uploader, file_id: UUID) -> OcrRetryOut:
             actor_user_id=identity.user_id,
             actor_role=identity.role,
         )
-    except (service.FileForbidden, service.FileNotVisible) as exc:
+    except service.FileForbidden as exc:
+        raise HTTPException(status_code=403, detail="Operación no permitida") from exc
+    except service.FileNotVisible as exc:
         raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
     except service.OcrRetryUnavailable as exc:
         raise HTTPException(

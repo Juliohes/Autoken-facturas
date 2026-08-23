@@ -1552,6 +1552,15 @@ contadores de retención, restricciones de proveedor e índices y restricciones 
 No se cambió información ni se deshizo ninguna migración: se hizo que el mapa que usa el programa refleje
 correctamente el archivador que las migraciones ya construyen.
 
+### Correcciones de CI descubiertas al cerrar R-051 (23/08/2026)
+
+Al desbloquear la comprobación del esquema, el robot pudo ejecutar toda la batería de pruebas y encontró
+cinco comportamientos antiguos que estaban ocultos detrás del fallo anterior: la supervisión de una
+asesoría no podía leer correctamente sus perfiles de proveedor, un permiso se traducía en un error 404,
+y dos tests seguían usando nombres o datos de contratos que ya habían cambiado. Se corrigieron con una
+migración compatible, respuestas HTTP precisas y tests actualizados; el comportamiento de negocio no se
+relajó ni se expusieron datos entre asesorías.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

@@ -256,11 +256,14 @@ async def test_c6_fallo_al_construir_extractor_deja_salida_reintentable_sin_pii_
         def error(self, _event: str, **kwargs: object) -> None:
             logged.append(kwargs)
 
-    def broken_builder(_settings: object):
+        def warning(self, _event: str, **kwargs: object) -> None:
+            logged.append(kwargs)
+
+    def broken_builder(_settings: object, _policy: object):
         raise RuntimeError("provider token=secret-ocr-text and invoice ACME SA")
 
     monkeypatch.setattr(ocr_job, "logger", Logger())
-    monkeypatch.setattr(ocr_job, "build_default_extractor", broken_builder)
+    monkeypatch.setattr(ocr_job, "build_production_extractor", broken_builder)
 
     await ocr_job.run_ocr(tenant_id, company_id, file_id)
 

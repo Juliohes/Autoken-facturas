@@ -267,6 +267,7 @@ async def test_s6_7_rotacion_recifra_los_campos_cifrados_del_benchmark(authapi: 
     """C23: una clave nueva debe poder leer el PII del benchmark y la vieja no."""
     import asyncpg
 
+    from ocr.benchmark import BENCHMARK_CONTRACT_VERSION, NORMALIZATION_VERSION, SCHEMA_VERSION
     from ocr.benchmark_repository import upsert_benchmark_result
     from shared import config
     from shared.db import tenant_session
@@ -302,6 +303,20 @@ async def test_s6_7_rotacion_recifra_los_campos_cifrados_del_benchmark(authapi: 
             comparables=0,
             error=None,
             duration_ms=1,
+            benchmark_contract_version=BENCHMARK_CONTRACT_VERSION,
+            schema_version=SCHEMA_VERSION,
+            normalization_version=NORMALIZATION_VERSION,
+            ground_truth_hash="ground-truth",
+            document_sha256="document-sha256",
+            variant_sha256=None,
+            pages=1,
+            field_exact_accuracy=0.0,
+            critical_field_accuracy=0.0,
+            all_critical_exact=False,
+            arithmetic_valid=False,
+            hallucination_flags=[],
+            manual_corrections_per_invoice=0,
+            api_cost_usd=None,
             encryption_key=old_key,
         )
 
