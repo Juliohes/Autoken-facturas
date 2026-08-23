@@ -24,6 +24,7 @@ from tests._dbtest import seed_tenant, seed_user
 Api = tuple[httpx.AsyncClient, dict[str, str]]
 
 SETTINGS = "/api/v1/platform/settings"
+LAB_SETTINGS = "/api/v1/platform/ocr-lab/settings"
 
 
 async def _login_platform_admin(
@@ -138,3 +139,43 @@ async def test_c7_is_admin_tech_false_para_platform_admin_normal(authapi: Api) -
 
     assert resp.status_code == 200
     assert resp.json()["is_admin_tech"] is False
+
+
+async def test_c11_admin_tech_ve_laboratorio_separado_y_apagado_por_defecto(authapi: Api) -> None:
+    """R-046: el estado del laboratorio no comparte el booleano de producción legado."""
+    client, dsns = authapi
+    token = await _login_platform_admin(client, dsns, is_admin_tech=True, email="lab@autoken.es")
+
+    resp = await client.get(LAB_SETTINGS, headers={**host("panel.localhost"), **bearer(token)})
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "lab_visible": False,
+        "auto_benchmark_enabled": False,
+        "benchmark_engines": ["tesseract"],
+        "benchmark_variants": ["original", "enhanced", "clahe"],
+    }
+
+
+async def test_c12_desactivar_benchmark_automatico_no_toca_produccion(authapi: Api) -> None:
+    """R-046: apagar el laboratorio persiste solo sus controles y mantiene la política fija."""
+    client, dsns = authapi
+    token = await _login_platform_admin(client, dsns, is_admin_tech=True, email="lab2@autoken.es")
+    headers = {**host("panel.localhost"), **bearer(token)}
+
+    lab_resp = await client.put(
+        LAB_SETTINGS,
+        headers=headers,
+        json={
+            "lab_visible": True,
+            "auto_benchmark_enabled": False,
+            "benchmark_engines": ["tesseract", "paddleocr"],
+            "benchmark_variants": ["original", "clahe"],
+        },
+    )
+    policy_resp = await client.get("/api/v1/platform/ocr-policy", headers=headers)
+
+    assert lab_resp.status_code == 200
+    assert lab_resp.json()["auto_benchmark_enabled"] is False
+    assert policy_resp.status_code == 200
+    assert policy_resp.json()["primary_engine"] == "gemini-3.5-flash"

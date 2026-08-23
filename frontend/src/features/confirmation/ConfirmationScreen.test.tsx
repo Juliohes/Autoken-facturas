@@ -15,12 +15,13 @@ import { CaptureUnreadableError, PendingOcrError } from './useReview'
 import type { ReviewResponse } from './types'
 
 vi.mock('../../api/client', () => ({
-  api: { GET: vi.fn(), POST: vi.fn() },
+  api: { GET: vi.fn(), POST: vi.fn(), PUT: vi.fn() },
 }))
 
 type AsyncMock = Mock<(...args: never[]) => Promise<unknown>>
 const getMock = api.GET as unknown as AsyncMock
 const postMock = api.POST as unknown as AsyncMock
+const putMock = api.PUT as unknown as AsyncMock
 
 function makeReview(over: Partial<ReviewResponse> = {}): ReviewResponse {
   return {
@@ -71,8 +72,10 @@ async function acceptResponsibility(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   getMock.mockReset()
   postMock.mockReset()
+  putMock.mockReset()
   getMock.mockResolvedValue({ data: makeReview(), error: undefined })
   postMock.mockResolvedValue({ data: { id: 'inv-1' }, error: undefined })
+  putMock.mockResolvedValue({ data: { revision: 1, updated_at: '2026-08-21T10:00:00Z' }, error: undefined })
 })
 
 describe('ConfirmationScreen (S2.4)', () => {

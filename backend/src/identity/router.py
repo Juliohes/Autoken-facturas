@@ -26,6 +26,7 @@ from identity.passwords import validate_password_policy
 from identity.tokens import encode_access_token
 from shared.config import Settings, get_settings
 from shared.redis import RedisError, get_redis
+from shared.rollout import evaluated_feature_flags
 from tenancy.resolution import ResolvedTenant
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -256,6 +257,7 @@ class MeOut(BaseModel):
     tenant: str | None
     company: MeCompanyOut | None
     is_admin_tech: bool
+    feature_flags: dict[str, bool]
 
 
 @router.get("/me")
@@ -278,6 +280,7 @@ async def me(identity: Annotated[MeIdentity, Depends(current_identity_for_me)]) 
         if identity.company is not None
         else None
     )
+    feature_flags = evaluated_feature_flags(get_settings(), identity.tenant_id)
     return MeOut(
         id=row.id,
         email=row.email,
@@ -285,4 +288,5 @@ async def me(identity: Annotated[MeIdentity, Depends(current_identity_for_me)]) 
         tenant=identity.tenant_slug,
         company=company,
         is_admin_tech=row.is_admin_tech,
+        feature_flags=feature_flags,
     )

@@ -8,8 +8,9 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Self
+from uuid import UUID
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Valor por defecto del secreto JWT: SOLO para desarrollo/test. En producción se rechaza al arrancar
@@ -149,6 +150,17 @@ class Settings(BaseSettings):
     db_pool_size: int = 20
     db_max_overflow: int = 20
 
+    # R-051: flags cerrados y reversibles. Los defaults conservan el comportamiento actual; un
+    # despliegue puede apagar una fase o limitarla a tenants piloto sin cambiar migraciones.
+    scanner_v2_enabled: bool = True
+    continuous_capture_enabled: bool = True
+    review_inbox_enabled: bool = True
+    draft_autosave_enabled: bool = True
+    processing_stages_enabled: bool = True
+    ocr_policy_v2_enabled: bool = True
+    supplier_learning_enabled: bool = True
+    rollout_tenant_allowlist: list[UUID] = Field(default_factory=list)
+
     # Dominio base para extraer el subdominio->tenant (S1.2). `localhost` se acepta además en
     # desarrollo (p. ej. `ilex.localhost`). Los subdominios de plataforma no resuelven a tenant.
     base_domain: str = "autoken.es"
@@ -246,7 +258,7 @@ class Settings(BaseSettings):
     azure_docintel_key: str | None = None
     azure_docintel_model: str = "prebuilt-layout"
 
-    # OCR — Google Gemini vía Vertex AI (candidatos del bench: Flash y Pro). El proyecto y la ruta
+    # OCR — Google Gemini vía Vertex AI. El proyecto y la ruta
     # al JSON de la service account son secretos; la región y los ids de modelo no lo son. Los
     # nombres de campo mapean a las env vars estándar de Vertex (GOOGLE_CLOUD_*, GOOGLE_APP_*).
     google_cloud_project: str | None = None
@@ -254,9 +266,16 @@ class Settings(BaseSettings):
     google_application_credentials: str | None = None
     # Gemini 3 aún no está en europe-west4: se accede por el endpoint `global` (decisión de Julio,
     # 2026-07-04). Región propia para no atar el resto de usos Vertex a global. Ids verificados
-    # contra `models.list()` de Vertex; `gemini-3-pro` pelado no existe, el Pro actual es 3.1.
+    # contra `models.list()` de Vertex; no usar `latest`, porque cambiaría el benchmark
+    # sin revisión.
     gemini_location: str = "global"
-    gemini_flash_model: str = "gemini-3-flash-preview"
+    # Producción: selección manual estable, independiente de los candidatos del laboratorio.
+    gemini_flash_model: str = "gemini-3.5-flash"
+    # Candidatos explícitos del benchmark R-030.
+    gemini_35_flash_model: str = "gemini-3.5-flash"
+    gemini_36_flash_model: str = "gemini-3.6-flash"
+    gemini_35_flash_lite_model: str = "gemini-3.5-flash-lite"
+    # Se conserva para el benchmark histórico S4.8 hasta completar R-032.
     gemini_pro_model: str = "gemini-3.1-pro-preview"
 
     # OCR — Azure OpenAI (gpt-5.1, chat-visión). Candidato del bench. Endpoint, clave y despliegue
@@ -301,14 +320,19 @@ class Settings(BaseSettings):
     max_request_body_bytes: int = 16 * 1024 * 1024
 
     # --- Worker OCR S2.3 (jobs, arq) -----------------------------------------------------------
-    # Cola de arq en la que la API encola `run_ocr` tras una subida aceptada y de la que el worker
-    # consume. No es secreto; se comparte el mismo Redis que el resto de la app.
-    ocr_queue_name: str = "autoken:queue:ocr"
+    # Colas separadas: el OCR que desbloquea al usuario no compite con benchmark, comparativas ni
+    # mantenimiento. `ocr_queue_name` se conserva como alias operativo de la cola primaria.
+    ocr_primary_queue_name: str = "autoken:queue:ocr:primary"
+    ocr_background_queue_name: str = "autoken:queue:ocr:background"
+    ocr_queue_name: str = "autoken:queue:ocr:primary"
+    ocr_worker_max_jobs: int = 4
+    ocr_background_worker_max_jobs: int = 1
     ocr_claim_lease_seconds: int = (
         5 * 60
     )  # S6.15 C4: bajado de 10 a 5 min (coherente con timeout de 150s)
     ocr_provider_timeout_seconds: int = 150  # S6.15 C4: 150s (suficiente para pico de 52s)
     ocr_recovery_batch_size: int = 100
+    retention_batch_size: int = 100
     intake_rate_limit_window_seconds: int = 60
     intake_uploads_per_user: int = 20
     intake_uploads_per_tenant: int = 100

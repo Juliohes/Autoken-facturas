@@ -42,6 +42,7 @@ _UPLOADED_FILE_UNIQUE = "invoices_uploaded_file_unique"
 # El historial privado es una vista operativa de los últimos documentos aceptados, no un listado
 # contable de facturas confirmadas. La cota es parte del contrato S6.12.
 HISTORY_LIMIT = 20
+INBOX_LIMIT = 20
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,49 @@ class HistoryEntry:
     status: str
     created_at: datetime
     direction: str | None
+
+
+@dataclass(frozen=True)
+class InboxEntry:
+    """Documento operativo de la bandeja personal, sin campos fiscales ni OCR (R-020)."""
+
+    id: UUID
+    status: str
+    processing_stage: str | None
+    created_at: datetime
+    direction: str | None
+    page_count: int
+
+
+@dataclass(frozen=True)
+class InboxSummary:
+    processing: int
+    ready: int
+    attention: int
+
+
+@dataclass(frozen=True)
+class InboxPage:
+    items: list[InboxEntry]
+    summary: InboxSummary
+    has_more: bool
+
+
+@dataclass(frozen=True)
+class SupervisionEntry:
+    id: UUID
+    user_email: str
+    company_name: str
+    status: str
+    created_at: datetime
+    direction: str | None
+    page_count: int
+
+
+@dataclass(frozen=True)
+class SupervisionPage:
+    items: list[SupervisionEntry]
+    has_more: bool
 
 
 @dataclass(frozen=True)
@@ -459,6 +503,15 @@ async def list_corrections(session: AsyncSession, uploaded_file_id: UUID) -> lis
     ]
 
 
+async def count_corrections(session: AsyncSession, uploaded_file_id: UUID) -> int:
+    """Cuenta las correcciones humanas registradas para una factura confirmada."""
+    count = await session.scalar(
+        text("SELECT count(*) FROM ocr_corrections WHERE uploaded_file_id = :fid"),
+        {"fid": str(uploaded_file_id)},
+    )
+    return int(count or 0)
+
+
 # Campos sensibles cuyo old_value/new_value en `invoice_edits` se cifran (spec S5.2 C7): el resto
 # (importe, fecha, líneas de IVA...) sigue en claro, como antes de S5.2. `invoice_edits.old_value`/
 # `new_value` son columnas TEXT (no bytea, spec del esquema original): para las filas sensibles se
@@ -598,3 +651,131 @@ async def list_history(
         )
         for row in rows
     ]
+
+
+async def list_inbox(
+    session: AsyncSession,
+    *,
+    uploaded_by: UUID,
+    limit: int,
+    cursor_created_at: datetime | None = None,
+    cursor_id: UUID | None = None,
+) -> InboxPage:
+    """Lista la bandeja SELF ONLY con cursor compuesto y resumen agregado (R-020)."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT f.id, f.status, f.processing_stage, f.created_at, f.direction, "
+                "       1 + (SELECT count(*) FROM uploaded_file_pages p "
+                "            WHERE p.root_uploaded_file_id = f.id) AS page_count "
+                "FROM uploaded_files f "
+                "WHERE f.uploaded_by = :uploaded_by "
+                "  AND NOT EXISTS (SELECT 1 FROM invoices i "
+                "                  WHERE i.uploaded_file_id = f.id AND i.is_test = true) "
+                "  AND (CAST(:cursor_created_at AS timestamptz) IS NULL OR "
+                "       f.created_at < CAST(:cursor_created_at AS timestamptz) OR "
+                "       (f.created_at = CAST(:cursor_created_at AS timestamptz) "
+                "        AND f.id < CAST(:cursor_id AS uuid))) "
+                "ORDER BY f.created_at DESC, f.id DESC LIMIT :limit"
+            ),
+            {
+                "uploaded_by": str(uploaded_by),
+                "cursor_created_at": cursor_created_at,
+                "cursor_id": str(cursor_id) if cursor_id is not None else None,
+                "limit": limit + 1,
+            },
+        )
+    ).all()
+    summary_row = (
+        await session.execute(
+            text(
+                "SELECT count(*) FILTER (WHERE f.status IN "
+                "                    ('pending_ocr', 'processing')) AS processing, "
+                "       count(*) FILTER (WHERE f.status IN ('ocr_done', 'confirmed')) AS ready, "
+                "       count(*) FILTER (WHERE f.status IN "
+                "                    ('needs_review', 'ocr_failed', 'capture_unreadable')) "
+                "                    AS attention "
+                "FROM uploaded_files f "
+                "WHERE f.uploaded_by = :uploaded_by "
+                "  AND NOT EXISTS (SELECT 1 FROM invoices i "
+                "                  WHERE i.uploaded_file_id = f.id AND i.is_test = true)"
+            ),
+            {"uploaded_by": str(uploaded_by)},
+        )
+    ).one()
+    return InboxPage(
+        items=[
+            InboxEntry(
+                id=row.id,
+                status=row.status,
+                processing_stage=row.processing_stage,
+                created_at=row.created_at,
+                direction=row.direction,
+                page_count=row.page_count,
+            )
+            for row in rows[:limit]
+        ],
+        summary=InboxSummary(
+            processing=summary_row.processing,
+            ready=summary_row.ready,
+            attention=summary_row.attention,
+        ),
+        has_more=len(rows) > limit,
+    )
+
+
+async def list_supervision(
+    session: AsyncSession,
+    *,
+    actor_user_id: UUID,
+    limit: int,
+    cursor_created_at: datetime | None = None,
+    cursor_id: UUID | None = None,
+    encryption_key: str,
+) -> SupervisionPage:
+    """Lista pendientes de otros usuarios del tenant para `tenant_admin` (R-026)."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT f.id, u.email AS user_email, "
+                "       pgp_sym_decrypt(c.name, :key)::text AS company_name, "
+                "       f.status, f.created_at, f.direction, "
+                "       1 + (SELECT count(*) FROM uploaded_file_pages p "
+                "            WHERE p.root_uploaded_file_id = f.id) AS page_count "
+                "FROM uploaded_files f "
+                "JOIN users u ON u.id = f.uploaded_by "
+                "JOIN companies c ON c.id = f.company_id "
+                "WHERE f.uploaded_by <> :actor_user_id "
+                "  AND f.status <> 'confirmed' "
+                "  AND NOT EXISTS (SELECT 1 FROM invoices i "
+                "                  WHERE i.uploaded_file_id = f.id AND i.is_test = true) "
+                "  AND (CAST(:cursor_created_at AS timestamptz) IS NULL OR "
+                "       f.created_at < CAST(:cursor_created_at AS timestamptz) OR "
+                "       (f.created_at = CAST(:cursor_created_at AS timestamptz) "
+                "        AND f.id < CAST(:cursor_id AS uuid))) "
+                "ORDER BY f.created_at DESC, f.id DESC LIMIT :limit"
+            ),
+            {
+                "actor_user_id": str(actor_user_id),
+                "key": encryption_key,
+                "cursor_created_at": cursor_created_at,
+                "cursor_id": str(cursor_id) if cursor_id is not None else None,
+                "limit": limit + 1,
+            },
+        )
+    ).all()
+    return SupervisionPage(
+        items=[
+            SupervisionEntry(
+                id=row.id,
+                user_email=row.user_email,
+                company_name=row.company_name,
+                status=row.status,
+                created_at=row.created_at,
+                direction=row.direction,
+                page_count=row.page_count,
+            )
+            for row in rows[:limit]
+        ],
+        has_more=len(rows) > limit,
+    )

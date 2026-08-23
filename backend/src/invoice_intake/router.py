@@ -294,6 +294,44 @@ class OcrRetryOut(BaseModel):
     status: Literal["pending_ocr"]
 
 
+class UploadStatusOut(BaseModel):
+    """Estado operativo de un fichero, sin PII ni detalles de almacenamiento (R-019)."""
+
+    id: UUID
+    status: str
+    processing_stage: str | None
+    created_at: datetime
+    ocr_started_at: datetime | None
+    ocr_finished_at: datetime | None
+    eta_seconds_min: int | None = None
+    eta_seconds_max: int | None = None
+
+
+@router.get("/{file_id}/status")
+async def upload_status(identity: Downloader, file_id: UUID) -> UploadStatusOut:
+    """Consulta el estado de OCR con la misma autorización privada que la descarga."""
+    try:
+        result = await service.get_file_status(
+            identity.session,
+            tenant_id=identity.tenant_id,
+            file_id=file_id,
+            actor_user_id=identity.user_id,
+            actor_role=identity.role,
+        )
+    except (service.PrivateFileNotVisible, service.FileForbidden, service.FileNotVisible) as exc:
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
+    return UploadStatusOut(
+        id=result.id,
+        status=result.status,
+        processing_stage=result.processing_stage,
+        created_at=result.created_at,
+        ocr_started_at=result.ocr_started_at,
+        ocr_finished_at=result.ocr_finished_at,
+        eta_seconds_min=result.eta_seconds_min,
+        eta_seconds_max=result.eta_seconds_max,
+    )
+
+
 @router.post("/{file_id}/retry-ocr", status_code=202)
 async def retry_ocr(identity: Uploader, file_id: UUID) -> OcrRetryOut:
     """Reencola de forma autorizada una lectura que terminó en fallo, sin volver a subir bytes."""

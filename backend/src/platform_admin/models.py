@@ -21,6 +21,7 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,11 +32,56 @@ class PlatformSettings(Base):
     __tablename__ = "platform_settings"
     # Mismo `CHECK (id)` que declara la migración 0017 (nunca puede existir una segunda fila):
     # sin declararlo aquí, el guard de deriva ORM<->migración lo detecta como constraint de sobra.
-    __table_args__ = (CheckConstraint("id", name="platform_settings_id_check"),)
+    __table_args__ = (
+        CheckConstraint("id", name="platform_settings_id_check"),
+        CheckConstraint(
+            "ocr_policy_version >= 1", name="platform_settings_ocr_policy_version_check"
+        ),
+        CheckConstraint(
+            "ocr_consensus_mode IN ('primary_only', 'per_field')",
+            name="platform_settings_ocr_policy_consensus_check",
+        ),
+        CheckConstraint(
+            "(ocr_fallback_engine IS NULL AND ocr_fallback_model IS NULL) "
+            "OR (ocr_fallback_engine IS NOT NULL AND ocr_fallback_model IS NOT NULL)",
+            name="platform_settings_ocr_fallback_complete_check",
+        ),
+    )
 
     id: Mapped[bool] = mapped_column(Boolean, primary_key=True, server_default="true")
     ocr_experiment_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
+    )
+    ocr_policy_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    ocr_primary_engine: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="gemini-3.5-flash"
+    )
+    ocr_primary_model: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="gemini-3.5-flash"
+    )
+    ocr_fallback_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    ocr_fallback_engine: Mapped[str | None] = mapped_column(
+        Text, nullable=True, server_default="mistral-ocr-4"
+    )
+    ocr_fallback_model: Mapped[str | None] = mapped_column(
+        Text, nullable=True, server_default="mistral-ocr-4-0"
+    )
+    ocr_consensus_mode: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="primary_only"
+    )
+    ocr_lab_visible: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    ocr_auto_benchmark_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    ocr_benchmark_engines: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default='["tesseract"]'
+    )
+    ocr_benchmark_variants: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default='["original", "enhanced", "clahe"]'
     )
 
 
@@ -61,6 +107,22 @@ class OcrBenchmarkBatchRun(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OcrPolicyPromotion(Base):
+    __tablename__ = "ocr_policy_promotions"
+
+    id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    actor_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    old_policy: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    new_policy: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    promoted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class OcrBenchmarkBatchCandidate(Base):

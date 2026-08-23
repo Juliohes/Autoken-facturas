@@ -17,9 +17,14 @@ export const ROUTES = {
   platformSettings: '/plataforma/ajustes',
   platformOcrRanking: '/plataforma/ranking-ocr',
   platformLab: '/plataforma/laboratorio',
+  platformPending: '/plataforma/pendientes',
   invoices: '/facturas',
   companies: '/empresas',
   history: '/historial',
+  inbox: '/mis-facturas',
+  supervision: '/pendientes-equipo',
+  supervisionReviewPattern: '/pendientes-equipo/:fileId',
+  supervisionReview: (fileId: string) => `/pendientes-equipo/${fileId}`,
   capture: '/capturar',
   confirmationPattern: '/confirmar/:fileId',
   confirmation: (fileId: string) => `/confirmar/${fileId}`,
@@ -71,14 +76,23 @@ const ROUTE_DEFS: RouteDef[] = [
     label: 'Laboratorio',
     visible: (ctx) => ctx.isAdminTech,
   },
+  {
+    path: ROUTES.platformPending,
+    roles: ['platform_admin'],
+    label: 'Pendientes globales',
+    visible: (ctx) => ctx.isAdminTech,
+  },
   { path: ROUTES.invoices, roles: ['tenant_admin'], label: 'Facturas' },
   { path: ROUTES.companies, roles: ['tenant_admin'], label: 'Empresas' },
   // Sin `label` (2026-08-01, a petición de Julio): ya no es una entrada propia del menú, sigue
   // siendo una ruta protegida igual, pero se llega a ella desde el enlace "Ver historial" dentro
   // de `CaptureScreen` ("Subir factura"), no desde el menú principal.
   { path: ROUTES.history, roles: ['tenant_admin', 'user'] },
+  { path: ROUTES.inbox, roles: ['tenant_admin', 'user'], label: 'Mis facturas' },
+  { path: ROUTES.supervision, roles: ['tenant_admin'], label: 'Pendientes del equipo' },
   { path: ROUTES.capture, roles: ['tenant_admin', 'user'], label: 'Subir factura' },
   { path: ROUTES.confirmationPattern, roles: ['tenant_admin', 'user'] },
+  { path: ROUTES.supervisionReviewPattern, roles: ['tenant_admin'] },
 ]
 
 // `user` entra directo a capturar (S2.2 decisión 1): subir facturas es su tarea principal del día a

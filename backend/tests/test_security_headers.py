@@ -42,6 +42,16 @@ async def test_c2_cabeceras_de_aislamiento_de_origen_en_todas_las_respuestas(
     assert resp.headers["cross-origin-resource-policy"] == "same-origin"
 
 
+async def test_datos_de_la_api_no_se_guardan_en_cache_del_navegador(
+    client: httpx.AsyncClient,
+) -> None:
+    """R-049: incluso respuestas sin PII explícita usan la política segura por defecto."""
+    resp = await client.get(_HEALTH)
+    assert resp.status_code == 200
+    assert resp.headers["cache-control"] == "private, no-store, max-age=0"
+    assert resp.headers["pragma"] == "no-cache"
+
+
 async def test_cabeceras_de_seguridad_tambien_en_respuestas_de_error(
     client: httpx.AsyncClient,
 ) -> None:

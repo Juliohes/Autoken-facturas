@@ -40,7 +40,9 @@ _OCR_BENCHMARK_BATCH_TASK = "run_benchmark_batch_task"
 _ENQUEUE_INFRA_ERRORS = (ImportError, RedisError, OSError, asyncio.TimeoutError)
 
 
-async def _enqueue(task_name: str, log_event: str, *args: str, identifier: str) -> bool:
+async def _enqueue(
+    task_name: str, log_event: str, *args: str, identifier: str, queue_name: str
+) -> bool:
     """Encola `task_name(*args)` en la cola del worker (best-effort): crea el pool, encola, cierra
     el pool. Compartido por `enqueue_ocr`/`enqueue_ocr_benchmark`/`enqueue_ocr_benchmark_batch`
     (2026-08-11, S6.7 auditoría/Área C, hallazgo de SOLID/DRY -- las tres funciones tenían el mismo
@@ -62,7 +64,7 @@ async def _enqueue(task_name: str, log_event: str, *args: str, identifier: str) 
 
         pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
         try:
-            await pool.enqueue_job(task_name, *args, _queue_name=settings.ocr_queue_name)
+            await pool.enqueue_job(task_name, *args, _queue_name=queue_name)
         finally:
             await pool.aclose()
     except _ENQUEUE_INFRA_ERRORS as exc:  # best-effort: el llamador no depende del worker
@@ -79,6 +81,7 @@ async def enqueue_ocr(
     Un fallo de infraestructura (Redis caído, arq ausente) se registra a nivel `error` y se traga:
     la subida ya está persistida y el fichero se reprocesará; nunca se propaga al flujo de intake.
     """
+    settings = get_settings()
     await _enqueue(
         _OCR_TASK,
         "ocr.enqueue_failed",
@@ -86,6 +89,7 @@ async def enqueue_ocr(
         str(company_id),
         str(uploaded_file_id),
         identifier=str(uploaded_file_id),
+        queue_name=settings.ocr_primary_queue_name,
     )
 
 
@@ -98,6 +102,7 @@ async def enqueue_ocr_comparison(
     de infraestructura del encolado se registra y se traga, nunca se propaga al flujo del OCR
     principal (cuyo resultado ya está persistido y disponible para el usuario).
     """
+    settings = get_settings()
     await _enqueue(
         _OCR_COMPARISON_TASK,
         "ocr_comparison.enqueue_failed",
@@ -105,6 +110,7 @@ async def enqueue_ocr_comparison(
         str(company_id),
         str(uploaded_file_id),
         identifier=str(uploaded_file_id),
+        queue_name=settings.ocr_background_queue_name,
     )
 
 
@@ -116,6 +122,7 @@ async def enqueue_ocr_benchmark(
     Mismo criterio que `enqueue_ocr`: un fallo de infraestructura del encolado (Redis caído, arq
     ausente) se registra y se traga -- confirmar una factura NUNCA depende del worker de benchmark.
     """
+    settings = get_settings()
     await _enqueue(
         _OCR_BENCHMARK_TASK,
         "ocr_benchmark.enqueue_failed",
@@ -123,6 +130,7 @@ async def enqueue_ocr_benchmark(
         str(company_id),
         str(uploaded_file_id),
         identifier=str(uploaded_file_id),
+        queue_name=settings.ocr_background_queue_name,
     )
 
 
@@ -134,9 +142,11 @@ async def enqueue_ocr_benchmark_batch(batch_run_id: str) -> bool:
     `ocr_benchmark_batch_runs` (`platform_admin.benchmark_batch_service.start_backfill`), el panel
     puede reintentarse manualmente si el worker nunca llega a procesarla.
     """
+    settings = get_settings()
     return await _enqueue(
         _OCR_BENCHMARK_BATCH_TASK,
         "ocr_benchmark_batch.enqueue_failed",
         batch_run_id,
         identifier=batch_run_id,
+        queue_name=settings.ocr_background_queue_name,
     )

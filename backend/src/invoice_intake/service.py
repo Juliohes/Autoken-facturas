@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import hashlib
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID, uuid4
 
 import structlog
@@ -24,10 +25,13 @@ from sqlalchemy.orm import Session
 
 from invoice_intake import mime, repository, scanner, storage
 from invoice_intake.image import validate_image
-from jobs import queue
+from jobs import eta_repository, queue
+from ocr.eta import estimate_eta
+from platform_admin import settings_repository
 from shared.audit import write_audit
 from shared.config import get_settings
 from shared.db import tenant_session
+from shared.metrics import page_count_bucket
 from tenancy.constants import Role
 
 logger = structlog.get_logger("invoice_intake")
@@ -87,6 +91,20 @@ class InvalidPageCount(IntakeError):
 
 class OcrRetryUnavailable(IntakeError):
     """El documento no está en un estado fallido que se pueda reintentar (-> 409)."""
+
+
+@dataclass(frozen=True)
+class UploadedFileStatus:
+    """Estado operativo mínimo de un fichero, sin PII ni ubicación del objeto (R-019)."""
+
+    id: UUID
+    status: str
+    processing_stage: str | None
+    created_at: datetime
+    ocr_started_at: datetime | None
+    ocr_finished_at: datetime | None
+    eta_seconds_min: int | None
+    eta_seconds_max: int | None
 
 
 @dataclass(frozen=True)
@@ -167,6 +185,82 @@ async def authorize_file_access(
     if in_tenant is not None:
         raise FileForbidden
     raise FileNotVisible
+
+
+async def authorize_file_edit(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    file_id: UUID,
+    actor_user_id: UUID,
+    actor_role: str,
+) -> repository.UploadedFileContext:
+    """Autoriza una operación editable, manteniendo el owner guard del borrador.
+
+    Un `tenant_admin` puede leer pendientes ajenas para supervisarlas, pero no se convierte por ello
+    en propietario de sus borradores ni puede usar el flujo editable de review/confirmación.
+    """
+    context = await authorize_file_access(
+        session,
+        tenant_id=tenant_id,
+        file_id=file_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+    )
+    if actor_role == Role.TENANT_ADMIN and context.uploaded_by != actor_user_id:
+        raise FileForbidden
+    return context
+
+
+async def get_file_status(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    file_id: UUID,
+    actor_user_id: UUID,
+    actor_role: str,
+) -> UploadedFileStatus:
+    """Devuelve el progreso de un fichero tras aplicar su autorización privada (R-019)."""
+    context = await authorize_file_access(
+        session,
+        tenant_id=tenant_id,
+        file_id=file_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+    )
+    eta_min: int | None = None
+    eta_max: int | None = None
+    if context.status == "pending_ocr":
+        try:
+            pages = await repository.get_document_pages(session, file_id)
+            policy = await settings_repository.get_ocr_policy(session)
+            samples = await eta_repository.get_samples(
+                engine=policy.primary_engine,
+                model=policy.primary_model,
+                page_count_bucket=page_count_bucket(len(pages)),
+            )
+            eta = estimate_eta(
+                pending_ahead=await repository.count_ocr_ahead(
+                    session, created_at=context.created_at
+                ),
+                effective_concurrency=get_settings().ocr_worker_max_jobs,
+                processing_seconds=samples.processing_seconds,
+                queue_wait_seconds=samples.queue_wait_seconds,
+            )
+            if eta is not None:
+                eta_min, eta_max = eta.minimum_seconds, eta.maximum_seconds
+        except Exception as exc:  # noqa: BLE001 - la ETA nunca bloquea el estado del upload
+            logger.warning("upload_status.eta_unavailable", reason=type(exc).__name__)
+    return UploadedFileStatus(
+        id=context.id,
+        status=context.status,
+        processing_stage=context.processing_stage,
+        created_at=context.created_at,
+        ocr_started_at=context.ocr_started_at,
+        ocr_finished_at=context.ocr_finished_at,
+        eta_seconds_min=eta_min,
+        eta_seconds_max=eta_max,
+    )
 
 
 async def get_download_url(
@@ -259,7 +353,7 @@ async def prepare_ocr_retry(
     actor_role: str,
 ) -> repository.UploadedFileContext:
     """Autoriza un reintento sin revelar archivos ajenos y exige un fallo OCR real."""
-    ctx = await authorize_file_access(
+    ctx = await authorize_file_edit(
         session,
         tenant_id=tenant_id,
         file_id=file_id,

@@ -193,6 +193,7 @@ class MeIdentity:
 
     user_id: UUID
     session: AsyncSession
+    tenant_id: UUID | None
     tenant_slug: str | None
     company: CompanyRef | None
 
@@ -210,7 +211,11 @@ async def current_identity_for_me(request: Request) -> AsyncIterator[MeIdentity]
     if claims.role == Role.PLATFORM_ADMIN.value:
         async with platform_session() as db_session:
             yield MeIdentity(
-                user_id=UUID(claims.sub), session=db_session, tenant_slug=None, company=None
+                user_id=UUID(claims.sub),
+                session=db_session,
+                tenant_id=None,
+                tenant_slug=None,
+                company=None,
             )
         return
 
@@ -224,6 +229,7 @@ async def current_identity_for_me(request: Request) -> AsyncIterator[MeIdentity]
             yield MeIdentity(
                 user_id=ctx.user_id,
                 session=ctx.session,
+                tenant_id=ctx.tenant_id,
                 tenant_slug=ctx.tenant_slug,
                 company=ctx.company,
             )

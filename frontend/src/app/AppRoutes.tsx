@@ -10,6 +10,7 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
 import { CaptureScreen } from '../features/capture/CaptureScreen'
@@ -17,9 +18,13 @@ import type { Direction } from '../features/capture/types'
 import { CompaniesPanel } from '../features/companies/CompaniesPanel'
 import { ConfirmationScreen } from '../features/confirmation/ConfirmationScreen'
 import { InvoiceHistory } from '../features/history/InvoiceHistory'
+import { InvoiceInbox } from '../features/inbox/InvoiceInbox'
+import { PendingSupervisionPanel } from '../features/supervision/PendingSupervisionPanel'
+import { SupervisionReviewScreen } from '../features/supervision/SupervisionReviewScreen'
 import { InvoicesPanel } from '../features/panel/InvoicesPanel'
 import { BenchmarkRanking } from '../features/platform/BenchmarkRanking'
 import { PlatformLab } from '../features/platform/PlatformLab'
+import { GlobalPendingPanel } from '../features/platform/GlobalPendingPanel'
 import { PlatformSettings } from '../features/platform/PlatformSettings'
 import { PlatformTenants } from '../features/platform/PlatformTenants'
 import { LoginScreen } from '../features/session/LoginScreen'
@@ -27,6 +32,7 @@ import { useSession } from '../features/session/SessionProvider'
 import type { AppliedTheme } from '../features/tenancy/theme'
 import { Menu } from './Menu'
 import { homeRouteForRole, rolesAllowedFor, ROUTES } from './routes'
+import { navigateAfterConfirm } from '../features/confirmation/postConfirmNavigation'
 
 function ProtectedRoute({ children, path }: { children: ReactNode; path: string }) {
   const { status, user } = useSession()
@@ -101,6 +107,7 @@ function CaptureRoute() {
 function ConfirmationRoute() {
   const { fileId } = useParams<{ fileId: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const location = useLocation()
   if (!fileId) return <Navigate to={ROUTES.history} replace />
   const direction = (location.state as { direction?: Direction } | null)?.direction
@@ -108,10 +115,16 @@ function ConfirmationRoute() {
     <ConfirmationScreen
       fileId={fileId}
       direction={direction}
-      onConfirmed={() => navigate(ROUTES.history)}
+      onConfirmed={() => void navigateAfterConfirm(queryClient, navigate)}
       onRetry={() => navigate(ROUTES.history)}
     />
   )
+}
+
+function SupervisionReviewRoute() {
+  const { fileId } = useParams<{ fileId: string }>()
+  if (!fileId) return <Navigate to={ROUTES.supervision} replace />
+  return <SupervisionReviewScreen fileId={fileId} />
 }
 
 export function AppRoutes({ theme }: { theme: AppliedTheme }) {
@@ -164,10 +177,34 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
           }
         />
         <Route
+          path={ROUTES.platformPending}
+          element={
+            <ProtectedRoute path={ROUTES.platformPending}>
+              <GlobalPendingPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path={ROUTES.invoices}
           element={
             <ProtectedRoute path={ROUTES.invoices}>
               <InvoicesRoute />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.supervision}
+          element={
+            <ProtectedRoute path={ROUTES.supervision}>
+              <PendingSupervisionPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.supervisionReviewPattern}
+          element={
+            <ProtectedRoute path={ROUTES.supervisionReviewPattern}>
+              <SupervisionReviewRoute />
             </ProtectedRoute>
           }
         />
@@ -184,6 +221,14 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
           element={
             <ProtectedRoute path={ROUTES.history}>
               <InvoiceHistory />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.inbox}
+          element={
+            <ProtectedRoute path={ROUTES.inbox}>
+              <InvoiceInbox />
             </ProtectedRoute>
           }
         />

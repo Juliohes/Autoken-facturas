@@ -47,8 +47,8 @@ async def start_backfill(session: AsyncSession, *, limit: int) -> tuple[bool, Ba
     Lanza `OcrExperimentDisabled` si el interruptor está apagado, ANTES de contar candidatos,
     insertar la fila o encolar nada (comprobado primero, incluso antes de mirar si ya hay un lote
     `running`: apagado significa que no se inicia nada, pase lo que pase)."""
-    settings_row = await settings_repository.get_settings(session)
-    if not settings_row.ocr_experiment_enabled:
+    lab_settings = await settings_repository.get_lab_settings(session)
+    if not lab_settings.auto_benchmark_enabled:
         raise OcrExperimentDisabled()
 
     # La función SQL toma un advisory xact lock, inserta y congela los candidatos en la misma

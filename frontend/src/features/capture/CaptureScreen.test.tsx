@@ -518,6 +518,30 @@ describe('CaptureScreen (S6.11)', () => {
     expect(body.get('sharpness_score')).toBeNull()
   })
 
+  it('R-051: con scanner_v2 apagado conserva la captura sin análisis ni recorte OpenCV', async () => {
+    let status: 'idle' | 'active' = 'idle'
+    const open = vi.fn(() => { status = 'active' })
+    const close = vi.fn(() => { status = 'idle' })
+    useSessionMock.mockReturnValue({
+      ...USER_SESSION,
+      user: { ...USER_SESSION.user, feature_flags: { scanner_v2_enabled: false } },
+    })
+    useCameraStreamMock.mockImplementation(() => ({ status, stream: null, canRetry: true, unavailableReason: null, open, close, retry: vi.fn() }))
+    successfulUpload()
+    const { rerender } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
+    rerender()
+    const video = document.querySelector('video') as HTMLVideoElement
+    Object.defineProperties(video, { videoWidth: { configurable: true, value: 640 }, videoHeight: { configurable: true, value: 480 } })
+    fireEvent.loadedData(video)
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+
+    await waitFor(() => expect(processCapturedFrameMock).toHaveBeenCalledWith(FAKE_FRAME, null))
+    expect(analyzeFrameMock).not.toHaveBeenCalled()
+  })
+
   it('C3: Capturar foto apaga la cámara, normaliza y sube directamente sin revisión', async () => {
     const close = vi.fn()
     successfulUpload()

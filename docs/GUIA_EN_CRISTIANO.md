@@ -1096,16 +1096,101 @@ y S4.8 (ranking multi-modelo), las 5 tareas cerradas y mergeadas.
   ventanita estrecha para estudiar una factura. Ahora se abre como una pantalla completa, con un botón
   claro para volver al resumen sin perder la asesoría que se estaba mirando. Dentro se puede cambiar entre
   la foto original, lo que leyó la IA, lo que decidió el sistema, lo que acabó confirmando la persona y la
-  comparación entre IAs.
+   comparación entre IAs.
+
+- **R-032 — comparación justa del OCR (22/08/2026):** cada resultado del banco guarda la versión del
+  contrato, la versión de normalización, un identificador del documento y de la verdad confirmada,
+  el número de páginas y las mismas variantes. Así se puede comprobar que dos motores fueron medidos
+  sobre exactamente la misma entrada. El benchmark R-032 separa cuatro candidatos mínimos: Gemini 3.5
+  Flash, Gemini 3.6 Flash, Gemini 3.5 Flash-Lite y Mistral OCR 4 con anotación estructurada.
+
+  Además de aciertos por campo y por campo crítico, el informe muestra si todos los críticos acertaron,
+  los tramos de IVA, el cuadre aritmético, posibles valores sin verdad de referencia, errores y tiempos
+  p50/p95. El coste de API y las correcciones manuales quedan vacíos cuando no existe telemetría real,
+  en lugar de inventar un cero. El benchmark sigue siendo un informe para revisión técnica: nunca
+  cambia automáticamente el motor de producción.
 
   Arriba del Laboratorio hay también un resumen de verdad: enseña qué combinación de lector e imagen ha
   acertado más para cada tipo de dato y permite filtrar, por ejemplo, solo CIF o solo importes. Si todavía
   no existe una respuesta humana con la que comparar, dice "sin datos comparables" en vez de pintar un
   engañoso 0%. Si una IA falló porque no tenía cuota, se ve ese fallo tal cual, sin esconderlo ni rellenarlo
   con otra IA. Consultar esta pantalla no vuelve a leer facturas ni genera gasto: solo muestra resultados
-  que ya estaban guardados.
+   que ya estaban guardados.
 
-  También se reforzó la cámara al subir una factura desde el móvil. La app intenta usar primero la cámara
+- **R-033 — política OCR de producción (22/08/2026):** la IA que lee facturas en producción ya no se
+  decide mirando directamente una variable de configuración ni reutilizando la lista de candidatos
+  del laboratorio. Existe una política guardada en la base de datos con versión, motor, modelo,
+  fallback y modo de consenso. Solo `admin-tech` puede cambiarla y cada cambio debe aumentar la
+  versión. El trabajador consulta esa política y construye exactamente el primario indicado.
+
+- **R-034 — fallback OCR condicional (22/08/2026):** el sistema no consulta dos IAs por cada factura.
+  Solo usa el segundo motor si el primero falla, tarda demasiado, deja un dato crítico ausente o
+  poco fiable, encuentra un CIF inválido o no consigue cuadrar los importes. Una confianza media
+  únicamente en el nombre del proveedor no basta para pagar otra lectura. Si el segundo motor
+  coincide, se reconcilian las lecturas; si discrepa en un dato, la factura queda para revisión y no
+  se llama automáticamente a un tercer motor.
+
+- **R-035 — consenso por campo (22/08/2026):** cuando existen dos lecturas, Autofactu ya no tiene que
+  elegir una factura completa. Compara cada fecha, importe, número, CIF, tramo de IVA y demás dato con
+  una normalización conservadora: por ejemplo, `121,00` y `121.00` representan el mismo importe, pero
+  no se borran indiscriminadamente los guiones o barras del número de factura. Cada decisión guarda si
+  fue aceptada, quedó dudosa o entró en conflicto, junto con sus fuentes y motivos. Esa explicación se
+  conserva en el resultado técnico y permite revisar por qué se eligió un valor sin perder la lectura
+  original.
+
+- **R-036 — confianza del sistema (22/08/2026):** la etiqueta que declara una IA y la confianza que
+  calcula Autofactu son ahora conceptos separados. El sistema parte de reglas sencillas y visibles:
+  premia una lectura fuerte, el acuerdo entre motores y las validaciones correctas; limita la confianza
+  cuando falla un CIF o el cuadre de importes, y resta por conflictos. El resultado guarda la puntuación
+  y motivos como `engines_agree`, `invoice_math_ok` o `tax_id_checksum_failed`, mientras conserva las
+  etiquetas antiguas para que las pantallas existentes sigan funcionando.
+
+- **R-037 — diagnóstico fiscal detallado (22/08/2026):** el cuadre ya puede explicar cada tramo de
+  IVA: cuota esperada, cuota leída, diferencia y si es válido, además del total general. El resultado
+  antiguo `CheckResult` sigue disponible para los consumidores que solo necesitan verdadero/falso.
+  Si aparece un tipo de IVA numérico que no está en la política estándar, se conserva en vez de
+  borrarlo o confundirlo con IRPF, y la factura se envía a revisión. La lista de tipos conocidos vive
+  separada del parser para poder cambiar la política fiscal sin reescribir la lectura OCR.
+
+- **R-038 — aprendizaje por proveedor (22/08/2026):** tras confirmar una factura, Autofactu guarda
+  únicamente patrones y contadores agregados para ese proveedor dentro de esa empresa y asesoría:
+  forma del número, tipos de IVA vistos, número de tramos y campos que el humano corrigió. No guarda
+  el CIF en claro ni copia facturas anteriores. El índice que encuentra el perfil es ciego y depende
+  del tenant y de la empresa. Durante las primeras tres confirmaciones el perfil está en arranque y
+  no puede influir en decisiones automáticas. Cuando ya está maduro, el lector puede usarlo como una
+  señal débil para detectar una anomalía o pedir fallback, pero nunca sustituye lo que dice claramente
+  la factura.
+
+- **R-039 — evidencia local opcional (22/08/2026):** existe un comprobador experimental para
+  Tesseract que puede buscar CIF, número, fecha e importe en el texto de una imagen. Si encuentra un
+  dato suma una señal; si no lo encuentra no invalida la lectura de la IA. Si Tesseract no está
+  instalado o tarda demasiado, la evidencia queda indeterminada. Este módulo no se ejecuta dentro del
+  camino crítico de subida, por lo que no añade varios segundos a la experiencia de usuario.
+
+- **R-043 — colas separadas (22/08/2026):** la lectura que desbloquea al usuario va a una cola
+  primaria independiente. Comparativas, benchmarks y mantenimiento van a una cola de fondo y tienen
+  su propia configuración de worker. Así un lote de laboratorio no puede ocupar todos los huecos y
+  retrasar la lectura de una factura recién subida.
+
+- **R-040 — experimento offline de imagen (22/08/2026):** el laboratorio puede generar cinco
+  versiones de la misma foto: original, natural, CLAHE, escala de grises y Sauvola. El informe usa
+  exactamente la misma verdad confirmada para todas, de modo que la comparación no confunde una
+  mejora de imagen con una diferencia de factura. Es un proceso offline y no cambia el preprocesado
+  de producción por sí solo.
+
+- **R-041/R-042 — challengers de layout (22/08/2026):** se ha definido una puerta común para
+  experimentos con PaddleOCR y Surya. Esa puerta devuelve señales sobre tablas, tramos de IVA y
+  orden de lectura, pero no decide importes ni sustituye al OCR principal. Los motores pesados
+  seguirán viviendo en servicios separados de laboratorio, no dentro del contenedor de la API.
+
+- **R-044/R-045 — límites y circuito de proveedor (22/08/2026):** el worker de usuario tiene un
+  máximo inicial de cuatro trabajos y el de fondo uno. Además, cada combinación de motor y modelo
+  tiene una máquina que puede cerrarle temporalmente el paso tras varios fallos, esperar y permitir
+  una única prueba. Esto evita que una caída del proveedor provoque cien llamadas de fallback a la
+  vez. La máquina conserva su estado en Redis y el worker la consulta antes de llamar al primario;
+  si Redis falla, no bloquea la lectura principal.
+
+   También se reforzó la cámara al subir una factura desde el móvil. La app intenta usar primero la cámara
   trasera, pero si el teléfono o el ordenador solo tiene otra cámara, la acepta en vez de bloquear al
   usuario. El botón de hacer foto espera a que haya una imagen real lista, para no fallar si se pulsa muy
   rápido. Si la cámara falla o se deniega el permiso, sigue estando el botón para subir un archivo y aparece
@@ -1259,6 +1344,205 @@ descubrió que la aplicación publicada todavía usaba una versión anterior, au
 preparado. Se aplicó la migración, se reconstruyeron API, trabajador OCR y frontend, y se comprobó que el
 servicio real de Setex está sano. La factura que se hubiera subido antes de ese momento conserva la lectura
 antigua; las nuevas ya pasan por el circuito corregido.
+
+### Progreso real del lector automático (R-016/R-017, 21/08/2026)
+
+La aplicación ya guarda en la base de datos en qué etapa está trabajando el lector, separado del estado
+final de la factura. Una factura recién subida queda "en cola"; después puede aparecer como preparando el
+documento, leyendo, comprobando los datos, contrastando resultados o guardando el resultado.
+
+Esto permite que la futura pantalla de progreso enseñe hechos reales y no una animación inventada. También
+se guardan la hora de inicio y de final del OCR. Cada cambio lleva una marca temporal del trabajador que
+tiene el documento reservado: si un trabajador antiguo despierta tarde, la base de datos rechaza su
+actualización y no puede falsear el progreso de otro trabajador.
+
+La pantalla de comprobación ya consulta una puerta pequeña de estado para mostrar ese progreso. No recibe
+el CIF, la imagen, el texto bruto de la IA ni la dirección interna del almacén. Si el servidor es antiguo y
+ no conoce todavía la etapa, muestra una barra indeterminada en vez de inventar un porcentaje.
+
+### Bandeja privada de mis facturas (R-020, 21/08/2026)
+
+Ya existe la pantalla **Mis facturas** (`/mis-facturas`). Enseña únicamente los documentos que ha subido la
+persona que ha iniciado sesión, incluso si esa persona es administradora de la asesoría. La lista solo muestra
+información operativa: estado, etapa del lector, fecha, dirección y número de páginas. No muestra CIF, proveedor,
+número de factura, importes ni el texto bruto de la IA.
+
+La pantalla también enseña un resumen de cuántas facturas están procesándose, cuántas están listas y cuántas
+necesitan atención. Mientras haya trabajo en curso hace una sola consulta conjunta cada dos segundos, no una
+consulta independiente por cada factura. Si hay muchas, se pueden cargar más usando un cursor estable para no
+repetir ni saltar documentos.
+
+### Borrador seguro mientras se revisa una factura (R-021/R-022, 21/08/2026)
+
+La pantalla de revisión ya guarda automáticamente lo que la persona está editando, sin convertirlo todavía
+en una factura definitiva. El guardado espera 750 milisegundos desde el último cambio para no mandar una
+petición por cada tecla. Si dos pestañas intentan guardar a la vez, cada borrador lleva un número de revisión:
+la segunda versión solo se acepta si sigue editando la versión que conocía, y una versión antigua recibe un
+aviso de conflicto en vez de borrar los cambios nuevos.
+
+Los CIF y nombres del borrador se guardan cifrados, igual que los de las facturas definitivas, y el borrador
+tiene sus propias reglas de aislamiento por asesoría. Confirmar una factura espera primero a que el borrador
+termine de guardarse; así no se confirma una versión distinta de la que la persona acaba de ver.
+
+### La revisión recupera el borrador correcto (R-023, 21/08/2026)
+
+Al volver a abrir una factura, la aplicación ya no enseña por accidente la lectura antigua de la IA si
+había cambios guardados. Primero busca el borrador; si existe, muestra esos datos y conserva las marcas de
+confianza que produjo la IA para que la persona sepa qué datos eran dudosos originalmente. Si nunca hubo
+borrador, sigue mostrando la lectura OCR como antes.
+
+La respuesta también indica si los datos vienen del OCR o del borrador, qué número de revisión tienen, cuándo
+se guardaron y cuántas páginas tiene el documento. Así la pantalla y el servidor hablan de la misma versión.
+
+### Confirmación atómica desde el borrador (R-024, 21/08/2026)
+
+Al confirmar, el servidor vuelve a comprobar los datos y usa el borrador guardado como fuente de verdad,
+aunque el navegador mande una versión antigua. Guarda la factura, sus tramos, las correcciones y la auditoría;
+marca el fichero como confirmado y solo entonces borra el borrador, todo dentro de la misma operación.
+
+Si cualquier comprobación falla, la factura no queda a medias y el borrador sigue disponible para continuar.
+La foto original tampoco se toca durante este paso.
+
+### Confirmar y continuar con la siguiente (R-025, 21/08/2026)
+
+Después de guardar una factura, la aplicación vuelve a preguntar qué queda pendiente en la bandeja. Si hay
+otra factura lista para revisar, abre automáticamente la primera; no decide cuál es antes de que el servidor
+haya confirmado la actual. Si no queda ninguna, vuelve a **Mis facturas**.
+
+### Supervisión de pendientes del equipo (R-026, 21/08/2026)
+
+El administrador de la asesoría tiene ahora una pantalla separada, **Pendientes del equipo**, donde ve las
+subidas pendientes de otras personas: quién la subió, empresa, estado, fecha, dirección y número de páginas.
+No mezcla esa vista con **Mis facturas**, que sigue siendo estrictamente personal.
+
+Puede abrir un pendiente para consultar la revisión, pero esa apertura usa una puerta de solo lectura. En esa
+pantalla no existen botones para guardar, confirmar ni confirmar y siguiente; el borrador continúa perteneciendo
+al usuario que subió el documento.
+
+### Supervisión global admin-tech (R-027, 21/08/2026)
+
+El usuario técnico de plataforma tiene una pantalla separada para ver pendientes de todas las asesorías. La
+lista muestra primero solo datos de control, como tenant, empresa, usuario y estado. El contenido de un documento
+no se abre automáticamente: hay que pulsar **Abrir en solo lectura**.
+
+Cada apertura se registra con el usuario técnico, la asesoría afectada, el documento, el identificador de la
+petición y la IP de origen. La consulta se ejecuta entrando explícitamente en el contexto de esa asesoría, en
+vez de usar una consulta global que pudiera saltarse las barreras de aislamiento. La primera versión ya está
+cableada en backend y frontend, con paginación estable mediante un cursor que permite continuar sin
+repetir ni saltar documentos.
+
+### Retención de documentos no confirmados (R-028, 22/08/2026)
+
+Un job diario busca documentos que llevan más de 90 días sin confirmarse. Primero guarda las ubicaciones de
+sus objetos, borra el borrador y las relaciones provisionales en la base de datos, registra una auditoría sin
+datos personales y confirma la transacción. Solo después intenta borrar los objetos de MinIO.
+
+Esto evita el problema peligroso de borrar primero el fichero físico y dejar la base de datos diciendo que
+existe. Si MinIO está temporalmente caído, la base de datos sigue limpia y una métrica cuenta el fallo para
+que operaciones pueda detectarlo y reintentarlo.
+
+### Mistral con campos estructurados (R-029, 22/08/2026)
+
+Mistral ya no se trata como si nunca pudiera devolver campos de factura. Se le envía un contrato JSON que
+indica exactamente qué debe devolver: fecha, número, importes, tramos de IVA e identificadores fiscales.
+Los importes viajan como texto, por ejemplo `"121.00"`, para no perder céntimos por redondeos, y dentro de
+la aplicación se convierten a `Decimal`.
+
+La respuesta se valida antes de entrar al resto del sistema. Si falta la anotación estructurada o está mal
+formada, el motor falla de forma visible. Los campos extraídos conservan confianza baja porque la confianza
+del proveedor por sí sola nunca confirma automáticamente una factura.
+
+### Candidatos Gemini versionados (R-030, 22/08/2026)
+
+La configuración ya no depende de nombres ambiguos como `preview` ni de un alias `latest`. El laboratorio
+tiene tres candidatos identificables: Gemini 3.5 Flash, Gemini 3.6 Flash y Gemini 3.5 Flash-Lite.
+
+La producción sigue apuntando a una versión elegida manualmente, Gemini 3.5 Flash. Que aparezca otro modelo
+mejor en un benchmark no cambia la producción automáticamente; esa promoción requiere una decisión explícita.
+
+### Contrato único de extracción OCR (R-031, 22/08/2026)
+
+Los distintos lectores de IA ya hablan el mismo idioma al entregar una factura. El contrato común contiene
+la versión del esquema, fecha, número, importes, IVA, IRPF e identificadores fiscales. Los importes siempre
+son texto al cruzar la frontera de cada proveedor y se convierten a números decimales dentro de Autofactu.
+
+Así Gemini, Claude, Azure OpenAI y Mistral pueden compararse sin que cada uno invente nombres de campos o
+reglas distintas. Las respuestas antiguas todavía se pueden leer para no romper datos ya generados, pero las
+nuevas deben cumplir el esquema versionado.
+
+### Producción OCR y laboratorio separados (R-046, 22/08/2026)
+
+El panel técnico ya distingue dos cosas que antes estaban mezcladas: el lector que usa la aplicación para
+las facturas reales y el laboratorio donde se prueban otros motores y variantes. Apagar el benchmark
+automático detiene las llamadas experimentales, pero no cambia el lector fijo de producción.
+
+La base de datos guarda estos controles separados. El botón de promoción pide confirmación y deja una
+traza permanente con la política anterior, la nueva, quién la promovió y cuándo. Así una prueba no puede
+cambiar la producción por accidente ni quedar sin explicación.
+
+### Telemetría sin datos privados (R-047, 22/08/2026)
+
+Autofactu ahora mide cuánto tarda una subida, cuánto espera una factura en la cola, cuánto tarda el OCR,
+cuándo se usa el segundo lector, cuánto tarda guardar un borrador y cuánto tiempo pasa hasta confirmar.
+También publica contadores agregados de documentos pendientes, listos y caducados.
+
+Estas métricas sirven para saber si el sistema está sano sin enviar a Prometheus datos de facturas. Nunca se
+usan como etiquetas el CIF, el proveedor, el número de factura ni el importe. El número de páginas se agrupa
+en tramos para evitar crear miles de métricas diferentes.
+
+### ETA honesta del OCR (R-048, 22/08/2026)
+
+La pantalla puede mostrar cuánto falta solo cuando Autofactu ya tiene al menos 30 lecturas terminadas de
+la misma combinación de motor, modelo y tamaño del documento. Calcula las tandas según los trabajadores
+disponibles y muestra un intervalo, por ejemplo 20-35 segundos. Si todavía no hay suficientes datos, no
+inventa una cifra y deja la ETA sin mostrar.
+
+### Endurecimiento del flujo OCR (R-049, 22/08/2026)
+
+Se separó la puerta de “puedo leer” de la puerta de “puedo modificar”. Un administrador de asesoría
+puede abrir una factura pendiente de otra persona para supervisarla, pero no puede guardar su borrador,
+confirmarla ni reintentar su OCR. La pantalla de supervisión y la apertura del administrador técnico usan
+un camino de solo lectura.
+
+Además, la API ordena al navegador y a los proxies no guardar respuestas ni imágenes privadas, y al cerrar
+sesión se limpia la caché de datos de la cuenta anterior. La validación completa contra servicios reales
+queda pendiente de disponer de Redis y Postgres.
+
+### Preparación de la prueba de carga OCR (R-050, 22/08/2026)
+
+Se ha preparado un arnés que lanza 100 subidas simultáneas, diez por cada uno de diez usuarios, y comprueba
+que cada usuario solo ve sus propios documentos. El informe mide p50/p95, respuestas `429`, estados OCR,
+pool de Postgres, Redis y recuperación, sin guardar correos ni datos fiscales.
+
+La prueba real necesita un entorno de staging con Postgres, Redis, MinIO, antivirus y worker OCR. Por eso
+esta fase queda pendiente de ejecución empírica y no se presenta como una garantía de rendimiento de producción.
+
+### Rollout reversible por fases (R-051, 22/08/2026)
+
+Autofactu ya tiene un conjunto cerrado de interruptores de despliegue. Permiten activar una capacidad
+primero en pruebas, después para un tenant piloto y ampliar progresivamente. Si algo sale mal, se apaga
+el interruptor y se vuelve al flujo anterior sin borrar facturas ni deshacer migraciones.
+
+El aprendizaje agregado de proveedores, la bandeja personal, el guardado automático de borradores, la
+captura multipágina y las etapas de procesamiento ya consumen estos interruptores. Si se apaga el scanner
+nuevo, se conserva la captura completa sin recorte OpenCV; si se apaga la política OCR nueva, se vuelve al
+primario legacy Gemini 3 Flash. `/auth/me` entrega al navegador solo el resultado de la evaluación para su
+tenant, nunca la lista interna de tenants piloto.
+
+### Rollback del scanner y de la política OCR (R-051, 23/08/2026)
+
+Los dos interruptores que faltaban ya tienen una vuelta atrás segura. Si se apaga el scanner nuevo,
+Autofactu conserva la foto completa y no intenta detectar bordes con OpenCV. Si se apaga la política OCR
+nueva, el worker vuelve al lector Gemini 3 Flash que se usaba antes de la política versionada, sin activar
+un segundo lector ni consultar la configuración nueva. Ambos cambios son de configuración y no requieren
+deshacer migraciones.
+
+### Preflight del canario (R-051, 23/08/2026)
+
+Antes de activar el canario existe un comprobador que revisa que los siete interruptores sean booleanos,
+que la lista de tenants piloto contenga UUIDs válidos y que staging tenga sus secretos mínimos. No muestra
+ningún secreto. Si falla, el despliegue se detiene antes de probar con usuarios reales; aun pasando, todavía
+hay que comprobar conectividad y ejecutar el canario funcional.
 
 ## 5. Qué queda por delante
 

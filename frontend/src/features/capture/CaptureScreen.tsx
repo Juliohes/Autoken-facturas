@@ -50,6 +50,8 @@ function firstVideoTrack(stream: MediaStream | null) {
 export function CaptureScreen({ onUploaded }: Props) {
   const { user } = useSession()
   const role = user?.role
+  const continuousCaptureEnabled = user?.feature_flags?.continuous_capture_enabled !== false
+  const scannerV2Enabled = user?.feature_flags?.scanner_v2_enabled !== false
   // S6.14 C7: mensaje de una sola vez cuando se llega aquí redirigido tras una "captura ilegible"
   // (`ConfirmationScreen.tsx`), vía estado de navegación efímero (mismo patrón que `lowSharpness`).
   const location = useLocation()
@@ -179,14 +181,14 @@ export function CaptureScreen({ onUploaded }: Props) {
     // normaliza la imagen. Evita dejar recursos del móvil activos ante un procesado lento.
     stopCamera()
     try {
-      const analysis = await analyzeFrame(frame)
+      const analysis = scannerV2Enabled ? await analyzeFrame(frame) : null
       if (operationRef.current !== operation) return
-      const blob = await processCapturedFrame(frame, analysis.corners)
+      const blob = await processCapturedFrame(frame, analysis?.corners ?? null)
       if (operationRef.current !== operation) return
       if (multiplePages) {
         addPage(blob)
       } else {
-        await uploadBlob(blob, operation, analysis.sharpness)
+        await uploadBlob(blob, operation, analysis?.sharpness ?? null)
       }
     } catch {
       if (operationRef.current === operation) {
@@ -276,6 +278,7 @@ export function CaptureScreen({ onUploaded }: Props) {
   }
 
   const startMultiplePages = () => {
+    if (!continuousCaptureEnabled) return
     if (!canStart) {
       setCaptureError('Elige una empresa antes de añadir las fotos.')
       return
@@ -393,7 +396,7 @@ export function CaptureScreen({ onUploaded }: Props) {
           </div>
           <div className="flex justify-center gap-3">
             <button type="button" onClick={openFilePicker} className="rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100">Subir archivo</button>
-            <button type="button" onClick={startMultiplePages} className="rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100">Varias hojas</button>
+            {continuousCaptureEnabled && <button type="button" onClick={startMultiplePages} className="rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100">Varias hojas</button>}
           </div>
         </div>
       )}
@@ -425,7 +428,7 @@ export function CaptureScreen({ onUploaded }: Props) {
           </div>
         </div>
       )}
-      <input ref={fileInputRef} type="file" aria-label="Elige o toma una foto" accept="image/*" multiple={multiplePages} onChange={(event) => void handleFileSelected(event)} className="sr-only" />
+      <input ref={fileInputRef} type="file" aria-label="Elige o toma una foto" accept="image/*" multiple={multiplePages && continuousCaptureEnabled} onChange={(event) => void handleFileSelected(event)} className="sr-only" />
     </section>
   )
 }

@@ -453,6 +453,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/uploads/{file_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Upload Status
+         * @description Consulta el estado de OCR con la misma autorización privada que la descarga.
+         */
+        get: operations["upload_status_api_v1_uploads__file_id__status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/uploads/{file_id}/retry-ocr": {
         parameters: {
             query?: never;
@@ -541,6 +561,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/uploads/{file_id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save Review Draft
+         * @description Guarda un borrador con control optimista de revisión (R-022).
+         */
+        put: operations["save_review_draft_api_v1_uploads__file_id__draft_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/uploads/{file_id}/review": {
         parameters: {
             query?: never;
@@ -601,6 +641,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/uploads/{file_id}/review-readonly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Review Upload Readonly
+         * @description Abre un pendiente ajeno para supervisión sin exponer acciones de escritura (R-026).
+         */
+        get: operations["review_upload_readonly_api_v1_uploads__file_id__review_readonly_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/pending-supervision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pending Supervision
+         * @description Pendientes de otros usuarios del tenant, solo metadata y paginación estable (R-026).
+         */
+        get: operations["pending_supervision_api_v1_invoices_pending_supervision_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoices/history": {
         parameters: {
             query?: never;
@@ -613,6 +693,26 @@ export interface paths {
          * @description Últimos documentos aceptados del contexto del usuario (S6.12). Solo lectura.
          */
         get: operations["invoice_history_api_v1_invoices_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Invoice Inbox
+         * @description Bandeja SELF ONLY, también para `tenant_admin`, con resumen y cursor estable.
+         */
+        get: operations["invoice_inbox_api_v1_invoices_inbox_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -981,6 +1081,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/ocr-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ocr Policy */
+        get: operations["get_ocr_policy_api_v1_platform_ocr_policy_get"];
+        /** Set Ocr Policy */
+        put: operations["set_ocr_policy_api_v1_platform_ocr_policy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Global Pending */
+        get: operations["list_global_pending_api_v1_platform_pending_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/pending/{tenant_id}/{file_id}/review-readonly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Global Review Readonly */
+        get: operations["global_review_readonly_api_v1_platform_pending__tenant_id___file_id__review_readonly_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform/ocr-ranking": {
         parameters: {
             query?: never;
@@ -1083,6 +1235,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/ocr-lab/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lab Settings */
+        get: operations["get_lab_settings_api_v1_platform_ocr_lab_settings_get"];
+        /** Set Lab Settings */
+        put: operations["set_lab_settings_api_v1_platform_ocr_lab_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/ocr-lab/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Promote Ocr Policy */
+        post: operations["promote_ocr_policy_api_v1_platform_ocr_lab_promote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform/benchmark/backfill": {
         parameters: {
             query?: never;
@@ -1138,6 +1325,26 @@ export interface paths {
         };
         /** Get Benchmark Ranking */
         get: operations["get_benchmark_ranking_api_v1_platform_benchmark_ranking_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/benchmark/ranking/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Benchmark Metrics
+         * @description Informe R-032 de métricas comparables, sin ejecutar motores OCR.
+         */
+        get: operations["get_benchmark_metrics_api_v1_platform_benchmark_ranking_metrics_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1210,6 +1417,41 @@ export interface components {
             completed: number;
             /** Failed Count */
             failed_count: number;
+        };
+        /** BenchmarkMetricsSummaryOut */
+        BenchmarkMetricsSummaryOut: {
+            /** Variant */
+            variant: string;
+            /** Engine */
+            engine: string;
+            /** Model */
+            model: string | null;
+            /** Executions */
+            executions: number;
+            /** Errors */
+            errors: number;
+            /** Field Exact Accuracy */
+            field_exact_accuracy: number | null;
+            /** Critical Field Accuracy */
+            critical_field_accuracy: number | null;
+            /** All Critical Exact Rate */
+            all_critical_exact_rate: number | null;
+            /** Tax Lines Accuracy */
+            tax_lines_accuracy: number | null;
+            /** Arithmetic Valid Rate */
+            arithmetic_valid_rate: number | null;
+            /** Hallucination Cases */
+            hallucination_cases: number;
+            /** P50 Duration Ms */
+            p50_duration_ms: number | null;
+            /** P95 Duration Ms */
+            p95_duration_ms: number | null;
+            /** Pages */
+            pages: number | null;
+            /** Api Cost Usd */
+            api_cost_usd: string | null;
+            /** Manual Corrections Per Invoice */
+            manual_corrections_per_invoice: number | null;
         };
         /** BenchmarkRankingOut */
         BenchmarkRankingOut: {
@@ -1538,6 +1780,43 @@ export interface components {
             /** Ratio */
             ratio: number | null;
         };
+        /** GlobalPendingOut */
+        GlobalPendingOut: {
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Tenant Slug */
+            tenant_slug: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** User Email */
+            user_email: string;
+            /** Company Name */
+            company_name: string;
+            /** Status */
+            status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Direction */
+            direction: ("recibida" | "emitida") | null;
+            /** Page Count */
+            page_count: number;
+        };
+        /** GlobalPendingPageOut */
+        GlobalPendingPageOut: {
+            /** Items */
+            items: components["schemas"]["GlobalPendingOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1598,6 +1877,53 @@ export interface components {
             duplicates: components["schemas"]["DuplicateRowOut"][];
             /** Truncated */
             truncated: boolean;
+        };
+        /**
+         * InboxItemOut
+         * @description Documento de la bandeja personal, sin PII fiscal (R-020).
+         */
+        InboxItemOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Status */
+            status: string;
+            /** Processing Stage */
+            processing_stage: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Direction */
+            direction: ("recibida" | "emitida") | null;
+            /** Page Count */
+            page_count: number;
+            /** Capture Session Id */
+            capture_session_id: string | null;
+            /** Capture Sequence */
+            capture_sequence: number | null;
+            /** Draft Updated At */
+            draft_updated_at: string | null;
+        };
+        /** InboxOut */
+        InboxOut: {
+            /** Items */
+            items: components["schemas"]["InboxItemOut"][];
+            summary: components["schemas"]["InboxSummaryOut"];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** InboxSummaryOut */
+        InboxSummaryOut: {
+            /** Processing */
+            processing: number;
+            /** Ready */
+            ready: number;
+            /** Attention */
+            attention: number;
         };
         /**
          * InvalidRowOut
@@ -1864,6 +2190,75 @@ export interface components {
             company: components["schemas"]["MeCompanyOut"] | null;
             /** Is Admin Tech */
             is_admin_tech: boolean;
+            /** Feature Flags */
+            feature_flags: {
+                [key: string]: boolean;
+            };
+        };
+        /** OcrLabSettingsOut */
+        OcrLabSettingsOut: {
+            /** Lab Visible */
+            lab_visible: boolean;
+            /** Auto Benchmark Enabled */
+            auto_benchmark_enabled: boolean;
+            /** Benchmark Engines */
+            benchmark_engines: string[];
+            /** Benchmark Variants */
+            benchmark_variants: string[];
+        };
+        /** OcrLabSettingsPayload */
+        OcrLabSettingsPayload: {
+            /** Lab Visible */
+            lab_visible: boolean;
+            /** Auto Benchmark Enabled */
+            auto_benchmark_enabled: boolean;
+            /** Benchmark Engines */
+            benchmark_engines: string[];
+            /** Benchmark Variants */
+            benchmark_variants: string[];
+        };
+        /**
+         * OcrPolicy
+         * @description Política versionada que decide qué motor puede usar producción.
+         */
+        OcrPolicy: {
+            /** Version */
+            version: number;
+            /** Primary Engine */
+            primary_engine: string;
+            /** Primary Model */
+            primary_model: string;
+            /** Fallback Enabled */
+            fallback_enabled: boolean;
+            /** Fallback Engine */
+            fallback_engine?: string | null;
+            /** Fallback Model */
+            fallback_model?: string | null;
+            /**
+             * Consensus Mode
+             * @enum {string}
+             */
+            consensus_mode: "primary_only" | "per_field";
+        };
+        /** OcrPolicyPromotionOut */
+        OcrPolicyPromotionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            old_policy: components["schemas"]["OcrPolicy"];
+            new_policy: components["schemas"]["OcrPolicy"];
+            /**
+             * Actor Id
+             * Format: uuid
+             */
+            actor_id: string;
+            /**
+             * Promoted At
+             * Format: date-time
+             */
+            promoted_at: string;
         };
         /** OcrRetryOut */
         OcrRetryOut: {
@@ -1942,6 +2337,77 @@ export interface components {
             company: string | null;
             /** Joins Existing Company */
             joins_existing_company: boolean;
+        };
+        /**
+         * ReviewDraftIn
+         * @description Snapshot editable previo a confirmar una factura (R-022).
+         */
+        ReviewDraftIn: {
+            /** Revision */
+            revision: number;
+            /** Direction */
+            direction?: ("recibida" | "emitida") | null;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Invoice Number */
+            invoice_number?: string | null;
+            /** Counterparty Tax Id */
+            counterparty_tax_id?: string | null;
+            /** Counterparty Name */
+            counterparty_name?: string | null;
+            /** Net Amount */
+            net_amount?: number | string | null;
+            /** Tax Amount */
+            tax_amount?: number | string | null;
+            /** Total Amount */
+            total_amount?: number | string | null;
+            /** Irpf Amount */
+            irpf_amount?: number | string | null;
+            /** Tax Lines */
+            tax_lines?: components["schemas"]["TaxLineIn"][];
+        };
+        /** ReviewDraftOut */
+        ReviewDraftOut: {
+            /** Revision */
+            revision: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * SupervisionItemOut
+         * @description Metadata de un pendiente ajeno para `tenant_admin`, sin acciones de escritura (R-026).
+         */
+        SupervisionItemOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** User Email */
+            user_email: string;
+            /** Company Name */
+            company_name: string;
+            /** Status */
+            status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Direction */
+            direction: ("recibida" | "emitida") | null;
+            /** Page Count */
+            page_count: number;
+        };
+        /** SupervisionOut */
+        SupervisionOut: {
+            /** Items */
+            items: components["schemas"]["SupervisionItemOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
         };
         /**
          * TaxLineIn
@@ -2104,6 +2570,34 @@ export interface components {
             created_at: string;
             /** Direction */
             direction: ("recibida" | "emitida") | null;
+        };
+        /**
+         * UploadStatusOut
+         * @description Estado operativo de un fichero, sin PII ni detalles de almacenamiento (R-019).
+         */
+        UploadStatusOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Status */
+            status: string;
+            /** Processing Stage */
+            processing_stage: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Ocr Started At */
+            ocr_started_at: string | null;
+            /** Ocr Finished At */
+            ocr_finished_at: string | null;
+            /** Eta Seconds Min */
+            eta_seconds_min?: number | null;
+            /** Eta Seconds Max */
+            eta_seconds_max?: number | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -2730,6 +3224,37 @@ export interface operations {
             };
         };
     };
+    upload_status_api_v1_uploads__file_id__status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     retry_ocr_api_v1_uploads__file_id__retry_ocr_post: {
         parameters: {
             query?: never;
@@ -2860,6 +3385,41 @@ export interface operations {
             };
         };
     };
+    save_review_draft_api_v1_uploads__file_id__draft_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewDraftIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewDraftOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     review_upload_api_v1_uploads__file_id__review_get: {
         parameters: {
             query?: never;
@@ -2965,6 +3525,71 @@ export interface operations {
             };
         };
     };
+    review_upload_readonly_api_v1_uploads__file_id__review_readonly_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pending_supervision_api_v1_invoices_pending_supervision_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupervisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     invoice_history_api_v1_invoices_history_get: {
         parameters: {
             query?: never;
@@ -2981,6 +3606,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HistoryOut"];
+                };
+            };
+        };
+    };
+    invoice_inbox_api_v1_invoices_inbox_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -3546,6 +4203,125 @@ export interface operations {
             };
         };
     };
+    get_ocr_policy_api_v1_platform_ocr_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OcrPolicy"];
+                };
+            };
+        };
+    };
+    set_ocr_policy_api_v1_platform_ocr_policy_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OcrPolicy"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OcrPolicy"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_global_pending_api_v1_platform_pending_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalPendingPageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    global_review_readonly_api_v1_platform_pending__tenant_id___file_id__review_readonly_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_ranking_api_v1_platform_ocr_ranking_get: {
         parameters: {
             query?: never;
@@ -3697,6 +4473,92 @@ export interface operations {
             };
         };
     };
+    get_lab_settings_api_v1_platform_ocr_lab_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OcrLabSettingsOut"];
+                };
+            };
+        };
+    };
+    set_lab_settings_api_v1_platform_ocr_lab_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OcrLabSettingsPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OcrLabSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    promote_ocr_policy_api_v1_platform_ocr_lab_promote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OcrPolicy"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OcrPolicyPromotionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_backfill_api_v1_platform_benchmark_backfill_post: {
         parameters: {
             query?: never;
@@ -3775,6 +4637,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BenchmarkRankingOut"];
+                };
+            };
+        };
+    };
+    get_benchmark_metrics_api_v1_platform_benchmark_ranking_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkMetricsSummaryOut"][];
                 };
             };
         };

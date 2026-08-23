@@ -25,6 +25,7 @@ __all__ = [
     "GeminiInvoiceExtractor",
     "build_default_extractor",
     "build_gemini_pro_extractor",
+    "build_gemini_model_extractor",
     "EXTRACTION_PROMPT",
 ]
 
@@ -123,6 +124,17 @@ def build_gemini_pro_extractor(settings: Any) -> InvoiceExtractor:
     return GeminiInvoiceExtractor(
         engine="gemini-3-pro",
         model=settings.gemini_pro_model,
+        project=settings.google_cloud_project,
+        location=settings.gemini_location,
+        credentials_path=settings.google_application_credentials,
+    )
+
+
+def build_gemini_model_extractor(settings: Any, *, engine: str, model: str) -> InvoiceExtractor:
+    """Construye un candidato Gemini con identidad y modelo fijados por el benchmark."""
+    return GeminiInvoiceExtractor(
+        engine=engine,
+        model=model,
         project=settings.google_cloud_project,
         location=settings.gemini_location,
         credentials_path=settings.google_application_credentials,

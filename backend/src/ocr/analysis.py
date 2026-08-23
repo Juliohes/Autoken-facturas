@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
+from ocr.confidence import Evidence, compute_field_confidence
 from ocr.extraction import (
     CONFIDENCE_RANK,
     Confidence,
@@ -29,7 +30,7 @@ from ocr.extraction import (
     ExtractedTaxId,
     is_low,
 )
-from ocr.verification import TaxLine, check_invoice_totals
+from ocr.verification import TaxLine, check_invoice_totals, check_invoice_totals_detailed
 from shared.tax_id import normalize_tax_id, validate_tax_id
 
 __all__ = [
@@ -71,6 +72,7 @@ class InvoiceAnalysis:
     own_tax_id_present: bool
     status: str
     confidences: dict[str, Any] = field(default_factory=dict)
+    system_confidences: dict[str, Any] = field(default_factory=dict)
     validations: dict[str, Any] = field(default_factory=dict)
 
 
@@ -100,7 +102,14 @@ def analyze_invoice(invoice: ExtractedInvoice, own_cif: str) -> InvoiceAnalysis:
         check = check_invoice_totals(
             lines, invoice.total_amount, irpf_cuota=invoice.irpf_amount or Decimal(0)
         )
-        totals = {VALIDATION_FIELD_VALID: check.valid, "reason": check.reason}
+        detail = check_invoice_totals_detailed(
+            lines, invoice.total_amount, irpf_cuota=invoice.irpf_amount or Decimal(0)
+        )
+        totals = {
+            VALIDATION_FIELD_VALID: check.valid,
+            "reason": check.reason,
+            "detail": detail.model_dump(mode="json"),
+        }
 
     # Mismas claves que `fields` en la respuesta de `review` (`invoicing.service.review`):
     # el frontend indexa `review.confidences[<nombre del campo>]` con esos nombres exactos
@@ -131,10 +140,23 @@ def analyze_invoice(invoice: ExtractedInvoice, own_cif: str) -> InvoiceAnalysis:
     if totals is not None and not totals[VALIDATION_FIELD_VALID]:
         confidences["total_amount"] = "baja"
 
+    system_confidences = _compute_system_confidences(
+        invoice, counterparty, mod23=mod23, totals=totals
+    )
+    confidences["_system_confidence"] = system_confidences
+
+    unknown_tax_rates = invoice.raw.get("_unknown_tax_rates", [])
+    if not isinstance(unknown_tax_rates, list):
+        unknown_tax_rates = []
     validations = {
         "own_tax_id_present": own_present,
         VALIDATION_KEY_COUNTERPARTY_MOD23: mod23,
         VALIDATION_KEY_TOTALS: totals,
+        "tax_rate_policy": {
+            VALIDATION_FIELD_VALID: not unknown_tax_rates,
+            "unknown_tax_rate": bool(unknown_tax_rates),
+            "rates": unknown_tax_rates,
+        },
     }
 
     # S6.14 C7: captura ilegible (la imagen en sí es el problema) se decide ANTES que needs_review,
@@ -143,7 +165,9 @@ def analyze_invoice(invoice: ExtractedInvoice, own_cif: str) -> InvoiceAnalysis:
     if _is_capture_unreadable(invoice, counterparty):
         status = STATUS_HARD_FAIL
     else:
-        needs_review = _needs_review(invoice, counterparty, own_present, mod23, totals)
+        needs_review = _needs_review(
+            invoice, counterparty, own_present, mod23, totals, bool(unknown_tax_rates)
+        )
         status = STATUS_NEEDS_REVIEW if needs_review else STATUS_AUTO_OK
 
     return InvoiceAnalysis(
@@ -153,6 +177,7 @@ def analyze_invoice(invoice: ExtractedInvoice, own_cif: str) -> InvoiceAnalysis:
         own_tax_id_present=own_present,
         status=status,
         confidences=confidences,
+        system_confidences=system_confidences,
         validations=validations,
     )
 
@@ -182,6 +207,7 @@ def _needs_review(
     own_present: bool,
     mod23: dict[str, Any] | None,
     totals: dict[str, Any] | None,
+    unknown_tax_rate: bool,
 ) -> bool:
     """True si CUALQUIER señal exige revisión reforzada (enrutado por confianza + validaciones)."""
     if counterparty is None:  # contraparte no leída
@@ -214,7 +240,91 @@ def _needs_review(
         return True
     if mod23 is not None and not mod23["valid"]:  # mód-23 KO
         return True
+    if unknown_tax_rate:
+        return True
     return totals is not None and not totals["valid"]  # descuadre aritmético
+
+
+def _compute_system_confidences(
+    invoice: ExtractedInvoice,
+    counterparty: ExtractedTaxId | None,
+    *,
+    mod23: dict[str, Any] | None,
+    totals: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    """Combina la confianza declarada con validaciones y consenso ya trazado."""
+    trace = invoice.raw.get("_consensus", {})
+    if not isinstance(trace, dict):
+        trace = {}
+    fields: dict[str, tuple[Any, Confidence | None]] = {
+        "issue_date": (invoice.issue_date, invoice.issue_date_confidence),
+        "total_amount": (invoice.total_amount, invoice.total_confidence),
+        "invoice_number": (invoice.invoice_number, invoice.invoice_number_confidence),
+        "net_amount": (invoice.net_amount, invoice.net_amount_confidence),
+        "tax_amount": (invoice.tax_amount, invoice.tax_amount_confidence),
+        "irpf_rate": (invoice.irpf_rate, invoice.irpf_rate_confidence),
+        "irpf_amount": (invoice.irpf_amount, invoice.irpf_amount_confidence),
+        "counterparty_tax_id": (
+            counterparty.value if counterparty is not None else None,
+            counterparty.value_confidence if counterparty is not None else None,
+        ),
+        "counterparty_name": (
+            counterparty.name if counterparty is not None else None,
+            counterparty.name_confidence if counterparty is not None else None,
+        ),
+    }
+    result: dict[str, dict[str, Any]] = {}
+    for field_name, (value, provider_confidence) in fields.items():
+        field_trace = trace.get(field_name, {})
+        if not isinstance(field_trace, dict):
+            field_trace = {}
+        reasons = field_trace.get("reasons", [])
+        sources = field_trace.get("sources", [])
+        if not isinstance(reasons, list):
+            reasons = []
+        if not isinstance(sources, list):
+            sources = []
+        invalid_reason: str | None = None
+        valid_reason: str | None = None
+        if field_name == "counterparty_tax_id" and mod23 is not None:
+            valid_reason = "tax_id_checksum_ok"
+            invalid_reason = "tax_id_checksum_failed"
+        elif field_name == "total_amount" and totals is not None:
+            valid_reason = "invoice_math_ok"
+            invalid_reason = "invoice_math_failed"
+        validation = mod23 if field_name == "counterparty_tax_id" else totals
+        validation_is_valid = (
+            validation is not None and validation.get(VALIDATION_FIELD_VALID) is True
+        )
+        validation_is_invalid = (
+            validation is not None and validation.get(VALIDATION_FIELD_VALID) is False
+        )
+        evidence = Evidence(
+            provider_confidence=_confidence_score(provider_confidence),
+            primary_high=provider_confidence == "alta",
+            fallback_agrees="engines_agree" in reasons,
+            deterministic_valid=valid_reason is not None and validation_is_valid,
+            deterministic_invalid=invalid_reason is not None and validation_is_invalid,
+            deterministic_valid_reason=valid_reason or "deterministic_valid",
+            deterministic_invalid_reason=invalid_reason or "deterministic_invalid",
+            fallback_used=len(sources) > 1,
+            engine_conflict=field_trace.get("status") == "conflict"
+            or "engines_disagree" in reasons,
+            field_present=value is not None,
+        )
+        confidence = compute_field_confidence(evidence)
+        result[field_name] = {
+            "provider_confidence": evidence.provider_confidence,
+            "system_confidence": confidence.score,
+            "reasons": list(dict.fromkeys([*reasons, *confidence.reasons])),
+        }
+    return result
+
+
+def _confidence_score(confidence: Confidence | None) -> float | None:
+    if confidence is None:
+        return None
+    return {"alta": 1.0, "media": 0.6, "baja": 0.2}[confidence]
 
 
 def _is_capture_unreadable(invoice: ExtractedInvoice, counterparty: ExtractedTaxId | None) -> bool:

@@ -123,6 +123,7 @@ async def test_c9_genera_una_fila_por_cada_variante_de_un_motor_con_su_desglose_
         own_cif=OWN_CIF,
         ocr_experiment_enabled=True,
         extractors=[("gemini-3-flash", make_extractor(_reading_invoice()))],
+        manual_corrections_per_invoice=2,
     )
 
     results = await fetch_benchmark_results(dsns, file_id=file_id)
@@ -131,6 +132,19 @@ async def test_c9_genera_una_fila_por_cada_variante_de_un_motor_con_su_desglose_
     for row in results:
         assert row["engine"] == "gemini-3-flash"
         assert row["error"] is None
+        assert row["benchmark_contract_version"] == "r032-v1"
+        assert row["schema_version"] == "1"
+        assert row["normalization_version"] == "field-matching-v1"
+        assert row["pages"] == 1
+        assert row["ground_truth_hash"] == results[0]["ground_truth_hash"]
+        assert row["document_sha256"] == results[0]["document_sha256"]
+        assert row["field_exact_accuracy"] == 1.0
+        assert row["critical_field_accuracy"] == 1.0
+        assert row["all_critical_exact"] is True
+        assert row["tax_lines_matched"] is True
+        assert row["arithmetic_valid"] is True
+        assert row["hallucination_flags"] == []
+        assert row["manual_corrections_per_invoice"] == 2
         assert row["comparables"] == 8, row  # 7 campos escalares + tramos de IVA
         assert row["aciertos"] == 8, row
         field_results = row["field_results"]

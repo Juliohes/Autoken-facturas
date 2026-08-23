@@ -45,6 +45,10 @@ _STATIC_SECURITY_HEADERS: dict[str, str] = {
     "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
+    # La API sirve datos fiscales y blobs privados; no permitimos que el navegador o un proxy los
+    # conserve tras cambiar de usuario en la misma sesión.
+    "Cache-Control": "private, no-store, max-age=0",
+    "Pragma": "no-cache",
 }
 # HSTS de 2 años con subdominios (solo producción, tras TLS). Sin `preload` para no comprometerse
 # con la lista de precarga desde aquí (decisión de despliegue; se puede añadir en S5.1).

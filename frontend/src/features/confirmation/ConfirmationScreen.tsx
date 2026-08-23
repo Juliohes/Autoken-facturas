@@ -17,6 +17,9 @@ import { availableTaxRates, taxRateLabel } from './taxLines'
 import { ConfirmRejectedError, useConfirm } from './useConfirm'
 import { useReview, CaptureUnreadableError, PendingOcrError } from './useReview'
 import { useDraftCounterpartyVerdict } from './useDraftCounterpartyVerdict'
+import { useDraftAutosave } from './useDraftAutosave'
+import { ProcessingProgress } from '../processing/ProcessingProgress'
+import { useUploadStatus } from '../processing/useUploadStatus'
 import {
   BLOCKING_REASONS,
   WARNING_IMBALANCE,
@@ -43,9 +46,13 @@ const CAPTURE_UNREADABLE_MESSAGE = 'La foto no se pudo leer. Repite la captura.'
 
 export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction }: Props) {
   const review = useReview(fileId)
+  const currentUser = useCurrentUser()
   const navigate = useNavigate()
   const location = useLocation()
   const isCaptureUnreadable = review.failureReason instanceof CaptureUnreadableError
+  const isPendingOcr = review.failureReason instanceof PendingOcrError
+  const uploadStatus = useUploadStatus(fileId, isPendingOcr)
+  const processingStagesEnabled = currentUser.data?.feature_flags?.processing_stages_enabled !== false
 
   // C7: una captura ilegible nunca abre un formulario con campos vacíos ni el error genérico de
   // "No se pudo abrir esta factura" — se explica y se vuelve a capturar automáticamente.
@@ -58,16 +65,25 @@ export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction }: 
   if (isCaptureUnreadable) return null
 
   if (review.isLoading) {
-    const isPendingOcr = review.failureReason instanceof PendingOcrError
     return (
       <div className="p-6 flex flex-col items-center justify-center space-y-4 text-center py-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-emerald-500" />
-        <p className="text-slate-100 font-medium">
-          {isPendingOcr ? 'Leyendo la factura...' : 'Cargando datos de revisión…'}
-        </p>
-        <p className="text-sm text-slate-400">
-          {isPendingOcr ? null : 'Espera un momento, por favor.'}
-        </p>
+        {isPendingOcr ? (
+          <>
+            <ProcessingProgress
+              status={uploadStatus.data?.status ?? 'pending_ocr'}
+              stage={processingStagesEnabled ? uploadStatus.data?.processing_stage : undefined}
+              etaSecondsMin={uploadStatus.data?.eta_seconds_min}
+              etaSecondsMax={uploadStatus.data?.eta_seconds_max}
+            />
+            <p className="sr-only">Leyendo la factura...</p>
+          </>
+        ) : (
+          <>
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-emerald-500" />
+            <p className="text-slate-100 font-medium">Cargando datos de revisión…</p>
+            <p className="text-sm text-slate-400">Espera un momento, por favor.</p>
+          </>
+        )}
         {isPendingOcr && <Link to={ROUTES.history} className="text-sm text-emerald-400">Volver al historial</Link>}
       </div>
     )
@@ -122,6 +138,7 @@ interface FormProps {
 function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, lowSharpness }: FormProps) {
   const confirm = useConfirm(fileId)
   const currentUser = useCurrentUser()
+  const draftAutosaveEnabled = currentUser.data?.feature_flags?.draft_autosave_enabled !== false
   const [form, setForm] = useState<ConfirmFormState>(() => initialFormState(review))
   const [responsibilityAccepted, setResponsibilityAccepted] = useState(false)
   const [isTest, setIsTest] = useState(false)
@@ -129,8 +146,17 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
   const [serverVerdict, setServerVerdict] = useState<CounterpartyVerdict | null>(null)
   const [serverBlockingReasons, setServerBlockingReasons] = useState<string[] | null>(null)
   const [selectedDirection, setSelectedDirection] = useState<Direction | null>(direction)
+  const [draftRevision, setDraftRevision] = useState(review.draft_revision ?? 0)
   const isAdmin = currentUser.data?.role === 'tenant_admin'
   const isUser = currentUser.data?.role === 'user'
+  const draftAutosave = useDraftAutosave({
+    fileId,
+    form,
+    direction: selectedDirection,
+    revision: draftRevision,
+    enabled: draftAutosaveEnabled,
+    onSaved: (result) => setDraftRevision(result.revision),
+  })
   const draftVerdict = useDraftCounterpartyVerdict({
     fileId,
     taxId: form.counterparty_tax_id,
@@ -168,7 +194,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
   const enabled = isConfirmEnabled({
     blockingReasons,
     responsibilityAccepted,
-    submitting: confirm.isPending,
+    submitting: confirm.isPending || draftAutosave.state === 'confirming' || draftAutosave.state === 'saving',
     ownTaxIdExceptionAccepted: isUser && ownTaxIdExceptionAccepted,
   }) && selectedDirection !== null
 
@@ -182,8 +208,13 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
   const isCounterpartyVerified = counterpartyVerdict?.status === 'valid' && counterpartyVerdict.name_match !== false
   const missingOwnTaxId = review.blocking_reasons.includes(BLOCKING_REASONS.ownTaxIdMissing)
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!selectedDirection) return
+    if (draftAutosaveEnabled && draftAutosave.state !== 'saved') {
+      const saved = await draftAutosave.saveNow()
+      if (!saved) return
+    }
+    draftAutosave.markConfirming()
     const body = formStateToConfirmBody(form, {
       direction: selectedDirection,
       responsibilityAccepted,
@@ -193,6 +224,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
     confirm.mutate(body, {
       onSuccess: () => onConfirmed(),
       onError: (error) => {
+        draftAutosave.markConfirmError()
         if (error instanceof ConfirmRejectedError && error.counterpartyVerdict) {
           setServerVerdict(error.counterpartyVerdict)
           setServerBlockingReasons(error.blockingReasons ?? [BLOCKING_REASONS.cifInvalid])
@@ -203,7 +235,12 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
 
   return (
     <section className="mx-auto max-w-xl space-y-6 p-6 text-slate-100">
-      <h1 className="text-xl font-semibold">Revisar y confirmar</h1>
+      <div className="flex items-baseline justify-between gap-4">
+        <h1 className="text-xl font-semibold">Revisar y confirmar</h1>
+        <p data-testid="draft-save-state" className="text-xs text-slate-400">
+          {draftSaveLabel(draftAutosave.state)}
+        </p>
+      </div>
 
       {/* S6.14 C8: aviso no bloqueante de nitidez, solo en esta primera visita (estado de
           navegación efímero, se pierde al recargar — decisión de diseño propia, spec §5). */}
@@ -499,4 +536,15 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
       </button>
     </section>
   )
+}
+
+function draftSaveLabel(state: ReturnType<typeof useDraftAutosave>['state']): string {
+  switch (state) {
+    case 'dirty': return 'Cambios pendientes'
+    case 'saving': return 'Guardando borrador...'
+    case 'saved': return 'Borrador guardado'
+    case 'save_error': return 'No se pudo guardar el borrador'
+    case 'confirming': return 'Confirmando...'
+    default: return 'Borrador sin cambios'
+  }
 }

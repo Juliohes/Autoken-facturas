@@ -59,6 +59,10 @@ export interface ReviewResponse {
   // S6.13: el contrato generado aún no contiene este campo. `null` significa histórico previo que
   // requiere elección explícita, no una dirección por defecto.
   direction?: Direction | null
+  source?: 'ocr' | 'draft'
+  draft_revision?: number | null
+  draft_updated_at?: string | null
+  page_count?: number
 }
 
 /** Motivos de bloqueo que el servidor reimpone en `confirm` (spec §2). */

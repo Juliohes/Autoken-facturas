@@ -12,7 +12,7 @@ Dos piezas separadas a propósito:
   UNA factura, que SÍ puede lanzar) en vez de reimplementar "leer verdad + descargar + benchmark"
   una tercera vez.
 - `run_benchmark_batch_task`: la task de arq, ÚNICO punto de producción legítimo que construye los
-  6 motores reales desde `.env` para el lote retroactivo (mismo criterio que
+  4 candidatos R-032 desde `.env` para el lote retroactivo (mismo criterio que
   `jobs.ocr_benchmark.run_ocr_benchmark_task`). Toma el `pg_advisory_lock` real (C12, primer uso de
   este mecanismo en el proyecto) sobre una conexión `asyncpg` RAW dedicada -- nunca a través del
   pool normal de la app (agotaría el pool durante minutos, mismo tipo de incidente ya corregido en
@@ -43,7 +43,7 @@ from sqlalchemy import text
 
 from jobs.ocr_benchmark import _run_for_invoice
 from ocr.extraction import InvoiceExtractor
-from ocr.ranking_engines import build_named_ranking_extractors
+from ocr.ranking_engines import build_named_benchmark_extractors
 from platform_admin import benchmark_batch_repository
 from shared.config import Settings, get_settings
 from shared.db import platform_session
@@ -129,7 +129,7 @@ async def _discover_and_run(batch_run_id: str, settings: Settings) -> None:
     async with platform_session() as session:
         candidates = await benchmark_batch_repository.list_candidates(session, batch_run_id)
 
-    extractors = build_named_ranking_extractors(settings)
+    extractors = build_named_benchmark_extractors(settings)
     await run_benchmark_batch(batch_run_id, candidates=candidates, extractors=extractors)
 
 

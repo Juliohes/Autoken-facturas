@@ -17,8 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 __all__ = [
     "CombinationSummary",
     "FieldGroupRanking",
+    "BenchmarkMetricsSummary",
     "get_combination_summary",
     "get_field_group_ranking",
+    "get_metrics_summary",
 ]
 
 
@@ -44,6 +46,26 @@ class CombinationSummary:
     aciertos: int
     comparables: int
     avg_duration_ms: float | None
+
+
+@dataclass(frozen=True)
+class BenchmarkMetricsSummary:
+    variant: str
+    engine: str
+    model: str | None
+    executions: int
+    errors: int
+    field_exact_accuracy: float | None
+    critical_field_accuracy: float | None
+    all_critical_exact_rate: float | None
+    tax_lines_accuracy: float | None
+    arithmetic_valid_rate: float | None
+    hallucination_cases: int
+    p50_duration_ms: float | None
+    p95_duration_ms: float | None
+    pages: float | None
+    api_cost_usd: str | None
+    manual_corrections_per_invoice: float | None
 
 
 async def get_field_group_ranking(session: AsyncSession) -> list[FieldGroupRanking]:
@@ -88,6 +110,42 @@ async def get_combination_summary(session: AsyncSession) -> list[CombinationSumm
             aciertos=row.aciertos,
             comparables=row.comparables,
             avg_duration_ms=row.avg_duration_ms,
+        )
+        for row in rows
+    ]
+
+
+async def get_metrics_summary(session: AsyncSession) -> list[BenchmarkMetricsSummary]:
+    """Devuelve las métricas comparables de R-032 por variante, motor y modelo."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT variant, engine, model, executions, errors, field_exact_accuracy, "
+                "critical_field_accuracy, all_critical_exact_rate, tax_lines_accuracy, "
+                "arithmetic_valid_rate, hallucination_cases, p50_duration_ms, p95_duration_ms, "
+                "pages, api_cost_usd, manual_corrections_per_invoice "
+                "FROM ocr_benchmark_r032_metrics_summary()"
+            )
+        )
+    ).all()
+    return [
+        BenchmarkMetricsSummary(
+            variant=row.variant,
+            engine=row.engine,
+            model=row.model,
+            executions=row.executions,
+            errors=row.errors,
+            field_exact_accuracy=row.field_exact_accuracy,
+            critical_field_accuracy=row.critical_field_accuracy,
+            all_critical_exact_rate=row.all_critical_exact_rate,
+            tax_lines_accuracy=row.tax_lines_accuracy,
+            arithmetic_valid_rate=row.arithmetic_valid_rate,
+            hallucination_cases=row.hallucination_cases,
+            p50_duration_ms=row.p50_duration_ms,
+            p95_duration_ms=row.p95_duration_ms,
+            pages=row.pages,
+            api_cost_usd=str(row.api_cost_usd) if row.api_cost_usd is not None else None,
+            manual_corrections_per_invoice=row.manual_corrections_per_invoice,
         )
         for row in rows
     ]

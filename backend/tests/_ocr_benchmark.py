@@ -58,6 +58,7 @@ async def fetch_benchmark_results(dsns: dict[str, str], *, file_id: str) -> list
             item["counterparty_name"] = item.pop("__cname")
             item["reading"] = _jsonb(item["reading"])
             item["field_results"] = _jsonb(item["field_results"])
+            item["hallucination_flags"] = _jsonb(item["hallucination_flags"])
             results.append(item)
         return results
     finally:

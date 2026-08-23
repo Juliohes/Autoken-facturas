@@ -41,6 +41,12 @@ class UploadedFile(Base):
             "direction IS NULL OR direction IN ('recibida', 'emitida')",
             name="uploaded_files_direction_check",
         ),
+        CheckConstraint(
+            "processing_stage IS NULL OR processing_stage IN "
+            "('queued', 'loading_document', 'primary_ocr', 'validating', 'fallback_ocr', "
+            "'consensus', 'persisting')",
+            name="uploaded_files_processing_stage_check",
+        ),
         UniqueConstraint(
             "company_id",
             "uploaded_by",
@@ -74,6 +80,11 @@ class UploadedFile(Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending_ocr")
+    processing_stage: Mapped[str | None] = mapped_column(
+        Text, nullable=True, server_default="queued"
+    )
+    ocr_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ocr_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     direction: Mapped[str | None] = mapped_column(Text, nullable=True)
     ocr_claim_token: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     ocr_claim_expires_at: Mapped[datetime | None] = mapped_column(

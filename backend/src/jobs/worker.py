@@ -23,6 +23,7 @@ from jobs.ocr import run_ocr, run_ocr_comparison_task
 from jobs.ocr_benchmark import run_ocr_benchmark_task
 from jobs.ocr_benchmark_batch import run_benchmark_batch_task
 from jobs.ocr_recovery import recover_ocr_task
+from jobs.retention import purge_expired_unconfirmed_documents_task
 from shared.config import get_settings
 from shared.db import get_engine
 from shared.db_security import assert_runtime_role_cannot_bypass_rls
@@ -72,6 +73,7 @@ class WorkerSettings:
             max_tries=1,
         ),
         recover_ocr_task,
+        purge_expired_unconfirmed_documents_task,
         run_ocr_benchmark_task,
         # Un lote autorizado puede tardar más que el timeout por defecto de ARQ (5 min): 30
         # facturas x 18 lecturas. Un solo intento automático evita reejecutar y volver a cobrar un
@@ -79,7 +81,18 @@ class WorkerSettings:
         func(run_benchmark_batch_task, timeout=4 * 60 * 60, max_tries=1),
     ]
     # arq no publica tipos completos para `cron`; la firma es la misma que las tasks registradas.
-    cron_jobs = [cron(cast(Any, recover_ocr_task), second=0)]
+    cron_jobs = [
+        cron(cast(Any, recover_ocr_task), second=0),
+        cron(cast(Any, purge_expired_unconfirmed_documents_task), hour=3, minute=0),
+    ]
     on_startup = startup
-    queue_name = _settings.ocr_queue_name
+    queue_name = _settings.ocr_primary_queue_name
+    max_jobs = _settings.ocr_worker_max_jobs
     redis_settings = RedisSettings.from_dsn(_settings.redis_url)
+
+
+class BackgroundWorkerSettings(WorkerSettings):
+    """Worker separado para laboratorio y mantenimiento, con prioridad independiente."""
+
+    queue_name = _settings.ocr_background_queue_name
+    max_jobs = _settings.ocr_background_worker_max_jobs
