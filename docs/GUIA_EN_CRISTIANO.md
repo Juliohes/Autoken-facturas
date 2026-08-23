@@ -1614,6 +1614,14 @@ de lado largo. Las esquinas encontradas en esa copia se devuelven a las coordena
 antes de recortar y enderezar. De esta forma el polígono del preview sirve de orientación, pero la foto final
 se vuelve a comprobar sobre la imagen que realmente se va a guardar.
 
+### Preview obligatoria antes de guardar (R-010, 23/08/2026)
+
+Una captura individual ya no se envía inmediatamente. Primero aparece una pantalla con la foto y dos
+decisiones claras: **Repetir**, que revoca la imagen temporal y vuelve a abrir la cámara sin llamar al
+servidor, o **Usar foto**, que adquiere el lock, muestra «Guardando factura…» y entonces realiza la subida.
+El selector de archivos sigue la misma regla. Las capturas multipágina mantienen su panel de miniaturas,
+porque ese panel ya permite revisar, quitar y ordenar páginas antes del envío.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

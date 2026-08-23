@@ -168,6 +168,7 @@ describe('CaptureScreen (S6.11)', () => {
 
     await user.click(screen.getByRole('radio', { name: 'Emitida' }))
     await user.upload(screen.getByLabelText('Elige o toma una foto'), file)
+    await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
 
     await waitFor(() => expect(postMultipartMock).toHaveBeenCalledOnce())
     const body = postMultipartMock.mock.calls[0][1]
@@ -182,6 +183,7 @@ describe('CaptureScreen (S6.11)', () => {
     const file = new File(['imagen'], 'factura.jpg', { type: 'image/jpeg' })
 
     await user.upload(screen.getByLabelText('Elige o toma una foto'), file)
+    await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
 
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-original', 'recibida', false))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -472,6 +474,7 @@ describe('CaptureScreen (S6.11)', () => {
     const user = userEvent.setup()
 
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+    await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
 
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida', true))
   })
@@ -485,6 +488,7 @@ describe('CaptureScreen (S6.11)', () => {
     const user = userEvent.setup()
 
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+    await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
 
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida', false))
   })
@@ -498,6 +502,7 @@ describe('CaptureScreen (S6.11)', () => {
     const user = userEvent.setup()
 
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+    await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
 
     await waitFor(() => expect(postMultipartMock).toHaveBeenCalledOnce())
     const body = postMultipartMock.mock.calls[0][1]
@@ -512,6 +517,7 @@ describe('CaptureScreen (S6.11)', () => {
     const file = new File(['contenido'], 'foto.jpg', { type: 'image/jpeg' })
 
     await user.upload(screen.getByLabelText(/elige o toma una foto/i), file)
+    await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
 
     await waitFor(() => expect(postMultipartMock).toHaveBeenCalledOnce())
     const body = postMultipartMock.mock.calls[0][1]
@@ -542,7 +548,7 @@ describe('CaptureScreen (S6.11)', () => {
     expect(analyzeFrameMock).not.toHaveBeenCalled()
   })
 
-  it('C3: Capturar foto apaga la cámara, normaliza y sube directamente sin revisión', async () => {
+  it('R-010: Capturar foto apaga la cámara, muestra preview y solo sube tras confirmar', async () => {
     const close = vi.fn()
     successfulUpload()
     useSessionMock.mockReturnValue(USER_SESSION)
@@ -553,10 +559,27 @@ describe('CaptureScreen (S6.11)', () => {
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
 
     await waitFor(() => expect(processCapturedFrameMock).toHaveBeenCalledWith(FAKE_FRAME, CORNERS))
+    await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida', false))
     expect(close).toHaveBeenCalled()
-    expect(screen.queryByRole('heading', { name: 'Revisar foto' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Usar esta foto' })).not.toBeInTheDocument()
+    expect(await screen.findByText('✓ Guardada')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Usar foto' })).not.toBeInTheDocument()
+  })
+
+  it('R-010: Repetir revoca el preview, vuelve a cámara y no llama al backend', async () => {
+    const open = vi.fn()
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open, close: vi.fn(), retry: vi.fn() })
+    const { onUploaded } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+    await user.click(await screen.findByRole('button', { name: 'Repetir' }))
+
+    expect(open).toHaveBeenCalledOnce()
+    expect(postMultipartMock).not.toHaveBeenCalled()
+    expect(onUploaded).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Preparando cámara…' })).toBeInTheDocument()
   })
 
   it('C3: conserva la dirección elegida hasta el envío directo', async () => {
@@ -568,11 +591,12 @@ describe('CaptureScreen (S6.11)', () => {
 
     await user.click(screen.getByRole('radio', { name: 'Emitida' }))
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+    await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
 
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'emitida', false))
   })
 
-  it('C4: el selector normaliza y envía el archivo sin revisión intermedia', async () => {
+  it('R-010: el selector normaliza y también exige confirmar el preview', async () => {
     successfulUpload()
     useSessionMock.mockReturnValue(USER_SESSION)
     const { onUploaded } = renderScreen()
@@ -582,8 +606,10 @@ describe('CaptureScreen (S6.11)', () => {
     await user.upload(screen.getByLabelText(/elige o toma una foto/i), file)
 
     await waitFor(() => expect(fileToJpegBlobMock).toHaveBeenCalledWith(file))
+    await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida', false))
-    expect(screen.queryByRole('heading', { name: 'Revisar foto' })).not.toBeInTheDocument()
+    expect(await screen.findByText('✓ Guardada')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Usar foto' })).not.toBeInTheDocument()
   })
 
   it('C4: mientras la API acepta el archivo, comunica que procesa la factura', async () => {
@@ -595,7 +621,8 @@ describe('CaptureScreen (S6.11)', () => {
 
     await user.upload(screen.getByLabelText(/elige o toma una foto/i), new File(['contenido'], 'foto.jpg', { type: 'image/jpeg' }))
 
-    expect(await screen.findByText('Procesando factura...')).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
+    expect(await screen.findByText('Guardando factura…')).toBeInTheDocument()
     resolveUpload(new Response(JSON.stringify({ id: 'file-abc' }), { status: 201 }))
   })
 

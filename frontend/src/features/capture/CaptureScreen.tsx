@@ -10,6 +10,7 @@ import { analyzeFrame } from './analyzeFrame'
 import { resolveEffectiveCompanyId } from './captureSelectors'
 import { acquireCaptureLock, DEFAULT_SHARPNESS_THRESHOLD, releaseCaptureLock } from './captureLoop'
 import { DocumentOverlay } from './DocumentOverlay'
+import { CapturePreview, type CapturePreviewStatus } from './CapturePreview'
 import { grabVideoFrame } from './grabVideoFrame'
 import { fileToJpegBlob } from './normalizeToJpeg'
 import { processCapturedFrame } from './processCapture'
@@ -28,6 +29,14 @@ interface CapturedPage {
   id: number
   blob: Blob
   previewUrl: string
+}
+
+interface CapturedPreview {
+  blob: Blob
+  previewUrl: string
+  sharpnessScore: number | null
+  companyId: string
+  direction: Direction
 }
 
 function pageGuidance(pageIndex: number) {
@@ -75,6 +84,8 @@ export function CaptureScreen({ onUploaded }: Props) {
   const [videoReady, setVideoReady] = useState(false)
   const [multiplePages, setMultiplePages] = useState(false)
   const [pages, setPages] = useState<CapturedPage[]>([])
+  const [capturedPreview, setCapturedPreview] = useState<CapturedPreview | null>(null)
+  const [previewStatus, setPreviewStatus] = useState<CapturePreviewStatus>('idle')
   const [addingPage, setAddingPage] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
   const companies = useCompanyOptions({ enabled: role === 'tenant_admin' })
@@ -97,6 +108,12 @@ export function CaptureScreen({ onUploaded }: Props) {
 
   useEffect(() => {
     return () => {
+      if (capturedPreview) releasePreviewUrl(capturedPreview.previewUrl)
+    }
+  }, [capturedPreview])
+
+  useEffect(() => {
+    return () => {
       operationRef.current += 1
       pagesRef.current.forEach((page) => releasePreviewUrl(page.previewUrl))
     }
@@ -107,15 +124,23 @@ export function CaptureScreen({ onUploaded }: Props) {
     setVideoReady(Boolean(video && video.videoWidth > 0 && video.videoHeight > 0))
   }
 
-  const uploadBlob = async (blob: Blob, operation: number, sharpnessScore: number | null) => {
+  const uploadBlob = async (
+    blob: Blob,
+    operation: number,
+    sharpnessScore: number | null,
+    targetCompanyId = effectiveCompanyId,
+    targetDirection = direction,
+  ): Promise<boolean> => {
     // Aviso no bloqueante (S6.14 C8): un análisis ausente (p. ej. selector de archivo, sin cámara)
     // no cuenta como "baja nitidez" — solo se avisa cuando SÍ hay una puntuación y es baja.
     const lowSharpness = sharpnessScore !== null && sharpnessScore < DEFAULT_SHARPNESS_THRESHOLD
     try {
-      const data = await upload.mutateAsync({ blob, companyId: effectiveCompanyId, direction, sharpnessScore })
-      if (operationRef.current === operation) onUploaded(data.id, direction, lowSharpness)
+      const data = await upload.mutateAsync({ blob, companyId: targetCompanyId, direction: targetDirection, sharpnessScore })
+      if (operationRef.current === operation) onUploaded(data.id, targetDirection, lowSharpness)
+      return operationRef.current === operation
     } catch {
       if (operationRef.current === operation) setCaptureError('No se pudo subir la foto. Inténtalo de nuevo.')
+      return false
     } finally {
       if (operationRef.current === operation) setProcessing(false)
     }
@@ -196,7 +221,14 @@ export function CaptureScreen({ onUploaded }: Props) {
       if (multiplePages) {
         addPage(blob)
       } else {
-        await uploadBlob(blob, operation, analysis?.sharpness ?? null)
+        setCapturedPreview({
+          blob,
+          previewUrl: previewUrlFor(blob),
+          sharpnessScore: analysis?.sharpness ?? null,
+          companyId: effectiveCompanyId,
+          direction,
+        })
+        setPreviewStatus('idle')
       }
     } catch {
       if (operationRef.current === operation) {
@@ -206,6 +238,7 @@ export function CaptureScreen({ onUploaded }: Props) {
       }
     } finally {
       releaseCaptureLock(captureLockRef)
+      if (!multiplePages && operationRef.current === operation) setProcessing(false)
       if (multiplePages && operationRef.current === operation) {
         addingPageRef.current = false
         setAddingPage(false)
@@ -249,6 +282,7 @@ export function CaptureScreen({ onUploaded }: Props) {
       return
     }
     const [file] = files
+    if (!acquireCaptureLock(captureLockRef)) return
     const operation = operationRef.current + 1
     operationRef.current = operation
     setCaptureError(null)
@@ -257,15 +291,54 @@ export function CaptureScreen({ onUploaded }: Props) {
     try {
       const blob = await fileToJpegBlob(file)
       if (operationRef.current !== operation) return
-      // Sin análisis de nitidez (selector de fichero, sin cámara ni `analyzeFrame`): `null`, nunca
-      // un aviso inventado de "baja nitidez" (S6.14 C8).
-      await uploadBlob(blob, operation, null)
+      setCapturedPreview({
+        blob,
+        previewUrl: previewUrlFor(blob),
+        sharpnessScore: null,
+        companyId: effectiveCompanyId,
+        direction,
+      })
+      setPreviewStatus('idle')
     } catch {
       if (operationRef.current === operation) {
         setCaptureError('No se pudo preparar la foto. Elige otra imagen.')
         setProcessing(false)
       }
+    } finally {
+      releaseCaptureLock(captureLockRef)
+      if (operationRef.current === operation) setProcessing(false)
     }
+  }
+
+  const repeatPreview = () => {
+    if (!capturedPreview || processing) return
+    operationRef.current += 1
+    setCapturedPreview(null)
+    setPreviewStatus('idle')
+    setCaptureError(null)
+    setVideoReady(false)
+    setMultiplePages(false)
+    camera.open()
+  }
+
+  const confirmPreview = async () => {
+    if (!capturedPreview || processing || !acquireCaptureLock(captureLockRef)) return
+    const preview = capturedPreview
+    const operation = operationRef.current + 1
+    operationRef.current = operation
+    setCaptureError(null)
+    setPreviewStatus('uploading')
+    setProcessing(true)
+    const uploaded = await uploadBlob(
+      preview.blob,
+      operation,
+      preview.sharpnessScore,
+      preview.companyId,
+      preview.direction,
+    )
+    releaseCaptureLock(captureLockRef)
+    if (uploaded && operationRef.current === operation) setPreviewStatus('saved')
+    else if (operationRef.current === operation) setPreviewStatus('idle')
   }
 
   const openCamera = (forMultiplePages = false) => {
@@ -365,6 +438,18 @@ export function CaptureScreen({ onUploaded }: Props) {
       </label>
     </fieldset>
   )
+
+  if (capturedPreview) {
+    return (
+      <CapturePreview
+        previewUrl={capturedPreview.previewUrl}
+        status={previewStatus}
+        error={captureError}
+        onRepeat={repeatPreview}
+        onUse={() => void confirmPreview()}
+      />
+    )
+  }
 
   if (processing) {
     return (

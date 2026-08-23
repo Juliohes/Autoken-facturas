@@ -15,7 +15,7 @@ Un requisito solo pasa a `DONE` con implementación y evidencia verificable.
 | R-007 | VERIFYING | R-006 | Máquina `AUTO/MANUAL` y lock compartido en `captureLoop.ts`; el lock también protege la captura manual real. 3 tests R-007 pasan; falta cerrar la UI completa de cambio de modo. |
 | R-008 | VERIFYING | R-005 | `coordinates.ts` compensa explícitamente `object-cover`; `DocumentOverlay.tsx` dibuja guía y polígono SVG con estados. 3 tests de coordenadas, suite frontend y build pasan; falta validación visual en navegador/dispositivo real. |
 | R-009 | VERIFYING | R-005,R-007 | `grabVideoFrame.ts` prioriza `ImageCapture.takePhoto()` con fallback canvas; `analyzeFrame.ts` limita la copia de análisis a 1600 px y escala las esquinas al still original para redetección y warp. 3 tests R-009, suite frontend y build pasan; falta validación en dispositivo real. |
-| R-010 | VERIFYING | R-009 | Preview obligatoria existente. |
+| R-010 | VERIFYING | R-009 | `CapturePreview.tsx` obliga a revisar la captura individual antes del POST, con `Repetir`, `Usar foto`, estados de guardado y limpieza de Blob URL. 3 tests de preview y suite frontend pasan; falta validación visual en dispositivo real. |
 | R-011 | VERIFYING | R-010 | Intake devuelve 201 y OCR es asíncrono; falta reconciliación completa. |
 | R-012 | TODO | R-002,R-011 | — |
 | R-013 | TODO | R-012 | — |
