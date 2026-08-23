@@ -55,12 +55,12 @@ function isDuplicateUploadResponse(value: unknown): value is DuplicateUploadResp
     && typeof value.duplicate_of === 'string'
 }
 
-async function readUploadResult(response: Response): Promise<UploadResult> {
+export async function readUploadResult(response: Response): Promise<UploadResult> {
   const body: unknown = await response.json().catch(() => undefined)
   // El backend solo revela `duplicate_of` para el propio documento autorizado. Una respuesta de
   // subida perdida que se reintenta llega aquí como 409 y permite retomar el original sin duplicar.
   if (response.status === 409 && isDuplicateUploadResponse(body)) return { id: body.duplicate_of }
-  if (!response.ok || !isUploadResult(body)) {
+  if (response.status !== 201 || !isUploadResult(body)) {
     throw new UploadCaptureError(describeUploadError(response.status, errorDetail(body)))
   }
   return body

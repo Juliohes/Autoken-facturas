@@ -1622,6 +1622,16 @@ servidor, o **Usar foto**, que adquiere el lock, muestra «Guardando factura…�
 El selector de archivos sigue la misma regla. Las capturas multipágina mantienen su panel de miniaturas,
 porque ese panel ya permite revisar, quitar y ordenar páginas antes del envío.
 
+### Subida aceptada y OCR separado (R-011, 23/08/2026)
+
+La aplicación distingue entre «la petición llegó» y «la factura se aceptó». El frontend solo considera
+correcta una respuesta `201` con un identificador de fichero; un `200`, `202` u otro código no se trata como
+guardado. El único desvío intencionado es `409` con `duplicate_of`, que lleva al documento propio original.
+
+El servidor responde después de guardar el fichero en estado `pending_ocr` y agenda el lector OCR después del
+commit de la base de datos. Por eso el usuario no queda esperando a que termine la inteligencia artificial y
+el worker nunca puede leer una fila que todavía no esté confirmada en la base de datos.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

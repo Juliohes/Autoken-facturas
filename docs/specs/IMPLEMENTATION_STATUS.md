@@ -16,7 +16,7 @@ Un requisito solo pasa a `DONE` con implementación y evidencia verificable.
 | R-008 | VERIFYING | R-005 | `coordinates.ts` compensa explícitamente `object-cover`; `DocumentOverlay.tsx` dibuja guía y polígono SVG con estados. 3 tests de coordenadas, suite frontend y build pasan; falta validación visual en navegador/dispositivo real. |
 | R-009 | VERIFYING | R-005,R-007 | `grabVideoFrame.ts` prioriza `ImageCapture.takePhoto()` con fallback canvas; `analyzeFrame.ts` limita la copia de análisis a 1600 px y escala las esquinas al still original para redetección y warp. 3 tests R-009, suite frontend y build pasan; falta validación en dispositivo real. |
 | R-010 | VERIFYING | R-009 | `CapturePreview.tsx` obliga a revisar la captura individual antes del POST, con `Repetir`, `Usar foto`, estados de guardado y limpieza de Blob URL. 3 tests de preview y suite frontend pasan; falta validación visual en dispositivo real. |
-| R-011 | VERIFYING | R-010 | Intake devuelve 201 y OCR es asíncrono; falta reconciliación completa. |
+| R-011 | VERIFYING | R-010 | Frontend acepta solo `201` con `id` en `readUploadResult`, conserva el `409 duplicate_of`; backend declara `201`, deja `pending_ocr` y encola tras commit. 5 tests de contrato frontend y 400 tests frontend pasan; tests backend requieren Redis local/staging. |
 | R-012 | TODO | R-002,R-011 | — |
 | R-013 | TODO | R-012 | — |
 | R-014 | VERIFYING | R-011 | Flujo posterior a subida pendiente de validación contra el maestro. |
