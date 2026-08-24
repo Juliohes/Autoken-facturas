@@ -1632,6 +1632,25 @@ El servidor responde después de guardar el fichero en estado `pending_ocr` y ag
 commit de la base de datos. Por eso el usuario no queda esperando a que termine la inteligencia artificial y
 el worker nunca puede leer una fila que todavía no esté confirmada en la base de datos.
 
+### Captura de varias facturas (R-012, 24/08/2026)
+
+«Varias facturas» no es lo mismo que «varias hojas». En el primer modo cada foto confirmada hace una petición
+individual y crea su propio `uploaded_file`; cuando llega el `201`, la siguiente foto queda habilitada. La
+sesión de la pantalla guarda un identificador UX, el orden y la hora de cada aceptación, hasta un máximo de
+diez facturas sin obligar a llegar a diez.
+
+Si el servidor responde que una factura ya estaba subida, se muestra un aviso discreto y no se vuelve a contar
+el mismo `fileId`. La pantalla envía el UUID de sesión y el número de orden como metadatos opcionales de cada
+subida. R-013 los guarda en `uploaded_files` y permite recuperar la sesión ordenada, sin crear una tabla de
+sesiones ni convertir ese identificador en una regla de autorización.
+
+### Agrupación durable de captura (R-013, 24/08/2026)
+
+Cada fila puede llevar `capture_session_id` y `capture_sequence`. Ambos son opcionales y deben llegar juntos;
+la secuencia aceptada está entre 1 y 50. La base de datos comprueba esa relación e incluye un índice parcial
+por tenant, usuario, sesión y orden para recuperar las fotos con rapidez. La autorización sigue viniendo
+del JWT, el tenant, `uploaded_by` y RLS: conocer un UUID de sesión no permite ver ni editar documentos ajenos.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

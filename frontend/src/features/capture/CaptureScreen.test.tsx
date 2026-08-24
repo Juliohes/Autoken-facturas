@@ -464,6 +464,29 @@ describe('CaptureScreen (S6.11)', () => {
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'emitida', false))
   })
 
+  it('R-012: Varias facturas crea tres uploaded_file independientes y permite continuar tras cada 201', async () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    for (const fileId of ['file-1', 'file-2', 'file-3']) {
+      postMultipartMock.mockResolvedValueOnce(new Response(JSON.stringify({ id: fileId }), { status: 201 }))
+    }
+    const { onUploaded } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Varias facturas' }))
+    for (const [index, fileId] of ['file-1', 'file-2', 'file-3'].entries()) {
+      await user.upload(screen.getByLabelText(/elige o toma una foto/i), new File([fileId], `${fileId}.jpg`, { type: 'image/jpeg' }))
+      await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
+      await waitFor(() => expect(postMultipartMock).toHaveBeenCalledTimes(index + 1))
+    }
+
+    expect(onUploaded).not.toHaveBeenCalled()
+    expect(screen.getByRole('region', { name: 'Sesión de varias facturas' })).toHaveTextContent('3 de 10')
+    expect(screen.getAllByRole('listitem', { name: /Factura \d/ })).toHaveLength(3)
+    const sessionIds = postMultipartMock.mock.calls.map((call) => (call[1] as FormData).get('capture_session_id'))
+    expect(new Set(sessionIds).size).toBe(1)
+    expect(postMultipartMock.mock.calls.map((call) => (call[1] as FormData).get('capture_sequence'))).toEqual(['1', '2', '3'])
+  })
+
   // spec: docs/specs/S6.14-captura-alta-resolucion-y-confianza-nombre.md, C8
   it('S6.14 C8: con nitidez baja (varianza del Laplaciano < umbral), onUploaded recibe lowSharpness=true', async () => {
     successfulUpload()

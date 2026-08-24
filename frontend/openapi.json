@@ -3468,6 +3468,29 @@
               }
             ],
             "title": "Sharpness Score"
+          },
+          "capture_session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Session Id"
+          },
+          "capture_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Sequence"
           }
         },
         "type": "object",

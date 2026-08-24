@@ -1495,6 +1495,10 @@ export interface components {
             direction?: ("recibida" | "emitida") | null;
             /** Sharpness Score */
             sharpness_score?: string | null;
+            /** Capture Session Id */
+            capture_session_id?: string | null;
+            /** Capture Sequence */
+            capture_sequence?: number | null;
         };
         /** Body_upload_logo_api_v1_platform_tenants_logo_post */
         Body_upload_logo_api_v1_platform_tenants_logo_post: {

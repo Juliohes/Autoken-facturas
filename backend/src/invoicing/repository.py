@@ -65,6 +65,8 @@ class InboxEntry:
     created_at: datetime
     direction: str | None
     page_count: int
+    capture_session_id: UUID | None
+    capture_sequence: int | None
 
 
 @dataclass(frozen=True)
@@ -666,6 +668,7 @@ async def list_inbox(
         await session.execute(
             text(
                 "SELECT f.id, f.status, f.processing_stage, f.created_at, f.direction, "
+                "       f.capture_session_id, f.capture_sequence, "
                 "       1 + (SELECT count(*) FROM uploaded_file_pages p "
                 "            WHERE p.root_uploaded_file_id = f.id) AS page_count "
                 "FROM uploaded_files f "
@@ -712,6 +715,8 @@ async def list_inbox(
                 created_at=row.created_at,
                 direction=row.direction,
                 page_count=row.page_count,
+                capture_session_id=row.capture_session_id,
+                capture_sequence=row.capture_sequence,
             )
             for row in rows[:limit]
         ],

@@ -82,6 +82,21 @@ async def duplicate_upload_handler(_request: Request, exc: Exception) -> JSONRes
     return JSONResponse(status_code=409, content={"duplicate_of": str(exc.duplicate_of)})
 
 
+def _validate_capture_grouping(
+    capture_session_id: UUID | None, capture_sequence: int | None
+) -> None:
+    """Valida metadatos UX sin conceder ningún scope adicional a la sesión."""
+    if (capture_session_id is None) != (capture_sequence is None):
+        raise HTTPException(
+            status_code=422,
+            detail="capture_session_id y capture_sequence deben enviarse juntos",
+        )
+    if capture_sequence is not None and not 1 <= capture_sequence <= 50:
+        raise HTTPException(
+            status_code=422, detail="capture_sequence debe estar entre 1 y 50"
+        )
+
+
 @router.post("", status_code=201)
 async def upload_file(
     identity: Uploader,
@@ -89,6 +104,8 @@ async def upload_file(
     company_id: Annotated[UUID, Form()],
     direction: Annotated[Literal["recibida", "emitida"] | None, Form()] = None,
     sharpness_score: Annotated[str | None, Form()] = None,
+    capture_session_id: Annotated[UUID | None, Form()] = None,
+    capture_sequence: Annotated[int | None, Form()] = None,
 ) -> UploadOut:
     """Sube un fichero de factura a una empresa. Ver spec S2.1 para los códigos (201/4xx/503).
 
@@ -98,6 +115,8 @@ async def upload_file(
     Laplaciano), string opcional. Es TELEMETRÍA, no dato de dominio: no se persiste ni se valida
     (un valor raro no rompe la subida); solo se loguea como métrica de calidad de captura.
     """
+    _validate_capture_grouping(capture_session_id, capture_sequence)
+
     # El servicio recibe primitivos (no el `AuthContext`, acoplado a FastAPI): el router es la única
     # capa que conoce la identidad HTTP y extrae de ella lo que la lógica de dominio necesita.
     member_company_id = identity.company.id if identity.company is not None else None
@@ -142,6 +161,8 @@ async def upload_file(
             company_id=company_id,
             content=content,
             direction=direction,
+            capture_session_id=capture_session_id,
+            capture_sequence=capture_sequence,
         )
     except service.EmptyFile as exc:
         raise HTTPException(status_code=422, detail="El fichero está vacío") from exc

@@ -442,6 +442,8 @@ async def create_upload(
     company_id: UUID,
     content: bytes,
     direction: str | None = None,
+    capture_session_id: UUID | None = None,
+    capture_sequence: int | None = None,
 ) -> repository.UploadedFileRecord:
     """Verifica y persiste el fichero de intake (o no deja nada). Devuelve la fila creada (201).
 
@@ -489,6 +491,8 @@ async def create_upload(
         content_type=real_mime,
         size_bytes=len(content),
         direction=direction,
+        capture_session_id=capture_session_id,
+        capture_sequence=capture_sequence,
     )
     _enqueue_ocr_after_commit(session, tenant_id, company_id, record.id)
     return record
@@ -617,6 +621,8 @@ async def _persist_or_compensate(
     content_type: str,
     size_bytes: int,
     direction: str | None,
+    capture_session_id: UUID | None,
+    capture_sequence: int | None,
 ) -> repository.UploadedFileRecord:
     """Inserta el registro + la traza en la transacción de la petición; compensa si algo falla.
 
@@ -636,6 +642,8 @@ async def _persist_or_compensate(
             size_bytes=size_bytes,
             sha256=sha256,
             direction=direction,
+            capture_session_id=capture_session_id,
+            capture_sequence=capture_sequence,
         )
         await write_audit(
             session,

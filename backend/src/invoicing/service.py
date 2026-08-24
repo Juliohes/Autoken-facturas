@@ -925,6 +925,8 @@ async def inbox(identity: AuthContext, *, cursor: str | None, limit: int) -> Inb
             created_at=entry.created_at,
             direction=entry.direction,
             page_count=entry.page_count,
+            capture_session_id=entry.capture_session_id,
+            capture_sequence=entry.capture_sequence,
         )
         for entry in page.items
     ]

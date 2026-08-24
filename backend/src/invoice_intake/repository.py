@@ -50,6 +50,15 @@ class UploadedFileRecord:
 
 
 @dataclass(frozen=True)
+class CaptureSessionFile:
+    """Referencia no fiscal de un fichero dentro de una sesión continua."""
+
+    id: UUID
+    capture_sequence: int
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class UploadedFileContext:
     """Contexto mínimo de un fichero de intake para autorizar/confirmar (S2.5): empresa + estado.
 
@@ -446,6 +455,8 @@ async def insert_uploaded_file(
     size_bytes: int,
     sha256: str,
     direction: str | None = None,
+    capture_session_id: UUID | None = None,
+    capture_sequence: int | None = None,
 ) -> UploadedFileRecord:
     """Inserta el fichero de intake en el tenant del contexto (`pending_ocr` + `scan_status=clean`).
 
@@ -459,9 +470,11 @@ async def insert_uploaded_file(
             text(
                 f"INSERT INTO uploaded_files "
                 f"(tenant_id, company_id, uploaded_by, storage_bucket, storage_key, "
-                f" content_type, size_bytes, sha256, direction) "
+                f" content_type, size_bytes, sha256, direction, "
+                f"capture_session_id, capture_sequence) "
                 f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :uploaded_by, :bucket, :key, "
-                f" :content_type, :size_bytes, :sha256, :direction) "
+                f" :content_type, :size_bytes, :sha256, :direction, "
+                f":capture_session_id, :capture_sequence) "
                 f"RETURNING id, company_id, content_type, size_bytes, sha256, "
                 f"          status, scan_status, created_at, direction"
             ),
@@ -474,6 +487,10 @@ async def insert_uploaded_file(
                 "size_bytes": size_bytes,
                 "sha256": sha256,
                 "direction": direction,
+                "capture_session_id": (
+                    str(capture_session_id) if capture_session_id is not None else None
+                ),
+                "capture_sequence": capture_sequence,
             },
         )
     ).one()
@@ -488,6 +505,32 @@ async def insert_uploaded_file(
         created_at=row.created_at,
         direction=row.direction,
     )
+
+
+async def list_capture_session(
+    session: AsyncSession, *, capture_session_id: UUID, uploaded_by: UUID
+) -> list[CaptureSessionFile]:
+    """Devuelve la sesión propia en orden de captura, sin usarla como autorización."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT id, capture_sequence, created_at FROM uploaded_files "
+                "WHERE capture_session_id = :capture_session_id "
+                "AND uploaded_by = :uploaded_by "
+                "ORDER BY capture_sequence ASC, id ASC"
+            ),
+            {
+                "capture_session_id": str(capture_session_id),
+                "uploaded_by": str(uploaded_by),
+            },
+        )
+    ).all()
+    return [
+        CaptureSessionFile(
+            id=row.id, capture_sequence=row.capture_sequence, created_at=row.created_at
+        )
+        for row in rows
+    ]
 
 
 async def insert_uploaded_file_page(

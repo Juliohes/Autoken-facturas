@@ -21,6 +21,8 @@ export interface UploadCaptureInput {
   blob: Blob
   companyId: string
   direction: Direction
+  captureSessionId?: string
+  captureSequence?: number
   /** S6.14 C8: nitidez calculada en cliente (varianza del Laplaciano), solo telemetría del lado
    * servidor — nunca bloquea ni retrasa la subida. `null`/ausente cuando no hay análisis (p. ej.
    * selector de fichero sin cámara): se omite del `FormData`, no se manda un `0` inventado. */
@@ -38,13 +40,15 @@ export interface UploadBatchCaptureInput {
   sharpnessScore?: number | null
 }
 
-type UploadResult = Pick<components['schemas']['UploadOut'], 'id'>
+export interface AcceptedUpload extends Pick<components['schemas']['UploadOut'], 'id'> {
+  duplicate: boolean
+}
 
 interface DuplicateUploadResponse {
   duplicate_of: string
 }
 
-function isUploadResult(value: unknown): value is UploadResult {
+function isUploadResult(value: unknown): value is Pick<AcceptedUpload, 'id'> {
   return value !== null && typeof value === 'object' && 'id' in value && typeof value.id === 'string'
 }
 
@@ -55,15 +59,15 @@ function isDuplicateUploadResponse(value: unknown): value is DuplicateUploadResp
     && typeof value.duplicate_of === 'string'
 }
 
-export async function readUploadResult(response: Response): Promise<UploadResult> {
+export async function readUploadResult(response: Response): Promise<AcceptedUpload> {
   const body: unknown = await response.json().catch(() => undefined)
   // El backend solo revela `duplicate_of` para el propio documento autorizado. Una respuesta de
   // subida perdida que se reintenta llega aquí como 409 y permite retomar el original sin duplicar.
-  if (response.status === 409 && isDuplicateUploadResponse(body)) return { id: body.duplicate_of }
+  if (response.status === 409 && isDuplicateUploadResponse(body)) return { id: body.duplicate_of, duplicate: true }
   if (response.status !== 201 || !isUploadResult(body)) {
     throw new UploadCaptureError(describeUploadError(response.status, errorDetail(body)))
   }
-  return body
+  return { ...body, duplicate: false }
 }
 
 // FormData solo admite `string`/`Blob`: la nitidez cruda (puede llevar decimales) viaja como
@@ -76,11 +80,13 @@ function appendSharpnessScore(formData: FormData, sharpnessScore: number | null 
 
 export function useUploadCapture() {
   return useMutation({
-    mutationFn: async ({ blob, companyId, direction, sharpnessScore }: UploadCaptureInput) => {
+    mutationFn: async ({ blob, companyId, direction, sharpnessScore, captureSessionId, captureSequence }: UploadCaptureInput) => {
       const formData = new FormData()
       formData.append('file', blob, 'captura.jpg')
       formData.append('company_id', companyId)
       formData.append('direction', direction)
+      if (captureSessionId) formData.append('capture_session_id', captureSessionId)
+      if (captureSequence !== undefined) formData.append('capture_sequence', String(captureSequence))
       appendSharpnessScore(formData, sharpnessScore)
 
       return readUploadResult(await postMultipart('/api/v1/uploads', formData))
@@ -90,7 +96,7 @@ export function useUploadCapture() {
 
 export function useUploadBatchCapture() {
   return useMutation({
-    mutationFn: async ({ blobs, companyId, direction, sharpnessScore }: UploadBatchCaptureInput): Promise<UploadResult> => {
+    mutationFn: async ({ blobs, companyId, direction, sharpnessScore }: UploadBatchCaptureInput): Promise<AcceptedUpload> => {
       const formData = new FormData()
       blobs.forEach((blob, index) => formData.append('files', blob, `pagina-${index + 1}.jpg`))
       formData.append('company_id', companyId)

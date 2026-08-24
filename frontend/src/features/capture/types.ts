@@ -46,3 +46,10 @@ export interface FrameAnalysis {
 }
 
 export type Direction = 'recibida' | 'emitida'
+
+export type CaptureProductMode =
+  | 'single_invoice'
+  | 'continuous_invoices'
+  | 'multipage_invoice'
+
+export type CaptureMode = 'auto' | 'manual'

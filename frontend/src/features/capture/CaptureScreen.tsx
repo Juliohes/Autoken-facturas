@@ -11,13 +11,14 @@ import { resolveEffectiveCompanyId } from './captureSelectors'
 import { acquireCaptureLock, DEFAULT_SHARPNESS_THRESHOLD, releaseCaptureLock } from './captureLoop'
 import { DocumentOverlay } from './DocumentOverlay'
 import { CapturePreview, type CapturePreviewStatus } from './CapturePreview'
+import { acceptContinuousUpload, createContinuousCaptureState, hasReachedContinuousLimit, type ContinuousCaptureState } from './continuousCapture'
 import { grabVideoFrame } from './grabVideoFrame'
 import { fileToJpegBlob } from './normalizeToJpeg'
 import { processCapturedFrame } from './processCapture'
-import type { Direction } from './types'
+import type { CaptureProductMode, Direction } from './types'
 import { useCameraStream } from './useCameraStream'
 import { useScannerEngine } from './useScannerEngine'
-import { useUploadBatchCapture, useUploadCapture } from './useUploadCapture'
+import { useUploadBatchCapture, useUploadCapture, type AcceptedUpload } from './useUploadCapture'
 
 interface Props {
   /** `lowSharpness` (S6.14 C8): aviso informativo de una sola vez para la pantalla de confirmación,
@@ -58,6 +59,15 @@ function firstVideoTrack(stream: MediaStream | null) {
   return stream.getVideoTracks?.()[0] ?? stream.getTracks()[0]
 }
 
+function newContinuousSessionId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16)
+    const value = character === 'x' ? random : (random & 0x3) | 0x8
+    return value.toString(16)
+  })
+}
+
 export function CaptureScreen({ onUploaded }: Props) {
   const { user } = useSession()
   const role = user?.role
@@ -83,6 +93,9 @@ export function CaptureScreen({ onUploaded }: Props) {
   const [captureError, setCaptureError] = useState<string | null>(null)
   const [videoReady, setVideoReady] = useState(false)
   const [multiplePages, setMultiplePages] = useState(false)
+  const [productMode, setProductMode] = useState<CaptureProductMode>('single_invoice')
+  const [continuousSession, setContinuousSession] = useState<ContinuousCaptureState>(() => createContinuousCaptureState(newContinuousSessionId()))
+  const [continuousNotice, setContinuousNotice] = useState<string | null>(null)
   const [pages, setPages] = useState<CapturedPage[]>([])
   const [capturedPreview, setCapturedPreview] = useState<CapturedPreview | null>(null)
   const [previewStatus, setPreviewStatus] = useState<CapturePreviewStatus>('idle')
@@ -130,17 +143,25 @@ export function CaptureScreen({ onUploaded }: Props) {
     sharpnessScore: number | null,
     targetCompanyId = effectiveCompanyId,
     targetDirection = direction,
-  ): Promise<boolean> => {
+    captureSessionId?: string,
+    captureSequence?: number,
+  ): Promise<AcceptedUpload | null> => {
     // Aviso no bloqueante (S6.14 C8): un análisis ausente (p. ej. selector de archivo, sin cámara)
     // no cuenta como "baja nitidez" — solo se avisa cuando SÍ hay una puntuación y es baja.
-    const lowSharpness = sharpnessScore !== null && sharpnessScore < DEFAULT_SHARPNESS_THRESHOLD
     try {
-      const data = await upload.mutateAsync({ blob, companyId: targetCompanyId, direction: targetDirection, sharpnessScore })
-      if (operationRef.current === operation) onUploaded(data.id, targetDirection, lowSharpness)
-      return operationRef.current === operation
+      const data = await upload.mutateAsync({
+        blob,
+        companyId: targetCompanyId,
+        direction: targetDirection,
+        sharpnessScore,
+        captureSessionId,
+        captureSequence,
+      })
+      if (operationRef.current !== operation) return null
+      return data
     } catch {
       if (operationRef.current === operation) setCaptureError('No se pudo subir la foto. Inténtalo de nuevo.')
-      return false
+      return null
     } finally {
       if (operationRef.current === operation) setProcessing(false)
     }
@@ -335,10 +356,27 @@ export function CaptureScreen({ onUploaded }: Props) {
       preview.sharpnessScore,
       preview.companyId,
       preview.direction,
+      productMode === 'continuous_invoices' ? continuousSession.sessionId : undefined,
+      productMode === 'continuous_invoices' ? continuousSession.currentSequence + 1 : undefined,
     )
     releaseCaptureLock(captureLockRef)
-    if (uploaded && operationRef.current === operation) setPreviewStatus('saved')
-    else if (operationRef.current === operation) setPreviewStatus('idle')
+    if (uploaded && operationRef.current === operation) {
+      if (productMode === 'continuous_invoices') {
+        const accepted = acceptContinuousUpload(continuousSession, uploaded.id)
+        setContinuousSession(accepted.state)
+        setContinuousNotice(uploaded.duplicate ? 'Esta factura ya estaba subida.' : `Factura ${accepted.state.currentSequence} guardada.`)
+        setCapturedPreview(null)
+        setPreviewStatus('idle')
+        if (!hasReachedContinuousLimit(accepted.state)) {
+          setVideoReady(false)
+          camera.open()
+        }
+      } else {
+        setPreviewStatus('saved')
+        const lowSharpness = preview.sharpnessScore !== null && preview.sharpnessScore < DEFAULT_SHARPNESS_THRESHOLD
+        onUploaded(uploaded.id, preview.direction, lowSharpness)
+      }
+    } else if (operationRef.current === operation) setPreviewStatus('idle')
   }
 
   const openCamera = (forMultiplePages = false) => {
@@ -347,6 +385,7 @@ export function CaptureScreen({ onUploaded }: Props) {
       return
     }
     setCaptureError(null)
+    setProductMode(forMultiplePages ? 'multipage_invoice' : 'single_invoice')
     setMultiplePages(forMultiplePages)
     camera.open()
   }
@@ -359,6 +398,26 @@ export function CaptureScreen({ onUploaded }: Props) {
     fileInputRef.current?.click()
   }
 
+  const startContinuousCapture = () => {
+    if (!continuousCaptureEnabled) return
+    if (!canStart) {
+      setCaptureError('Elige una empresa antes de tomar las fotos.')
+      return
+    }
+    setCaptureError(null)
+    setContinuousNotice(null)
+    setProductMode('continuous_invoices')
+    setContinuousSession(createContinuousCaptureState(newContinuousSessionId()))
+    setMultiplePages(false)
+    camera.open()
+  }
+
+  const finishContinuousCapture = () => {
+    setProductMode('single_invoice')
+    setMultiplePages(false)
+    stopCamera()
+  }
+
   const startMultiplePages = () => {
     if (!continuousCaptureEnabled) return
     if (!canStart) {
@@ -366,6 +425,7 @@ export function CaptureScreen({ onUploaded }: Props) {
       return
     }
     setCaptureError(null)
+    setProductMode('multipage_invoice')
     setMultiplePages(true)
     camera.open()
   }
@@ -482,6 +542,23 @@ export function CaptureScreen({ onUploaded }: Props) {
         </p>
       )}
       {captureError && <p role="alert" className="text-sm text-red-400">{captureError}</p>}
+      {continuousNotice && <p role="status" className="text-sm text-emerald-300">{continuousNotice}</p>}
+
+      {productMode === 'continuous_invoices' && continuousSession.accepted.length > 0 && (
+        <section aria-label="Sesión de varias facturas" className="space-y-3 rounded-lg border border-emerald-700/60 bg-emerald-950/20 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-medium">{continuousSession.accepted.length} de {continuousSession.maxItems} facturas aceptadas</p>
+            <button type="button" onClick={finishContinuousCapture} className="rounded-md border border-slate-600 px-3 py-2 text-sm">Terminar sesión</button>
+          </div>
+          <ol className="flex flex-wrap gap-2">
+            {continuousSession.accepted.map((invoice) => (
+              <li key={invoice.fileId} aria-label={`Factura ${invoice.sequence}`} className="rounded border border-emerald-800 px-3 py-1 text-sm text-emerald-200">
+                Factura {invoice.sequence} aceptada
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       {camera.status === 'idle' && (
         <div className="space-y-5">
@@ -490,6 +567,7 @@ export function CaptureScreen({ onUploaded }: Props) {
           </div>
           <div className="flex justify-center gap-3">
             <button type="button" onClick={openFilePicker} className="rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100">Subir archivo</button>
+            {continuousCaptureEnabled && <button type="button" onClick={startContinuousCapture} className="rounded-md border border-emerald-600 px-4 py-3 text-base font-medium text-emerald-300">Varias facturas</button>}
             {continuousCaptureEnabled && <button type="button" onClick={startMultiplePages} className="rounded-md border border-slate-600 px-4 py-3 text-base font-medium text-slate-100">Varias hojas</button>}
           </div>
         </div>
@@ -514,6 +592,7 @@ export function CaptureScreen({ onUploaded }: Props) {
                   state={liveAnalysis?.corners ? liveAnalysis.detectionConfidence !== undefined && liveAnalysis.detectionConfidence >= 0.75 && (liveAnalysis.areaRatio ?? 0) >= 0.3 ? 'good' : 'detected' : 'none'}
                 />
                 {multiplePages && <p className="absolute left-4 right-4 top-[max(1rem,env(safe-area-inset-top))] rounded bg-slate-950/80 px-3 py-2 text-center text-sm font-medium">{pageGuidance(pages.length)}</p>}
+                {productMode === 'continuous_invoices' && <p className="absolute left-4 right-4 top-[max(1rem,env(safe-area-inset-top))] rounded bg-slate-950/80 px-3 py-2 text-center text-sm font-medium">Factura {continuousSession.currentSequence + 1} de {continuousSession.maxItems}</p>}
                 {torchAvailable && <button type="button" aria-label="Linterna" onClick={() => void toggleTorch()} className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] rounded-full bg-slate-950/80 px-4 py-2 text-sm font-medium">Linterna{torchOn ? ' encendida' : ''}</button>}
               </>
             )}
