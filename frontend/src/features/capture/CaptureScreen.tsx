@@ -113,7 +113,7 @@ export function CaptureScreen({ onUploaded }: Props) {
   useEffect(() => {
     setVideoReady(false)
     if (videoRef.current) videoRef.current.srcObject = camera.stream
-  }, [camera.stream])
+  }, [camera.stream, capturedPreview])
 
   useEffect(() => {
     pagesRef.current = pages
@@ -197,6 +197,15 @@ export function CaptureScreen({ onUploaded }: Props) {
     camera.close()
   }
 
+  const resumeContinuousCamera = () => {
+    const track = firstVideoTrack(camera.stream)
+    const streamIsLive = camera.status === 'active'
+      && camera.stream !== null
+      && (!track || track.readyState === 'live')
+    setVideoReady(false)
+    if (!streamIsLive) camera.open()
+  }
+
   const closeCamera = () => {
     operationRef.current += 1
     addingPageRef.current = false
@@ -231,9 +240,9 @@ export function CaptureScreen({ onUploaded }: Props) {
       addingPageRef.current = true
       setAddingPage(true)
     }
-    // El frame ya está en memoria: no se necesita mantener cámara ni linterna mientras OpenCV
-    // normaliza la imagen. Evita dejar recursos del móvil activos ante un procesado lento.
-    stopCamera()
+    // En simple y multipágina se liberan recursos mientras se procesa; continuous conserva el stream
+    // para volver a encuadrar sin pedir permiso ni abrir otra cámara después del 201.
+    if (productMode !== 'continuous_invoices') stopCamera()
     try {
       const analysis = scannerV2Enabled ? await analyzeFrame(frame) : null
       if (operationRef.current !== operation) return
@@ -308,7 +317,7 @@ export function CaptureScreen({ onUploaded }: Props) {
     operationRef.current = operation
     setCaptureError(null)
     setProcessing(true)
-    stopCamera()
+    if (productMode !== 'continuous_invoices') stopCamera()
     try {
       const blob = await fileToJpegBlob(file)
       if (operationRef.current !== operation) return
@@ -339,7 +348,8 @@ export function CaptureScreen({ onUploaded }: Props) {
     setCaptureError(null)
     setVideoReady(false)
     setMultiplePages(false)
-    camera.open()
+    if (productMode === 'continuous_invoices') resumeContinuousCamera()
+    else camera.open()
   }
 
   const confirmPreview = async () => {
@@ -368,8 +378,9 @@ export function CaptureScreen({ onUploaded }: Props) {
         setCapturedPreview(null)
         setPreviewStatus('idle')
         if (!hasReachedContinuousLimit(accepted.state)) {
-          setVideoReady(false)
-          camera.open()
+          resumeContinuousCamera()
+        } else {
+          stopCamera()
         }
       } else {
         setPreviewStatus('saved')

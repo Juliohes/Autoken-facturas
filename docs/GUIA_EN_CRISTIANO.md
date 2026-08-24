@@ -1651,6 +1651,16 @@ la secuencia aceptada está entre 1 y 50. La base de datos comprueba esa relaci�
 por tenant, usuario, sesión y orden para recuperar las fotos con rapidez. La autorización sigue viniendo
 del JWT, el tenant, `uploaded_by` y RLS: conocer un UUID de sesión no permite ver ni editar documentos ajenos.
 
+### Después de subir y mantener la cámara (R-014/R-015, 24/08/2026)
+
+Una subida simple ya no fuerza la pantalla de confirmación. Primero muestra que el fichero fue aceptado y
+ofrece dos decisiones: abrir su progreso/revisión cuando corresponda o ir a «Mis facturas». La revisión no
+se abre por sorpresa mientras el OCR sigue trabajando.
+
+En «Varias facturas», la cámara permanece abierta mientras se prepara y se sube una foto. Cuando llega el
+`201`, la misma cámara vuelve a estar disponible sin pedir permiso otra vez. Si el sistema operativo ha
+terminado el track, la aplicación lo detecta por `readyState` y solo entonces solicita una cámara nueva.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de

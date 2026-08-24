@@ -3,12 +3,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { api } from '../api/client'
 import * as tokenStore from '../api/tokenStore'
 import { SessionProvider } from '../features/session/SessionProvider'
+import type { Direction } from '../features/capture/types'
 import type { AppliedTheme } from '../features/tenancy/theme'
 import { AppRoutes } from './AppRoutes'
 
@@ -23,6 +24,23 @@ const THEME: AppliedTheme = {
 vi.mock('../api/client', () => ({
   api: { GET: vi.fn(), POST: vi.fn() },
 }))
+
+vi.mock('../features/capture/CaptureScreen', () => ({
+  CaptureScreen: ({ onUploaded }: { onUploaded: (fileId: string, direction: Direction, lowSharpness: boolean) => void }) => (
+    <CaptureScreenStub onUploaded={onUploaded} />
+  ),
+}))
+
+function CaptureScreenStub({ onUploaded }: { onUploaded: (fileId: string, direction: Direction, lowSharpness: boolean) => void }) {
+  const navigate = useNavigate()
+  return (
+    <section>
+      <h1>Capturar factura</h1>
+      <button type="button" role="link" onClick={() => navigate('/historial')}>Ver historial</button>
+      <button type="button" onClick={() => onUploaded('file-accepted', 'recibida', false)}>Simular subida aceptada</button>
+    </section>
+  )
+}
 
 type AsyncMock = Mock<(...args: never[]) => Promise<unknown>>
 const getMock = api.GET as unknown as AsyncMock
@@ -223,6 +241,20 @@ describe('AppRoutes (S4.9)', () => {
     // Sin facturas mockeadas, `InvoiceHistory` muestra su estado vacío (sin encabezado propio):
     // basta para confirmar que la navegación llegó de verdad a `/historial`.
     expect(await screen.findByText('Todavía no has enviado ninguna factura.')).toBeInTheDocument()
+  })
+
+  it('R-014: una subida aceptada no navega directamente a confirmación', async () => {
+    mockAuthenticatedAs('user')
+    renderApp('/capturar')
+    const user = userEvent.setup()
+
+    await screen.findByRole('heading', { name: 'Capturar factura' })
+    await user.click(screen.getByRole('button', { name: 'Simular subida aceptada' }))
+
+    expect(await screen.findByRole('heading', { name: 'Factura aceptada' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Revisar cuando esté lista' })).toHaveAttribute('href', '/confirmar/file-accepted')
+    expect(screen.getByRole('link', { name: 'Ir a Mis facturas' })).toHaveAttribute('href', '/mis-facturas')
+    expect(screen.queryByRole('heading', { name: 'Confirmar factura' })).not.toBeInTheDocument()
   })
 
   it('S2.2 decisión 1: la ruta de inicio de user es /capturar, no /historial', async () => {

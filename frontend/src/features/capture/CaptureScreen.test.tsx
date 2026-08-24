@@ -487,6 +487,31 @@ describe('CaptureScreen (S6.11)', () => {
     expect(postMultipartMock.mock.calls.map((call) => (call[1] as FormData).get('capture_sequence'))).toEqual(['1', '2', '3'])
   })
 
+  it('R-015: una factura continua conserva el stream y no solicita otra cámara tras el 201', async () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    const open = vi.fn(() => { status = 'active' })
+    const close = vi.fn(() => { status = 'idle' })
+    const track = { readyState: 'live', stop: vi.fn() } as unknown as MediaStreamTrack
+    const stream = { getVideoTracks: () => [track], getTracks: () => [track] } as unknown as MediaStream
+    let status: 'idle' | 'active' = 'idle'
+    useCameraStreamMock.mockImplementation(() => ({ status, stream: status === 'active' ? stream : null, canRetry: true, unavailableReason: null, open, close, retry: open }))
+    successfulUpload()
+    const { rerender } = renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Varias facturas' }))
+    rerender()
+    const video = document.querySelector('video') as HTMLVideoElement
+    Object.defineProperties(video, { videoWidth: { configurable: true, value: 640 }, videoHeight: { configurable: true, value: 480 } })
+    fireEvent.loadedData(video)
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+    await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
+
+    await waitFor(() => expect(postMultipartMock).toHaveBeenCalledOnce())
+    expect(open).toHaveBeenCalledOnce()
+    expect(close).not.toHaveBeenCalled()
+  })
+
   // spec: docs/specs/S6.14-captura-alta-resolucion-y-confianza-nombre.md, C8
   it('S6.14 C8: con nitidez baja (varianza del Laplaciano < umbral), onUploaded recibe lowSharpness=true', async () => {
     successfulUpload()

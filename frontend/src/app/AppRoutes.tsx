@@ -2,6 +2,7 @@
 // (solo cablea props/navegación, spec §4 invariante). El control de acceso real vive en el
 // backend; aquí solo se evita mostrar enlaces/pantallas que el backend rechazaría de todos modos.
 import {
+  Link,
   Navigate,
   Route,
   Routes,
@@ -11,7 +12,7 @@ import {
   useSearchParams,
 } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { CaptureScreen } from '../features/capture/CaptureScreen'
 import type { Direction } from '../features/capture/types'
@@ -91,14 +92,27 @@ function InvoicesRoute() {
 }
 
 function CaptureRoute() {
-  const navigate = useNavigate()
+  const [accepted, setAccepted] = useState<{ fileId: string; direction: Direction; lowSharpness: boolean } | null>(null)
+  if (accepted) {
+    return (
+      <section className="mx-auto flex max-w-xl flex-col gap-4 p-6 pt-20 text-slate-100" aria-label="Factura aceptada">
+        <h1 className="text-2xl font-semibold">Factura aceptada</h1>
+        <p className="text-slate-300">La estamos procesando. Puedes continuar trabajando y revisarla cuando esté lista.</p>
+        <div className="flex flex-wrap gap-3">
+          <Link to={ROUTES.confirmation(accepted.fileId)} state={{ direction: accepted.direction, lowSharpness: accepted.lowSharpness }} className="rounded-md bg-emerald-600 px-4 py-3 font-medium text-white">
+            Revisar cuando esté lista
+          </Link>
+          <Link to={ROUTES.inbox} className="rounded-md border border-slate-600 px-4 py-3 font-medium text-slate-100">
+            Ir a Mis facturas
+          </Link>
+        </div>
+      </section>
+    )
+  }
   return (
     <CaptureScreen
       onUploaded={(fileId, direction, lowSharpness) =>
-        // `lowSharpness` viaja como estado de navegación efímero (S6.14 C8), mismo patrón ya usado
-        // para `direction` antes de S6.13: es un aviso informativo de una sola vez, no un dato
-        // persistente ni crítico, así que no reaparece si se recarga o se reabre más tarde.
-        navigate(ROUTES.confirmation(fileId), { state: { direction, lowSharpness } })
+        setAccepted({ fileId, direction, lowSharpness })
       }
     />
   )
