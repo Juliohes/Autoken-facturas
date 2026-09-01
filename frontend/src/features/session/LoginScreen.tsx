@@ -52,7 +52,7 @@ export function LoginScreen({ theme }: { theme: AppliedTheme }) {
         <h1 className="text-xl font-semibold">Iniciar sesión</h1>
 
         {error && (
-          <p role="alert" className="text-sm text-red-400">
+          <p role="alert" className="text-sm text-fg" style={{ color: 'var(--tn-error)' }}>
             {error}
           </p>
         )}

@@ -274,6 +274,31 @@
     text-align: center;
     color: var(--text-secondary);
     font-size: 0.75rem;
+    border-top: 2px solid transparent;
+    transition: color 140ms ease, border-color 180ms ease;
+  }
+
+  /* Estado activo: texto navy + línea de acento naranja (color + forma, no solo color). */
+  .tn-user-nav-links a[aria-current='page'],
+  .tn-user-nav-links a.active {
+    color: var(--text-primary);
+    font-weight: 600;
+    border-top-color: var(--tn-accent);
+  }
+
+  /* Badge de pendientes: acento naranja con texto navy (AA), nunca blanco sobre #FA6703. */
+  .tn-user-nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--tn-accent);
+    color: var(--tn-accent-ink);
+    font-size: 0.6875rem;
+    font-weight: 700;
   }
 
   @media (min-width: 768px) {
@@ -1070,11 +1095,16 @@
 
   .tn-login-shell button[type='submit'] {
     min-height: 48px;
-    border: 1px solid var(--brand-navy);
+    border: 1px solid var(--tn-accent);
     border-radius: var(--tn-radius-md);
-    color: var(--brand-navy);
-    background: var(--brand-navy);
+    /* Texto navy sobre naranja de acento (AA 6.18:1). */
+    color: var(--tn-accent-ink);
+    background: var(--tn-accent);
     font-weight: 700;
+  }
+
+  .tn-login-shell button[type='submit']:hover:not(:disabled) {
+    filter: brightness(1.04);
   }
 
   .tn-auth-layout {
