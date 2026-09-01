@@ -954,6 +954,8 @@ describe('ConfirmationScreen — S6.1 rediseño de celdas de comprobación', () 
     expect(irpfInput).toHaveValue('15,00')
   })
 
+  // Bloque 6 (sistema de tokens): `border-slate-600` -> `border-line`, mismo borde neutro por
+  // defecto de FieldRow; el comportamiento verificado (sin marca de aviso) no cambia.
   it('C20: un valor presente con confianza baja sigue teniendo un campo neutral para revisar', async () => {
     getMock.mockResolvedValue({
       // `total_amount` tiene un valor real ('100.00') en `makeReview()`.
@@ -964,7 +966,7 @@ describe('ConfirmationScreen — S6.1 rediseño de celdas de comprobación', () 
 
     await screen.findByLabelText('Importe total')
     expect(screen.queryByTestId('mark-total_amount')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Importe total')).toHaveClass('border-slate-600')
+    expect(screen.getByLabelText('Importe total')).toHaveClass('border-line')
   })
 
   it('C21: un campo REALMENTE ausente sigue siendo editable y neutral', async () => {
@@ -979,6 +981,6 @@ describe('ConfirmationScreen — S6.1 rediseño de celdas de comprobación', () 
 
     await screen.findByLabelText('Importe total')
     expect(screen.queryByTestId('mark-total_amount')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Importe total')).toHaveClass('border-slate-600')
+    expect(screen.getByLabelText('Importe total')).toHaveClass('border-line')
   })
 })

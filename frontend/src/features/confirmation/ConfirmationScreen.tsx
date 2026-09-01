@@ -10,6 +10,7 @@ import type { Direction } from '../capture/types'
 import { useCurrentUser } from '../identity/useCurrentUser'
 import { CounterpartyVerdictBlock } from './CounterpartyVerdictBlock'
 import { Modal } from '../../shared/Modal'
+import { Banner } from '../../ui'
 import { FieldRow } from './FieldRow'
 import { ResponsibilityCheckbox } from './ResponsibilityCheckbox'
 import { isConfirmEnabled } from './confirmGate'
@@ -80,26 +81,24 @@ export function ConfirmationScreen({ fileId, onConfirmed, onRetry, onDeleted = (
             <p className="sr-only">Leyendo la factura...</p>
           </>
         ) : (
-          <>
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-emerald-500" />
-            <p className="text-slate-100 font-medium">Cargando datos de revisión…</p>
-            <p className="text-sm text-slate-400">Espera un momento, por favor.</p>
-          </>
+          <div role="status" className="flex flex-col items-center gap-4">
+            <span aria-hidden="true" className="tn-spinner" />
+            <p className="text-fg font-medium">Cargando datos de revisión…</p>
+            <p className="text-sm text-muted">Espera un momento, por favor.</p>
+          </div>
         )}
-        {isPendingOcr && <Link to={ROUTES.history} className="text-sm text-emerald-400">Volver al historial</Link>}
+        {isPendingOcr && <Link to={ROUTES.history} className="text-sm text-accent-strong">Volver al historial</Link>}
       </div>
     )
   }
   if (review.isError || !review.data) {
     return (
-      <div className="p-6">
-        <p className="text-red-400" role="alert">
-          No se pudo abrir esta factura. Inténtalo de nuevo.
-        </p>
+      <div className="p-6 space-y-4">
+        <Banner tone="bad">No se pudo abrir esta factura. Inténtalo de nuevo.</Banner>
         <button
           type="button"
           onClick={onRetry}
-          className="mt-4 rounded-md border border-slate-600 px-4 py-2 text-slate-100"
+          className="tn-btn tn-btn-secondary tn-btn-md"
         >
           Repetir foto
         </button>
@@ -258,7 +257,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
     <section className="tn-panel-page mx-auto max-w-xl space-y-6 p-6">
       <div className="flex items-baseline justify-between gap-4">
         <h1 className="text-xl font-semibold">Revisar y confirmar</h1>
-        <p data-testid="draft-save-state" className="text-xs text-slate-400">
+        <p data-testid="draft-save-state" className="text-xs text-muted">
           {draftSaveLabel(draftAutosave.state)}
         </p>
       </div>
@@ -266,18 +265,15 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
       {/* S6.14 C8: aviso no bloqueante de nitidez, solo en esta primera visita (estado de
           navegación efímero, se pierde al recargar — decisión de diseño propia, spec §5). */}
       {lowSharpness && (
-        <p
-          data-testid="warning-low-sharpness"
-          className="rounded-md border border-yellow-500 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200"
-        >
-          Esta foto puede estar borrosa. Revisa bien los datos antes de confirmar.
-        </p>
+        <div data-testid="warning-low-sharpness">
+          <Banner tone="warn">Esta foto puede estar borrosa. Revisa bien los datos antes de confirmar.</Banner>
+        </div>
       )}
 
       {direction === null && (
-        <fieldset className="space-y-2 rounded-md border border-amber-500/60 p-4">
-          <legend className="px-1 text-sm font-medium text-amber-200">Dirección de la factura</legend>
-          <p className="text-sm text-amber-100">Elige si la factura es recibida o emitida antes de guardar.</p>
+        <fieldset className="space-y-2 rounded-md border p-4" style={{ borderColor: 'var(--tn-warning)' }}>
+          <legend className="px-1 text-sm font-medium" style={{ color: 'var(--tn-warning)' }}>Dirección de la factura</legend>
+          <p className="text-sm text-fg">Elige si la factura es recibida o emitida antes de guardar.</p>
           <div className="flex gap-3">
             <label><input type="radio" name="historical-direction" checked={selectedDirection === 'recibida'} onChange={() => setSelectedDirection('recibida')} /> Recibida</label>
             <label><input type="radio" name="historical-direction" checked={selectedDirection === 'emitida'} onChange={() => setSelectedDirection('emitida')} /> Emitida</label>
@@ -289,8 +285,8 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
           vez de "3-4 campos siempre visibles + resto plegado". Solo tramos de IVA e IRPF
           conservan su propio desplegable interno (sin cambios de comportamiento ahí). */}
 
-      <div data-testid="section-counterparty" className="space-y-3 rounded-md border border-slate-700 p-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Contraparte</h2>
+      <div data-testid="section-counterparty" className="space-y-3 rounded-md border border-line p-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Contraparte</h2>
         <FieldRow
           name="counterparty_tax_id"
           label="CIF de contraparte"
@@ -301,7 +297,8 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
               <span
                 data-testid="mark-counterparty-verified"
                 title="CIF verificado"
-                className="rounded px-1.5 py-0.5 text-xs font-semibold text-emerald-300"
+                className="rounded px-1.5 py-0.5 text-xs font-semibold"
+                style={{ color: 'var(--tn-success)' }}
               >
                 ✓
               </span>
@@ -310,10 +307,10 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
         />
         {counterpartyVerdict && !isCounterpartyVerified && <CounterpartyVerdictBlock verdict={counterpartyVerdict} />}
         {waitingForDraftVerdict && !draftVerdict.isError && (
-          <p className="text-sm text-slate-400">Comprobando CIF...</p>
+          <p className="text-sm text-muted">Comprobando CIF...</p>
         )}
         {counterpartyChanged && !serverVerdict && !draftVerdict.isDebouncing && draftVerdict.isError && (
-          <p role="alert" className="text-sm text-red-400">No se pudo verificar el CIF. Revísalo antes de guardar.</p>
+          <p role="alert" className="text-sm" style={{ color: 'var(--tn-error)' }}>No se pudo verificar el CIF. Revísalo antes de guardar.</p>
         )}
         <FieldRow
           name="counterparty_name"
@@ -323,8 +320,8 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
         />
       </div>
 
-      <div data-testid="section-amounts" className="space-y-3 rounded-md border border-slate-700 p-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Importes</h2>
+      <div data-testid="section-amounts" className="space-y-3 rounded-md border border-line p-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Importes</h2>
         <FieldRow
           name="net_amount"
           label="Base imponible"
@@ -334,24 +331,24 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
 
         {/* S6.1 C8-C12: tramos de IVA en desplegable con resumen; añadir/quitar con tasa
             cerrada {21,10,4,Sin IVA}, nunca un % libre. */}
-        <details data-testid="tax-lines" className="rounded-md border border-slate-700 p-3">
-          <summary className="cursor-pointer text-sm text-slate-300">Tramos de IVA</summary>
+        <details data-testid="tax-lines" className="rounded-md border border-line p-3">
+          <summary className="cursor-pointer text-sm text-muted">Tramos de IVA</summary>
           <div className="mt-3 space-y-3">
             {form.tax_lines.map((line, i) => (
               <div
                 key={i}
-                className="space-y-2 rounded-md border border-slate-700 p-2"
+                className="space-y-2 rounded-md border border-line p-2"
                 data-testid={`tax-line-${i}`}
               >
                 <div className="flex items-center justify-between">
-                  <span data-testid={`tax-line-${i}-summary`} className="text-sm text-slate-300">
+                  <span data-testid={`tax-line-${i}-summary`} className="text-sm text-muted">
                     {taxRateLabel(line.iva_pct)} · Base {line.base || '—'}
                   </span>
                   <button
                     type="button"
                     data-testid={`remove-tax-line-${i}`}
                     onClick={() => set({ tax_lines: form.tax_lines.filter((_, j) => j !== i) })}
-                    className="text-xs font-semibold text-red-400"
+                    className="text-xs font-semibold text-fg"
                   >
                     Quitar
                   </button>
@@ -390,7 +387,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
                   if (!rate) return
                   set({ tax_lines: [...form.tax_lines, { iva_pct: rate, base: '', cuota: '' }] })
                 }}
-                className="w-full rounded-md border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100"
+                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-fg"
               >
                 <option value="">Añadir tramo…</option>
                 {availableTaxRates(form.tax_lines).map((rate) => (
@@ -418,8 +415,8 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
 
         {/* IRPF separado del IVA: si la IA lo leyó, el importe aparece ya cargado y sigue siendo
             editable; si no existe, el campo queda vacío y no se inventa nada. */}
-        <details data-testid="irpf-details" className="rounded-md border border-slate-700 p-3">
-          <summary className="cursor-pointer text-sm text-slate-300">
+        <details data-testid="irpf-details" className="rounded-md border border-line p-3">
+          <summary className="cursor-pointer text-sm text-muted">
             IRPF{form.irpf_amount && review.fields.irpf_rate ? ` (${review.fields.irpf_rate}%)` : ''}
           </summary>
           <div className="mt-3">
@@ -434,42 +431,41 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
 
         {/* C10: descuadre aritmético -> aviso "Revisar" (no bloquea). */}
       {hasImbalance && (
-          <p
-            data-testid="warning-imbalance"
-            className="rounded-md border border-yellow-500 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200"
-          >
-            El total no cuadra con el IVA.
-          </p>
+          <div data-testid="warning-imbalance">
+            <Banner tone="warn">El total no cuadra con el IVA.</Banner>
+          </div>
         )}
       </div>
 
       {review.duplicate && (
-        <div
-          data-testid="warning-duplicate"
-          role="alert"
-          className="space-y-2 rounded-md border border-red-500 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-        >
-          <p className="font-semibold">
-            {review.duplicate.kind === 'confirmed'
-              ? 'Esta factura ya está guardada como duplicado.'
-              : 'Esta factura parece coincidir con otra ya subida.'}
-          </p>
-          <p>No puedes continuar con esta factura duplicada.</p>
-          <button
-            type="button"
-            onClick={() => navigate(`/confirmar/${review.duplicate?.uploaded_file_id}`)}
-            className="rounded-md border border-red-300 px-3 py-1.5 font-medium text-red-100"
+        <div data-testid="warning-duplicate">
+          <Banner
+            tone="bad"
+            action={
+              <button
+                type="button"
+                onClick={() => navigate(`/confirmar/${review.duplicate?.uploaded_file_id}`)}
+                className="tn-btn tn-btn-danger tn-btn-sm"
+              >
+                Revisar factura original
+              </button>
+            }
           >
-            Revisar factura original
-          </button>
+            <p className="font-semibold">
+              {review.duplicate.kind === 'confirmed'
+                ? 'Esta factura ya está guardada como duplicado.'
+                : 'Esta factura parece coincidir con otra ya subida.'}
+            </p>
+            <p>No puedes continuar con esta factura duplicada.</p>
+          </Banner>
         </div>
       )}
 
       <div
         data-testid="section-invoice-identity"
-        className="space-y-3 rounded-md border border-slate-700 p-4"
+        className="space-y-3 rounded-md border border-line p-4"
       >
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
           Fecha y número de factura
         </h2>
         <FieldRow
@@ -489,7 +485,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
 
       {/* Identidad propia conocida (no editable, no se puntúa; ADR-0011): al final, texto plano,
           sin caja de campo — viene del registro de la empresa, no se lee ni se confirma aquí. */}
-      <div data-testid="own-identity" className="text-sm text-slate-400">
+      <div data-testid="own-identity" className="text-sm text-muted">
         <p>Empresa propia: {review.own.name ?? '—'}</p>
         <p>CIF propio: {review.own.cif ?? '—'}</p>
       </div>
@@ -497,17 +493,15 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
       {/* 2026-08-08 (hallazgo de Julio): antes este motivo de bloqueo no tenía NINGÚN mensaje
           visible — el botón se deshabilitaba sin que el usuario supiera por qué. */}
       {missingOwnTaxId && (
-        <p
-          data-testid="warning-own-tax-id-missing"
-          role="alert"
-          className="rounded-md border border-red-500 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-        >
-          No se ve el CIF de {review.own.name ?? 'tu empresa'} ({review.own.cif ?? '—'}). Confirma que esta factura es suya.
-        </p>
+        <div data-testid="warning-own-tax-id-missing">
+          <Banner tone="bad">
+            No se ve el CIF de {review.own.name ?? 'tu empresa'} ({review.own.cif ?? '—'}). Confirma que esta factura es suya.
+          </Banner>
+        </div>
       )}
 
       {missingOwnTaxId && isUser && (
-        <label className="flex items-start gap-2 text-sm text-slate-300">
+        <label className="flex items-start gap-2 text-sm text-muted">
           <input
             type="checkbox"
             checked={ownTaxIdExceptionAccepted}
@@ -520,7 +514,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
       {/* S3.5: solo el tenant_admin puede marcar una factura como de prueba (excluida de
           informes, purgable de un clic); un empleado ni ve la casilla. */}
       {isAdmin && (
-        <label className="flex items-center gap-2 text-sm text-slate-300">
+        <label className="flex items-center gap-2 text-sm text-muted">
           <input
             type="checkbox"
             checked={isTest}
@@ -530,7 +524,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
         </label>
       )}
 
-      <label className="flex items-start gap-2 text-sm text-slate-300">
+      <label className="flex items-start gap-2 text-sm text-muted">
         <input
           type="checkbox"
           aria-label="He revisado todos los datos de la factura."
@@ -547,13 +541,11 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
       />
 
       {blockMessages.length > 0 && (
-        <div
-          data-testid="confirm-blockers"
-          role="alert"
-          className="space-y-1 rounded-md border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
-        >
-          <p className="font-semibold">Para confirmar falta:</p>
-          {blockMessages.map((message) => <p key={message}>{message}</p>)}
+        <div data-testid="confirm-blockers">
+          <Banner tone="warn">
+            <p className="font-semibold">Para confirmar falta:</p>
+            {blockMessages.map((message) => <p key={message}>{message}</p>)}
+          </Banner>
         </div>
       )}
 
@@ -561,7 +553,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
         type="button"
         disabled={!enabled}
         onClick={handleConfirm}
-        className="w-full rounded-md bg-emerald-600 px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+        className="tn-btn tn-btn-primary tn-btn-lg w-full"
       >
         Confirmar y guardar
       </button>
@@ -570,27 +562,27 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
         type="button"
         onClick={() => setShowDeleteDialog(true)}
         disabled={deleteUpload.isPending}
-        className="w-full rounded-md border border-red-500/70 px-4 py-2 text-red-300 disabled:opacity-40"
+        className="tn-btn tn-btn-danger tn-btn-md w-full"
       >
         Eliminar factura sin confirmar
       </button>
 
       {deleteUpload.isError && (
-        <p data-testid="delete-error" role="alert" className="text-sm text-red-400">
+        <p data-testid="delete-error" role="alert" className="text-sm" style={{ color: 'var(--tn-error)' }}>
           {deleteUpload.error instanceof Error ? deleteUpload.error.message : 'No se pudo eliminar la factura.'}
         </p>
       )}
 
       {showDeleteDialog && (
         <Modal title="Eliminar factura" onClose={() => setShowDeleteDialog(false)} panelClassName="max-w-md space-y-4">
-          <p className="text-slate-300">
+          <p className="text-muted">
             Esta factura todavía no se ha confirmado ni guardado. Se eliminará para que puedas hacerla de nuevo.
           </p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={() => setShowDeleteDialog(false)}
-              className="rounded-md border border-slate-600 px-4 py-2 text-slate-100"
+              className="tn-btn tn-btn-secondary tn-btn-md"
             >
               Cancelar
             </button>
@@ -603,7 +595,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
                   onDeleted()
                 },
               })}
-              className="rounded-md bg-red-600 px-4 py-2 font-semibold text-white disabled:opacity-40"
+              className="tn-btn tn-btn-danger tn-btn-md"
             >
               {deleteUpload.isPending ? 'Eliminando...' : 'Sí, eliminar'}
             </button>
@@ -612,21 +604,21 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, dir
       )}
 
       {/* C9: aviso rojo, grande y legible, SIEMPRE bajo el botón. */}
-      <p role="alert" className="text-center text-base font-semibold text-red-400">
+      <p role="alert" className="text-center text-base font-semibold" style={{ color: 'var(--tn-error)' }}>
         {RESPONSIBILITY_NOTICE}
       </p>
 
       {/* C12: rechazo del servidor mostrado sin perder lo editado ni navegar. */}
       {confirm.isError && (
-        <p data-testid="confirm-error" role="alert" className="text-sm text-red-400">
-          No se pudo guardar. Revisa los datos e inténtalo de nuevo.
-        </p>
+        <div data-testid="confirm-error">
+          <Banner tone="bad">No se pudo guardar. Revisa los datos e inténtalo de nuevo.</Banner>
+        </div>
       )}
 
       <button
         type="button"
         onClick={onRetry}
-        className="w-full rounded-md border border-slate-600 px-4 py-2 text-slate-100"
+        className="tn-btn tn-btn-secondary tn-btn-md w-full"
       >
         Repetir foto
       </button>
