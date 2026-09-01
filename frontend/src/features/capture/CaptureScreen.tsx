@@ -711,12 +711,12 @@ export function CaptureScreen({ onUploaded }: Props) {
         </label>
       )}
       {redirectMessage && (
-        <p data-testid="capture-redirect-message" className="rounded-md border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+        <p data-testid="capture-redirect-message" className="tn-banner tn-banner-warn rounded-md px-3 py-2 text-sm">
           {redirectMessage}
         </p>
       )}
       {captureError && <p role="alert" className="text-sm text-red-400">{captureError}</p>}
-      {successMessage && <p role="status" className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm">{successMessage}</p>}
+      {successMessage && <p role="status" className="tn-banner tn-banner-ok rounded px-3 py-2 text-sm">{successMessage}</p>}
       {continuousNotice && <p role="status" className="text-sm text-emerald-300">{continuousNotice}</p>}
 
       {productMode === 'continuous_invoices' && continuousSession.accepted.length > 0 && (

@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 
 import { ROUTES } from '../../app/routes'
 import { Modal } from '../../shared/Modal'
+import { StatusBadge, type StatusTone } from '../../ui'
 import { INBOX_QUERY_KEY } from './useInvoiceInbox'
 import { useDeleteUpload } from '../confirmation/useDeleteUpload'
 import type { InboxItem as InboxItemData } from './types'
@@ -18,6 +19,17 @@ const STATUS_LABEL: Record<string, string> = {
   confirmed: 'Confirmada',
 }
 
+// Tono semántico por estado (color + icono + texto, AA). El estado nunca es solo color.
+const STATUS_TONE: Record<string, StatusTone> = {
+  pending_ocr: 'neutral',
+  processing: 'info',
+  ocr_done: 'ok',
+  needs_review: 'warn',
+  ocr_failed: 'bad',
+  capture_unreadable: 'bad',
+  confirmed: 'ok',
+}
+
 export function InboxItem({ item }: { item: InboxItemData }) {
   const queryClient = useQueryClient()
   const deleteUpload = useDeleteUpload(item.id)
@@ -30,8 +42,9 @@ export function InboxItem({ item }: { item: InboxItemData }) {
     <li className="tn-inbox-item flex items-center justify-between gap-4" data-testid="inbox-item">
       <div className="min-w-0">
         <p className="font-medium text-slate-100">Factura enviada</p>
-        <p className="text-sm text-slate-400">
-          {STATUS_LABEL[item.status] ?? item.status} · {item.page_count} {item.page_count === 1 ? 'página' : 'páginas'}
+        <p className="text-sm text-muted flex items-center gap-2">
+          <StatusBadge tone={STATUS_TONE[item.status] ?? 'neutral'} label={STATUS_LABEL[item.status] ?? item.status} />
+          <span>{item.page_count} {item.page_count === 1 ? 'página' : 'páginas'}</span>
         </p>
         <time dateTime={item.created_at} className="text-xs text-slate-500">
           {formatCreatedAt(item.created_at)}

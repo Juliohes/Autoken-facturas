@@ -64,8 +64,12 @@ describe('InvoiceInbox (R-020)', () => {
 
     renderInbox()
 
-    expect(await screen.findByText('Mis facturas')).toBeInTheDocument()
-    expect(screen.getByText('Procesando OCR · 2 páginas')).toBeInTheDocument()
+    // R-VPS-v2 bloque 7: el H1 pasa de "Mis facturas" a "Pendientes" (deuda §1.1/§4.6, unifica
+    // el nombre con el destino de navegación "Pendientes"); el estado ahora se muestra con
+    // StatusBadge (color+icono+texto) separado del recuento de páginas, no como un único string.
+    expect(await screen.findByText('Pendientes')).toBeInTheDocument()
+    expect(screen.getByText('Procesando OCR')).toBeInTheDocument()
+    expect(screen.getByText('2 páginas')).toBeInTheDocument()
     expect(screen.getByText('1')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.queryByText(/CIF|Proveedor|Importe|Número/)).not.toBeInTheDocument()

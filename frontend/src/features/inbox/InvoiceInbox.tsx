@@ -41,8 +41,8 @@ export function InvoiceInbox() {
   return (
     <section className="tn-panel-page mx-auto max-w-2xl space-y-5 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Mis facturas</h1>
-        <p className="mt-1 text-sm text-slate-400">Solo aparecen las facturas que has subido tú.</p>
+        <h1 className="text-xl font-semibold">Pendientes</h1>
+        <p className="mt-1 text-sm text-muted">Solo aparecen las facturas que has subido tú.</p>
       </div>
       {(location.state as { message?: string } | null)?.message && (
         <p role="status" className="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
@@ -78,8 +78,13 @@ export function InvoiceInbox() {
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="tn-summary-card rounded-md border px-3 py-2 text-center">
-      <p className="text-lg font-semibold text-emerald-300">{value}</p>
-      <p className="text-xs text-slate-400">{label}</p>
+      {/* Bloque 8 (a11y): sin `text-emerald-300` -- el remapeo legacy `.tn-panel-page
+          .text-emerald-300` (verde oscuro, para superficies claras) pisaba por especificidad
+          a `.tn-summary-card p:first-child` (acento sobre esta tarjeta glass oscura),
+          dejando el número con ~2.17:1 de contraste. Sin esa clase, aplica el color pensado
+          para esta superficie. */}
+      <p className="text-lg font-semibold">{value}</p>
+      <p className="text-xs text-muted">{label}</p>
     </div>
   )
 }

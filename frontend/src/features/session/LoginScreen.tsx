@@ -52,7 +52,7 @@ export function LoginScreen({ theme }: { theme: AppliedTheme }) {
         <h1 className="text-xl font-semibold">Iniciar sesión</h1>
 
         {error && (
-          <p role="alert" className="text-sm text-red-400">
+          <p role="alert" className="text-sm text-fg" style={{ color: 'var(--tn-error)' }}>
             {error}
           </p>
         )}
@@ -120,7 +120,7 @@ export function LoginScreen({ theme }: { theme: AppliedTheme }) {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-md bg-emerald-600 px-4 py-2 font-medium text-white disabled:opacity-40"
+          className="tn-btn tn-btn-primary tn-btn-lg w-full"
         >
           {submitting ? 'Entrando…' : 'Entrar'}
         </button>

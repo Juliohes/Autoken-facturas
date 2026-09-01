@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { ROUTES } from '../../app/routes'
 import { Modal } from '../../shared/Modal'
+import { Banner, SegmentedControl } from '../../ui'
 import { useSession } from '../session/SessionProvider'
 import { useInvoiceInbox } from '../inbox/useInvoiceInbox'
 import { useUploadCapture } from '../capture/useUploadCapture'
@@ -68,20 +69,15 @@ export function UploadFileScreen() {
     <section className="tn-panel-page mx-auto w-full max-w-2xl space-y-6 p-6" aria-labelledby="upload-title">
       <div>
         <h1 id="upload-title" className="text-2xl font-semibold">Subir Archivo</h1>
-        <p className="mt-1 text-slate-600">Cada imagen o PDF se enviará como una factura independiente.</p>
+        <p className="mt-1 text-muted">Cada imagen o PDF se enviará como una factura independiente.</p>
       </div>
-      <fieldset className="space-y-2">
-        <legend className="font-medium">Dirección de la factura</legend>
-        <div className="flex gap-2">
-          {(['recibida', 'emitida'] as const).map((value) => (
-            <label key={value} className="cursor-pointer rounded border border-slate-300 px-4 py-3 has-[:checked]:border-orange-600 has-[:checked]:bg-orange-50">
-              <input className="sr-only" type="radio" name="upload-direction" checked={direction === value} onChange={() => setDirection(value)} />
-              {value === 'recibida' ? 'Recibida' : 'Emitida'}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      {message && <p role="status" className="rounded border border-orange-300 bg-orange-50 px-3 py-2 text-sm">{message}</p>}
+      <SegmentedControl
+        label="Dirección de la factura"
+        value={direction}
+        onChange={setDirection}
+        options={[{ value: 'recibida', label: 'Recibida' }, { value: 'emitida', label: 'Emitida' }]}
+      />
+      {message && <Banner tone="info">{message}</Banner>}
       <button type="button" onClick={openPicker} disabled={busy} className="tn-primary-action min-h-11 rounded px-5 py-3 font-semibold disabled:opacity-50">
         {busy ? 'Subiendo documentos...' : 'Elegir imágenes o PDF'}
       </button>

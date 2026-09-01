@@ -35,6 +35,22 @@ export default {
           primary: 'var(--color-primary)',
           secondary: 'var(--color-secondary)',
         },
+        // Tokens semánticos (Bloque 1): apuntan a las variables CSS de index.css para que el
+        // flujo de usuario migre a clases estables (bg-surface, text-fg, bg-accent...) mientras el
+        // hack slate/emerald de arriba sigue sirviendo al admin hasta su propia fase de migración.
+        surface: 'var(--surface-primary)',
+        'surface-soft': 'var(--surface-secondary)',
+        line: 'var(--border-default)',
+        fg: 'var(--text-primary)',
+        muted: 'var(--text-secondary)',
+        faint: 'var(--text-tertiary)',
+        accent: 'rgb(var(--tn-accent-rgb) / <alpha-value>)',
+        'accent-ink': 'var(--tn-accent-ink)',
+        'accent-strong': 'var(--tn-accent-strong)',
+      },
+      fontFamily: {
+        display: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
     },
   },
