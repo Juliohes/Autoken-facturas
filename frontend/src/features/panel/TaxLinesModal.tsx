@@ -6,6 +6,7 @@
 import { useState } from 'react'
 
 import { fromAmountInputValue, toAmountInputValue } from '../../shared/format'
+import { Modal } from '../../shared/Modal'
 import { useEditInvoice } from './useEditInvoice'
 import type { InvoiceRow } from './types'
 
@@ -53,15 +54,7 @@ export function TaxLinesModal({ invoice, onClose }: Props) {
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Tramos de IVA"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-    >
-      <div className="w-full max-w-lg space-y-3 rounded-lg border border-slate-600 bg-slate-800 p-4 text-slate-100">
-        <h2 className="text-lg font-semibold">Tramos de IVA</h2>
-
+    <Modal title="Tramos de IVA" onClose={onClose} panelClassName="max-w-lg space-y-3">
         <div className="space-y-2">
           {lines.map((line, i) => (
             <div key={i} className="flex flex-wrap items-end gap-2">
@@ -132,7 +125,6 @@ export function TaxLinesModal({ invoice, onClose }: Props) {
             {editInvoice.isPending ? 'Guardando…' : 'Guardar'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

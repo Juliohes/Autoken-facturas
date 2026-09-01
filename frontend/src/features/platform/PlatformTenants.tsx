@@ -181,7 +181,7 @@ export function PlatformTenants() {
   }
 
   return (
-    <section className="mx-auto max-w-4xl space-y-8 p-6 text-slate-100">
+    <section className="tn-panel-page mx-auto max-w-4xl space-y-8 p-6">
       <div>
         <h1 className="text-xl font-semibold">Plataforma — Asesorías</h1>
 

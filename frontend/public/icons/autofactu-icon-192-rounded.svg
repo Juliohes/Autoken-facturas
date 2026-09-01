@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <clipPath id="rounded">
+      <rect x="5" y="5" width="182" height="182" rx="34" />
+    </clipPath>
+  </defs>
+  <image href="/autofactu-favicon-rounded.svg" x="5" y="5" width="182" height="182" clip-path="url(#rounded)" preserveAspectRatio="xMidYMid slice" />
+</svg>

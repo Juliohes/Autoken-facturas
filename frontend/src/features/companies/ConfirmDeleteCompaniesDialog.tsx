@@ -1,3 +1,5 @@
+import { Modal } from '../../shared/Modal'
+
 // Aviso emergente de confirmación antes de borrar empresas seleccionadas (2026-08-09, a petición
 // de Julio: "que aparezca... un pequeño botón para hacer check... y eliminar finalmente la
 // empresa, tras un aviso emergente para confirmar el borrado"), mismo patrón `role="dialog"` que
@@ -12,20 +14,12 @@ interface Props {
 
 export function ConfirmDeleteCompaniesDialog({ names, deleting, onConfirm, onCancel }: Props) {
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Confirmar borrado de empresas"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onClick={onCancel}
+    <Modal
+      title={`¿Borrar ${names.length} ${names.length === 1 ? 'empresa' : 'empresas'}?`}
+      accessibleName="Confirmar borrado de empresas"
+      onClose={onCancel}
+      panelClassName="max-w-md space-y-3"
     >
-      <div
-        className="w-full max-w-md space-y-3 rounded-lg border border-slate-600 bg-slate-800 p-4 text-slate-100"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-lg font-semibold">
-          ¿Borrar {names.length} {names.length === 1 ? 'empresa' : 'empresas'}?
-        </h2>
         <p className="text-sm text-red-400">
           Esto borra de forma permanente, junto con su histórico, y no se puede deshacer:
         </p>
@@ -52,7 +46,6 @@ export function ConfirmDeleteCompaniesDialog({ names, deleting, onConfirm, onCan
             {deleting ? 'Borrando…' : 'Borrar'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

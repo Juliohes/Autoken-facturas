@@ -29,7 +29,7 @@ export function PlatformSettings() {
   const error = policy.isError || lab.isError
 
   return (
-    <section className="mx-auto max-w-3xl space-y-6 p-6 text-slate-100">
+    <section className="tn-panel-page mx-auto max-w-3xl space-y-6 p-6">
       <header>
         <h1 className="text-xl font-semibold">Ajustes de plataforma</h1>
         <p className="mt-1 text-sm text-slate-400">Producción y laboratorio OCR tienen controles separados.</p>
@@ -56,7 +56,7 @@ export function PlatformSettings() {
             Promover esta combinación a producción
           </button>
           {promotionOpen && (
-            <div role="dialog" aria-modal="true" className="mt-4 rounded border border-slate-600 bg-slate-950 p-4">
+            <div role="dialog" aria-modal="true" className="mt-4 rounded border border-slate-600 bg-white p-4">
               <h3 className="font-medium">Confirmar promoción</h3>
               <p className="mt-2 text-sm text-slate-400">Se registrará la política anterior, la nueva política, el actor y la fecha.</p>
               <div className="mt-3 flex gap-2">

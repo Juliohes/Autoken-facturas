@@ -209,7 +209,7 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
   }
 
   return (
-    <section className="mx-auto max-w-5xl space-y-8 p-6 text-slate-100">
+    <section className="tn-panel-page mx-auto max-w-5xl space-y-8 p-6">
       <div>
         <h1 className="text-xl font-semibold">Empresas</h1>
 

@@ -27,6 +27,14 @@ beforeEach(() => {
 })
 
 describe('LoginScreen (S4.9)', () => {
+  it('usa el tono azul de marca en el shell y un panel con acabado glass', () => {
+    useSessionMock.mockReturnValue({ status: 'unauthenticated', user: null, login: vi.fn(), logout: vi.fn() })
+    render(<LoginScreen theme={THEME} />)
+
+    expect(screen.getByRole('main')).toHaveClass('tn-login-shell')
+    expect(screen.getByRole('form', { name: 'Inicio de sesión' })).toHaveClass('tn-login-card')
+  })
+
   it('C1: envía email + contraseña a login()', async () => {
     const login = vi.fn().mockResolvedValue({ outcome: 'ok' })
     useSessionMock.mockReturnValue({ status: 'unauthenticated', user: null, login, logout: vi.fn() })
@@ -39,6 +47,29 @@ describe('LoginScreen (S4.9)', () => {
 
     await waitFor(() => expect(login).toHaveBeenCalledWith('ana@ilex.es', 's3cret', undefined))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('C4: permite mostrar y volver a ocultar la contraseña sin cambiar su valor', async () => {
+    const login = vi.fn().mockResolvedValue({ outcome: 'ok' })
+    useSessionMock.mockReturnValue({ status: 'unauthenticated', user: null, login, logout: vi.fn() })
+    const user = userEvent.setup()
+    render(<LoginScreen theme={THEME} />)
+
+    const password = screen.getByLabelText('Contraseña')
+    await user.type(screen.getByLabelText('Email'), 'ana@ilex.es')
+    await user.type(password, 's3cret')
+    expect(password).toHaveAttribute('type', 'password')
+
+    await user.click(screen.getByRole('button', { name: 'Mostrar contraseña' }))
+    expect(screen.getByLabelText('Contraseña')).toHaveAttribute('type', 'text')
+    expect(screen.getByLabelText('Contraseña')).toHaveValue('s3cret')
+
+    await user.click(screen.getByRole('button', { name: 'Ocultar contraseña' }))
+    expect(screen.getByLabelText('Contraseña')).toHaveAttribute('type', 'password')
+    expect(screen.getByLabelText('Contraseña')).toHaveValue('s3cret')
+
+    await user.click(screen.getByRole('button', { name: 'Entrar' }))
+    await waitFor(() => expect(login).toHaveBeenCalledWith('ana@ilex.es', 's3cret', undefined))
   })
 
   it('C2: credenciales incorrectas muestran un error legible, sin perder lo escrito', async () => {

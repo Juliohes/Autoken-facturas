@@ -38,7 +38,7 @@ export function PendingSupervisionPanel() {
 
   const hasMore = supervision.data?.next_cursor !== null && supervision.data?.next_cursor !== undefined
   return (
-    <section className="mx-auto max-w-4xl space-y-5 p-6 text-slate-100">
+    <section className="tn-panel-page mx-auto max-w-4xl space-y-5 p-6">
       <div>
         <h1 className="text-xl font-semibold">Pendientes del equipo</h1>
         <p className="mt-1 text-sm text-slate-400">Vista de supervisión. La revisión es solo de lectura.</p>

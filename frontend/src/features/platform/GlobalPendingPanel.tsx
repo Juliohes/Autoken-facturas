@@ -16,7 +16,7 @@ export function GlobalPendingPanel() {
   }
 
   return (
-    <section className="mx-auto max-w-6xl space-y-5 p-6 text-slate-100">
+    <section className="tn-panel-page mx-auto max-w-6xl space-y-5 p-6">
       <header>
         <h1 className="text-xl font-semibold">Pendientes globales</h1>
         <p className="mt-1 text-sm text-slate-400">Solo se abre un documento cuando lo seleccionas.</p>

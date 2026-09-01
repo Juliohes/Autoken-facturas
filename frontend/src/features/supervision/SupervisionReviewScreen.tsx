@@ -23,7 +23,7 @@ export function SupervisionReviewScreen({ fileId }: { fileId: string }) {
   }
 
   return (
-    <section className="mx-auto max-w-2xl space-y-5 p-6 text-slate-100">
+      <section className="tn-panel-page mx-auto max-w-2xl space-y-5 p-6">
       <Link to={ROUTES.supervision} className="text-sm text-emerald-400">Volver a pendientes</Link>
       <div>
         <h1 className="text-xl font-semibold">Revisión de supervisión</h1>

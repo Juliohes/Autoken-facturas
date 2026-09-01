@@ -169,7 +169,7 @@ export function BenchmarkRanking() {
   }
 
   return (
-    <section className="mx-auto max-w-5xl space-y-6 p-6 text-slate-100">
+      <section className="tn-panel-page mx-auto max-w-5xl space-y-6 p-6">
       <h1 className="text-xl font-semibold">Ranking OCR multi-modelo</h1>
       <p className="text-sm text-slate-400">
         Comparativa real de cada variante de preprocesado por motor candidato, ejecutada sobre las

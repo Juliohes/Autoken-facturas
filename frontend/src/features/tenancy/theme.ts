@@ -4,21 +4,18 @@
 import type { CurrentTenant } from './types'
 
 export const DEFAULT_APP_NAME = 'Autoken Facturas'
-// Logo real de Autoken (variante clara, pensada para fondo oscuro — la misma que ya usa la web
-// corporativa `autoken.es` en su cabecera). Sirve de tenant estático (`frontend/public/`, mismo
-// origen), no una URL de terceros: no aplica el motivo de `referrerPolicy` de un logo de tenant.
-export const DEFAULT_LOGO_URL = '/autoken-logo.png'
-// Solo el icono (cerebro/circuito), sin el lockup "AUTOKEN / Automatización e IA": al tamaño de un
-// favicon de pestaña el texto queda ilegible y sobra (Julio, 2026-07-29). El logo con texto de
-// arriba sigue siendo el que se ve DENTRO de la app (login, cabecera del menú); este solo es el
-// fallback de `faviconUrl` cuando el tenant no tiene uno propio.
-export const DEFAULT_FAVICON_URL = '/autoken-favicon.png'
+// Logo estático de Autofactu (`frontend/public/`, mismo origen). Se usa como fallback cuando un
+// tenant no tiene branding propio, tanto en el login como en la cabecera de la app.
+export const DEFAULT_LOGO_URL = '/autofactu-logo.png'
+// El favicon usa exclusivamente el símbolo recortado sobre fondo azul: el texto no es legible en
+// tamaños pequeños y el fondo sólido evita que el navegador lo muestre como una marca transparente.
+export const DEFAULT_FAVICON_URL = '/autofactu-favicon-rounded.svg'
 // Naranja real de la marca Autoken (logo + web corporativa) — mismo valor que `emerald-600` en
 // `tailwind.config.js`, que es lo que de verdad pintan los botones principales de cada pantalla.
-export const DEFAULT_COLOR_PRIMARY = '#F26522'
+export const DEFAULT_COLOR_PRIMARY = '#FA6703'
 // Navy real de la marca Autoken (fondo del logo) — mismo valor que `slate-900`, mismo valor que
 // `theme_color`/`background_color` del manifest.
-export const DEFAULT_COLOR_SECONDARY = '#0B1322'
+export const DEFAULT_COLOR_SECONDARY = '#021231'
 
 export interface AppliedTheme {
   appName: string
@@ -30,9 +27,8 @@ export interface AppliedTheme {
 
 /** Branding del tenant (o su ausencia) -> tema a aplicar. Cada campo cae a su propio default.
  *
- * `faviconUrl` reutiliza `DEFAULT_LOGO_URL` (mismo fichero estático): revierte la decisión S4.3 de
- * no tener favicon por defecto (Julio, 2026-07-28) para que la pestaña del navegador muestre el
- * logo real de Autoken en vez del icono genérico, incluso sin branding propio configurado. */
+ * `faviconUrl` usa el símbolo cuadrado de Autofactu con fondo, separado del lockup transparente para
+ * que la pestaña del navegador muestre un icono nítido incluso sin branding propio configurado. */
 export function resolveTheme(tenant: CurrentTenant | undefined): AppliedTheme {
   return {
     appName: tenant?.app_name ?? DEFAULT_APP_NAME,

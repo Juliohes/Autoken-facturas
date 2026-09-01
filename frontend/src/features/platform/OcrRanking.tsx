@@ -95,7 +95,7 @@ export function OcrRanking() {
   }
 
   return (
-    <section className="mx-auto max-w-3xl space-y-4 p-6 text-slate-100">
+    <section className="tn-panel-page mx-auto max-w-3xl space-y-4 p-6">
       <h1 className="text-xl font-semibold">Ranking OCR multi-modelo</h1>
       <p className="text-sm text-slate-400">
         Puntuación media de cada motor candidato sobre las facturas ya procesadas con el
