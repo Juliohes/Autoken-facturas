@@ -541,6 +541,12 @@
     pointer-events: none;
   }
 
+  /* Variante sin tarjeta: el contenido se apoya directamente sobre el fondo de la app
+   * (UploadFileScreen, paso 7). Solo color de texto, sin superficie/borde/sombra. */
+  .tn-page-plain {
+    color: var(--text-primary);
+  }
+
   /* Las pantallas existentes usan una paleta slate diseñada para el shell oscuro anterior. */
   .tn-panel-page .text-slate-100 { color: var(--text-primary) !important; }
   .tn-panel-page .text-slate-200 { color: var(--text-primary) !important; }
