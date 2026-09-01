@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation } from 'react-router-dom'
+import { Flashlight, FlashlightOff } from 'lucide-react'
 
 import { ROUTES } from '../../app/routes'
 import { useCompanyOptions } from '../companies/useCompanyOptions'
@@ -787,10 +788,9 @@ export function CaptureScreen({ onUploaded }: Props) {
                     onClick={() => void toggleTorch()}
                     className="camera-control absolute right-4 top-[max(1rem,env(safe-area-inset-top))] inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-white/40 bg-slate-950/80 p-2 text-white"
                   >
-                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-6 w-6">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m8 8 5-5 4 4-5 5-4 4-3-3 4-4Z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m12 12 3 3M5 19l-2 2M17 7l4-4M18 15l3 2M20 20l-3-3" />
-                    </svg>
+                    {torchOn
+                      ? <Flashlight aria-hidden="true" className="h-6 w-6" strokeWidth={1.8} />
+                      : <FlashlightOff aria-hidden="true" className="h-6 w-6" strokeWidth={1.8} />}
                   </button>
                 )}
               </>
