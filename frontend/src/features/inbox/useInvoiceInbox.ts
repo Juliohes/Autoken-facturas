@@ -22,7 +22,7 @@ export function useInvoiceInbox(cursor: string | null, enabled = true) {
   return useQuery({
     ...invoiceInboxQueryOptions(cursor),
     enabled,
-    refetchInterval: (query) => (query.state.data?.summary.processing ? 2000 : false),
+    refetchInterval: (query) => (query.state.data?.summary?.processing ? 2000 : false),
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   })

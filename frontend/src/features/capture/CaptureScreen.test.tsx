@@ -1,7 +1,7 @@
 // Comportamientos observables de la captura directa S6.11. Canvas y cámara se
 // simulan porque jsdom no proporciona píxeles ni un MediaStream real.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
@@ -104,21 +104,46 @@ describe('CaptureScreen (S6.11)', () => {
     expect(screen.queryByTestId('capture-redirect-message')).not.toBeInTheDocument()
   })
 
-  it('S6.12 C1: el selector de dirección es el primer control y prioriza la foto sobre las acciones secundarias', () => {
+  it('C2: el selector y las acciones de captura aparecen sin un enlace redundante al historial', () => {
     useSessionMock.mockReturnValue(USER_SESSION)
     renderScreen()
 
     const directionSelector = screen.getByRole('group', { name: 'Dirección' })
-    const historyLink = screen.getByRole('link', { name: 'Ver historial' })
     const takePhoto = screen.getByRole('button', { name: 'Tomar foto' })
-    const uploadFile = screen.getByRole('button', { name: 'Subir archivo' })
     const multiplePages = screen.getByRole('button', { name: 'Varias hojas' })
 
-    expect(directionSelector.compareDocumentPosition(historyLink)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(screen.queryByRole('link', { name: /ver historial|mis facturas/i })).not.toBeInTheDocument()
+    // R-056: "Subir factura" se ha movido a la pestaña Subir Archivo; ya no está en el escáner.
+    expect(screen.queryByRole('button', { name: 'Subir factura' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Capturar factura' })).toHaveClass('sr-only')
+    expect(screen.getByRole('heading', { name: 'Capturar factura' }).closest('section')).toHaveClass('tn-capture-entry-screen')
     expect(directionSelector.compareDocumentPosition(takePhoto)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
-    expect(takePhoto).toHaveClass('rounded-full')
-    expect(takePhoto.parentElement).toHaveClass('justify-center')
-    expect(uploadFile.parentElement).toBe(multiplePages.parentElement)
+    expect(takePhoto).toHaveClass('tn-capture-segment', 'tn-capture-segment-primary')
+    expect(multiplePages).toHaveClass('tn-capture-segment', 'tn-capture-segment-secondary')
+    expect(multiplePages).toHaveAttribute('aria-pressed', 'false')
+    expect(takePhoto.parentElement).toHaveClass('tn-capture-segmented')
+    expect(multiplePages.parentElement).toBe(takePhoto.parentElement)
+    expect(takePhoto.querySelector('svg')).toBeInTheDocument()
+    expect(multiplePages.querySelector('svg')).toBeInTheDocument()
+  })
+
+  it('R-056 C3: entra sin dirección seleccionada y bloquea las acciones de captura', () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    renderScreen()
+
+    expect(screen.getByRole('radio', { name: 'Recibida' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Emitida' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Tomar foto' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Varias hojas' })).toBeDisabled()
+    // R-056: "Subir factura" vive en la pestaña Subir Archivo, no en el escáner.
+    expect(screen.queryByRole('button', { name: 'Subir factura' })).not.toBeInTheDocument()
+  })
+
+  it('R-056 C4: el escáner no muestra la entrada visible de captura continua', () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    renderScreen()
+
+    expect(screen.queryByRole('button', { name: 'Varias facturas' })).not.toBeInTheDocument()
   })
 
   it('C1: el panel inicial conserva dirección, Tomar foto y Subir archivo sin pedir la cámara', () => {
@@ -129,7 +154,8 @@ describe('CaptureScreen (S6.11)', () => {
     expect(screen.getByRole('radio', { name: 'Recibida' })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Emitida' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Tomar foto' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Subir archivo' })).toBeInTheDocument()
+    // R-056: "Subir factura" vive en la pestaña Subir Archivo, no en el escáner.
+    expect(screen.queryByRole('button', { name: 'Subir factura' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Abrir cámara' })).not.toBeInTheDocument()
     expect(open).not.toHaveBeenCalled()
   })
@@ -175,18 +201,20 @@ describe('CaptureScreen (S6.11)', () => {
     expect(body.get('direction')).toBe('emitida')
   })
 
-  it('S6.13 C1/C5: un duplicado propio conduce al documento original en vez de afirmar que la foto se perdió', async () => {
+  it('R-052 C8: un duplicado propio no crea otra factura y ofrece revisar la original o repetir', async () => {
     useSessionMock.mockReturnValue(USER_SESSION)
     postMultipartMock.mockResolvedValueOnce(new Response(JSON.stringify({ duplicate_of: 'file-original' }), { status: 409 }))
     const { onUploaded } = renderScreen()
     const user = userEvent.setup()
     const file = new File(['imagen'], 'factura.jpg', { type: 'image/jpeg' })
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.upload(screen.getByLabelText('Elige o toma una foto'), file)
     await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
 
-    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-original', 'recibida', false))
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Factura duplicada' })).toBeInTheDocument())
+    expect(onUploaded).not.toHaveBeenCalled()
+    expect(screen.getByRole('link', { name: 'Revisar factura original' })).toHaveAttribute('href', '/confirmar/file-original')
   })
 
   it('C2: la cámara activa ocupa la pantalla y ofrece guía A4, Capturar foto y Cerrar cámara', () => {
@@ -195,9 +223,94 @@ describe('CaptureScreen (S6.11)', () => {
     renderScreen()
 
     expect(screen.getByRole('dialog', { name: 'Cámara para capturar factura' })).toHaveClass('fixed', 'inset-0')
+    expect(screen.getByRole('dialog', { name: 'Cámara para capturar factura' })).toHaveClass('tn-capture-stage')
+    expect(screen.getByRole('dialog', { name: 'Cámara para capturar factura' }).firstElementChild).toHaveClass('tn-capture-stage-body')
+    expect(screen.getByTestId('camera-stage-controls')).toHaveClass('tn-capture-stage-controls')
+    expect(screen.getByRole('dialog', { name: 'Cámara para capturar factura' })).not.toHaveClass('tn-liquid-glass')
     expect(screen.getByTestId('camera-guide-frame')).toBeInTheDocument()
+    expect(within(screen.getByRole('dialog', { name: 'Cámara para capturar factura' })).queryByRole('button', { name: 'Subir factura' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Capturar foto' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cerrar cámara' })).toBeInTheDocument()
+  })
+
+  it('C2: al activar la cámara conecta el stream al vídeo y arranca su previsualización', async () => {
+    const stream = { getTracks: () => [] } as unknown as MediaStream
+    const play = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+
+    renderScreen()
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    await waitFor(() => expect(video.srcObject).toBe(stream))
+    expect(play).toHaveBeenCalled()
+  })
+
+  it('R-007: la cámara ofrece AUTO por defecto y MANUAL como alternativa explícita', () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+    renderScreen()
+
+    expect(screen.getByRole('radio', { name: 'Automático' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Manual' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Capturar foto' })).toBeEnabled()
+  })
+
+  it('R-007: cambiar a MANUAL reinicia AUTO pero mantiene disponible el disparo consciente', async () => {
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+    renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('radio', { name: 'Manual' }))
+
+    expect(screen.getByRole('radio', { name: 'Manual' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Capturar foto' })).toBeEnabled()
+    expect(screen.queryByText('Factura lista. Capturando…')).not.toBeInTheDocument()
+  })
+
+  it('R-007: si la cámara rechaza un frame, libera el lock y permite volver a intentarlo', async () => {
+    const grabError = new Error('capture failed')
+    grabVideoFrameMock.mockRejectedValueOnce(grabError)
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+    renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo preparar la foto/i)
+
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+    await waitFor(() => expect(grabVideoFrameMock).toHaveBeenCalledTimes(2))
+  })
+
+  it('R-052: si falla el análisis OpenCV, conserva la foto y permite revisarla', async () => {
+    analyzeFrameMock.mockRejectedValueOnce(new Error('opencv unavailable'))
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
+    renderScreen()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
+    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
+
+    expect(await screen.findByRole('button', { name: 'Usar foto' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(processCapturedFrameMock).toHaveBeenCalledWith(FAKE_FRAME, null)
+  })
+
+  it('S6.9: Escape cierra el diálogo de cámara y devuelve el control al flujo', async () => {
+    const close = vi.fn()
+    useSessionMock.mockReturnValue(USER_SESSION)
+    useCameraStreamMock.mockReturnValue({ status: 'active', stream: null, canRetry: true, unavailableReason: null, open: vi.fn(), close, retry: vi.fn() })
+    renderScreen()
+    const user = userEvent.setup()
+
+    await user.keyboard('{Escape}')
+
+    expect(close).toHaveBeenCalledOnce()
   })
 
   it('S6.12 C3: la cámara simple cubre el viewport y muestra la vista previa a sangre con una guía cercana al borde', () => {
@@ -207,7 +320,7 @@ describe('CaptureScreen (S6.11)', () => {
 
     expect(screen.getByRole('dialog', { name: 'Cámara para capturar factura' })).toHaveClass('fixed', 'inset-0', 'p-0')
     expect(document.querySelector('video')).toHaveClass('h-full', 'w-full', 'object-cover')
-    expect(screen.getByTestId('camera-guide-frame')).toHaveClass('inset-4')
+    expect(screen.getByTestId('camera-guide-frame')).toHaveClass('inset-2')
   })
 
   it('S6.12 C4: una cámara con flash ofrece Linterna y alterna la luz sin cerrar la captura', async () => {
@@ -219,10 +332,11 @@ describe('CaptureScreen (S6.11)', () => {
     renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Linterna' }))
+    await user.click(screen.getByRole('button', { name: 'Activar linterna' }))
 
     expect(applyConstraints).toHaveBeenCalledWith({ advanced: [{ torch: true }] })
     expect(screen.getByRole('button', { name: 'Capturar foto' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Desactivar linterna' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('S6.12 C4: una cámara sin flash sigue lista para capturar sin prometer una linterna inexistente', () => {
@@ -232,7 +346,7 @@ describe('CaptureScreen (S6.11)', () => {
     useCameraStreamMock.mockReturnValue({ status: 'active', stream, canRetry: true, unavailableReason: null, open: vi.fn(), close: vi.fn(), retry: vi.fn() })
     renderScreen()
 
-    expect(screen.queryByRole('button', { name: 'Linterna' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Activar linterna' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Capturar foto' })).toBeEnabled()
   })
 
@@ -245,7 +359,7 @@ describe('CaptureScreen (S6.11)', () => {
     renderScreen()
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Linterna' }))
+    await user.click(screen.getByRole('button', { name: 'Activar linterna' }))
 
     expect(applyConstraints).toHaveBeenCalledWith({ advanced: [{ torch: true }] })
     expect(screen.getByRole('button', { name: 'Capturar foto' })).toBeEnabled()
@@ -260,6 +374,7 @@ describe('CaptureScreen (S6.11)', () => {
     const { rerender } = renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
     rerender()
 
@@ -275,6 +390,7 @@ describe('CaptureScreen (S6.11)', () => {
     const firstPage = new File(['página 1'], 'fiscal.jpg', { type: 'image/jpeg' })
     const secondPage = new File(['página 2'], 'importes.jpg', { type: 'image/jpeg' })
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
     await user.upload(screen.getByLabelText(/elige o toma una foto/i), firstPage)
 
@@ -307,6 +423,7 @@ describe('CaptureScreen (S6.11)', () => {
     const { rerender } = renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
     rerender()
     const video = document.querySelector('video')
@@ -332,6 +449,7 @@ describe('CaptureScreen (S6.11)', () => {
     const { rerender } = renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
     rerender()
     let video = document.querySelector('video') as HTMLVideoElement
@@ -373,12 +491,13 @@ describe('CaptureScreen (S6.11)', () => {
     const { rerender } = renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
     rerender()
     const video = document.querySelector('video') as HTMLVideoElement
     Object.defineProperties(video, { videoWidth: { configurable: true, value: 640 }, videoHeight: { configurable: true, value: 480 } })
     fireEvent.loadedData(video)
-    await user.click(screen.getByRole('button', { name: 'Linterna' }))
+    await user.click(screen.getByRole('button', { name: 'Activar linterna' }))
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/cámara aún no está lista/i)
@@ -399,12 +518,13 @@ describe('CaptureScreen (S6.11)', () => {
     const { rerender } = renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
     rerender()
     const video = document.querySelector('video') as HTMLVideoElement
     Object.defineProperties(video, { videoWidth: { configurable: true, value: 640 }, videoHeight: { configurable: true, value: 480 } })
     fireEvent.loadedData(video)
-    await user.click(screen.getByRole('button', { name: 'Linterna' }))
+    await user.click(screen.getByRole('button', { name: 'Activar linterna' }))
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo preparar la foto/i)
@@ -425,9 +545,10 @@ describe('CaptureScreen (S6.11)', () => {
     const { rerender } = renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Varias hojas' }))
     rerender()
-    await user.click(screen.getByRole('button', { name: 'Linterna' }))
+    await user.click(screen.getByRole('button', { name: 'Activar linterna' }))
     await user.upload(screen.getByLabelText(/elige o toma una foto/i), new File(['rota'], 'rota.jpg', { type: 'image/jpeg' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo preparar una de las fotos/i)
@@ -464,53 +585,10 @@ describe('CaptureScreen (S6.11)', () => {
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'emitida', false))
   })
 
-  it('R-012: Varias facturas crea tres uploaded_file independientes y permite continuar tras cada 201', async () => {
-    useSessionMock.mockReturnValue(USER_SESSION)
-    for (const fileId of ['file-1', 'file-2', 'file-3']) {
-      postMultipartMock.mockResolvedValueOnce(new Response(JSON.stringify({ id: fileId }), { status: 201 }))
-    }
-    const { onUploaded } = renderScreen()
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Varias facturas' }))
-    for (const [index, fileId] of ['file-1', 'file-2', 'file-3'].entries()) {
-      await user.upload(screen.getByLabelText(/elige o toma una foto/i), new File([fileId], `${fileId}.jpg`, { type: 'image/jpeg' }))
-      await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
-      await waitFor(() => expect(postMultipartMock).toHaveBeenCalledTimes(index + 1))
-    }
-
-    expect(onUploaded).not.toHaveBeenCalled()
-    expect(screen.getByRole('region', { name: 'Sesión de varias facturas' })).toHaveTextContent('3 de 10')
-    expect(screen.getAllByRole('listitem', { name: /Factura \d/ })).toHaveLength(3)
-    const sessionIds = postMultipartMock.mock.calls.map((call) => (call[1] as FormData).get('capture_session_id'))
-    expect(new Set(sessionIds).size).toBe(1)
-    expect(postMultipartMock.mock.calls.map((call) => (call[1] as FormData).get('capture_sequence'))).toEqual(['1', '2', '3'])
-  })
-
-  it('R-015: una factura continua conserva el stream y no solicita otra cámara tras el 201', async () => {
-    useSessionMock.mockReturnValue(USER_SESSION)
-    const open = vi.fn(() => { status = 'active' })
-    const close = vi.fn(() => { status = 'idle' })
-    const track = { readyState: 'live', stop: vi.fn() } as unknown as MediaStreamTrack
-    const stream = { getVideoTracks: () => [track], getTracks: () => [track] } as unknown as MediaStream
-    let status: 'idle' | 'active' = 'idle'
-    useCameraStreamMock.mockImplementation(() => ({ status, stream: status === 'active' ? stream : null, canRetry: true, unavailableReason: null, open, close, retry: open }))
-    successfulUpload()
-    const { rerender } = renderScreen()
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'Varias facturas' }))
-    rerender()
-    const video = document.querySelector('video') as HTMLVideoElement
-    Object.defineProperties(video, { videoWidth: { configurable: true, value: 640 }, videoHeight: { configurable: true, value: 480 } })
-    fireEvent.loadedData(video)
-    await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
-    await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
-
-    await waitFor(() => expect(postMultipartMock).toHaveBeenCalledOnce())
-    expect(open).toHaveBeenCalledOnce()
-    expect(close).not.toHaveBeenCalled()
-  })
+  // R-012 y R-015 eliminados: el botón "Varias facturas" fue retirado en R-056
+  // (Julio confirmó que cada captura siempre vuelve al Escáner y la captura
+  // continua ya no tiene entrada visible). La lógica interna de captura continua
+  // se conserva pero no se expone como acción de la pantalla principal.
 
   // spec: docs/specs/S6.14-captura-alta-resolucion-y-confianza-nombre.md, C8
   it('S6.14 C8: con nitidez baja (varianza del Laplaciano < umbral), onUploaded recibe lowSharpness=true', async () => {
@@ -521,6 +599,7 @@ describe('CaptureScreen (S6.11)', () => {
     const { onUploaded } = renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
     await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
 
@@ -535,6 +614,7 @@ describe('CaptureScreen (S6.11)', () => {
     const { onUploaded } = renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
     await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
 
@@ -549,6 +629,7 @@ describe('CaptureScreen (S6.11)', () => {
     renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
     await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
 
@@ -564,6 +645,7 @@ describe('CaptureScreen (S6.11)', () => {
     const user = userEvent.setup()
     const file = new File(['contenido'], 'foto.jpg', { type: 'image/jpeg' })
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.upload(screen.getByLabelText(/elige o toma una foto/i), file)
     await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
 
@@ -585,6 +667,7 @@ describe('CaptureScreen (S6.11)', () => {
     const { rerender } = renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Tomar foto' }))
     rerender()
     const video = document.querySelector('video') as HTMLVideoElement
@@ -604,13 +687,15 @@ describe('CaptureScreen (S6.11)', () => {
     const { onUploaded } = renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
 
     await waitFor(() => expect(processCapturedFrameMock).toHaveBeenCalledWith(FAKE_FRAME, CORNERS))
     await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida', false))
     expect(close).toHaveBeenCalled()
-    expect(await screen.findByText('✓ Guardada')).toBeInTheDocument()
+    // R-056: tras confirmar, vuelve al escáner con mensaje de éxito; no queda en la pantalla preview.
+    expect(await screen.findByText(/factura subida correctamente/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Usar foto' })).not.toBeInTheDocument()
   })
 
@@ -621,6 +706,7 @@ describe('CaptureScreen (S6.11)', () => {
     const { onUploaded } = renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
     await user.click(await screen.findByRole('button', { name: 'Repetir' }))
 
@@ -651,12 +737,14 @@ describe('CaptureScreen (S6.11)', () => {
     const user = userEvent.setup()
     const file = new File(['contenido'], 'foto.heic', { type: 'image/heic' })
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.upload(screen.getByLabelText(/elige o toma una foto/i), file)
 
     await waitFor(() => expect(fileToJpegBlobMock).toHaveBeenCalledWith(file))
     await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('file-abc', 'recibida', false))
-    expect(await screen.findByText('✓ Guardada')).toBeInTheDocument()
+    // R-056: tras confirmar, vuelve al escáner con mensaje de éxito; no queda en la pantalla preview.
+    expect(await screen.findByText(/factura subida correctamente/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Usar foto' })).not.toBeInTheDocument()
   })
 
@@ -667,6 +755,7 @@ describe('CaptureScreen (S6.11)', () => {
     renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.upload(screen.getByLabelText(/elige o toma una foto/i), new File(['contenido'], 'foto.jpg', { type: 'image/jpeg' }))
 
     await user.click(await screen.findByRole('button', { name: 'Usar foto' }))
@@ -680,11 +769,13 @@ describe('CaptureScreen (S6.11)', () => {
     renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.upload(screen.getByLabelText(/elige o toma una foto/i), new File(['x'], 'rota.jpg', { type: 'image/jpeg' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo preparar la foto/i)
+    // R-056: "Subir factura" vive en la pestaña Subir Archivo, no en el escáner.
     expect(screen.getByRole('button', { name: 'Tomar foto' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Subir archivo' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Subir factura' })).not.toBeInTheDocument()
   })
 
   it('C5: cerrar la cámara detiene el stream', async () => {
@@ -705,7 +796,8 @@ describe('CaptureScreen (S6.11)', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent(/no se pudo cargar tu empresa/i)
     expect(screen.queryByRole('button', { name: 'Tomar foto' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Subir archivo' })).not.toBeInTheDocument()
+    // R-056: "Subir factura" ya no está en el escáner.
+    expect(screen.queryByRole('button', { name: 'Subir factura' })).not.toBeInTheDocument()
   })
 
   it('C5: un resultado de cámara tras desmontar no puede subir ni navegar', async () => {
@@ -716,6 +808,7 @@ describe('CaptureScreen (S6.11)', () => {
     const { onUploaded, unmount } = renderScreen()
     const user = userEvent.setup()
 
+    await user.click(screen.getByRole('radio', { name: 'Recibida' }))
     await user.click(screen.getByRole('button', { name: 'Capturar foto' }))
     unmount()
     resolveAnalysis({ sharpness: 200, corners: CORNERS })

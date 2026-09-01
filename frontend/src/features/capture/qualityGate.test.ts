@@ -37,4 +37,15 @@ describe('evaluateQualityGate', () => {
   it('permite AUTO cuando todas las señales cumplen el umbral', () => {
     expect(evaluateQualityGate(quality())).toEqual({ ready: true, reason: 'ready' })
   })
+
+  it.each([
+    [{ sharpness: Number.NaN }],
+    [{ meanLuminance: Number.POSITIVE_INFINITY }],
+    [{ darkPixelRatio: Number.NaN }],
+    [{ brightPixelRatio: Number.NaN }],
+    [{ stabilityScore: Number.NaN }],
+    [{ perspectiveScore: Number.POSITIVE_INFINITY }],
+  ])('rechaza cualquier señal no finita de forma conservadora: %s', (overrides) => {
+    expect(evaluateQualityGate(quality(overrides))).toEqual({ ready: false, reason: 'no_document' })
+  })
 })

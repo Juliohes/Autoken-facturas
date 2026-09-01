@@ -1,5 +1,5 @@
-// Orquestación de la captura manual, pura y sin OpenCV/cámara. El análisis solo acompaña al disparo
-// explícito de la persona para preservar la decisión consciente de tomar la foto.
+// Orquestación AUTO/MANUAL, pura y sin OpenCV/cámara. Ambos modos comparten el mismo lock para que
+// nunca haya dos capturas concurrentes.
 import type { Corner, FrameAnalysis } from './types'
 
 export type CaptureMode = 'auto' | 'manual'

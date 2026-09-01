@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 
 import { InboxItem } from './InboxItem'
 import { useInvoiceInbox } from './useInvoiceInbox'
@@ -7,6 +8,7 @@ import { useSession } from '../session/SessionProvider'
 
 export function InvoiceInbox() {
   const { user } = useSession()
+  const location = useLocation()
   const [cursor, setCursor] = useState<string | null>(null)
   const [items, setItems] = useState<InboxItemData[]>([])
   const inbox = useInvoiceInbox(cursor, user?.feature_flags?.review_inbox_enabled !== false)
@@ -37,11 +39,16 @@ export function InvoiceInbox() {
   const hasMore = inbox.data?.next_cursor !== null && inbox.data?.next_cursor !== undefined
 
   return (
-    <section className="mx-auto max-w-2xl space-y-5 p-6 text-slate-100">
+    <section className="tn-panel-page mx-auto max-w-2xl space-y-5 p-6">
       <div>
         <h1 className="text-xl font-semibold">Mis facturas</h1>
         <p className="mt-1 text-sm text-slate-400">Solo aparecen las facturas que has subido tú.</p>
       </div>
+      {(location.state as { message?: string } | null)?.message && (
+        <p role="status" className="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+          {(location.state as { message: string }).message}
+        </p>
+      )}
       <div className="grid grid-cols-3 gap-2" aria-label="Resumen de facturas">
         <SummaryCard label="Procesando" value={summary.processing} />
         <SummaryCard label="Listas" value={summary.ready} />
@@ -70,7 +77,7 @@ export function InvoiceInbox() {
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-md border border-slate-700 bg-slate-800/50 px-3 py-2 text-center">
+    <div className="tn-summary-card rounded-md border px-3 py-2 text-center">
       <p className="text-lg font-semibold text-emerald-300">{value}</p>
       <p className="text-xs text-slate-400">{label}</p>
     </div>

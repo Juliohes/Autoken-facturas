@@ -13,10 +13,10 @@ vi.mock('../session/SessionProvider', () => ({
 
 const getMock = api.GET as unknown as Mock
 
-function renderInbox() {
+function renderInbox(state?: Record<string, string>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[{ pathname: '/mis-facturas', state }]}>
       <QueryClientProvider client={client}>
         <InvoiceInbox />
       </QueryClientProvider>
@@ -29,6 +29,17 @@ beforeEach(() => {
 })
 
 describe('InvoiceInbox (R-020)', () => {
+  it('R-052 C5: muestra el aviso de que la factura pendiente no se guardó tras eliminarla', async () => {
+    getMock.mockResolvedValue({
+      data: { items: [], summary: { processing: 0, ready: 0, attention: 0 }, next_cursor: null },
+      error: undefined,
+    })
+
+    renderInbox({ message: 'La factura no se ha confirmado ni guardado.' })
+
+    expect(await screen.findByRole('status')).toHaveTextContent('La factura no se ha confirmado ni guardado.')
+  })
+
   it('muestra resumen y documentos operativos sin campos fiscales', async () => {
     getMock.mockResolvedValue({
       data: {

@@ -33,7 +33,7 @@ export function DocumentOverlay({ corners, sourceWidth, sourceHeight, state = 'n
   const [size, setSize] = useState({ width: 0, height: 0 })
   const points = pointsForOverlay(corners, sourceWidth, sourceHeight, size.width, size.height)
   const polygonPoints = points?.map(({ x, y }) => `${x},${y}`).join(' ')
-  const stroke = state === 'auto_armed' || state === 'good' ? '#FFF3A3' : '#FFD400'
+  const stroke = 'currentColor'
   const strokeWidth = state === 'good' || state === 'auto_armed' ? 4 : 3
   const opacity = state === 'none' ? 0.35 : state === 'stabilizing' ? 0.65 : 1
 
@@ -61,15 +61,15 @@ export function DocumentOverlay({ corners, sourceWidth, sourceHeight, state = 'n
       ref={svgRef}
       data-testid="document-overlay"
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 h-full w-full"
+      className="tn-document-overlay pointer-events-none absolute inset-0 h-full w-full text-[color:var(--brand-cyan-light)]"
     >
       <rect
-        x="16%"
-        y="22%"
-        width="68%"
-        height="56%"
+        x="6%"
+        y="10%"
+        width="88%"
+        height="80%"
         fill="none"
-        stroke="#FFD400"
+        stroke="currentColor"
         strokeWidth="2"
         opacity={opacity}
         strokeDasharray={state === 'stabilizing' ? '8 6' : undefined}
@@ -79,7 +79,7 @@ export function DocumentOverlay({ corners, sourceWidth, sourceHeight, state = 'n
         <polygon
           data-testid="document-overlay-polygon"
           points={polygonPoints}
-          fill="rgba(255,212,0,0.08)"
+          fill="none"
           stroke={stroke}
           strokeWidth={strokeWidth}
           opacity={opacity}

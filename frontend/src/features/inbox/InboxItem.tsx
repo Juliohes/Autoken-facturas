@@ -1,6 +1,11 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 
 import { ROUTES } from '../../app/routes'
+import { Modal } from '../../shared/Modal'
+import { INBOX_QUERY_KEY } from './useInvoiceInbox'
+import { useDeleteUpload } from '../confirmation/useDeleteUpload'
 import type { InboxItem as InboxItemData } from './types'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -14,12 +19,15 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 export function InboxItem({ item }: { item: InboxItemData }) {
+  const queryClient = useQueryClient()
+  const deleteUpload = useDeleteUpload(item.id)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const confirmationState = item.direction === null ? undefined : { direction: item.direction }
   const pending = item.status === 'pending_ocr' || item.status === 'processing'
   const reviewable = item.status === 'ocr_done' || item.status === 'needs_review'
 
   return (
-    <li className="flex items-center justify-between gap-4 border-b border-slate-700 py-4" data-testid="inbox-item">
+    <li className="tn-inbox-item flex items-center justify-between gap-4" data-testid="inbox-item">
       <div className="min-w-0">
         <p className="font-medium text-slate-100">Factura enviada</p>
         <p className="text-sm text-slate-400">
@@ -33,7 +41,38 @@ export function InboxItem({ item }: { item: InboxItemData }) {
         {pending && <Link to={ROUTES.confirmation(item.id)} state={confirmationState} className="text-sm text-emerald-400">Ver progreso</Link>}
         {reviewable && <Link to={ROUTES.confirmation(item.id)} state={confirmationState} className="text-sm text-emerald-400">Revisar factura</Link>}
         {item.status === 'capture_unreadable' && <Link to={ROUTES.capture} className="text-sm text-emerald-400">Repetir foto</Link>}
+        {item.status !== 'confirmed' && (
+          <button
+            type="button"
+            onClick={() => setShowDeleteDialog(true)}
+            className="ml-3 text-sm text-red-300"
+          >
+            Eliminar
+          </button>
+        )}
       </div>
+      {showDeleteDialog && (
+        <Modal title="Eliminar factura" onClose={() => setShowDeleteDialog(false)} panelClassName="max-w-md space-y-4">
+          <p className="text-slate-300">Esta factura no se ha confirmado ni guardado. ¿Quieres eliminarla para hacerla de nuevo?</p>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setShowDeleteDialog(false)} className="rounded-md border border-slate-600 px-4 py-2">Cancelar</button>
+            <button
+              type="button"
+              disabled={deleteUpload.isPending}
+              onClick={() => deleteUpload.mutate(undefined, {
+                onSuccess: async () => {
+                  setShowDeleteDialog(false)
+                  await queryClient.invalidateQueries({ queryKey: INBOX_QUERY_KEY })
+                },
+              })}
+              className="rounded-md bg-red-600 px-4 py-2 font-semibold disabled:opacity-40"
+            >
+              {deleteUpload.isPending ? 'Eliminando...' : 'Sí, eliminar'}
+            </button>
+          </div>
+          {deleteUpload.isError && <p role="alert" className="text-sm text-red-400">No se pudo eliminar la factura.</p>}
+        </Modal>
+      )}
     </li>
   )
 }

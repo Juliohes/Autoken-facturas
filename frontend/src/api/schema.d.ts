@@ -1867,6 +1867,8 @@ export interface components {
         HistoryOut: {
             /** Entries */
             entries: components["schemas"]["HistoryEntryOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
         };
         /**
          * ImportReportOut
@@ -3596,7 +3598,10 @@ export interface operations {
     };
     invoice_history_api_v1_invoices_history_get: {
         parameters: {
-            query?: never;
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;

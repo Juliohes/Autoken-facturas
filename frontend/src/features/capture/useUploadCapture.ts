@@ -78,32 +78,36 @@ function appendSharpnessScore(formData: FormData, sharpnessScore: number | null 
   if (typeof sharpnessScore === 'number') formData.append('sharpness_score', String(sharpnessScore))
 }
 
+export async function uploadCapture({ blob, companyId, direction, sharpnessScore, captureSessionId, captureSequence }: UploadCaptureInput): Promise<AcceptedUpload> {
+  const formData = new FormData()
+  formData.append('file', blob, 'captura.jpg')
+  formData.append('company_id', companyId)
+  formData.append('direction', direction)
+  if (captureSessionId) formData.append('capture_session_id', captureSessionId)
+  if (captureSequence !== undefined) formData.append('capture_sequence', String(captureSequence))
+  appendSharpnessScore(formData, sharpnessScore)
+
+  return readUploadResult(await postMultipart('/api/v1/uploads', formData))
+}
+
+export async function uploadMultipageCapture({ blobs, companyId, direction, sharpnessScore }: UploadBatchCaptureInput): Promise<AcceptedUpload> {
+  const formData = new FormData()
+  blobs.forEach((blob, index) => formData.append('files', blob, `pagina-${index + 1}.jpg`))
+  formData.append('company_id', companyId)
+  formData.append('direction', direction)
+  appendSharpnessScore(formData, sharpnessScore)
+
+  return readUploadResult(await postMultipart('/api/v1/uploads/batch', formData))
+}
+
 export function useUploadCapture() {
   return useMutation({
-    mutationFn: async ({ blob, companyId, direction, sharpnessScore, captureSessionId, captureSequence }: UploadCaptureInput) => {
-      const formData = new FormData()
-      formData.append('file', blob, 'captura.jpg')
-      formData.append('company_id', companyId)
-      formData.append('direction', direction)
-      if (captureSessionId) formData.append('capture_session_id', captureSessionId)
-      if (captureSequence !== undefined) formData.append('capture_sequence', String(captureSequence))
-      appendSharpnessScore(formData, sharpnessScore)
-
-      return readUploadResult(await postMultipart('/api/v1/uploads', formData))
-    },
+    mutationFn: uploadCapture,
   })
 }
 
 export function useUploadBatchCapture() {
   return useMutation({
-    mutationFn: async ({ blobs, companyId, direction, sharpnessScore }: UploadBatchCaptureInput): Promise<AcceptedUpload> => {
-      const formData = new FormData()
-      blobs.forEach((blob, index) => formData.append('files', blob, `pagina-${index + 1}.jpg`))
-      formData.append('company_id', companyId)
-      formData.append('direction', direction)
-      appendSharpnessScore(formData, sharpnessScore)
-
-      return readUploadResult(await postMultipart('/api/v1/uploads/batch', formData))
-    },
+    mutationFn: uploadMultipageCapture,
   })
 }

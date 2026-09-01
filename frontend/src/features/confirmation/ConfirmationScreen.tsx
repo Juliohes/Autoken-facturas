@@ -9,6 +9,7 @@ import { ROUTES } from '../../app/routes'
 import type { Direction } from '../capture/types'
 import { useCurrentUser } from '../identity/useCurrentUser'
 import { CounterpartyVerdictBlock } from './CounterpartyVerdictBlock'
+import { Modal } from '../../shared/Modal'
 import { FieldRow } from './FieldRow'
 import { ResponsibilityCheckbox } from './ResponsibilityCheckbox'
 import { isConfirmEnabled } from './confirmGate'
@@ -20,10 +21,10 @@ import { useDraftCounterpartyVerdict } from './useDraftCounterpartyVerdict'
 import { useDraftAutosave } from './useDraftAutosave'
 import { ProcessingProgress } from '../processing/ProcessingProgress'
 import { useUploadStatus } from '../processing/useUploadStatus'
+import { useDeleteUpload } from './useDeleteUpload'
 import {
   BLOCKING_REASONS,
   WARNING_IMBALANCE,
-  type Confidence,
   type CounterpartyVerdict,
   type ReviewResponse,
 } from './types'
@@ -36,6 +37,7 @@ interface Props {
   fileId: string
   onConfirmed: () => void
   onRetry: () => void
+  onDeleted?: () => void
   /** Dirección elegida en la captura; la persistida por el backend siempre tiene prioridad. */
   direction?: Direction
 }
@@ -44,7 +46,7 @@ interface Props {
 // desincronizar el `navigate` de aquí con lo que espera `CaptureScreen.tsx`).
 const CAPTURE_UNREADABLE_MESSAGE = 'La foto no se pudo leer. Repite la captura.'
 
-export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction }: Props) {
+export function ConfirmationScreen({ fileId, onConfirmed, onRetry, onDeleted = () => undefined, direction }: Props) {
   const review = useReview(fileId)
   const currentUser = useCurrentUser()
   const navigate = useNavigate()
@@ -118,6 +120,7 @@ export function ConfirmationScreen({ fileId, onConfirmed, onRetry, direction }: 
       review={review.data}
       onConfirmed={onConfirmed}
       onRetry={onRetry}
+      onDeleted={onDeleted}
       direction={review.data.direction === undefined ? direction ?? null : review.data.direction}
       lowSharpness={lowSharpness}
     />
@@ -129,18 +132,20 @@ interface FormProps {
   review: ReviewResponse
   onConfirmed: () => void
   onRetry: () => void
+  onDeleted: () => void
   direction: Direction | null
   /** S6.14 C8: aviso no bloqueante, nunca impide confirmar. */
   lowSharpness: boolean
 }
 
 /** Formulario propiamente dicho: se monta con los datos ya cargados. */
-function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, lowSharpness }: FormProps) {
+function ConfirmationForm({ fileId, review, onConfirmed, onRetry, onDeleted, direction, lowSharpness }: FormProps) {
   const confirm = useConfirm(fileId)
   const currentUser = useCurrentUser()
   const draftAutosaveEnabled = currentUser.data?.feature_flags?.draft_autosave_enabled !== false
   const [form, setForm] = useState<ConfirmFormState>(() => initialFormState(review))
   const [responsibilityAccepted, setResponsibilityAccepted] = useState(false)
+  const [reviewAcknowledged, setReviewAcknowledged] = useState(false)
   const [isTest, setIsTest] = useState(false)
   const [ownTaxIdExceptionAccepted, setOwnTaxIdExceptionAccepted] = useState(false)
   const [serverVerdict, setServerVerdict] = useState<CounterpartyVerdict | null>(null)
@@ -157,6 +162,8 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
     enabled: draftAutosaveEnabled,
     onSaved: (result) => setDraftRevision(result.revision),
   })
+  const deleteUpload = useDeleteUpload(fileId)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const draftVerdict = useDraftCounterpartyVerdict({
     fileId,
     taxId: form.counterparty_tax_id,
@@ -165,8 +172,8 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
     initialName: review.fields.counterparty_name ?? '',
   })
 
-  const conf = (field: string): Confidence => review.confidences[field] ?? null
   const set = (patch: Partial<ConfirmFormState>) => {
+    setReviewAcknowledged(false)
     if ('counterparty_tax_id' in patch || 'counterparty_name' in patch) {
       setServerVerdict(null)
       setServerBlockingReasons(null)
@@ -191,14 +198,6 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
           : [BLOCKING_REASONS.cifInvalid])),
       ]
     : review.blocking_reasons
-  const enabled = isConfirmEnabled({
-    blockingReasons,
-    responsibilityAccepted,
-    submitting: confirm.isPending || draftAutosave.state === 'confirming' || draftAutosave.state === 'saving',
-    ownTaxIdExceptionAccepted: isUser && ownTaxIdExceptionAccepted,
-  }) && selectedDirection !== null
-
-  const hasImbalance = review.warnings.includes(WARNING_IMBALANCE)
   // 2026-08-08 (petición de Julio): sin caja "CIF de contraparte verificado" — un check verde
   // junto al campo, mismo estilo que las marcas de confianza. La caja se conserva para los casos
   // que sí necesitan explicación (inválido/no encontrado/nombre que no coincide/sin verificar).
@@ -207,10 +206,32 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
     : counterpartyChanged ? null : review.counterparty_verdict)
   const isCounterpartyVerified = counterpartyVerdict?.status === 'valid' && counterpartyVerdict.name_match !== false
   const missingOwnTaxId = review.blocking_reasons.includes(BLOCKING_REASONS.ownTaxIdMissing)
+  const submitting = confirm.isPending || draftAutosave.state === 'confirming' || draftAutosave.state === 'saving'
+  const enabled = isConfirmEnabled({
+    blockingReasons,
+    responsibilityAccepted,
+    reviewAcknowledged,
+    submitting,
+    ownTaxIdExceptionAccepted: isUser && ownTaxIdExceptionAccepted,
+  }) && selectedDirection !== null
+  const blockMessages = getConfirmBlockMessages({
+    blockingReasons,
+    isUser,
+    ownTaxIdExceptionAccepted,
+    responsibilityAccepted,
+    reviewAcknowledged,
+    selectedDirection,
+    submitting,
+    waitingForDraftVerdict,
+    draftVerdictError: draftVerdict.isError,
+  })
+
+  const hasImbalance = review.warnings.includes(WARNING_IMBALANCE)
+  const navigate = useNavigate()
 
   const handleConfirm = async () => {
     if (!selectedDirection) return
-    if (draftAutosaveEnabled && draftAutosave.state !== 'saved') {
+    if (draftAutosaveEnabled && (draftAutosave.state === 'dirty' || draftAutosave.state === 'save_error')) {
       const saved = await draftAutosave.saveNow()
       if (!saved) return
     }
@@ -234,7 +255,7 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
   }
 
   return (
-    <section className="mx-auto max-w-xl space-y-6 p-6 text-slate-100">
+    <section className="tn-panel-page mx-auto max-w-xl space-y-6 p-6">
       <div className="flex items-baseline justify-between gap-4">
         <h1 className="text-xl font-semibold">Revisar y confirmar</h1>
         <p data-testid="draft-save-state" className="text-xs text-slate-400">
@@ -274,7 +295,6 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
           name="counterparty_tax_id"
           label="CIF de contraparte"
           value={form.counterparty_tax_id}
-          confidence={conf('counterparty_tax_id')}
           onChange={(v) => set({ counterparty_tax_id: v })}
           extraBadge={
             isCounterpartyVerified ? (
@@ -299,7 +319,6 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
           name="counterparty_name"
           label="Nombre de la contraparte"
           value={form.counterparty_name}
-          confidence={conf('counterparty_name')}
           onChange={(v) => set({ counterparty_name: v })}
         />
       </div>
@@ -310,7 +329,6 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
           name="net_amount"
           label="Base imponible"
           value={form.net_amount}
-          confidence={conf('net_amount')}
           onChange={(v) => set({ net_amount: v })}
         />
 
@@ -343,7 +361,6 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
                     name={`tax_lines.${i}.base`}
                     label="Base"
                     value={line.base}
-                    scored={false}
                     onChange={(v) =>
                       set({
                         tax_lines: form.tax_lines.map((l, j) => (j === i ? { ...l, base: v } : l)),
@@ -354,7 +371,6 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
                     name={`tax_lines.${i}.cuota`}
                     label="Cuota"
                     value={line.cuota}
-                    scored={false}
                     onChange={(v) =>
                       set({
                         tax_lines: form.tax_lines.map((l, j) => (j === i ? { ...l, cuota: v } : l)),
@@ -391,14 +407,12 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
           name="tax_amount"
           label="IVA"
           value={form.tax_amount}
-          confidence={conf('tax_amount')}
           onChange={(v) => set({ tax_amount: v })}
         />
         <FieldRow
           name="total_amount"
           label="Importe total"
           value={form.total_amount}
-          confidence={conf('total_amount')}
           onChange={(v) => set({ total_amount: v })}
         />
 
@@ -413,14 +427,13 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
               name="irpf_amount"
               label="IRPF (retención)"
               value={form.irpf_amount}
-              confidence={conf('irpf_amount')}
               onChange={(v) => set({ irpf_amount: v })}
             />
           </div>
         </details>
 
         {/* C10: descuadre aritmético -> aviso "Revisar" (no bloquea). */}
-        {hasImbalance && (
+      {hasImbalance && (
           <p
             data-testid="warning-imbalance"
             className="rounded-md border border-yellow-500 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200"
@@ -429,6 +442,28 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
           </p>
         )}
       </div>
+
+      {review.duplicate && (
+        <div
+          data-testid="warning-duplicate"
+          role="alert"
+          className="space-y-2 rounded-md border border-red-500 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+        >
+          <p className="font-semibold">
+            {review.duplicate.kind === 'confirmed'
+              ? 'Esta factura ya está guardada como duplicado.'
+              : 'Esta factura parece coincidir con otra ya subida.'}
+          </p>
+          <p>No puedes continuar con esta factura duplicada.</p>
+          <button
+            type="button"
+            onClick={() => navigate(`/confirmar/${review.duplicate?.uploaded_file_id}`)}
+            className="rounded-md border border-red-300 px-3 py-1.5 font-medium text-red-100"
+          >
+            Revisar factura original
+          </button>
+        </div>
+      )}
 
       <div
         data-testid="section-invoice-identity"
@@ -442,14 +477,12 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
           label="Fecha"
           type="date"
           value={form.issue_date}
-          confidence={conf('issue_date')}
           onChange={(v) => set({ issue_date: v })}
         />
         <FieldRow
           name="invoice_number"
           label="Número de factura"
           value={form.invoice_number}
-          confidence={conf('invoice_number')}
           onChange={(v) => set({ invoice_number: v })}
         />
       </div>
@@ -497,13 +530,31 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
         </label>
       )}
 
+      <label className="flex items-start gap-2 text-sm text-slate-300">
+        <input
+          type="checkbox"
+          aria-label="He revisado todos los datos de la factura."
+          checked={reviewAcknowledged}
+          onChange={(event) => setReviewAcknowledged(event.target.checked)}
+          className="mt-1"
+        />
+        He revisado todos los datos de la factura.
+      </label>
+
       <ResponsibilityCheckbox
         checked={responsibilityAccepted}
         onChange={setResponsibilityAccepted}
       />
 
-      {missingOwnTaxId && isUser && !ownTaxIdExceptionAccepted && (
-        <p className="text-sm text-amber-300">Marca la confirmación para guardar.</p>
+      {blockMessages.length > 0 && (
+        <div
+          data-testid="confirm-blockers"
+          role="alert"
+          className="space-y-1 rounded-md border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+        >
+          <p className="font-semibold">Para confirmar falta:</p>
+          {blockMessages.map((message) => <p key={message}>{message}</p>)}
+        </div>
       )}
 
       <button
@@ -514,6 +565,51 @@ function ConfirmationForm({ fileId, review, onConfirmed, onRetry, direction, low
       >
         Confirmar y guardar
       </button>
+
+      <button
+        type="button"
+        onClick={() => setShowDeleteDialog(true)}
+        disabled={deleteUpload.isPending}
+        className="w-full rounded-md border border-red-500/70 px-4 py-2 text-red-300 disabled:opacity-40"
+      >
+        Eliminar factura sin confirmar
+      </button>
+
+      {deleteUpload.isError && (
+        <p data-testid="delete-error" role="alert" className="text-sm text-red-400">
+          {deleteUpload.error instanceof Error ? deleteUpload.error.message : 'No se pudo eliminar la factura.'}
+        </p>
+      )}
+
+      {showDeleteDialog && (
+        <Modal title="Eliminar factura" onClose={() => setShowDeleteDialog(false)} panelClassName="max-w-md space-y-4">
+          <p className="text-slate-300">
+            Esta factura todavía no se ha confirmado ni guardado. Se eliminará para que puedas hacerla de nuevo.
+          </p>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => setShowDeleteDialog(false)}
+              className="rounded-md border border-slate-600 px-4 py-2 text-slate-100"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={deleteUpload.isPending}
+              onClick={() => deleteUpload.mutate(undefined, {
+                onSuccess: () => {
+                  setShowDeleteDialog(false)
+                  onDeleted()
+                },
+              })}
+              className="rounded-md bg-red-600 px-4 py-2 font-semibold text-white disabled:opacity-40"
+            >
+              {deleteUpload.isPending ? 'Eliminando...' : 'Sí, eliminar'}
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {/* C9: aviso rojo, grande y legible, SIEMPRE bajo el botón. */}
       <p role="alert" className="text-center text-base font-semibold text-red-400">
@@ -547,4 +643,47 @@ function draftSaveLabel(state: ReturnType<typeof useDraftAutosave>['state']): st
     case 'confirming': return 'Confirmando...'
     default: return 'Borrador sin cambios'
   }
+}
+
+interface ConfirmBlockMessageOptions {
+  blockingReasons: string[]
+  isUser: boolean
+  ownTaxIdExceptionAccepted: boolean
+  responsibilityAccepted: boolean
+  reviewAcknowledged: boolean
+  selectedDirection: Direction | null
+  submitting: boolean
+  waitingForDraftVerdict: boolean
+  draftVerdictError: boolean
+}
+
+function getConfirmBlockMessages(options: ConfirmBlockMessageOptions): string[] {
+  if (options.submitting) return ['Estamos guardando la factura. No cierres esta pantalla.']
+
+  const messages: string[] = []
+  const effectiveReasons = new Set(options.blockingReasons)
+  if (options.isUser && options.ownTaxIdExceptionAccepted) effectiveReasons.delete(BLOCKING_REASONS.ownTaxIdMissing)
+
+  if (options.waitingForDraftVerdict) {
+    effectiveReasons.delete(BLOCKING_REASONS.cifInvalid)
+    effectiveReasons.delete(BLOCKING_REASONS.cifNotFound)
+    messages.push('Espera a que se verifique el CIF de la contraparte.')
+  } else if (options.draftVerdictError) {
+    effectiveReasons.delete(BLOCKING_REASONS.cifInvalid)
+    effectiveReasons.delete(BLOCKING_REASONS.cifNotFound)
+    messages.push('No se pudo verificar el CIF de la contraparte. Revísalo antes de guardar.')
+  }
+
+  for (const reason of effectiveReasons) {
+    if (reason === BLOCKING_REASONS.cifInvalid) messages.push('El CIF de la contraparte no es válido. Corrígelo.')
+    else if (reason === BLOCKING_REASONS.cifNotFound) messages.push('No encontramos el CIF de la contraparte. Revísalo.')
+    else if (reason === BLOCKING_REASONS.ownTaxIdMissing) messages.push('Confirma que la factura corresponde a tu empresa.')
+    else if (reason === BLOCKING_REASONS.duplicate) messages.push('La factura está duplicada. Revisa la original o elimínala.')
+    else messages.push('Hay un dato que el servidor no permite confirmar. Revisa la factura.')
+  }
+
+  if (options.selectedDirection === null) messages.push('Selecciona si la factura es recibida o emitida.')
+  if (!options.reviewAcknowledged) messages.push('Marca que has revisado todos los datos de la factura.')
+  if (!options.responsibilityAccepted) messages.push('Acepta la responsabilidad de los datos confirmados.')
+  return messages
 }

@@ -3,6 +3,7 @@
 // factura. Las 4 esquinas se recuperan con `approxPolyDP` y, si no da 4 vértices limpios, con
 // `convexHull`/`minAreaRect` (S6.14 C3), nunca descartando un candidato válido solo por su forma.
 import type { Corner, DetectionMethod } from '../types'
+import { DEFAULT_SCANNER_CONFIG, type ScannerConfig } from '../scannerConfig'
 import type { CvMat, CvModule, CvRotatedRect } from './cvTypes'
 import { orderCorners } from './orderCorners'
 
@@ -49,11 +50,6 @@ function confidenceFor(features: CandidateFeatures, score: number): number {
   const prior = features.method === null ? 0 : METHOD_PRIORS[features.method]
   return clampUnit(score * prior)
 }
-
-// Un contorno que ocupe menos de esto del área total del frame se descarta: evita confundir un
-// objeto pequeño y casual con el documento que se quiere capturar (spec §5, "detección de esquinas
-// ambigua" se trata igual que "sin esquinas claras": se sube el frame entero, sin recortar).
-const MIN_DOCUMENT_AREA_RATIO = 0.15
 
 // Kernel del cierre morfológico (S6.14 C3): pequeño a propósito, solo para unir bordes partidos por
 // una sombra puntual, sin fusionar contornos que de verdad son distintos.
@@ -167,7 +163,11 @@ function candidateFeatures(
   }
 }
 
-export function detectDocument(cv: CvModule, imageData: ImageData): DocumentDetection {
+export function detectDocument(
+  cv: CvModule,
+  imageData: ImageData,
+  config: ScannerConfig = DEFAULT_SCANNER_CONFIG,
+): DocumentDetection {
   const src = cv.matFromImageData(imageData)
   const gray = new cv.Mat()
   const blurred = new cv.Mat()
@@ -199,7 +199,7 @@ export function detectDocument(cv: CvModule, imageData: ImageData): DocumentDete
       try {
         const area = cv.contourArea(contour)
         const areaRatio = area / frameArea
-        if (areaRatio < MIN_DOCUMENT_AREA_RATIO) continue
+        if (areaRatio < config.detectionMinAreaRatio) continue
         const candidate = extractQuadrilateral(cv, contour)
         if (!candidate) continue
         const features = candidateFeatures(cv, contour, candidate.corners, candidate.method, areaRatio, imageData.width, imageData.height)

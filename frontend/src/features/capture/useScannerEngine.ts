@@ -118,14 +118,22 @@ export function useScannerEngine(
   const coordinatorRef = useRef<ScannerCoordinator | null>(null)
 
   useEffect(() => {
-    if (!enabled || !video || typeof Worker === 'undefined') {
+    // Sin OffscreenCanvas no se inicia un worker que fallaría al convertir el frame; el botón
+    // MANUAL sigue disponible como degradación segura para navegadores antiguos.
+    if (!enabled || !video || typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') {
       coordinatorRef.current?.dispose()
       coordinatorRef.current = null
       setState({ analysis: null, error: false })
       return undefined
     }
 
-    const worker = new Worker(new URL('./scanner.worker.ts', import.meta.url), { type: 'module' })
+    let worker: Worker
+    try {
+      worker = new Worker(new URL('./scanner.worker.ts', import.meta.url), { type: 'module' })
+    } catch {
+      setState({ analysis: null, error: true })
+      return undefined
+    }
     const coordinator = createScannerCoordinator(
       worker,
       (analysis) => setState((current) => ({ ...current, analysis })),
@@ -139,6 +147,7 @@ export function useScannerEngine(
     let timeout: number | undefined
     let videoFrameCallback: number | undefined
     let nextAllowedAt = 0
+    let pendingPreview: { image: ScannerPreviewImage; sourceWidth: number; sourceHeight: number } | null = null
     const requestVideoFrame = (video as HTMLVideoElement & {
       requestVideoFrameCallback?: (callback: () => void) => number
     }).requestVideoFrameCallback
@@ -148,13 +157,27 @@ export function useScannerEngine(
       if (requestVideoFrame) videoFrameCallback = requestVideoFrame.call(video, tick)
       else timeout = window.setTimeout(tick, intervalMs)
     }
+    const submitPendingPreview = () => {
+      if (!pendingPreview || !coordinator.canSubmitPreview()) return
+      const preview = pendingPreview
+      pendingPreview = null
+      if (!coordinator.submitPreview(preview.image, preview.sourceWidth, preview.sourceHeight)) closePreview(preview.image)
+    }
+
     const tick = () => {
       if (cancelled) return
+      submitPendingPreview()
       const now = performance.now()
-      if (now >= nextAllowedAt && coordinator.canSubmitPreview() && video.videoWidth > 0 && video.videoHeight > 0) {
+      if (now >= nextAllowedAt && video.videoWidth > 0 && video.videoHeight > 0) {
         nextAllowedAt = now + intervalMs
         void capturePreview(video).then((image) => {
-          if (cancelled || !coordinator.submitPreview(image, video.videoWidth, video.videoHeight)) closePreview(image)
+          if (cancelled) {
+            closePreview(image)
+            return
+          }
+          if (pendingPreview) closePreview(pendingPreview.image)
+          pendingPreview = { image, sourceWidth: video.videoWidth, sourceHeight: video.videoHeight }
+          submitPendingPreview()
         }).catch(() => undefined)
       }
       schedule()
@@ -168,6 +191,8 @@ export function useScannerEngine(
         const cancel = (video as HTMLVideoElement & { cancelVideoFrameCallback?: (handle: number) => void }).cancelVideoFrameCallback
         cancel?.call(video, videoFrameCallback)
       }
+      if (pendingPreview) closePreview(pendingPreview.image)
+      pendingPreview = null
       if (coordinatorRef.current === coordinator) coordinatorRef.current = null
       coordinator.dispose()
     }

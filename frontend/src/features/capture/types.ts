@@ -43,6 +43,11 @@ export interface FrameAnalysis {
   detectionConfidence?: number
   areaRatio?: number
   detectionMethod?: DetectionMethod
+  meanLuminance?: number
+  darkPixelRatio?: number
+  brightPixelRatio?: number
+  clipped?: boolean
+  perspectiveScore?: number
 }
 
 export type Direction = 'recibida' | 'emitida'

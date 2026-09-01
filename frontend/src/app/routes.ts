@@ -26,6 +26,7 @@ export const ROUTES = {
   supervisionReviewPattern: '/pendientes-equipo/:fileId',
   supervisionReview: (fileId: string) => `/pendientes-equipo/${fileId}`,
   capture: '/capturar',
+  upload: '/subir-archivo',
   confirmationPattern: '/confirmar/:fileId',
   confirmation: (fileId: string) => `/confirmar/${fileId}`,
 } as const
@@ -87,10 +88,11 @@ const ROUTE_DEFS: RouteDef[] = [
   // Sin `label` (2026-08-01, a petición de Julio): ya no es una entrada propia del menú, sigue
   // siendo una ruta protegida igual, pero se llega a ella desde el enlace "Ver historial" dentro
   // de `CaptureScreen` ("Subir factura"), no desde el menú principal.
-  { path: ROUTES.history, roles: ['tenant_admin', 'user'] },
+  { path: ROUTES.history, roles: ['user'], label: 'Historial' },
   { path: ROUTES.inbox, roles: ['tenant_admin', 'user'], label: 'Mis facturas' },
   { path: ROUTES.supervision, roles: ['tenant_admin'], label: 'Pendientes del equipo' },
   { path: ROUTES.capture, roles: ['tenant_admin', 'user'], label: 'Subir factura' },
+  { path: ROUTES.upload, roles: ['user'], label: 'Subir Archivo' },
   { path: ROUTES.confirmationPattern, roles: ['tenant_admin', 'user'] },
   { path: ROUTES.supervisionReviewPattern, roles: ['tenant_admin'] },
 ]
@@ -112,7 +114,11 @@ export function menuLinksForRole(role: Role, ctx: MenuVisibilityContext): MenuLi
     (def) => def.label && def.roles.includes(role) && (def.visible?.(ctx) ?? true),
   ).map((def) => ({
     to: def.path,
-    label: def.label as string,
+    label: def.path === ROUTES.capture && role === 'user'
+      ? 'Escáner'
+      : def.path === ROUTES.inbox && role === 'user'
+        ? 'Pendientes'
+        : def.label as string,
   }))
 }
 

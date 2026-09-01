@@ -40,6 +40,7 @@ from invoicing.corrections import (
     TaxLineFields,
     diff_corrections,
 )
+from invoicing.duplicates import DuplicateMatch, DuplicateValues, duplicate_match
 from invoicing.supplier_profiles import build_profile_features, supplier_profile_blind_index
 from jobs import queue
 from ocr import repository as ocr_repo
@@ -111,6 +112,20 @@ class StructuredInvoicingError(InvoicingError):
 
     def as_detail(self) -> dict[str, object]:
         raise NotImplementedError
+
+
+class DuplicateInvoice(StructuredInvoicingError):
+    """La factura coincide con otra factura del mismo contexto (-> 409)."""
+
+    def __init__(self, match: DuplicateMatch) -> None:
+        self.match = match
+
+    def as_detail(self) -> dict[str, object]:
+        return {
+            "code": "duplicate_invoice",
+            "duplicate": self.match.as_dict(),
+            "blocking_reasons": [REASON_DUPLICATE_INVOICE],
+        }
 
 
 class CounterpartyBlocked(StructuredInvoicingError):
@@ -204,6 +219,7 @@ class ReviewData:
     draft_revision: int | None = None
     draft_updated_at: datetime | None = None
     page_count: int = 1
+    duplicate: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -226,6 +242,12 @@ class HistoryItem:
     status: str
     created_at: datetime
     direction: str | None
+
+
+@dataclass(frozen=True)
+class HistoryData:
+    entries: list[HistoryItem]
+    next_cursor: str | None
 
 
 class InvalidInboxCursor(InvoicingError):
@@ -314,6 +336,7 @@ def _is_admin(role: str) -> bool:
 REASON_CIF_INVALID = "counterparty_cif_invalid"
 REASON_CIF_NOT_FOUND = "counterparty_cif_not_found"
 REASON_OWN_TAX_ID_MISSING = "own_tax_id_missing"
+REASON_DUPLICATE_INVOICE = "duplicate_invoice"
 
 
 def _counterparty_reason(verdict: CounterpartyVerdict) -> str | None:
@@ -362,6 +385,46 @@ def _blocking_reasons(
     if _own_tax_id_blocks(own_tax_id_present, role):
         reasons.append(REASON_OWN_TAX_ID_MISSING)
     return reasons
+
+
+async def _find_duplicate(
+    session: AsyncSession,
+    *,
+    company_id: UUID,
+    file_id: UUID,
+    own_tax_id: str | None,
+    invoice_number: str | None,
+    counterparty_tax_id: str | None,
+    total_amount: Decimal | None,
+    encryption_key: str,
+) -> DuplicateMatch | None:
+    """Compara una revisión con candidatos visibles de la misma empresa."""
+    current = DuplicateValues(invoice_number, own_tax_id, counterparty_tax_id, total_amount)
+    candidates = await repository.list_duplicate_candidates(
+        session,
+        company_id=company_id,
+        uploaded_file_id=file_id,
+        encryption_key=encryption_key,
+    )
+    matches = [
+        duplicate_match(
+            current,
+            DuplicateValues(
+                candidate.invoice_number,
+                candidate.own_tax_id,
+                candidate.counterparty_tax_id,
+                candidate.total_amount,
+            ),
+            uploaded_file_id=str(candidate.uploaded_file_id),
+            invoice_id=str(candidate.invoice_id) if candidate.invoice_id is not None else None,
+        )
+        for candidate in candidates
+    ]
+    valid_matches = [match for match in matches if match is not None]
+    return next(
+        (match for match in valid_matches if match.kind == "confirmed"),
+        valid_matches[0] if valid_matches else None,
+    )
 
 
 async def _load_file(identity: AuthContext, file_id: UUID) -> intake_repo.UploadedFileContext:
@@ -488,6 +551,7 @@ async def build_review_data(
     company_id: UUID,
     extraction: ExtractionRecord,
     role: str,
+    file_id: UUID | None = None,
     counterparty_override: tuple[str | None, str | None] | None = None,
 ) -> ReviewData:
     """Calcula los datos de revisión (campos + confianzas + veredicto + avisos) a partir de una
@@ -521,6 +585,21 @@ async def build_review_data(
     if not extraction.own_tax_id_present:
         warnings.append("cif_propio_ausente")
 
+    duplicate: DuplicateMatch | None = None
+    if file_id is not None:
+        duplicate = await _find_duplicate(
+            session,
+            company_id=company_id,
+            file_id=file_id,
+            own_tax_id=own.cif if own is not None else None,
+            invoice_number=extraction.invoice_number,
+            counterparty_tax_id=counterparty_tax_id,
+            total_amount=extraction.total_amount,
+            encryption_key=tenant_encryption_key(get_settings(), tenant_id),
+        )
+        if duplicate is not None:
+            warnings.append("duplicado")
+
     return ReviewData(
         fields={
             "issue_date": _iso(extraction.issue_date),
@@ -541,8 +620,12 @@ async def build_review_data(
             "name": own.name if own is not None else None,
         },
         warnings=warnings,
-        blocking_reasons=_blocking_reasons(verdict, extraction.own_tax_id_present, role),
+        blocking_reasons=[
+            *_blocking_reasons(verdict, extraction.own_tax_id_present, role),
+            *([REASON_DUPLICATE_INVOICE] if duplicate is not None else []),
+        ],
         direction=None,
+        duplicate=duplicate.as_dict() if duplicate is not None else None,
     )
 
 
@@ -573,6 +656,7 @@ async def review(identity: AuthContext, file_id: UUID, *, readonly: bool = False
         file_ctx.company_id,
         extraction,
         identity.role,
+        file_id=file_id,
         counterparty_override=(draft.counterparty_tax_id, draft.counterparty_name)
         if draft is not None
         else None,
@@ -606,10 +690,29 @@ async def review(identity: AuthContext, file_id: UUID, *, readonly: bool = False
         draft_warnings.append("descuadre")
     if not extraction.own_tax_id_present:
         draft_warnings.append("cif_propio_ausente")
+    own_tax_id = data.own.get("cif")
+    draft_duplicate = await _find_duplicate(
+        identity.session,
+        company_id=file_ctx.company_id,
+        file_id=file_id,
+        own_tax_id=own_tax_id if isinstance(own_tax_id, str) else None,
+        invoice_number=draft.invoice_number,
+        counterparty_tax_id=draft.counterparty_tax_id,
+        total_amount=draft.total_amount,
+        encryption_key=ocr_key,
+    )
+    draft_blocking_reasons = [
+        reason for reason in data.blocking_reasons if reason != REASON_DUPLICATE_INVOICE
+    ]
+    if draft_duplicate is not None:
+        draft_blocking_reasons.append(REASON_DUPLICATE_INVOICE)
+        draft_warnings.append("duplicado")
     return replace(
         data,
         fields=fields,
         warnings=draft_warnings,
+        blocking_reasons=draft_blocking_reasons,
+        duplicate=draft_duplicate.as_dict() if draft_duplicate is not None else None,
         direction=draft.direction or file_ctx.direction,
         source="draft",
         draft_revision=draft.revision,
@@ -688,6 +791,24 @@ async def confirm(identity: AuthContext, file_id: UUID, command: ConfirmCommand)
     # La captura manda sobre el body cuando ya existe. Para documentos anteriores a S6.13 la
     # dirección sigue siendo nula y el valor explícito del humano conserva la compatibilidad.
     command = replace(command, direction=file_ctx.direction or command.direction)
+
+    company = await companies_repo.get_company(
+        identity.session,
+        file_ctx.company_id,
+        encryption_key=company_encryption_key(get_settings(), identity.tenant_id),
+    )
+    duplicate = await _find_duplicate(
+        identity.session,
+        company_id=file_ctx.company_id,
+        file_id=file_id,
+        own_tax_id=company.cif if company is not None else None,
+        invoice_number=command.invoice_number,
+        counterparty_tax_id=command.counterparty_tax_id,
+        total_amount=command.total_amount,
+        encryption_key=tenant_encryption_key(get_settings(), identity.tenant_id),
+    )
+    if duplicate is not None:
+        raise DuplicateInvoice(duplicate)
 
     # Guardas locales baratas y deterministas ANTES de la reverificación (que puede tocar red L3):
     # un usuario que no acepta la responsabilidad o sin el CIF propio no dispara lookups externos.
@@ -854,8 +975,8 @@ def _enqueue_benchmark_after_commit(
     event.listen(session.sync_session, "after_commit", _enqueue, once=True)
 
 
-async def history(identity: AuthContext) -> list[HistoryItem]:
-    """Historial de los 20 últimos documentos aceptados del contexto (S6.12). Solo lectura.
+async def history(identity: AuthContext, *, cursor: str | None = None, limit: int = repository.INBOX_LIMIT) -> HistoryData:
+    """Historial confirmado de los últimos cuatro meses, con cursor y solo lectura (R-056).
 
     Autorización de fichero por-fila no aplica aquí (a diferencia de `review`/`confirm`, que cargan
     UN fichero): la RLS de dos niveles ya acota el resultado al tenant/empresa de la sesión (spec
@@ -863,19 +984,28 @@ async def history(identity: AuthContext) -> list[HistoryItem]:
     propia empresa, solo ve lo que confirmó él mismo, nunca lo de un compañero. Un `tenant_admin`
     conserva la vista completa de su asesoría (spec original, sin cambios).
     """
-    entries = await repository.list_history(
+    cursor_created_at: datetime | None = None
+    cursor_id: UUID | None = None
+    if cursor is not None:
+        cursor_created_at, cursor_id = _decode_inbox_cursor(cursor)
+    page = await repository.list_history(
         identity.session,
         uploaded_by=identity.user_id if identity.role == Role.USER else None,
+        cursor_created_at=cursor_created_at,
+        cursor_id=cursor_id,
+        limit=limit,
     )
-    return [
+    entries = [
         HistoryItem(
             id=entry.id,
             status=entry.status,
             created_at=entry.created_at,
             direction=entry.direction,
         )
-        for entry in entries
+        for entry in page.entries
     ]
+    next_cursor = _encode_inbox_cursor(entries[-1].created_at, entries[-1].id) if page.has_more else None
+    return HistoryData(entries=entries, next_cursor=next_cursor)
 
 
 def _encode_inbox_cursor(created_at: datetime, item_id: UUID) -> str:

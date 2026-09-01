@@ -30,8 +30,8 @@ from ocr.eta import estimate_eta
 from platform_admin import settings_repository
 from shared.audit import write_audit
 from shared.config import get_settings
-from shared.db import tenant_session
-from shared.metrics import page_count_bucket
+from shared.db import tenant_session, tenant_statement_session
+from shared.metrics import observe_upload_phase, page_count_bucket
 from tenancy.constants import Role
 
 logger = structlog.get_logger("invoice_intake")
@@ -39,6 +39,7 @@ logger = structlog.get_logger("invoice_intake")
 # Traza de auditoría del intake (spec S2.1 C13): entidad y acción en constantes, no literales.
 _AUDIT_ENTITY = "uploaded_file"
 AUDIT_ACTION_UPLOAD = "intake.upload"
+AUDIT_ACTION_DELETE_UNCONFIRMED = "intake.delete_unconfirmed"
 
 # Expiración fija y corta de la URL firmada de descarga (S2.7 spec §4): no configurable por el
 # cliente. Pensada para que el navegador cargue la imagen al momento, no para compartir el enlace.
@@ -83,6 +84,10 @@ class FileNotVisible(IntakeError):
 
 class PrivateFileNotVisible(FileNotVisible):
     """Un compañero intenta acceder a un documento propio de otro `user` (-> 404)."""
+
+
+class ConfirmedFile(IntakeError):
+    """Una factura ya confirmada no admite borrado manual (-> 409)."""
 
 
 class InvalidPageCount(IntakeError):
@@ -389,6 +394,41 @@ async def delete_uploaded_file_row(
     ]
 
 
+async def delete_unconfirmed_file(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    file_id: UUID,
+    actor_user_id: UUID,
+    actor_role: str,
+) -> None:
+    """Elimina un documento pendiente del propietario y agenda la limpieza de sus objetos.
+
+    La fila es la fuente de verdad: el almacenamiento se limpia solo después del commit y el worker
+    OCR que pudiera estar ejecutándose pierde su fila antes de poder publicar un resultado.
+    """
+    context = await authorize_file_edit(
+        session,
+        tenant_id=tenant_id,
+        file_id=file_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+    )
+    if context.status == "confirmed":
+        raise ConfirmedFile
+    deleted, locations = await repository.delete_unconfirmed_file(session, file_id)
+    if not deleted:
+        raise ConfirmedFile
+    await write_audit(
+        session,
+        actor_id=actor_user_id,
+        action=AUDIT_ACTION_DELETE_UNCONFIRMED,
+        entity=_AUDIT_ENTITY,
+        entity_id=file_id,
+    )
+    schedule_storage_cleanup(session, locations)
+
+
 def schedule_storage_cleanup(
     session: AsyncSession, locations: list[repository.UploadedFileLocation]
 ) -> None:
@@ -436,10 +476,10 @@ def schedule_bucket_cleanup(session: AsyncSession, bucket: str) -> None:
 
 async def create_upload(
     *,
-    session: AsyncSession,
     tenant_id: UUID,
     user_id: UUID,
     company_id: UUID,
+    rls_company_id: UUID | None,
     content: bytes,
     direction: str | None = None,
     capture_session_id: UUID | None = None,
@@ -451,59 +491,66 @@ async def create_upload(
     insertar + auditar (en la MISMA transacción). El tipo lo decide SOLO el MIME real, nunca la
     cabecera declarada (C4). La autorización por pertenencia ya la comprobó `authorize_upload`.
     """
-    if not content:
-        raise EmptyFile
+    with observe_upload_phase("validation"):
+        if not content:
+            raise EmptyFile
 
-    real_mime = mime.sniff_mime(content)
-    if not mime.is_allowed(real_mime):
-        raise UnsupportedMediaType
-    assert real_mime is not None  # `is_allowed(None)` es False: aquí el MIME está determinado
-    await asyncio.to_thread(
-        validate_image, content, real_mime, max_pixels=get_settings().max_upload_image_pixels
-    )
-
-    sha256 = _sha256(content)
+        real_mime = mime.sniff_mime(content)
+        if not mime.is_allowed(real_mime):
+            raise UnsupportedMediaType
+        assert real_mime is not None  # `is_allowed(None)` es False: aquí el MIME está determinado
+        await asyncio.to_thread(
+            validate_image, content, real_mime, max_pixels=get_settings().max_upload_image_pixels
+        )
+        sha256 = _sha256(content)
     bucket = storage.bucket_for(tenant_id)
     key = storage.key_for(company_id, uuid4())
 
     # Dedup privado ANTES del antivirus: un compañero puede subir los mismos bytes sin descubrir
     # este documento ni su id; quien ya lo subió no vuelve a escanearlo ni almacenarlo.
-    existing = await repository.find_duplicate_id(session, company_id, user_id, sha256)
+    with observe_upload_phase("deduplication"):
+        async with tenant_statement_session() as duplicate_session:
+            existing = await repository.find_duplicate_id(
+                duplicate_session, tenant_id, company_id, user_id, sha256
+            )
     if existing is not None:
         raise DuplicateUpload(existing)
-
     # Antivirus (fail-closed): infectado -> ScanInfected (422); caído -> ScannerUnavailable (503).
     # Se usa el atributo de módulo (no se importa la función) para permitir el monkeypatch C7.
-    await asyncio.to_thread(scanner.scan, content)
+    with observe_upload_phase("antivirus"):
+        await asyncio.to_thread(scanner.scan, content)
 
     # Almacenar el objeto ANTES de insertar el registro; un fallo aquí -> StorageUnavailable (503)
     # y sin fila (C12a). Se usa `storage.put_object` como atributo de módulo (monkeypatch C12a).
-    await asyncio.to_thread(storage.put_object, bucket, key, content, len(content), real_mime)
+    with observe_upload_phase("storage"):
+        await asyncio.to_thread(storage.put_object, bucket, key, content, len(content), real_mime)
 
-    record = await _persist_or_compensate(
-        session=session,
-        tenant_id=tenant_id,
-        user_id=user_id,
-        company_id=company_id,
-        sha256=sha256,
-        bucket=bucket,
-        key=key,
-        content_type=real_mime,
-        size_bytes=len(content),
-        direction=direction,
-        capture_session_id=capture_session_id,
-        capture_sequence=capture_sequence,
-    )
-    _enqueue_ocr_after_commit(session, tenant_id, company_id, record.id)
+    with observe_upload_phase("persistence"):
+        async with tenant_session(tenant_id, rls_company_id) as persist_session:
+            record = await _persist_or_compensate(
+                session=persist_session,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                company_id=company_id,
+                sha256=sha256,
+                bucket=bucket,
+                key=key,
+                content_type=real_mime,
+                size_bytes=len(content),
+                direction=direction,
+                capture_session_id=capture_session_id,
+                capture_sequence=capture_sequence,
+            )
+            _enqueue_ocr_after_commit(persist_session, tenant_id, company_id, record.id)
     return record
 
 
 async def create_upload_batch(
     *,
-    session: AsyncSession,
     tenant_id: UUID,
     user_id: UUID,
     company_id: UUID,
+    rls_company_id: UUID | None,
     contents: list[bytes],
     direction: str,
 ) -> repository.UploadedFileRecord:
@@ -530,13 +577,20 @@ async def create_upload_batch(
         if sha256 in seen_hashes:
             raise DuplicateUpload(UUID(int=0))
         seen_hashes.add(sha256)
-        duplicate_of = await repository.find_document_duplicate_id(
-            session, company_id, user_id, sha256
-        )
-        if duplicate_of is not None:
-            raise DuplicateUpload(duplicate_of)
-        await asyncio.to_thread(scanner.scan, content)
         prepared.append(_PreparedUpload(content, content_type, sha256))
+
+    # Todas las páginas se deduplican antes de tocar ClamAV, para no escanear parcialmente un lote
+    # que ya sabemos que no puede entrar. La sesión solo cubre estas lecturas RLS.
+    async with tenant_session(tenant_id, rls_company_id) as duplicate_session:
+        for page in prepared:
+            duplicate_of = await repository.find_document_duplicate_id(
+                duplicate_session, company_id, user_id, page.sha256
+            )
+            if duplicate_of is not None:
+                raise DuplicateUpload(duplicate_of)
+
+    for page in prepared:
+        await asyncio.to_thread(scanner.scan, page.content)
 
     bucket = storage.bucket_for(tenant_id)
     locations = [
@@ -561,40 +615,42 @@ async def create_upload_batch(
                 len(page.content),
                 page.content_type,
             )
-        first = prepared[0]
-        root = await repository.insert_uploaded_file(
-            session,
-            company_id=company_id,
-            uploaded_by=user_id,
-            storage_bucket=locations[0].bucket,
-            storage_key=locations[0].key,
-            content_type=first.content_type,
-            size_bytes=len(first.content),
-            sha256=first.sha256,
-            direction=direction,
-        )
-        for page_number, (page, location) in enumerate(
-            zip(prepared[1:], locations[1:], strict=True), start=2
-        ):
-            await repository.insert_uploaded_file_page(
-                session,
-                root_uploaded_file_id=root.id,
+        async with tenant_session(tenant_id, rls_company_id) as persist_session:
+            first = prepared[0]
+            root = await repository.insert_uploaded_file(
+                persist_session,
                 company_id=company_id,
                 uploaded_by=user_id,
-                page_number=page_number,
-                storage_bucket=location.bucket,
-                storage_key=location.key,
-                content_type=page.content_type,
-                size_bytes=len(page.content),
-                sha256=page.sha256,
+                storage_bucket=locations[0].bucket,
+                storage_key=locations[0].key,
+                content_type=first.content_type,
+                size_bytes=len(first.content),
+                sha256=first.sha256,
+                direction=direction,
             )
-        await write_audit(
-            session,
-            actor_id=user_id,
-            action=AUDIT_ACTION_UPLOAD,
-            entity=_AUDIT_ENTITY,
-            entity_id=root.id,
-        )
+            for page_number, (page, location) in enumerate(
+                zip(prepared[1:], locations[1:], strict=True), start=2
+            ):
+                await repository.insert_uploaded_file_page(
+                    persist_session,
+                    root_uploaded_file_id=root.id,
+                    company_id=company_id,
+                    uploaded_by=user_id,
+                    page_number=page_number,
+                    storage_bucket=location.bucket,
+                    storage_key=location.key,
+                    content_type=page.content_type,
+                    size_bytes=len(page.content),
+                    sha256=page.sha256,
+                )
+            await write_audit(
+                persist_session,
+                actor_id=user_id,
+                action=AUDIT_ACTION_UPLOAD,
+                entity=_AUDIT_ENTITY,
+                entity_id=root.id,
+            )
+            _enqueue_ocr_after_commit(persist_session, tenant_id, company_id, root.id)
     except IntegrityError as exc:
         await _remove_locations_best_effort(stored)
         if repository.is_duplicate_violation(exc):
@@ -605,7 +661,6 @@ async def create_upload_batch(
         await _remove_locations_best_effort(stored)
         raise
 
-    _enqueue_ocr_after_commit(session, tenant_id, company_id, root.id)
     return root
 
 
@@ -632,7 +687,7 @@ async def _persist_or_compensate(
       huérfano y se propaga (>= 500).
     """
     try:
-        record = await repository.insert_uploaded_file(
+        record = await repository.insert_uploaded_file_with_audit(
             session,
             company_id=company_id,
             uploaded_by=user_id,
@@ -644,13 +699,6 @@ async def _persist_or_compensate(
             direction=direction,
             capture_session_id=capture_session_id,
             capture_sequence=capture_sequence,
-        )
-        await write_audit(
-            session,
-            actor_id=user_id,
-            action=AUDIT_ACTION_UPLOAD,
-            entity=_AUDIT_ENTITY,
-            entity_id=record.id,
         )
         return record
     except IntegrityError as exc:

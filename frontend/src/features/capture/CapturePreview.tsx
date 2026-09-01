@@ -11,8 +11,8 @@ export interface CapturePreviewProps {
 export function CapturePreview({ previewUrl, status, error = null, onRepeat, onUse }: CapturePreviewProps) {
   const busy = status === 'uploading' || status === 'saved'
   return (
-    <section aria-label="Vista previa de la captura" className="mx-auto flex max-w-xl flex-col items-center gap-5 p-6 pt-10 text-slate-100">
-      <div className="w-full overflow-hidden rounded-lg border border-slate-700 bg-slate-900">
+    <section aria-label="Vista previa de la captura" className="tn-panel-page tn-preview-shell mx-auto flex max-w-xl flex-col items-center gap-5 p-6 pt-10">
+      <div className="tn-preview-image w-full overflow-hidden rounded-lg border bg-white">
         <img src={previewUrl} alt="Vista previa de la factura" className="max-h-[65vh] w-full object-contain" />
       </div>
       <h1 className="text-xl font-semibold">Revisar foto</h1>
@@ -21,8 +21,8 @@ export function CapturePreview({ previewUrl, status, error = null, onRepeat, onU
       {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
       {status !== 'saved' && (
         <div className="flex w-full gap-3">
-          <button type="button" onClick={onRepeat} disabled={busy} className="flex-1 rounded-md border border-slate-600 px-4 py-3 font-medium disabled:opacity-40">Repetir</button>
-          <button type="button" onClick={onUse} disabled={busy} className="flex-1 rounded-md bg-emerald-600 px-4 py-3 font-semibold text-white disabled:opacity-40">Usar foto</button>
+          <button type="button" onClick={onRepeat} disabled={busy} className="tn-secondary-action flex-1 rounded-md border px-4 py-3 font-medium disabled:opacity-40">Repetir</button>
+          <button type="button" onClick={onUse} disabled={busy} className="tn-primary-action flex-1 rounded-md px-4 py-3 font-semibold disabled:opacity-40">Usar foto</button>
         </div>
       )}
     </section>

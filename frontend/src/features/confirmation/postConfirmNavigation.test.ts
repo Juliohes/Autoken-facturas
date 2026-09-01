@@ -1,7 +1,6 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ROUTES } from '../../app/routes'
 import type { InboxResponse } from '../inbox/types'
 import { firstReadyInvoice, navigateAfterConfirm } from './postConfirmNavigation'
 
@@ -34,22 +33,21 @@ const snapshot: InboxResponse = {
   next_cursor: null,
 }
 
-describe('navigateAfterConfirm (R-025)', () => {
-  it('elige la primera factura revisable solo después de refrescar la bandeja', async () => {
+describe('navigateAfterConfirm (R-052)', () => {
+  it('devuelve la primera factura revisable solo después de refrescar la bandeja y no navega por sorpresa', async () => {
     const queryClient = new QueryClient()
     const navigate = vi.fn()
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
     vi.spyOn(queryClient, 'fetchQuery').mockResolvedValue(snapshot)
 
-    await navigateAfterConfirm(queryClient, navigate)
+    const next = await navigateAfterConfirm(queryClient)
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['invoice-inbox'] })
-    expect(navigate).toHaveBeenCalledWith(ROUTES.confirmation('next'), {
-      state: { direction: 'emitida' },
-    })
+    expect(next).toEqual(snapshot.items[1])
+    expect(navigate).not.toHaveBeenCalled()
   })
 
-  it('vuelve a Mis facturas cuando no quedan documentos revisables', async () => {
+  it('devuelve null cuando no quedan documentos revisables', async () => {
     const queryClient = new QueryClient()
     const navigate = vi.fn()
     vi.spyOn(queryClient, 'fetchQuery').mockResolvedValue({
@@ -58,9 +56,10 @@ describe('navigateAfterConfirm (R-025)', () => {
       summary: { processing: 0, ready: 0, attention: 0 },
     })
 
-    await navigateAfterConfirm(queryClient, navigate)
+    const next = await navigateAfterConfirm(queryClient)
 
-    expect(navigate).toHaveBeenCalledWith(ROUTES.inbox)
+    expect(next).toBeNull()
+    expect(navigate).not.toHaveBeenCalled()
   })
 
   it('considera revisables solo ocr_done y needs_review', () => {

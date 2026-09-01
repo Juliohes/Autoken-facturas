@@ -384,6 +384,24 @@ async def delete_uploaded_file(session: AsyncSession, file_id: UUID) -> None:
     await session.execute(text("DELETE FROM uploaded_files WHERE id = :id"), {"id": str(file_id)})
 
 
+async def delete_unconfirmed_file(
+    session: AsyncSession, file_id: UUID
+) -> tuple[bool, list[UploadedFileLocation]]:
+    """Borra atómicamente un documento no confirmado y devuelve sus objetos para limpiar después.
+
+    La condición de estado vive en el `DELETE`: si una confirmación gana la carrera, no se puede
+    borrar su fila aunque la autorización se hubiera comprobado unos instantes antes.
+    """
+    locations = await get_document_pages(session, file_id)
+    result = await session.execute(
+        text("DELETE FROM uploaded_files WHERE id = :id AND status <> 'confirmed' RETURNING id"),
+        {"id": str(file_id)},
+    )
+    return result.first() is not None, [
+        UploadedFileLocation(page.bucket, page.key, page.content_type) for page in locations
+    ]
+
+
 def is_duplicate_violation(exc: IntegrityError) -> bool:
     """True si la integridad global de hash de un documento rechazó la escritura."""
     return any(violates_unique_constraint(exc, constraint) for constraint in _DUPLICATE_CONSTRAINTS)
@@ -405,7 +423,7 @@ async def company_exists(session: AsyncSession, company_id: UUID) -> bool:
 
 
 async def find_duplicate_id(
-    session: AsyncSession, company_id: UUID, uploaded_by: UUID, sha256: str
+    session: AsyncSession, tenant_id: UUID, company_id: UUID, uploaded_by: UUID, sha256: str
 ) -> UUID | None:
     """Id propio existente con ese `(company_id, uploaded_by, sha256)`, o `None` si no hay.
 
@@ -414,11 +432,15 @@ async def find_duplicate_id(
     row = (
         await session.execute(
             text(
-                "SELECT id FROM uploaded_files WHERE company_id = :cid "
-                "AND uploaded_by = :uploaded_by "
-                "AND sha256 = :sha LIMIT 1"
+                "SELECT public.find_duplicate_upload_id_for_app(:tid, :cid, :uploaded_by, :sha) "
+                "AS id"
             ),
-            {"cid": str(company_id), "uploaded_by": str(uploaded_by), "sha": sha256},
+            {
+                "tid": str(tenant_id),
+                "cid": str(company_id),
+                "uploaded_by": str(uploaded_by),
+                "sha": sha256,
+            },
         )
     ).first()
     return row.id if row is not None else None
@@ -477,6 +499,76 @@ async def insert_uploaded_file(
                 f":capture_session_id, :capture_sequence) "
                 f"RETURNING id, company_id, content_type, size_bytes, sha256, "
                 f"          status, scan_status, created_at, direction"
+            ),
+            {
+                "company_id": str(company_id),
+                "uploaded_by": str(uploaded_by),
+                "bucket": storage_bucket,
+                "key": storage_key,
+                "content_type": content_type,
+                "size_bytes": size_bytes,
+                "sha256": sha256,
+                "direction": direction,
+                "capture_session_id": (
+                    str(capture_session_id) if capture_session_id is not None else None
+                ),
+                "capture_sequence": capture_sequence,
+            },
+        )
+    ).one()
+    return UploadedFileRecord(
+        id=row.id,
+        company_id=row.company_id,
+        content_type=row.content_type,
+        size_bytes=row.size_bytes,
+        sha256=row.sha256,
+        status=row.status,
+        scan_status=row.scan_status,
+        created_at=row.created_at,
+        direction=row.direction,
+    )
+
+
+async def insert_uploaded_file_with_audit(
+    session: AsyncSession,
+    *,
+    company_id: UUID,
+    uploaded_by: UUID,
+    storage_bucket: str,
+    storage_key: str,
+    content_type: str,
+    size_bytes: int,
+    sha256: str,
+    direction: str | None = None,
+    capture_session_id: UUID | None = None,
+    capture_sequence: int | None = None,
+) -> UploadedFileRecord:
+    """Inserta el fichero y su auditoría en una sola operación SQL atómica.
+
+    El CTE conserva el mismo contexto RLS de la sesión: el tenant de ambas filas se deriva de
+    `app.tenant_id` y la entrada de auditoría referencia el id que acaba de devolver el insert.
+    La transacción sigue perteneciendo al llamante, que conserva la compensación de MinIO.
+    """
+    row = (
+        await session.execute(
+            text(
+                f"WITH inserted AS ("
+                f"INSERT INTO uploaded_files "
+                f"(tenant_id, company_id, uploaded_by, storage_bucket, storage_key, "
+                f" content_type, size_bytes, sha256, direction, "
+                f"capture_session_id, capture_sequence) "
+                f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :uploaded_by, :bucket, :key, "
+                f" :content_type, :size_bytes, :sha256, :direction, "
+                f":capture_session_id, :capture_sequence) "
+                f"RETURNING id, company_id, content_type, size_bytes, sha256, "
+                f"          status, scan_status, created_at, direction"
+                f"), audited AS ("
+                f"INSERT INTO audit_log "
+                f"(tenant_id, actor_id, action, entity, entity_id) "
+                f"SELECT {_TENANT_FROM_CONTEXT}, :uploaded_by, 'intake.upload', "
+                f"       'uploaded_file', id FROM inserted"
+                f") SELECT id, company_id, content_type, size_bytes, sha256, "
+                f"status, scan_status, created_at, direction FROM inserted"
             ),
             {
                 "company_id": str(company_id),

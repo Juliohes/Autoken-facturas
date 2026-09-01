@@ -48,7 +48,17 @@ export function evaluateQualityGate(
   quality: QualityGateInput,
   config: QualityGateConfig = DEFAULT_QUALITY_GATE_CONFIG,
 ): AutoCaptureDecision {
-  if (!Number.isFinite(quality.detectionConfidence) || !Number.isFinite(quality.areaRatio)
+  const numericSignals = [
+    quality.sharpness,
+    quality.meanLuminance,
+    quality.darkPixelRatio,
+    quality.brightPixelRatio,
+    quality.areaRatio,
+    quality.detectionConfidence,
+    quality.stabilityScore,
+    quality.perspectiveScore,
+  ]
+  if (numericSignals.some((value) => !Number.isFinite(value))
     || quality.detectionConfidence <= 0 || quality.areaRatio <= 0) {
     return { ready: false, reason: 'no_document' }
   }

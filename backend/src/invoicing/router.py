@@ -119,6 +119,7 @@ _ERROR_STATUS: list[tuple[type[Exception], int, str]] = [
     (service.CompanyForbidden, 403, "No perteneces a la empresa del fichero"),
     (service.FileNotVisible, 404, "Fichero no encontrado"),
     (service.AlreadyConfirmed, 409, "El fichero ya tiene una factura confirmada"),
+    (service.DuplicateInvoice, 409, "La factura parece estar duplicada"),
     # `PendingOcr`/`CaptureUnreadable` antes que `NotConfirmable`: son sus subclases, y
     # `_raise_http` usa el PRIMER match — si `NotConfirmable` fuera antes, nunca se alcanzarían.
     (service.PendingOcr, 409, "La factura todavía se está procesando con IA"),
@@ -214,6 +215,7 @@ async def review_upload(identity: Reviewer, file_id: UUID) -> dict[str, object]:
         "draft_revision": data.draft_revision,
         "draft_updated_at": data.draft_updated_at,
         "page_count": data.page_count,
+        "duplicate": data.duplicate,
     }
 
 
@@ -287,6 +289,7 @@ class HistoryOut(BaseModel):
     """Respuesta de `GET /invoices/history`: últimos envíos, más reciente primero."""
 
     entries: list[HistoryEntryOut]
+    next_cursor: str | None
 
 
 class InboxItemOut(BaseModel):
@@ -345,6 +348,7 @@ def _review_payload(data: service.ReviewData) -> dict[str, object]:
         "draft_revision": data.draft_revision,
         "draft_updated_at": data.draft_updated_at,
         "page_count": data.page_count,
+        "duplicate": data.duplicate,
     }
 
 
@@ -377,9 +381,16 @@ async def pending_supervision(
 
 
 @invoices_router.get("/history")
-async def invoice_history(identity: HistoryViewer) -> HistoryOut:
-    """Últimos documentos aceptados del contexto del usuario (S6.12). Solo lectura."""
-    entries = await service.history(identity)
+async def invoice_history(
+    identity: HistoryViewer,
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = service.INBOX_LIMIT,
+) -> HistoryOut:
+    """Facturas confirmadas de los últimos cuatro meses, con cursor estable (R-056)."""
+    try:
+        data = await service.history(identity, cursor=cursor, limit=limit)
+    except service.InvalidInboxCursor as exc:
+        raise HTTPException(status_code=422, detail="Cursor de historial no válido") from exc
     return HistoryOut(
         entries=[
             HistoryEntryOut(
@@ -388,8 +399,9 @@ async def invoice_history(identity: HistoryViewer) -> HistoryOut:
                 created_at=entry.created_at,
                 direction=cast(Literal["recibida", "emitida"] | None, entry.direction),
             )
-            for entry in entries
-        ]
+            for entry in data.entries
+        ],
+        next_cursor=data.next_cursor,
     )
 
 

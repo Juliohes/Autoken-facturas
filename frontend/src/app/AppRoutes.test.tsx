@@ -106,6 +106,7 @@ function mockAuthenticatedAs(role: keyof typeof ME_BY_ROLE) {
     if (path.includes('/reporting/companies')) return Promise.resolve({ data: COMPANIES, error: undefined })
     if (path === '/api/v1/companies') return Promise.resolve({ data: COMPANIES, error: undefined })
     if (path.includes('/registrations')) return Promise.resolve({ data: [], error: undefined })
+    if (path.includes('/invoices/inbox')) return Promise.resolve({ data: { items: [], next_cursor: null, summary: { processing: 0, ready: 0, attention: 0 } }, error: undefined })
     if (path.includes('/invoices/history')) return Promise.resolve({ data: { entries: [] }, error: undefined })
     throw new Error(`ruta GET no mockeada: ${path}`)
   })
@@ -217,20 +218,22 @@ describe('AppRoutes (S4.9)', () => {
     expect(within(nav).queryByText('Plataforma')).not.toBeInTheDocument()
   })
 
-  it('C11: user ve Subir factura en el menú, nada más (Historial vive dentro, no en el menú)', async () => {
+  it('R-056 C1: user ve exactamente los cuatro destinos del flujo', async () => {
     mockAuthenticatedAs('user')
     renderApp('/historial')
 
     await waitFor(() => expect(screen.getByRole('navigation')).toBeInTheDocument())
     const nav = screen.getByRole('navigation')
-    expect(within(nav).getByText('Subir factura')).toBeInTheDocument()
-    expect(within(nav).queryByText('Historial')).not.toBeInTheDocument()
+    expect(within(nav).getByText('Escáner')).toBeInTheDocument()
+    expect(within(nav).getByText('Subir Archivo')).toBeInTheDocument()
+    expect(within(nav).getByText('Pendientes')).toBeInTheDocument()
+    expect(within(nav).getByText('Historial')).toBeInTheDocument()
     expect(within(nav).queryByText('Facturas')).not.toBeInTheDocument()
     expect(within(nav).queryByText('Empresas')).not.toBeInTheDocument()
     expect(within(nav).queryByText('Plataforma')).not.toBeInTheDocument()
   })
 
-  it('2026-08-01: "Ver historial" vive dentro de "Subir factura" (Julio), no en el menú principal', async () => {
+  it('R-056: historial es una pantalla propia de confirmadas', async () => {
     mockAuthenticatedAs('user')
     renderApp('/capturar')
     const user = userEvent.setup()
@@ -238,9 +241,7 @@ describe('AppRoutes (S4.9)', () => {
     expect(await screen.findByRole('heading', { name: 'Capturar factura' })).toBeInTheDocument()
     await user.click(screen.getByRole('link', { name: 'Ver historial' }))
 
-    // Sin facturas mockeadas, `InvoiceHistory` muestra su estado vacío (sin encabezado propio):
-    // basta para confirmar que la navegación llegó de verdad a `/historial`.
-    expect(await screen.findByText('Todavía no has enviado ninguna factura.')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Historial' })).toBeInTheDocument()
   })
 
   it('R-014: una subida aceptada no navega directamente a confirmación', async () => {
@@ -251,9 +252,7 @@ describe('AppRoutes (S4.9)', () => {
     await screen.findByRole('heading', { name: 'Capturar factura' })
     await user.click(screen.getByRole('button', { name: 'Simular subida aceptada' }))
 
-    expect(await screen.findByRole('heading', { name: 'Factura aceptada' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Revisar cuando esté lista' })).toHaveAttribute('href', '/confirmar/file-accepted')
-    expect(screen.getByRole('link', { name: 'Ir a Mis facturas' })).toHaveAttribute('href', '/mis-facturas')
+    expect(await screen.findByRole('heading', { name: 'Capturar factura' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Confirmar factura' })).not.toBeInTheDocument()
   })
 

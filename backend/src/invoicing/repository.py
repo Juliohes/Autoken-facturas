@@ -56,6 +56,12 @@ class HistoryEntry:
 
 
 @dataclass(frozen=True)
+class HistoryPage:
+    entries: list[HistoryEntry]
+    has_more: bool
+
+
+@dataclass(frozen=True)
 class InboxEntry:
     """Documento operativo de la bandeja personal, sin campos fiscales ni OCR (R-020)."""
 
@@ -137,6 +143,16 @@ class InvoiceRecord:
     confirmed_by: UUID
     confirmed_at: datetime
     tax_lines: list[tuple[Decimal | None, Decimal | None, Decimal | None]]
+
+
+@dataclass(frozen=True)
+class DuplicateCandidate:
+    uploaded_file_id: UUID
+    invoice_id: UUID | None
+    invoice_number: str | None
+    own_tax_id: str | None
+    counterparty_tax_id: str | None
+    total_amount: Decimal | None
 
 
 def is_duplicate_invoice(exc: IntegrityError) -> bool:
@@ -295,6 +311,62 @@ async def invoice_exists_for_file(session: AsyncSession, uploaded_file_id: UUID)
         )
     ).first()
     return row is not None
+
+
+async def list_duplicate_candidates(
+    session: AsyncSession,
+    *,
+    company_id: UUID,
+    uploaded_file_id: UUID,
+    encryption_key: str,
+) -> list[DuplicateCandidate]:
+    """Lee candidatos confirmados y OCR visibles de la misma empresa, sin cruzar RLS."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT i.uploaded_file_id, i.id AS invoice_id, i.invoice_number, "
+                "pgp_sym_decrypt(c.cif, :key)::text AS own_tax_id, "
+                "pgp_sym_decrypt(i.counterparty_tax_id, :key)::text "
+                "AS counterparty_tax_id, i.total_amount "
+                "FROM invoices i JOIN companies c ON c.id = i.company_id "
+                "WHERE i.company_id = :company_id AND i.uploaded_file_id <> :file_id "
+                "UNION ALL "
+                "SELECT e.uploaded_file_id, NULL AS invoice_id, e.invoice_number, "
+                "pgp_sym_decrypt(c.cif, :key)::text AS own_tax_id, "
+                "pgp_sym_decrypt(e.counterparty_tax_id, :key)::text "
+                "AS counterparty_tax_id, e.total_amount "
+                "FROM ocr_extractions e "
+                "JOIN uploaded_files f ON f.id = e.uploaded_file_id "
+                "JOIN companies c ON c.id = f.company_id "
+                "WHERE f.company_id = :company_id AND e.uploaded_file_id <> :file_id "
+                "UNION ALL "
+                "SELECT d.uploaded_file_id, NULL AS invoice_id, d.invoice_number, "
+                "pgp_sym_decrypt(c.cif, :key)::text AS own_tax_id, "
+                "pgp_sym_decrypt(d.counterparty_tax_id, :key)::text AS counterparty_tax_id, "
+                "d.total_amount "
+                "FROM review_drafts d "
+                "JOIN uploaded_files f ON f.id = d.uploaded_file_id "
+                "JOIN companies c ON c.id = f.company_id "
+                "WHERE f.company_id = :company_id AND d.uploaded_file_id <> :file_id"
+            ),
+            {
+                "company_id": str(company_id),
+                "file_id": str(uploaded_file_id),
+                "key": encryption_key,
+            },
+        )
+    ).all()
+    return [
+        DuplicateCandidate(
+            uploaded_file_id=row.uploaded_file_id,
+            invoice_id=row.invoice_id,
+            invoice_number=row.invoice_number,
+            own_tax_id=row.own_tax_id,
+            counterparty_tax_id=row.counterparty_tax_id,
+            total_amount=row.total_amount,
+        )
+        for row in rows
+    ]
 
 
 async def insert_invoice(
@@ -620,31 +692,40 @@ async def list_edits(
 
 
 async def list_history(
-    session: AsyncSession, *, uploaded_by: UUID | None = None
-) -> list[HistoryEntry]:
-    """Últimos documentos aceptados del contexto, la más reciente primero (S6.12).
+    session: AsyncSession, *, uploaded_by: UUID | None = None,
+    cursor_created_at: datetime | None = None, cursor_id: UUID | None = None,
+    limit: int = HISTORY_LIMIT,
+) -> HistoryPage:
+    """Facturas confirmadas de los últimos cuatro meses, más recientes primero (R-056).
 
-    La RLS de `uploaded_files` acota tenant y empresa. `uploaded_by` añade la frontera por usuario
-    para empleados; `None` conserva la vista de asesoría del administrador. Excluye solo las raíces
-    ligadas a factura de prueba y ordena también por id para un corte estable con igual timestamp.
+    La RLS acota el tenant. El usuario conserva además su frontera de propietario y el cursor usa la
+    misma pareja fecha/id que inbox para no saltar ni duplicar filas.
     """
     rows = (
         await session.execute(
             text(
                 "SELECT f.id, f.status, f.created_at, f.direction FROM uploaded_files f "
-                "WHERE ((:uploaded_by)::uuid IS NULL OR f.uploaded_by = (:uploaded_by)::uuid) "
-                "AND NOT EXISTS (SELECT 1 FROM invoices i "
-                "                WHERE i.uploaded_file_id = f.id AND i.is_test = true) "
+                "JOIN invoices i ON i.uploaded_file_id = f.id "
+                "WHERE i.status = 'confirmed' "
+                "AND f.created_at >= current_timestamp - interval '4 months' "
+                "AND i.is_test = false "
+                "AND ((:uploaded_by)::uuid IS NULL OR f.uploaded_by = (:uploaded_by)::uuid) "
+                "AND (CAST(:cursor_created_at AS timestamptz) IS NULL OR "
+                "     f.created_at < CAST(:cursor_created_at AS timestamptz) OR "
+                "     (f.created_at = CAST(:cursor_created_at AS timestamptz) "
+                "      AND f.id < CAST(:cursor_id AS uuid))) "
                 "ORDER BY f.created_at DESC, f.id DESC "
                 "LIMIT :limit"
             ),
             {
-                "limit": HISTORY_LIMIT,
+                "limit": limit + 1,
                 "uploaded_by": str(uploaded_by) if uploaded_by is not None else None,
+                "cursor_created_at": cursor_created_at,
+                "cursor_id": str(cursor_id) if cursor_id is not None else None,
             },
         )
     ).all()
-    return [
+    entries = [
         HistoryEntry(
             id=row.id,
             status=row.status,
@@ -653,6 +734,7 @@ async def list_history(
         )
         for row in rows
     ]
+    return HistoryPage(entries=entries[:limit], has_more=len(entries) > limit)
 
 
 async def list_inbox(
@@ -674,7 +756,7 @@ async def list_inbox(
                 "FROM uploaded_files f "
                 "WHERE f.uploaded_by = :uploaded_by "
                 "  AND NOT EXISTS (SELECT 1 FROM invoices i "
-                "                  WHERE i.uploaded_file_id = f.id AND i.is_test = true) "
+                "                  WHERE i.uploaded_file_id = f.id) "
                 "  AND (CAST(:cursor_created_at AS timestamptz) IS NULL OR "
                 "       f.created_at < CAST(:cursor_created_at AS timestamptz) OR "
                 "       (f.created_at = CAST(:cursor_created_at AS timestamptz) "
@@ -701,7 +783,7 @@ async def list_inbox(
                 "FROM uploaded_files f "
                 "WHERE f.uploaded_by = :uploaded_by "
                 "  AND NOT EXISTS (SELECT 1 FROM invoices i "
-                "                  WHERE i.uploaded_file_id = f.id AND i.is_test = true)"
+                "                  WHERE i.uploaded_file_id = f.id)"
             ),
             {"uploaded_by": str(uploaded_by)},
         )

@@ -1342,6 +1342,20 @@
         "summary": "Invoice History",
         "description": "\u00daltimos documentos aceptados del contexto del usuario (S6.12). Solo lectura.",
         "operationId": "invoice_history_api_v1_invoices_history_get",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "default": null, "title": "Cursor" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "maximum": 50, "minimum": 1, "default": 20, "title": "Limit" }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -4418,11 +4432,16 @@
             },
             "type": "array",
             "title": "Entries"
+          },
+          "next_cursor": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Next Cursor"
           }
         },
         "type": "object",
         "required": [
-          "entries"
+          "entries",
+          "next_cursor"
         ],
         "title": "HistoryOut",
         "description": "Respuesta de `GET /invoices/history`: \u00faltimos env\u00edos, m\u00e1s reciente primero."

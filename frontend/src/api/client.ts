@@ -20,6 +20,7 @@ type MultipartPath = '/api/v1/uploads' | '/api/v1/uploads/batch'
 // Contrato S6.13 pendiente de que el backend publique OpenAPI actualizado. Se acota la ruta en
 // origen para no aceptar URLs arbitrarias mientras `schema.d.ts` aún no la puede describir.
 type RetryOcrPath = `/api/v1/uploads/${string}/retry-ocr`
+type DeleteUploadPath = `/api/v1/uploads/${string}`
 
 /**
  * Envía ficheros multipart sin forzar un `FormData` a través del tipo JSON que FastAPI publica
@@ -64,6 +65,26 @@ export async function postJson(path: RetryOcrPath): Promise<Response> {
 
   headers.set('Authorization', `Bearer ${newToken}`)
   response = await fetch(path, { method: 'POST', headers })
+  return response
+}
+
+/** Borra un fichero pendiente manteniendo el mismo refresh transparente que el resto de acciones. */
+export async function deleteUpload(path: DeleteUploadPath): Promise<Response> {
+  const headers = new Headers()
+  const token = getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  let response = await fetch(path, { method: 'DELETE', headers })
+  if (response.status !== 401) return response
+
+  const newToken = await refreshOnce()
+  if (!newToken) {
+    notifyUnauthorized()
+    return response
+  }
+
+  headers.set('Authorization', `Bearer ${newToken}`)
+  response = await fetch(path, { method: 'DELETE', headers })
   return response
 }
 

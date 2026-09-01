@@ -385,7 +385,7 @@ async def test_c12b_fallo_al_registrar_no_deja_objeto_huerfano(
     async def _boom(*_a: object, **_k: object) -> None:
         raise RuntimeError("fallo al insertar (test)")
 
-    monkeypatch.setattr(repository, "insert_uploaded_file", _boom)
+    monkeypatch.setattr(repository, "insert_uploaded_file_with_audit", _boom)
 
     resp = await client.post(
         UPLOADS,

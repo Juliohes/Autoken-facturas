@@ -275,9 +275,9 @@ async def test_s42_rls_tapa_la_lectura_directa_de_tenant_branding_sin_contexto(
 # `/` inicial a propósito: un `src` de icono relativo resuelve contra la URL del propio manifest
 # (no la del documento), y el manifest ya no vive en la raíz (auditoría de arquitectura de S4.3).
 _DEFAULT_ICONS = [
-    {"src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
-    {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
-    {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    {"src": "/icons/autofactu-icon-192-rounded.svg", "sizes": "192x192", "type": "image/svg+xml"},
+    {"src": "/icons/autofactu-icon-512-rounded.svg", "sizes": "512x512", "type": "image/svg+xml"},
+    {"src": "/icons/autofactu-icon-512-rounded.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable"},
 ]
 
 
@@ -317,8 +317,8 @@ async def test_s43_defensivo_manifest_sin_fila_de_tenant_branding_cae_a_los_valo
     body = resp.json()
     assert body["name"] == "Autoken Facturas"
     assert body["short_name"] == "Facturas"
-    assert body["theme_color"] == "#0f172a"
-    assert body["background_color"] == "#0f172a"
+    assert body["theme_color"] == "#021232"
+    assert body["background_color"] == "#021232"
     assert body["display"] == "standalone"
     assert body["start_url"] == "/"
     assert body["icons"] == _DEFAULT_ICONS
@@ -345,8 +345,8 @@ async def test_s43_c2_alta_minima_via_platform_admin_manifest_cae_al_nombre_del_
     body = resp.json()
     assert body["name"] == "Mínima SL"
     assert body["short_name"] == "Mínima SL"
-    assert body["theme_color"] == "#0f172a"
-    assert body["background_color"] == "#0f172a"
+    assert body["theme_color"] == "#021232"
+    assert body["background_color"] == "#021232"
     assert body["icons"] == _DEFAULT_ICONS
 
 

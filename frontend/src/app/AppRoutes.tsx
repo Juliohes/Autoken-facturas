@@ -2,7 +2,6 @@
 // (solo cablea props/navegación, spec §4 invariante). El control de acceso real vive en el
 // backend; aquí solo se evita mostrar enlaces/pantallas que el backend rechazaría de todos modos.
 import {
-  Link,
   Navigate,
   Route,
   Routes,
@@ -18,8 +17,10 @@ import { CaptureScreen } from '../features/capture/CaptureScreen'
 import type { Direction } from '../features/capture/types'
 import { CompaniesPanel } from '../features/companies/CompaniesPanel'
 import { ConfirmationScreen } from '../features/confirmation/ConfirmationScreen'
-import { InvoiceHistory } from '../features/history/InvoiceHistory'
+import { PostConfirmDialog } from '../features/confirmation/PostConfirmDialog'
 import { InvoiceInbox } from '../features/inbox/InvoiceInbox'
+import { InvoiceHistory } from '../features/history/InvoiceHistory'
+import { UploadFileScreen } from '../features/upload/UploadFileScreen'
 import { PendingSupervisionPanel } from '../features/supervision/PendingSupervisionPanel'
 import { SupervisionReviewScreen } from '../features/supervision/SupervisionReviewScreen'
 import { InvoicesPanel } from '../features/panel/InvoicesPanel'
@@ -92,30 +93,7 @@ function InvoicesRoute() {
 }
 
 function CaptureRoute() {
-  const [accepted, setAccepted] = useState<{ fileId: string; direction: Direction; lowSharpness: boolean } | null>(null)
-  if (accepted) {
-    return (
-      <section className="mx-auto flex max-w-xl flex-col gap-4 p-6 pt-20 text-slate-100" aria-label="Factura aceptada">
-        <h1 className="text-2xl font-semibold">Factura aceptada</h1>
-        <p className="text-slate-300">La estamos procesando. Puedes continuar trabajando y revisarla cuando esté lista.</p>
-        <div className="flex flex-wrap gap-3">
-          <Link to={ROUTES.confirmation(accepted.fileId)} state={{ direction: accepted.direction, lowSharpness: accepted.lowSharpness }} className="rounded-md bg-emerald-600 px-4 py-3 font-medium text-white">
-            Revisar cuando esté lista
-          </Link>
-          <Link to={ROUTES.inbox} className="rounded-md border border-slate-600 px-4 py-3 font-medium text-slate-100">
-            Ir a Mis facturas
-          </Link>
-        </div>
-      </section>
-    )
-  }
-  return (
-    <CaptureScreen
-      onUploaded={(fileId, direction, lowSharpness) =>
-        setAccepted({ fileId, direction, lowSharpness })
-      }
-    />
-  )
+  return <CaptureScreen onUploaded={() => undefined} />
 }
 
 function ConfirmationRoute() {
@@ -123,15 +101,36 @@ function ConfirmationRoute() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const location = useLocation()
+  const [nextInvoice, setNextInvoice] = useState<Awaited<ReturnType<typeof navigateAfterConfirm>>>(null)
   if (!fileId) return <Navigate to={ROUTES.history} replace />
   const direction = (location.state as { direction?: Direction } | null)?.direction
   return (
-    <ConfirmationScreen
-      fileId={fileId}
-      direction={direction}
-      onConfirmed={() => void navigateAfterConfirm(queryClient, navigate)}
-      onRetry={() => navigate(ROUTES.history)}
-    />
+    <>
+      <ConfirmationScreen
+        fileId={fileId}
+        direction={direction}
+        onConfirmed={async () => {
+          const next = await navigateAfterConfirm(queryClient)
+          if (next) setNextInvoice(next)
+          else navigate(ROUTES.inbox)
+        }}
+        onRetry={() => navigate(ROUTES.history)}
+        onDeleted={() => navigate(ROUTES.inbox, { state: { message: 'La factura no se ha confirmado ni guardado.' } })}
+      />
+      {nextInvoice && (
+        <PostConfirmDialog
+          onReview={() => {
+            const next = nextInvoice
+            setNextInvoice(null)
+            navigate(ROUTES.confirmation(next.id), { state: { direction: next.direction ?? undefined } })
+          }}
+          onClose={() => {
+            setNextInvoice(null)
+            navigate(ROUTES.inbox)
+          }}
+        />
+      )}
+    </>
   )
 }
 
@@ -151,7 +150,7 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
     // sin esto, el fondo por defecto es blanco y ese texto queda casi invisible (hallazgo real,
     // reportado por Julio al entrar de verdad). El login ya tenía su propio fondo aparte
     // (`LoginScreen`); este envoltorio cubre el resto del árbol autenticado.
-    <div className="min-h-screen bg-slate-900 text-slate-100">
+    <div className="tn-app-shell min-h-screen">
       {status === 'authenticated' && user && (
         <Menu role={user.role} isAdminTech={user.is_admin_tech} theme={theme} />
       )}
@@ -251,6 +250,14 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
           element={
             <ProtectedRoute path={ROUTES.capture}>
               <CaptureRoute />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.upload}
+          element={
+            <ProtectedRoute path={ROUTES.upload}>
+              <UploadFileScreen />
             </ProtectedRoute>
           }
         />

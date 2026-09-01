@@ -3,6 +3,103 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: light;
+
+    --app-background: #f4f7fb;
+    --surface: #ffffff;
+    --surface-soft: #f8fafc;
+    --navy-glass: rgba(2, 18, 49, 0.84);
+    --navy-glass-border: rgba(255, 255, 255, 0.25);
+    --brand-navy: var(--color-secondary, #021231);
+    --brand-navy-rgb: 2, 18, 49;
+    --brand-navy-dark: var(--brand-navy);
+    --brand-navy-light: var(--brand-navy);
+    --brand-cyan: var(--brand-navy);
+    --brand-cyan-dark: var(--brand-navy);
+    --brand-cyan-light: #ffffff;
+    --brand-orange: #fa6703;
+    --brand-orange-dark: var(--brand-orange);
+    --brand-orange-light: #ffe1d1;
+    --background-primary: #f4f7fb;
+    --background-secondary: #edf3f8;
+    --surface-primary: #ffffff;
+    --surface-secondary: #f8fafc;
+    --text-primary: #101828;
+    --text-secondary: #667085;
+    --text-tertiary: #98a2b3;
+    --text-on-navy: #f7fbff;
+    --border-default: #e4e7ec;
+    --divider-default: #eaecf0;
+    --success: #20b486;
+    --success-surface: #eafaf4;
+    --warning: var(--brand-orange);
+    --warning-surface: var(--brand-orange-light);
+    --error: #e5484d;
+    --error-surface: #fff0f0;
+    --glass-navy-background: rgba(2, 18, 49, 0.84);
+    --glass-navy-background-strong: rgba(2, 18, 49, 0.94);
+    --glass-navy-background-soft: rgba(2, 18, 49, 0.72);
+    --glass-navy-border: rgba(255, 255, 255, 0.25);
+    --glass-navy-highlight: rgba(255, 255, 255, 0.34);
+
+    /* Alias de las clases existentes para no cambiar contratos visuales de los componentes. */
+    --color-primary: #fa6703;
+    --color-secondary: #021231;
+    --tn-accent-wash: color-mix(in srgb, var(--brand-orange) 16%, transparent);
+    --tn-accent-ink: var(--brand-navy);
+    --tn-background: var(--background-primary);
+    --tn-background-secondary: var(--background-secondary);
+    --tn-surface: var(--surface-primary);
+    --tn-surface-subtle: var(--surface-secondary);
+    --tn-text-primary: var(--text-primary);
+    --tn-text-secondary: var(--text-secondary);
+    --tn-text-tertiary: var(--text-tertiary);
+    --tn-text-on-glass: var(--text-on-navy);
+    --tn-navy-950: var(--brand-navy);
+    --tn-navy-900: var(--brand-navy);
+    --tn-navy-800: var(--brand-navy);
+    --tn-navy-700: var(--brand-navy);
+    --tn-navy-600: var(--brand-navy);
+    --tn-cyan-500: var(--brand-navy);
+    --tn-cyan-600: var(--brand-navy);
+    --tn-cyan-edge: var(--brand-orange);
+    --tn-success: var(--success);
+    --tn-success-surface: var(--success-surface);
+    --tn-warning: var(--brand-orange);
+    --tn-warning-surface: var(--warning-surface);
+    --tn-error: var(--error);
+    --tn-error-surface: var(--error-surface);
+    --tn-draft: var(--text-secondary);
+    --tn-draft-surface: #f2f4f7;
+    --tn-border: var(--border-default);
+    --tn-divider: var(--divider-default);
+    --tn-glass-background: var(--glass-navy-background);
+    --tn-glass-background-strong: var(--glass-navy-background-strong);
+    --tn-glass-background-soft: var(--glass-navy-background-soft);
+    --tn-glass-border: var(--glass-navy-border);
+    --tn-glass-highlight: var(--glass-navy-highlight);
+    --tn-glass-shadow: 0 14px 34px rgba(var(--brand-navy-rgb), 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.34), inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+    --tn-radius-xs: 8px;
+    --tn-radius-sm: 12px;
+    --tn-radius-md: 16px;
+    --tn-radius-lg: 22px;
+    --tn-radius-xl: 28px;
+    --tn-radius-pill: 999px;
+    --tn-shadow-card: 0 5px 18px rgba(16, 24, 40, 0.07);
+    --tn-shadow-glass: var(--tn-glass-shadow);
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background: var(--background-primary);
+    color: var(--tn-text-primary);
+    overflow-x: hidden;
+  }
+
   /* El texto de un botón nunca debe partirse en 2 líneas, en ninguna pantalla (plataforma o
      tenant). Regla global en vez de tocar cada botón uno a uno, mismo patrón que las paletas
      slate/emerald de tailwind.config.js. Los contenedores que agrupan varios botones deben usar
@@ -10,5 +107,830 @@
      el texto dentro de uno. */
   button {
     white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
+@layer components {
+  .tn-app-shell {
+    position: relative;
+    isolation: isolate;
+    min-height: 100dvh;
+    color: var(--tn-text-primary);
+    background: var(--background-primary);
+  }
+
+  .tn-top-nav {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    border-color: var(--glass-navy-border);
+    border-radius: 0;
+    background: var(--brand-navy) !important;
+  }
+
+  .tn-user-nav {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: var(--surface-primary);
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  .tn-user-nav-links {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 41;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding: 0 8px max(8px, env(safe-area-inset-bottom));
+    background: var(--surface-primary);
+    box-shadow: 0 -4px 16px rgba(2, 18, 49, 0.1);
+  }
+
+  .tn-user-nav-links a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+  }
+
+  @media (min-width: 768px) {
+    .tn-user-nav {
+      position: sticky;
+      top: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+    }
+
+    .tn-user-nav-links {
+      position: static;
+      display: flex;
+      gap: 12px;
+      padding: 8px 0;
+    }
+
+    .tn-user-nav-links a {
+      padding: 0 12px;
+      font-size: 0.875rem;
+    }
+  }
+
+  .tn-login-shell {
+    padding: 24px;
+    background: var(--background-primary);
+    color: var(--text-primary);
+  }
+
+  .tn-login-card {
+    color: var(--text-primary);
+    background: var(--surface-primary);
+    border: 1px solid var(--border-default);
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-login-label {
+    color: var(--text-secondary);
+  }
+
+  .tn-login-input {
+    color: var(--text-primary) !important;
+    background: var(--surface-primary) !important;
+    border: 1px solid var(--border-default) !important;
+  }
+
+  .tn-login-input:focus {
+    border-color: var(--brand-orange) !important;
+    outline: 3px solid rgba(250, 103, 3, 0.22);
+    outline-offset: 1px;
+  }
+
+  .tn-liquid-glass input,
+  .tn-liquid-glass select,
+  .tn-liquid-glass textarea {
+    color: var(--text-primary) !important;
+    background: var(--surface-primary) !important;
+    border-color: var(--border-default) !important;
+  }
+
+  .tn-brand-logo {
+    background: transparent;
+    object-fit: contain;
+  }
+
+  .tn-password-field {
+    position: relative;
+    display: block;
+  }
+
+  .tn-password-field .tn-login-input {
+    width: 100%;
+    padding-right: 42px;
+  }
+
+  .tn-password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    border: 0;
+    border-radius: 8px;
+    color: var(--brand-navy);
+    background: transparent;
+    transform: translateY(-50%);
+  }
+
+  .tn-password-toggle:hover {
+    color: #fff;
+    background: rgba(141, 230, 255, 0.14);
+  }
+
+  .tn-password-toggle:focus-visible {
+    outline: 2px solid var(--tn-cyan-edge);
+    outline-offset: 1px;
+  }
+
+  .tn-password-toggle svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .tn-liquid-glass {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    color: var(--tn-text-on-glass);
+    background: linear-gradient(145deg, rgba(15, 42, 82, 0.86), rgba(2, 18, 49, 0.94)) !important;
+    border: 1px solid var(--glass-navy-border);
+    border-radius: var(--tn-radius-lg);
+    box-shadow: var(--tn-shadow-glass);
+    -webkit-backdrop-filter: blur(18px) saturate(145%);
+    backdrop-filter: blur(18px) saturate(145%);
+    transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .tn-liquid-glass::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    background: linear-gradient(130deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.1) 20%, transparent 48%);
+    pointer-events: none;
+  }
+
+  .tn-liquid-glass::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 1px;
+    border-radius: calc(var(--tn-radius-lg) - 1px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 1px 0 0 rgba(141, 230, 255, 0.12), inset -1px 0 0 rgba(141, 230, 255, 0.08);
+    pointer-events: none;
+  }
+
+  .tn-liquid-glass[data-interactive='true']:hover {
+    border-color: rgba(141, 230, 255, 0.86);
+    box-shadow: 0 16px 38px rgba(2, 18, 49, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  }
+
+  .tn-liquid-glass[data-interactive='true']:active {
+    transform: scale(0.985);
+  }
+
+  .tn-liquid-glass:focus-visible {
+    outline: 3px solid rgba(25, 191, 242, 0.38);
+    outline-offset: 3px;
+  }
+
+  [data-liquid-glass='off'] .tn-liquid-glass {
+    background: var(--brand-navy) !important;
+    border-color: rgba(255, 255, 255, 0.18);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  [data-liquid-glass='off'] .tn-liquid-glass::before,
+  [data-liquid-glass='off'] .tn-liquid-glass::after {
+    display: none;
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .tn-liquid-glass {
+      background: var(--brand-navy) !important;
+    }
+  }
+
+  .tn-panel-page {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    color: var(--text-primary);
+    background: var(--surface-primary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--tn-radius-xl);
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-panel-page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: transparent;
+    pointer-events: none;
+  }
+
+  /* Las pantallas existentes usan una paleta slate diseñada para el shell oscuro anterior. */
+  .tn-panel-page .text-slate-100 { color: var(--text-primary) !important; }
+  .tn-panel-page .text-slate-200 { color: var(--text-primary) !important; }
+  .tn-panel-page .text-slate-300 { color: var(--text-secondary) !important; }
+  .tn-panel-page .text-slate-400 { color: var(--text-secondary) !important; }
+  .tn-panel-page .text-slate-500 { color: var(--text-tertiary) !important; }
+  .tn-panel-page .text-emerald-400,
+  .tn-panel-page .text-emerald-300,
+  .tn-panel-page .text-emerald-200 { color: #16794a !important; }
+  .tn-panel-page .text-amber-400,
+  .tn-panel-page .text-amber-300,
+  .tn-panel-page .text-amber-200,
+  .tn-panel-page .text-amber-100 { color: var(--brand-orange-dark) !important; }
+  .tn-panel-page .text-red-400,
+  .tn-panel-page .text-red-300,
+  .tn-panel-page .text-red-200 { color: var(--error) !important; }
+  .tn-panel-page [class~='bg-slate-800'],
+  .tn-panel-page [class*='bg-slate-800/'] {
+    background: var(--surface-secondary) !important;
+  }
+  .tn-panel-page [class~='bg-slate-900'],
+  .tn-panel-page [class*='bg-slate-900/'] {
+    background: var(--surface-primary) !important;
+  }
+  .tn-panel-page [class~='bg-slate-700'] {
+    background: var(--surface-secondary) !important;
+  }
+  .tn-panel-page [class~='border-slate-700'], .tn-panel-page [class~='border-slate-600'] {
+    border-color: var(--border-default) !important;
+  }
+  .tn-panel-page [class~='bg-emerald-600'] {
+    background: var(--brand-cyan) !important;
+    border: 1px solid var(--brand-cyan-dark);
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-panel-page [class~='border-emerald-600'], .tn-panel-page [class~='border-emerald-700'] {
+    border-color: var(--tn-cyan-600) !important;
+  }
+
+  .tn-panel-page [class~='divide-slate-700'] > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--divider-default) !important;
+  }
+
+  .tn-panel-page .tn-camera-stage {
+    color: #f7fbff;
+    background: var(--tn-navy-950) !important;
+  }
+
+  .tn-panel-page .tn-camera-stage .text-slate-100,
+  .tn-panel-page .tn-camera-stage .text-slate-200,
+  .tn-panel-page .tn-camera-stage .text-slate-300,
+  .tn-panel-page .tn-camera-stage .text-slate-400 {
+    color: #f7fbff !important;
+  }
+
+  .tn-liquid-glass .text-slate-100,
+  .tn-liquid-glass .text-slate-200,
+  .tn-liquid-glass .text-slate-300 {
+    color: #f7fbff !important;
+  }
+
+  .tn-liquid-glass .text-slate-400,
+  .tn-liquid-glass .text-slate-500 {
+    color: var(--text-secondary) !important;
+  }
+
+  .tn-solid-card {
+    color: var(--tn-text-primary);
+    background: var(--tn-surface);
+    border: 1px solid var(--tn-border);
+    border-radius: var(--tn-radius-md);
+    box-shadow: var(--tn-shadow-card);
+    -webkit-backdrop-filter: blur(14px) saturate(115%);
+    backdrop-filter: blur(14px) saturate(115%);
+  }
+
+  .tn-glass-action {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid var(--tn-glass-border) !important;
+    border-radius: var(--tn-radius-md) !important;
+    color: #f7fbff !important;
+    background: var(--tn-glass-background) !important;
+    box-shadow: 0 10px 24px rgba(2, 18, 49, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+    -webkit-backdrop-filter: blur(12px) saturate(125%);
+    backdrop-filter: blur(12px) saturate(125%);
+    transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 220ms ease, box-shadow 220ms ease;
+  }
+
+  .tn-glass-action:hover:not(:disabled) {
+    border-color: var(--tn-cyan-edge) !important;
+    box-shadow: 0 14px 28px rgba(2, 18, 49, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.46);
+  }
+
+  .tn-glass-action:active:not(:disabled) {
+    transform: translateY(1px) scale(0.985);
+  }
+
+  .tn-panel-page .tn-glass-action {
+    color: #fff !important;
+  }
+
+  /* La aplicación tenía muchos botones antiguos sin una clase propia. Esta capa les da el mismo
+     tratamiento glass sin tocar botones con estado semántico explícito (éxito, error o aviso). */
+  .tn-panel-page button:not(.tn-primary-action):not(.tn-capture-segment):not(.tn-capture-secondary-action):not([class*='bg-emerald']):not([class*='bg-red']):not([class*='bg-sky']):not([class*='bg-amber']),
+  .tn-panel-page a[class*='border-'] {
+    min-height: 44px;
+    border: 1px solid var(--tn-glass-border) !important;
+    border-radius: var(--tn-radius-md) !important;
+    color: var(--text-primary) !important;
+    background: var(--surface-secondary) !important;
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-panel-page button:not(.tn-primary-action):not(.tn-capture-segment):not(.tn-capture-secondary-action):not([class*='bg-emerald']):not([class*='bg-red']):not([class*='bg-sky']):not([class*='bg-amber']):hover:not(:disabled),
+  .tn-panel-page a[class*='border-']:hover {
+    border-color: var(--tn-cyan-edge) !important;
+    box-shadow: 0 14px 28px rgba(2, 18, 49, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.46);
+  }
+
+  .tn-primary-action {
+    min-height: 56px;
+    border: 1px solid var(--brand-navy) !important;
+    border-radius: var(--tn-radius-pill) !important;
+    color: #fff !important;
+    background: var(--brand-navy) !important;
+    box-shadow: 0 10px 24px rgba(var(--brand-navy-rgb), 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+    transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), filter 140ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .tn-primary-action:hover:not(:disabled) {
+    filter: brightness(1.035);
+    box-shadow: 0 14px 28px rgba(2, 18, 49, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+
+  .tn-primary-action:active:not(:disabled) {
+    transform: translateY(1px) scale(0.985);
+  }
+
+  .tn-secondary-action {
+    color: var(--text-on-navy) !important;
+    background: var(--brand-navy) !important;
+    border-color: var(--tn-glass-border) !important;
+    box-shadow: var(--tn-shadow-glass);
+  }
+
+  .tn-capture-screen {
+    background: color-mix(in srgb, var(--surface-primary) 62%, transparent);
+    border: 1px solid rgba(255, 255, 255, 0.68);
+    border-radius: var(--tn-radius-xl);
+    box-shadow: var(--tn-shadow-glass);
+    -webkit-backdrop-filter: blur(20px) saturate(135%);
+    backdrop-filter: blur(20px) saturate(135%);
+  }
+
+  .tn-capture-screen::before {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.06) 42%, transparent 72%);
+  }
+
+  .tn-capture-entry-screen {
+    display: flex;
+    min-height: calc(100dvh - 72px);
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .tn-capture-entry-screen > * {
+    width: min(100%, 620px);
+  }
+
+  .tn-capture-entry-screen > .tn-direction-toggle {
+    width: fit-content;
+  }
+
+  .tn-capture-entry-screen > .space-y-5 {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .tn-capture-segmented {
+    display: inline-flex;
+    width: min(100%, 430px);
+    max-width: 100%;
+    height: 96px;
+    overflow: visible;
+    border: 1px solid var(--tn-glass-border);
+    border-radius: 28px;
+  }
+
+  .tn-capture-segment {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    height: 96px;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 0 28px;
+    border: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    transition: background-color 160ms ease, color 160ms ease, transform 160ms ease, filter 160ms ease;
+  }
+
+  .tn-capture-segment-primary {
+    z-index: 2;
+    color: #fff;
+    background: var(--brand-navy) !important;
+    border-radius: 28px;
+  }
+
+  .tn-capture-segment-secondary {
+    z-index: 1;
+    flex: 0 0 92px;
+    width: 92px;
+    margin-left: -28px;
+    flex-direction: column;
+    gap: 5px;
+    padding: 0 8px 0 36px;
+    color: var(--brand-navy);
+    background: color-mix(in srgb, white 72%, transparent);
+    border: 1px solid rgba(22, 75, 130, 0.3);
+    -webkit-backdrop-filter: blur(14px) saturate(145%);
+    backdrop-filter: blur(14px) saturate(145%);
+    border-radius: 0 28px 28px 0;
+  }
+
+  .tn-capture-segment-secondary[aria-pressed='true'] {
+    color: #fff;
+    background: var(--brand-cyan);
+  }
+
+  .tn-capture-segment-secondary .tn-capture-icon {
+    width: 25px;
+    height: 25px;
+  }
+
+  .tn-capture-segment:hover {
+    filter: brightness(1.04);
+  }
+
+  .tn-capture-segment:active {
+    transform: scale(0.985);
+  }
+
+  .tn-capture-segment:focus-visible {
+    position: relative;
+    z-index: 3;
+    outline: 3px solid rgba(25, 191, 242, 0.45);
+    outline-offset: -3px;
+  }
+
+  .tn-capture-secondary-actions {
+    display: flex;
+    width: min(100%, 360px);
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .tn-capture-secondary-action {
+    display: inline-flex;
+    min-height: 46px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 7px;
+    border: 1px solid var(--tn-glass-border);
+    border-radius: var(--tn-radius-md);
+    color: #f7fbff !important;
+    background: color-mix(in srgb, white 64%, transparent);
+    box-shadow: 0 8px 18px rgba(2, 18, 49, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .tn-capture-secondary-action:hover {
+    border-color: var(--tn-cyan-edge);
+    box-shadow: 0 12px 24px rgba(2, 18, 49, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  }
+
+  .tn-capture-secondary-action:active {
+    transform: scale(0.985);
+  }
+
+  .tn-capture-upload-action {
+    color: var(--brand-navy) !important;
+    background: var(--brand-orange) !important;
+    border-color: var(--brand-orange) !important;
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-capture-upload-action:hover {
+    border-color: var(--brand-orange-dark) !important;
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-capture-icon {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+  }
+
+  .tn-direction-toggle {
+    width: fit-content;
+    padding: 4px;
+    border: 1px solid var(--tn-glass-border);
+    border-radius: var(--tn-radius-pill);
+    background: rgba(2, 18, 49, 0.12);
+    box-shadow: inset 0 1px 2px rgba(2, 18, 49, 0.12);
+  }
+
+  .tn-toggle-option {
+    min-width: 108px;
+    border-color: transparent !important;
+    border-radius: var(--tn-radius-pill) !important;
+    color: var(--brand-navy) !important;
+    background: transparent !important;
+    text-align: center;
+    transition: color 140ms ease, background 180ms ease, box-shadow 180ms ease;
+  }
+
+  .tn-toggle-option:has(input:checked) {
+    color: #fff !important;
+    background: var(--brand-navy) !important;
+    box-shadow: 0 5px 12px rgba(var(--brand-navy-rgb), 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  }
+
+
+  .tn-toggle-option:focus-within {
+    outline: 3px solid rgba(25, 191, 242, 0.28);
+    outline-offset: 2px;
+  }
+
+  .tn-preview-shell {
+    color: var(--text-primary) !important;
+  }
+
+  .tn-preview-image {
+    background: var(--tn-surface) !important;
+    border-color: var(--tn-border) !important;
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-inbox-item {
+    margin-bottom: 10px;
+    padding: 16px !important;
+    background: var(--surface-primary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--tn-radius-md);
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-summary-card {
+    background: var(--glass-navy-background) !important;
+    border-color: var(--glass-navy-border) !important;
+    box-shadow: var(--tn-shadow-glass);
+    color: var(--text-on-navy) !important;
+  }
+
+  .tn-summary-card p:first-child {
+    color: var(--tn-cyan-edge) !important;
+  }
+
+  .tn-capture-stage {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .tn-capture-stage-body {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .tn-capture-stage-controls {
+    flex: 0 0 auto;
+    max-height: 45dvh;
+    overflow-y: auto;
+  }
+
+  .tn-camera-viewport-boundary {
+    border: 0;
+  }
+
+  .tn-document-overlay {
+    color: var(--brand-orange);
+  }
+
+  .camera-toolbar,
+  .camera-toolbar label,
+  .camera-control {
+    color: var(--text-on-navy) !important;
+  }
+
+  .camera-mode-option {
+    border-color: rgba(255, 255, 255, 0.44) !important;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .camera-mode-option:has(input:checked) {
+    color: #fff !important;
+    border-color: rgba(255, 255, 255, 0.6) !important;
+    background: rgba(255, 255, 255, 0.22) !important;
+  }
+
+  .camera-control[aria-pressed='true'] {
+    color: var(--brand-orange) !important;
+    border-color: var(--brand-orange) !important;
+  }
+
+  .camera-capture-button {
+    min-width: 56px;
+    min-height: 56px;
+    color: var(--brand-navy) !important;
+    background: var(--brand-orange) !important;
+    border-color: var(--brand-orange-dark) !important;
+    box-shadow: none;
+  }
+
+  .tn-panel-page select,
+  .tn-panel-page input,
+  .tn-panel-page textarea {
+    color: var(--text-primary) !important;
+    background: var(--surface-primary) !important;
+    border-color: var(--border-default) !important;
+  }
+
+  .tn-panel-page select:focus,
+  .tn-panel-page input:focus,
+  .tn-panel-page textarea:focus {
+    border-color: var(--brand-orange) !important;
+    outline: 3px solid color-mix(in srgb, var(--brand-orange) 24%, transparent);
+    outline-offset: 1px;
+  }
+
+  .tn-panel-page table {
+    color: var(--text-primary);
+  }
+
+  .tn-panel-page thead {
+    color: var(--text-secondary);
+    background: var(--surface-secondary);
+  }
+
+  .tn-panel-page pre,
+  .tn-panel-page code {
+    color: var(--text-primary);
+    background: var(--surface-secondary);
+  }
+
+  .tn-panel-page .text-sky-200,
+  .tn-panel-page .text-sky-300,
+  .tn-panel-page .text-cyan-300 { color: var(--brand-navy) !important; }
+
+  .tn-login-shell button[type='submit'] {
+    min-height: 48px;
+    border: 1px solid var(--brand-navy);
+    border-radius: var(--tn-radius-md);
+    color: var(--brand-navy);
+    background: var(--brand-navy);
+    font-weight: 700;
+  }
+
+  .tn-auth-layout {
+    display: grid;
+    width: min(100%, 920px);
+    grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1fr);
+    gap: 24px;
+    align-items: stretch;
+  }
+
+  .tn-auth-brand {
+    display: flex;
+    min-height: 430px;
+    flex-direction: column;
+    justify-content: center;
+    padding: 40px;
+    background: var(--brand-navy) !important;
+  }
+
+  .tn-auth-brand .tn-brand-logo {
+    width: min(100%, 310px);
+    margin-bottom: 28px;
+  }
+
+  .tn-auth-brand h1 {
+    max-width: 14ch;
+    margin: 0;
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    line-height: 1.05;
+  }
+
+  .tn-auth-brand p {
+    max-width: 34ch;
+    margin-top: 16px;
+    color: color-mix(in srgb, var(--text-on-navy) 78%, transparent);
+  }
+
+  .tn-auth-form-card {
+    align-self: center;
+  }
+
+  @media (max-width: 720px) {
+    .tn-login-shell {
+      padding: 16px;
+    }
+
+    .tn-auth-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .tn-auth-brand {
+      min-height: 0;
+      padding: 28px;
+    }
+
+    .tn-auth-brand h1 {
+      font-size: 2rem;
+    }
+  }
+
+  @media (max-width: 419px) {
+    .tn-toggle-option {
+      min-width: 96px;
+    }
+
+    .tn-capture-segment {
+      gap: 7px;
+      padding-inline: 18px;
+      font-size: 1.125rem;
+    }
+
+    .tn-capture-segment-secondary {
+      flex-basis: 78px;
+      width: 78px;
+      margin-left: -28px;
+      padding-right: 6px;
+      padding-left: 32px;
+      font-size: 0.8125rem;
+    }
+
+    .tn-capture-segment .tn-capture-icon {
+      width: 22px;
+      height: 22px;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .tn-liquid-glass {
+    background: var(--tn-navy-950) !important;
+    border-color: #fff;
+  }
+}
+
+@media (forced-colors: active) {
+  .tn-liquid-glass, .tn-primary-action, .tn-solid-card {
+    forced-color-adjust: auto;
+    border: 1px solid CanvasText;
   }
 }
