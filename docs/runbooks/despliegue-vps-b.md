@@ -21,6 +21,15 @@ cd /opt/app-facturas/infrastructure
 docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
+Preferentemente ejecutar desde la raíz `bash infrastructure/deploy.sh`. El script reconstruye las imágenes,
+espera los healthchecks y comprueba que API y worker tienen el perfil `proxy`, que existe la red externa,
+que Traefik ha recibido un router `/api` y que el health público devuelve JSON `status=ok`.
+
+No usar `docker compose -f docker-compose.yml up` sin el overlay de producción: ese comando deja API
+fuera de la red `proxy` y Traefik no puede enrutar `/api/*`. El resultado visible es que Nginx devuelve
+`index.html` con HTTP 200 en vez de la respuesta JSON de FastAPI y ningún login puede completarse. Para
+las URLs, cuentas y pruebas de cada rol, ver `docs/runbooks/acceso-web.md`.
+
 ### Antivirus no disponible al subir una factura
 
 La subida se bloquea intencionadamente si ClamAV no puede escanear el fichero: nunca se desactiva el

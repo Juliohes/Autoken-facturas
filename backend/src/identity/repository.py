@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from companies.service import tenant_encryption_key as company_encryption_key
 from shared.config import get_settings
-from shared.db import platform_session, tenant_session
+from shared.db import platform_session, tenant_session, tenant_statement_session
 from shared.db import session as db_session
 from tenancy.resolution import ResolvedTenant
 
@@ -215,6 +215,22 @@ async def resolve_user_company(tenant_id: UUID, user_id: str) -> CompanyRef:
         raise MisconfiguredUserCompany
     row = rows[0]
     return CompanyRef(id=row.id, name=row.name)
+
+
+async def resolve_user_company_id(tenant_id: UUID, user_id: str) -> UUID:
+    """Resuelve solo el id de empresa para dependencias que no necesitan el nombre descifrado."""
+    async with tenant_statement_session() as sess:
+        rows = (
+            await sess.execute(
+                text(
+                    "SELECT id FROM public.resolve_user_company_id_for_app(:tid, :uid)"
+                ),
+                {"tid": str(tenant_id), "uid": user_id},
+            )
+        ).all()
+    if len(rows) != 1:
+        raise MisconfiguredUserCompany
+    return UUID(str(rows[0].id))
 
 
 async def find_platform_admin_for_reissue(email: str) -> tuple[str, bool] | None:

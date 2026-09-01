@@ -30,11 +30,13 @@ from identity.repository import (
     MisconfiguredUserCompany,
     read_platform_identity,
     resolve_user_company,
+    resolve_user_company_id,
 )
 from identity.scoping import RlsScope, RoleNotAuthorized, scope_for_role
 from identity.tokens import AccessClaims, InvalidAccessToken, decode_access_token
 from shared.config import get_settings
 from shared.db import platform_session, tenant_session
+from shared.metrics import observe_upload_phase
 from tenancy.constants import Role
 from tenancy.resolution import ResolvedTenant
 
@@ -71,6 +73,53 @@ class AuthContext:
     company: CompanyRef | None
 
 
+@dataclass(frozen=True)
+class UploadAuthContext:
+    """Identidad para intake sin retener una transacción durante I/O externo."""
+
+    user_id: UUID
+    tenant_id: UUID
+    role: str
+    tenant_slug: str
+    company_id: UUID | None
+
+
+def _tenant_claims(request: Request) -> tuple[AccessClaims, ResolvedTenant]:
+    """Valida token y host, compartido por identidades con y sin sesión persistente."""
+    claims = _decode_bearer_claims(request)
+    resolved: ResolvedTenant | None = getattr(request.state, "tenant", None)
+    if resolved is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if claims.tenant_id is None or str(resolved.id) != claims.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return claims, resolved
+
+
+async def current_upload_identity(request: Request) -> UploadAuthContext:
+    """Resuelve identidad y empresa sin abrir la transacción de la petición."""
+    claims, resolved = _tenant_claims(request)
+    try:
+        scope = scope_for_role(claims.role)
+    except RoleNotAuthorized as exc:
+        raise HTTPException(status_code=403, detail="Forbidden") from exc
+
+    company_id: UUID | None = None
+    if scope is RlsScope.COMPANY:
+        try:
+            with observe_upload_phase("identity"):
+                company_id = await resolve_user_company_id(resolved.id, claims.sub)
+        except MisconfiguredUserCompany as exc:
+            raise HTTPException(status_code=403, detail="Forbidden") from exc
+    identity = UploadAuthContext(
+        user_id=UUID(claims.sub),
+        tenant_id=resolved.id,
+        role=claims.role,
+        tenant_slug=resolved.slug,
+        company_id=company_id,
+    )
+    return identity
+
+
 async def current_identity(request: Request) -> AsyncGenerator[AuthContext, None]:
     """Valida el token, lo casa con el subdominio y cede una sesión dentro de `tenant_session`.
 
@@ -82,15 +131,7 @@ async def current_identity(request: Request) -> AsyncGenerator[AuthContext, None
     `company_id`, ve todo el tenant). El nivel de empresa se resuelve **por petición** (no en el
     token).
     """
-    claims = _decode_bearer_claims(request)
-
-    resolved: ResolvedTenant | None = getattr(request.state, "tenant", None)
-    if resolved is None:
-        # El subdominio no resuelve a un tenant activo (inexistente o suspendido): sin contexto, la
-        # sesión no puede cablearse a ningún tenant y el token deja de valer (C23).
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    if claims.tenant_id is None or str(resolved.id) != claims.tenant_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
+    claims, resolved = _tenant_claims(request)
 
     # Nivel de empresa según el rol, por allowlist explícita (denegar por defecto, ADR-0013 / A2):
     # `user` -> contexto de empresa (acotado a su única empresa activa); `tenant_admin` -> contexto

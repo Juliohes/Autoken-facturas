@@ -10,6 +10,11 @@ esperada). Este módulo solo contiene la primitiva realmente transversal.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from time import perf_counter
+
 from prometheus_client import Counter, Gauge, Histogram
 
 # Métodos HTTP que la app realmente enruta. Cualquier otro token se agrupa en "OTHER": el método
@@ -29,6 +34,59 @@ upload_to_201_seconds = Histogram(
     "autoken_upload_to_201_seconds",
     "Tiempo de respuesta de una subida aceptada con HTTP 201",
 )
+upload_phase_seconds = Histogram(
+    "autoken_upload_phase_seconds",
+    "Tiempo de cada fase técnica de una subida, sin datos de negocio",
+    ["phase"],
+)
+db_session_setup_seconds = Histogram(
+    "autoken_db_session_setup_seconds",
+    "Tiempo para adquirir una sesión y fijar el contexto RLS",
+    ["phase"],
+)
+
+_current_upload_phase: ContextVar[str | None] = ContextVar("current_upload_phase", default=None)
+_UPLOAD_PHASES = frozenset(
+    {
+        "authorization",
+        "identity",
+        "rate_limit",
+        "request_body",
+        "validation",
+        "deduplication",
+        "antivirus",
+        "storage",
+        "persistence",
+    }
+)
+
+
+@contextmanager
+def observe_upload_phase(phase: str) -> Iterator[None]:
+    """Mide una fase conocida de intake sin permitir etiquetas arbitrarias."""
+    if phase not in _UPLOAD_PHASES:
+        raise ValueError(f"Unknown upload phase: {phase}")
+    token = _current_upload_phase.set(phase)
+    started = perf_counter()
+    try:
+        yield
+    finally:
+        upload_phase_seconds.labels(phase=phase).observe(perf_counter() - started)
+        _current_upload_phase.reset(token)
+
+
+@contextmanager
+def observe_db_session_setup() -> Iterator[None]:
+    """Mide la adquisición de conexión y la configuración RLS de una sesión."""
+    started = perf_counter()
+    try:
+        yield
+    finally:
+        db_session_setup_seconds.labels(phase=_current_upload_phase.get() or "other").observe(
+            perf_counter() - started
+        )
+
+
 ocr_queue_wait_seconds = Histogram(
     "autoken_ocr_queue_wait_seconds",
     "Tiempo que un documento espera antes de comenzar OCR",

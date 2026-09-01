@@ -5,6 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
+
 from shared.rollout import FeatureFlag, evaluated_feature_flags, is_rollout_enabled
 
 
@@ -32,6 +34,15 @@ def test_flag_apagado_gana_siempre_incluso_para_tenant_allowlisted() -> None:
     settings = _settings(supplier_learning_enabled=False, rollout_tenant_allowlist=[pilot])
 
     assert not is_rollout_enabled(settings, FeatureFlag.SUPPLIER_LEARNING, pilot)
+
+
+@pytest.mark.parametrize("flag", tuple(FeatureFlag))
+def test_cualquier_flag_se_puede_apagar_para_el_tenant_piloto(flag: FeatureFlag) -> None:
+    """El rollback funcional de cualquier capacidad no depende de qué flag se haya elegido."""
+    pilot = uuid4()
+    settings = _settings(rollout_tenant_allowlist=[pilot], **{flag.value: False})
+
+    assert not is_rollout_enabled(settings, flag, pilot)
 
 
 def test_flags_evaluados_no_exponen_allowlist_y_respetan_el_tenant() -> None:

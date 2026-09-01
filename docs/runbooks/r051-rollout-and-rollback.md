@@ -42,6 +42,16 @@ siempre gana, aunque el tenant esté en la allowlist.
 
 ## Preflight
 
+En un entorno público, el despliegue debe pasar primero por el entrypoint que valida Traefik:
+
+```bash
+HEALTHCHECK_HOSTS=panel-staging.autoken.es,setex.autoken.es bash infrastructure/deploy.sh
+```
+
+No continuar con el canario si ese comando falla. Arrancar solo el Compose base en `staging` o
+`production` provoca un fallo cerrado de API/worker por `DEPLOYMENT_PROFILE`, en vez de dejar un
+frontend aparentemente sano con la API mal enrutada.
+
 Antes de iniciar el canario, ejecutar desde `backend/`:
 
 ```bash

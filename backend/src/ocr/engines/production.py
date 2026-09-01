@@ -5,9 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from ocr.engines.gemini_extractor import build_gemini_model_extractor
+from ocr.engines.load_test import LoadTestInvoiceExtractor
 from ocr.engines.mistral_extractor import MistralInvoiceExtractor
 from ocr.extraction import InvoiceExtractionError, InvoiceExtractor
 from ocr.policy import OcrPolicy
+from shared.config import AppEnv
 
 __all__ = ["build_fallback_extractor", "build_production_extractor"]
 
@@ -34,6 +36,8 @@ def build_fallback_extractor(settings: Any, policy: OcrPolicy) -> InvoiceExtract
 
 
 def _build_extractor(settings: Any, engine: str, model: str) -> InvoiceExtractor:
+    if getattr(settings, "app_env", None) is AppEnv.LOAD_TEST:
+        return LoadTestInvoiceExtractor()
     if engine in _GEMINI_ENGINES:
         return build_gemini_model_extractor(
             settings,

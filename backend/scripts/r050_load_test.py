@@ -81,6 +81,35 @@ def _percentile(values: list[float], percentile: float) -> float | None:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
 
 
+def _recovery_snapshot(metrics: dict[str, float | None]) -> dict[str, float | None]:
+    """Extrae el estado operativo necesario para comprobar recuperación, sin PII."""
+    return {
+        "queue_backend_up": metrics.get("autoken_ocr_queue_backend_up"),
+        "queue_depth": metrics.get("autoken_ocr_queue_depth"),
+        "pending": metrics.get('autoken_ocr_documents{state="pending"}'),
+        "processing": metrics.get('autoken_ocr_documents{state="processing"}'),
+        "abandoned": metrics.get('autoken_ocr_documents{state="abandoned"}'),
+        "failed": metrics.get('autoken_ocr_documents{state="failed"}'),
+        "expired_pending": metrics.get("autoken_expired_pending_count"),
+    }
+
+
+def _recovery_delta(
+    before: dict[str, float | None], after: dict[str, float | None]
+) -> dict[str, float | None]:
+    """Compara la recuperación final con la línea base global del stack."""
+    before_snapshot = _recovery_snapshot(before)
+    after_snapshot = _recovery_snapshot(after)
+    delta: dict[str, float | None] = {}
+    for key, after_value in after_snapshot.items():
+        before_value = before_snapshot[key]
+        if before_value is None or after_value is None:
+            delta[key] = None
+        else:
+            delta[key] = after_value - before_value
+    return delta
+
+
 def _load_config(path: Path) -> LoadConfig:
     raw = json.loads(path.read_text(encoding="utf-8"))
     users = tuple(LoadUser(**user) for user in raw["users"])
@@ -206,23 +235,24 @@ async def _check_inbox_privacy(
     config: LoadConfig,
     tokens: tuple[str, ...],
     uploads: list[UploadResult],
-) -> int:
+) -> tuple[int, int]:
     own_ids: dict[int, set[str]] = {index: set() for index in range(len(tokens))}
     for upload in uploads:
         if upload.file_id is not None:
             own_ids[upload.user_index].add(upload.file_id)
     leaks = 0
+    http_errors = 0
     for user_index, token in enumerate(tokens):
         response = await client.get(
             "/api/v1/invoices/inbox",
             headers={"Host": config.tenant_host, "Authorization": f"Bearer {token}"},
         )
         if response.status_code != 200:
-            leaks += 1
+            http_errors += 1
             continue
         visible = {str(item["id"]) for item in response.json().get("items", [])}
         leaks += len(visible - own_ids[user_index])
-    return leaks
+    return leaks, http_errors
 
 
 async def _metrics(client: httpx.AsyncClient, config: LoadConfig) -> dict[str, float | None]:
@@ -234,8 +264,12 @@ async def _metrics(client: httpx.AsyncClient, config: LoadConfig) -> dict[str, f
         "autoken_db_pool_checked_out",
         "autoken_db_pool_overflow",
         "autoken_db_pool_capacity",
+        "autoken_upload_phase_seconds_count",
+        "autoken_upload_phase_seconds_sum",
         "autoken_ocr_queue_depth",
         "autoken_ocr_queue_backend_up",
+        "autoken_ocr_documents",
+        "autoken_expired_pending_count",
         "autoken_ocr_provider_429_total",
     }
     result: dict[str, float | None] = {}
@@ -244,8 +278,10 @@ async def _metrics(client: httpx.AsyncClient, config: LoadConfig) -> dict[str, f
         metric_name = name.split("{", 1)[0]
         if separator and metric_name in wanted and not name.startswith("#"):
             try:
-                result[metric_name] = result.get(metric_name, 0) or 0
-                result[metric_name] = result[metric_name] + float(raw_value)
+                value = float(raw_value)
+                result[metric_name] = (result.get(metric_name, 0) or 0) + value
+                if "{" in name:
+                    result[name] = value
             except ValueError:
                 continue
     return result
@@ -254,6 +290,7 @@ async def _metrics(client: httpx.AsyncClient, config: LoadConfig) -> dict[str, f
 async def run(config: LoadConfig) -> dict[str, Any]:
     limits = httpx.Limits(max_connections=120, max_keepalive_connections=20)
     async with httpx.AsyncClient(base_url=config.base_url, limits=limits, timeout=30) as client:
+        metrics_before = await _metrics(client, config)
         tokens = tuple(
             await asyncio.gather(*(_login(client, config, user) for user in config.users))
         )
@@ -267,7 +304,7 @@ async def run(config: LoadConfig) -> dict[str, Any]:
             )
         )
         status_counts = await _wait_for_ocr(client, config, tokens, uploads)
-        leaks = await _check_inbox_privacy(client, config, tokens, uploads)
+        leaks, inbox_http_errors = await _check_inbox_privacy(client, config, tokens, uploads)
         metrics = await _metrics(client, config)
     latencies = [result.latency_seconds for result in uploads]
     status_codes: dict[str, int] = {}
@@ -284,10 +321,15 @@ async def run(config: LoadConfig) -> dict[str, Any]:
             "mean_seconds": statistics.fmean(latencies) if latencies else None,
         },
         "ocr_status_counts": status_counts,
+        "metrics_before": metrics_before,
         "metrics_snapshot": metrics,
+        "recovery_before": _recovery_snapshot(metrics_before),
+        "recovery": _recovery_snapshot(metrics),
+        "recovery_delta": _recovery_delta(metrics_before, metrics),
         "rate_limit_429": status_codes.get("429", 0),
         "provider_429": metrics.get("autoken_ocr_provider_429_total"),
         "cross_user_leaks": leaks,
+        "inbox_http_errors": inbox_http_errors,
     }
 
 
@@ -304,6 +346,7 @@ def main() -> int:
         0
         if report["uploads"]["status_codes"].get("201", 0) == 100
         and report["cross_user_leaks"] == 0
+        and report["inbox_http_errors"] == 0
         else 1
     )
 

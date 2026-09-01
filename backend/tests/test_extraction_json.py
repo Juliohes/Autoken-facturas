@@ -79,6 +79,32 @@ def test_r031_parsea_el_contrato_comun_con_amounts_string() -> None:
     assert invoice.raw["schema_version"] == "1"
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("450,00", Decimal("450.00")),
+        ("1.234,56", Decimal("1234.56")),
+        ("1,234.56", Decimal("1234.56")),
+    ],
+)
+def test_r031_parsea_importes_con_formato_espanol_o_ingles(
+    value: str, expected: Decimal
+) -> None:
+    payload = dict(
+        _COMMON_PAYLOAD,
+        total_amount=value,
+        tax_lines=[{"base": value, "rate": "21", "quota": "94,50"}],
+    )
+
+    invoice = parse_structured_invoice(
+        json.dumps(payload), engine="gemini-3.5-flash", model="gemini-3.5-flash"
+    )
+
+    assert invoice.total_amount == expected
+    assert invoice.tax_lines[0].base == expected
+    assert invoice.tax_lines[0].cuota == Decimal("94.50")
+
+
 def test_r031_rechaza_una_version_de_schema_desconocida() -> None:
     payload = dict(_COMMON_PAYLOAD, schema_version="2")
 

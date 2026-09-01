@@ -239,12 +239,35 @@ def _as_date(value: object) -> date | None:
 
 
 def _as_decimal(value: object) -> Decimal:
-    """Importe obligatorio de un tramo a `Decimal` (vía `str` para no arrastrar error de float)."""
-    return Decimal(str(value))
+    """Convierte un número del proveedor admitiendo separadores ES/EN."""
+    if isinstance(value, Decimal):
+        amount = value
+    elif isinstance(value, (int, float)):
+        amount = Decimal(str(value))
+    else:
+        text = str(value).strip().replace(" ", "")
+        if "," in text and "." in text:
+            # El separador que aparece más a la derecha es el decimal.
+            if text.rfind(",") > text.rfind("."):
+                text = text.replace(".", "").replace(",", ".")
+            else:
+                text = text.replace(",", "")
+        elif "," in text:
+            text = text.replace(",", ".")
+        elif text.count(".") > 1:
+            text = text.replace(".", "")
+        elif text.count(".") == 1:
+            integer, fraction = text.split(".")
+            if len(fraction) == 3 and len(integer.lstrip("+-")) <= 3:
+                text = integer + fraction
+        amount = Decimal(text)
+    if not amount.is_finite():
+        raise ValueError("El importe no es finito")
+    return amount
 
 
 def _as_optional_decimal(value: object) -> Decimal | None:
     """Importe opcional a `Decimal` o `None` si no es legible (regla anti-alucinación)."""
     if value is None:
         return None
-    return Decimal(str(value))
+    return _as_decimal(value)

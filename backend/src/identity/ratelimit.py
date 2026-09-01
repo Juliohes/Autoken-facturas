@@ -39,6 +39,22 @@ end
 return count
 """
 
+# Mismo contrato que `_RECORD_FAILURE_LUA`, pero para los dos cubos del intake en una sola llamada.
+# Redis ejecuta el script de forma atómica, por lo que ningún upload puede observar solo uno de los
+# contadores actualizado. Las dos claves se pasan como KEYS para mantener compatibilidad con Redis
+# Cluster.
+_RECORD_INTAKE_LUA = """
+local user_count = redis.call('INCR', KEYS[1])
+if redis.call('TTL', KEYS[1]) < 0 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+local tenant_count = redis.call('INCR', KEYS[2])
+if redis.call('TTL', KEYS[2]) < 0 then
+    redis.call('EXPIRE', KEYS[2], ARGV[1])
+end
+return {user_count, tenant_count}
+"""
+
 
 def _ip_email_key(ip: str, email: str) -> str:
     return f"login:fail:{ip}:{email}"
@@ -163,8 +179,13 @@ async def intake_attempt_exceeds(
     window_seconds: int,
 ) -> bool:
     """Limita intake/OCR por usuario y tenant antes de recursos costosos (S6.13)."""
-    user_count = await _record_hit(
-        redis, _intake_key(kind, tenant_id, f"user:{user_id}"), window_seconds
+    # Un único EVAL atómico actualiza ambos cubos y evita los viajes de red de dos EVAL separados
+    # o de un MULTI/EXEC bajo una oleada de subidas.
+    user_count, tenant_count = await redis.eval(
+        _RECORD_INTAKE_LUA,
+        2,
+        _intake_key(kind, tenant_id, f"user:{user_id}"),
+        _intake_key(kind, tenant_id, "tenant"),
+        str(window_seconds),
     )
-    tenant_count = await _record_hit(redis, _intake_key(kind, tenant_id, "tenant"), window_seconds)
-    return user_count > max_per_user or tenant_count > max_per_tenant
+    return int(user_count) > max_per_user or int(tenant_count) > max_per_tenant

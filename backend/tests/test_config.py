@@ -5,7 +5,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from shared.config import AppEnv, LogLevel, Settings, require_strong_backup_encryption_key
+from shared.config import (
+    AppEnv,
+    DeploymentProfile,
+    LogLevel,
+    Settings,
+    require_strong_backup_encryption_key,
+)
 
 
 def test_env_file_se_resuelve_a_la_raiz_del_monorepo() -> None:
@@ -144,3 +150,30 @@ def test_jwt_secret_default_es_aceptable_fuera_de_produccion(entorno: AppEnv) ->
     """En development/staging el default de dev no rompe (los tests y el arranque local lo usan)."""
     settings = Settings(app_env=entorno)
     assert settings.app_env is entorno
+
+
+def test_staging_requiere_el_perfil_de_red_proxy() -> None:
+    """Un staging arrancado con el Compose base no debe aceptar tráfico sin Traefik."""
+    with pytest.raises(ValidationError, match="DEPLOYMENT_PROFILE=proxy"):
+        Settings(app_env=AppEnv.STAGING, deployment_profile=DeploymentProfile.STANDALONE)
+
+
+def test_production_requiere_el_perfil_de_red_proxy() -> None:
+    """Producción también falla cerrada si se omite el overlay de proxy."""
+    with pytest.raises(ValidationError, match="DEPLOYMENT_PROFILE=proxy"):
+        Settings(
+            app_env=AppEnv.PRODUCTION,
+            deployment_profile=DeploymentProfile.STANDALONE,
+            jwt_secret="x" * 48,
+            db_encryption_master_key="y" * 48,
+        )
+
+
+def test_development_mantiene_el_perfil_standalone() -> None:
+    settings = Settings(app_env=AppEnv.DEVELOPMENT)
+    assert settings.deployment_profile is DeploymentProfile.STANDALONE
+
+
+def test_pool_pre_ping_es_seguro_por_defecto_y_configurable() -> None:
+    assert Settings().db_pool_pre_ping is True
+    assert Settings(db_pool_pre_ping=False).db_pool_pre_ping is False

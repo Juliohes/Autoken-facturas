@@ -1,0 +1,7 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.32,<1
+pillow>=10,<13
+pydantic>=2.9,<3
+paddleocr>=3.0,<4
+paddlepaddle>=3.0,<4
+numpy>=2,<3

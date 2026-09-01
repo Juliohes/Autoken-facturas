@@ -34,6 +34,18 @@ El script realiza 100 peticiones concurrentes, mide latencia de `POST /uploads`,
 OCR, consulta `/metrics` y pide la bandeja privada de cada usuario. El informe solo contiene conteos,
 latencias, estados y métricas agregadas.
 
+Para probar una caída durante la oleada, usar `r050_recovery_load.py` con un fichero `--ready-file`.
+La marca se crea después de completar los diez logins; detener Redis solo después de que aparezca, para
+no confundir un fallo de preparación con un fallo durante las subidas:
+
+```bash
+python scripts/r050_recovery_load.py \
+  --config /ruta/local/r050-users.json \
+  --out /ruta/local/r050-recovery-report.json \
+  --ready-file /ruta/local/r050-recovery-ready \
+  --stagger-seconds 0.5
+```
+
 ## Criterios de aceptación
 
 - 100 respuestas `201`, salvo `429` previamente justificados por la política de rate-limit.
@@ -41,6 +53,9 @@ latencias, estados y métricas agregadas.
 - `cross_user_leaks == 0`.
 - Informe con `autoken_db_pool_*`, `autoken_ocr_queue_depth` y
   `autoken_ocr_queue_backend_up`.
+- Para investigar latencia, conservar también `autoken_upload_phase_seconds_count` y
+  `autoken_upload_phase_seconds_sum` por fase; las fases aceptadas están cerradas en el código y no
+  contienen identificadores de negocio.
 - Estados OCR terminales o timeout explícito, sin perder documentos aceptados.
 - Ningún benchmark experimental ejecutado con el laboratorio apagado.
 
@@ -52,6 +67,8 @@ latencias, estados y métricas agregadas.
    datos de factura.
 3. Restaurar Redis y ejecutar el recuperador OCR. Verificar que los documentos pendientes vuelven a
    aparecer en la cola y que el claim impide dos llamadas simultáneas al proveedor.
+   Para simular específicamente un enqueue perdido, limpiar solo la base Redis dedicada a la prueba
+   después de restaurarla y antes de ejecutar el recuperador; nunca hacer esto en una base operativa.
 4. Repetir la consulta de `/metrics` y conservar los valores antes/después de `up`, profundidad,
    pendientes, procesando, abandonados y fallidos.
 5. En un escenario separado, provocar respuestas `429` del proveedor de prueba. Confirmar que el
@@ -62,4 +79,4 @@ latencias, estados y métricas agregadas.
 
 Guardar el JSON generado y una nota de ejecución fuera del repositorio de código si contiene URLs,
 usuarios o configuración de staging. En el repositorio solo debe quedar el resumen sin PII: p50, p95,
-conteos HTTP, conteos OCR, estado del pool, Redis, recuperación y fugas.
+conteos HTTP, conteos OCR, estado del pool, Redis, recuperación, fugas y diagnóstico agregado por fase.

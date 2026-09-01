@@ -51,6 +51,14 @@ class AppEnv(StrEnum):
     DEVELOPMENT = "development"
     STAGING = "staging"
     PRODUCTION = "production"
+    LOAD_TEST = "load_test"
+
+
+class DeploymentProfile(StrEnum):
+    """Topología de red en la que se ejecuta la aplicación."""
+
+    STANDALONE = "standalone"
+    PROXY = "proxy"
 
 
 class LogLevel(StrEnum):
@@ -79,6 +87,9 @@ class Settings(BaseSettings):
     app_name: str = "Autoken Facturas v2"
     app_version: str = "0.1.0"
     app_env: AppEnv = AppEnv.DEVELOPMENT
+    # El perfil se inyecta desde Compose. En staging/producción el overlay debe declarar `proxy`; si
+    # se arranca solo el Compose base, API y worker fallan antes de aceptar tráfico.
+    deployment_profile: DeploymentProfile | None = None
     log_level: LogLevel = LogLevel.INFO
     api_prefix: str = "/api/v1"
 
@@ -91,6 +102,32 @@ class Settings(BaseSettings):
         siendo un error de validación (fail-loud), en vez de tragarse y caer a INFO (BP-5).
         """
         return value.lower() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def _require_proxy_profile_outside_local(self) -> Self:
+        """Evita desplegar staging/producción sin el overlay que conecta Traefik.
+
+        El valor implícito mantiene cómodos los tests y el uso directo de `Settings`; Compose fija
+        explícitamente `standalone` en la pila base y `proxy` en el overlay real. Así el fallo real
+        de arrancar solo el fichero base queda convertido en un error de startup visible, en vez de
+        en una web que devuelve `index.html` para las llamadas `/api/*`.
+        """
+        if self.deployment_profile is None:
+            default_profile = (
+                DeploymentProfile.PROXY
+                if self.app_env in {AppEnv.STAGING, AppEnv.PRODUCTION}
+                else DeploymentProfile.STANDALONE
+            )
+            object.__setattr__(self, "deployment_profile", default_profile)
+        if (
+            self.app_env in {AppEnv.STAGING, AppEnv.PRODUCTION}
+            and self.deployment_profile is not DeploymentProfile.PROXY
+        ):
+            raise ValueError(
+                "staging/production requieren DEPLOYMENT_PROFILE=proxy; "
+                "arranca el stack con docker-compose.yml + docker-compose.prod.yml"
+            )
+        return self
 
     @model_validator(mode="after")
     def _reject_insecure_jwt_secret_in_production(self) -> Self:
@@ -149,6 +186,7 @@ class Settings(BaseSettings):
     # app, el total de conexiones a Postgres es la suma de todas — ajustar aquí, no en el código.
     db_pool_size: int = 20
     db_max_overflow: int = 20
+    db_pool_pre_ping: bool = True
 
     # R-051: flags cerrados y reversibles. Los defaults conservan el comportamiento actual; un
     # despliegue puede apagar una fase o limitarla a tenants piloto sin cambiar migraciones.

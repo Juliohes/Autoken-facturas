@@ -86,6 +86,7 @@ class RedisCircuitBreaker:
     ) -> None:
         self.redis = redis
         self.key = f"autoken:ocr:circuit:{engine}:{model}"
+        self.probe_key = f"{self.key}:probe"
         self.failure_threshold = failure_threshold
         self.failure_window_seconds = failure_window_seconds
         self.open_seconds = open_seconds
@@ -94,18 +95,33 @@ class RedisCircuitBreaker:
     async def allow(self) -> bool:
         breaker = await self._load()
         allowed = breaker.allow(self.clock())
-        if allowed and breaker.state is CircuitState.HALF_OPEN:
+        if not allowed:
+            return False
+        if breaker.state is CircuitState.HALF_OPEN:
+            # SET NX makes the half-open probe exclusive across workers. The TTL lets a new
+            # worker retry if the probe process dies before recording success/failure.
+            claimed = await self.redis.set(
+                self.probe_key,
+                "1",
+                nx=True,
+                ex=max(int(self.open_seconds), 1),
+            )
+            if not claimed:
+                return False
             await self._save(breaker)
         return allowed
 
     async def record_failure(self) -> None:
         breaker = await self._load()
         breaker.record_failure(self.clock())
+        if breaker.state is CircuitState.OPEN:
+            await self.redis.delete(self.probe_key)
         await self._save(breaker)
 
     async def record_success(self) -> None:
         breaker = await self._load()
         breaker.record_success()
+        await self.redis.delete(self.probe_key)
         await self._save(breaker)
 
     async def _load(self) -> CircuitBreaker:

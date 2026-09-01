@@ -1,0 +1,9 @@
+{
+  "requested": 100,
+  "status_codes": {
+    "201": 69,
+    "500": 31
+  },
+  "accepted_201": 69,
+  "transport_errors": 0
+}

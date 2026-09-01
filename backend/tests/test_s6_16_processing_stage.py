@@ -145,6 +145,8 @@ async def test_status_endpoint_devuelve_solo_progreso_y_respeta_la_privacidad(au
     assert body["processing_stage"] == ProcessingStage.QUEUED.value
     assert body["ocr_started_at"] is None
     assert body["ocr_finished_at"] is None
+    assert body["eta_seconds_min"] is None
+    assert body["eta_seconds_max"] is None
     assert (
         not {
             "sha256",
@@ -174,3 +176,58 @@ async def test_status_endpoint_devuelve_solo_progreso_y_respeta_la_privacidad(au
         headers=intake_auth(other_token, hostname="processing-status.localhost"),
     )
     assert private_response.status_code == 404
+
+
+async def test_status_endpoint_muestra_eta_solo_con_muestras_suficientes(authapi: Api) -> None:
+    """R-048: 30 muestras recientes permiten un rango calculado con concurrencia efectiva."""
+    client, dsns = authapi
+    tenant_id, company_id, first_file_id = await _seed(dsns, "processing-eta")
+    second_file_id = await seed_uploaded_file(
+        dsns,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        uploaded_by=(
+            await _user_id(dsns, tenant_id=tenant_id, email="ana@processing-eta.es")
+        ),
+        content=b"second-pending-file",
+    )
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        await conn.executemany(
+            "INSERT INTO ocr_processing_samples "
+            "(engine, model, page_count_bucket, status, queue_wait_seconds, processing_seconds) "
+            "VALUES ($1, $2, $3, $4, $5, $6)",
+            [
+                ("gemini-3.5-flash", "gemini-3.5-flash", "1", "needs_review", 5.0, 20.0)
+            ]
+            * 30,
+        )
+    finally:
+        await conn.close()
+
+    token = await token_for(
+        client, email="ana@processing-eta.es", hostname="processing-eta.localhost"
+    )
+    response = await client.get(
+        f"/api/v1/uploads/{second_file_id}/status",
+        headers=intake_auth(token, hostname="processing-eta.localhost"),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eta_seconds_min"] == 25
+    assert body["eta_seconds_max"] == 30
+    assert first_file_id != second_file_id
+
+
+async def _user_id(dsns: dict[str, str], *, tenant_id: str, email: str) -> str:
+    """Recupera el usuario sintético creado por el helper de escenario."""
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        return str(
+            await conn.fetchval(
+                "SELECT id FROM users WHERE tenant_id = $1 AND email = $2", tenant_id, email
+            )
+        )
+    finally:
+        await conn.close()

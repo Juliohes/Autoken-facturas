@@ -1,0 +1,30 @@
+{
+  "generated_at": "2026-08-27",
+  "tenant_scope": "Setex canary allowlist",
+  "flag": "SUPPLIER_LEARNING_ENABLED",
+  "rollback": {
+    "before": true,
+    "applied": false,
+    "api_loaded": false,
+    "worker_loaded": false,
+    "other_flags_changed": false,
+    "allowlist_changed": false,
+    "preflight_ready": true,
+    "public_health": {
+      "panel_staging": 200,
+      "setex": 200
+    }
+  },
+  "restoration": {
+    "restored": true,
+    "api_loaded": true,
+    "worker_loaded": true,
+    "preflight_ready": true,
+    "public_health": {
+      "panel_staging": 200,
+      "setex": 200
+    }
+  },
+  "migrations_changed": false,
+  "data_deleted": false
+}

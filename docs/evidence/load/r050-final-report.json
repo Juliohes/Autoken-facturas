@@ -1,0 +1,77 @@
+{
+  "generated_at": "2026-08-26T11:17:26+00:00",
+  "scenario": {
+    "users": 10,
+    "uploads_per_user": 10
+  },
+  "uploads": {
+    "requested": 100,
+    "status_codes": {
+      "201": 100
+    },
+    "p50_seconds": 2.905470845493255,
+    "p95_seconds": 3.260862060389627,
+    "mean_seconds": 2.8376156698203703
+  },
+  "ocr_status_counts": {
+    "needs_review": 100
+  },
+  "metrics_before": {
+    "autoken_ocr_queue_depth": 0.0,
+    "autoken_ocr_documents": 1.0,
+    "autoken_ocr_documents{state=\"pending\"}": 0.0,
+    "autoken_ocr_documents{state=\"processing\"}": 0.0,
+    "autoken_ocr_documents{state=\"abandoned\"}": 0.0,
+    "autoken_ocr_documents{state=\"failed\"}": 1.0,
+    "autoken_expired_pending_count": 0.0,
+    "autoken_db_pool_size": 30.0,
+    "autoken_db_pool_checked_out": 0.0,
+    "autoken_db_pool_overflow": 0.0,
+    "autoken_db_pool_capacity": 30.0,
+    "autoken_ocr_queue_backend_up": 1.0
+  },
+  "metrics_snapshot": {
+    "autoken_ocr_queue_depth": 0.0,
+    "autoken_ocr_documents": 1.0,
+    "autoken_ocr_documents{state=\"pending\"}": 0.0,
+    "autoken_ocr_documents{state=\"processing\"}": 0.0,
+    "autoken_ocr_documents{state=\"abandoned\"}": 0.0,
+    "autoken_ocr_documents{state=\"failed\"}": 1.0,
+    "autoken_expired_pending_count": 0.0,
+    "autoken_db_pool_size": 30.0,
+    "autoken_db_pool_checked_out": 0.0,
+    "autoken_db_pool_overflow": 0.0,
+    "autoken_db_pool_capacity": 30.0,
+    "autoken_ocr_queue_backend_up": 1.0
+  },
+  "recovery_before": {
+    "queue_backend_up": 1.0,
+    "queue_depth": 0.0,
+    "pending": 0.0,
+    "processing": 0.0,
+    "abandoned": 0.0,
+    "failed": 1.0,
+    "expired_pending": 0.0
+  },
+  "recovery": {
+    "queue_backend_up": 1.0,
+    "queue_depth": 0.0,
+    "pending": 0.0,
+    "processing": 0.0,
+    "abandoned": 0.0,
+    "failed": 1.0,
+    "expired_pending": 0.0
+  },
+  "recovery_delta": {
+    "queue_backend_up": 0.0,
+    "queue_depth": 0.0,
+    "pending": 0.0,
+    "processing": 0.0,
+    "abandoned": 0.0,
+    "failed": 0.0,
+    "expired_pending": 0.0
+  },
+  "rate_limit_429": 0,
+  "provider_429": null,
+  "cross_user_leaks": 0
+}

@@ -1,4 +1,4 @@
-"""Test unitario del rate-limit de login (S1.3): la clave de fallo SIEMPRE queda con TTL.
+"""Tests de rate-limit: las claves de fallo SIEMPRE quedan con TTL.
 
 Regresión de robustez: `record_failure` fija el TTL de la ventana de forma atómica junto al `INCR`
 (un único EVAL). Si la clave quedara sin expiración, ese (IP+email) o esa IP quedaría bloqueado
@@ -53,3 +53,38 @@ async def test_record_failure_repetido_conserva_el_ttl(redis_client: aioredis.Re
     assert await redis_client.get(ratelimit._ip_email_key(ip, email)) == "3"
     assert await redis_client.ttl(ratelimit._ip_email_key(ip, email)) > 0
     assert await redis_client.ttl(ratelimit._ip_key(ip)) > 0
+
+
+async def test_intake_actualiza_los_dos_cubos_atomicos(redis_client: aioredis.Redis) -> None:
+    """El límite de intake actualiza usuario y tenant, y ambos contadores expiran juntos."""
+    tenant_id, user_id, window = "tenant-ratelimit", "user-ratelimit", 900
+
+    first = await ratelimit.intake_attempt_exceeds(
+        redis_client,
+        kind="upload",
+        tenant_id=tenant_id,
+        user_id=user_id,
+        max_per_user=1,
+        max_per_tenant=2,
+        window_seconds=window,
+    )
+    second = await ratelimit.intake_attempt_exceeds(
+        redis_client,
+        kind="upload",
+        tenant_id=tenant_id,
+        user_id=user_id,
+        max_per_user=1,
+        max_per_tenant=2,
+        window_seconds=window,
+    )
+
+    assert first is False
+    assert second is True
+    assert await redis_client.get(
+        ratelimit._intake_key("upload", tenant_id, f"user:{user_id}")
+    ) == "2"
+    assert await redis_client.get(ratelimit._intake_key("upload", tenant_id, "tenant")) == "2"
+    assert await redis_client.ttl(
+        ratelimit._intake_key("upload", tenant_id, f"user:{user_id}")
+    ) > 0
+    assert await redis_client.ttl(ratelimit._intake_key("upload", tenant_id, "tenant")) > 0
