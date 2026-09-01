@@ -112,4 +112,49 @@ describe('InvoiceInbox (R-020)', () => {
     expect(await screen.findByText('La bandeja está temporalmente desactivada.')).toBeInTheDocument()
     expect(getMock).not.toHaveBeenCalled()
   })
+
+  it('paso 9: no muestra una captura ilegible aunque llegara del backend (defensa frontend)', async () => {
+    const { useSession } = await import('../session/SessionProvider')
+    vi.mocked(useSession).mockReturnValue({
+      user: { feature_flags: { review_inbox_enabled: true } },
+    } as never)
+    getMock.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: 'unreadable-1',
+            status: 'capture_unreadable',
+            processing_stage: null,
+            created_at: '2026-08-21T10:00:00Z',
+            direction: 'recibida',
+            page_count: 1,
+            capture_session_id: null,
+            capture_sequence: null,
+            draft_updated_at: null,
+          },
+          {
+            id: 'processing-1',
+            status: 'processing',
+            processing_stage: 'primary_ocr',
+            created_at: '2026-08-21T09:00:00Z',
+            direction: 'recibida',
+            page_count: 1,
+            capture_session_id: null,
+            capture_sequence: null,
+            draft_updated_at: null,
+          },
+        ],
+        summary: { processing: 1, ready: 0, attention: 0 },
+        next_cursor: null,
+      },
+      error: undefined,
+    })
+
+    renderInbox()
+
+    const items = await screen.findAllByTestId('inbox-item')
+    expect(items).toHaveLength(1)
+    expect(screen.queryByText('Foto ilegible')).not.toBeInTheDocument()
+    expect(screen.queryByText('Repetir foto')).not.toBeInTheDocument()
+  })
 })

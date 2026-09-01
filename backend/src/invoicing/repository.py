@@ -753,7 +753,14 @@ async def list_inbox(
     cursor_created_at: datetime | None = None,
     cursor_id: UUID | None = None,
 ) -> InboxPage:
-    """Lista la bandeja SELF ONLY con cursor compuesto y resumen agregado (R-020)."""
+    """Lista la bandeja SELF ONLY con cursor compuesto y resumen agregado (R-020).
+
+    `capture_unreadable` (S6.14: la imagen en sí es el problema, ni se ha llegado a leer) queda
+    fuera tanto del listado como del resumen `attention` (paso 9, ajustes UI): no es "pendiente de
+    comprobación", es una captura que hay que repetir. Su limpieza/expiración no necesita un job
+    nuevo: `jobs.retention.purge_expired_unconfirmed_documents` (R-028) ya purga cualquier
+    `uploaded_file` con `status <> 'confirmed'` (incluido este) a los 90 días.
+    """
     rows = (
         await session.execute(
             text(
@@ -763,6 +770,7 @@ async def list_inbox(
                 "            WHERE p.root_uploaded_file_id = f.id) AS page_count "
                 "FROM uploaded_files f "
                 "WHERE f.uploaded_by = :uploaded_by "
+                "  AND f.status != 'capture_unreadable' "
                 "  AND NOT EXISTS (SELECT 1 FROM invoices i "
                 "                  WHERE i.uploaded_file_id = f.id) "
                 "  AND (CAST(:cursor_created_at AS timestamptz) IS NULL OR "
@@ -786,10 +794,11 @@ async def list_inbox(
                 "                    ('pending_ocr', 'processing')) AS processing, "
                 "       count(*) FILTER (WHERE f.status IN ('ocr_done', 'confirmed')) AS ready, "
                 "       count(*) FILTER (WHERE f.status IN "
-                "                    ('needs_review', 'ocr_failed', 'capture_unreadable')) "
+                "                    ('needs_review', 'ocr_failed')) "
                 "                    AS attention "
                 "FROM uploaded_files f "
                 "WHERE f.uploaded_by = :uploaded_by "
+                "  AND f.status != 'capture_unreadable' "
                 "  AND NOT EXISTS (SELECT 1 FROM invoices i "
                 "                  WHERE i.uploaded_file_id = f.id)"
             ),
