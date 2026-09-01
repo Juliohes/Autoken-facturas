@@ -41,11 +41,31 @@ export function resolveTheme(tenant: CurrentTenant | undefined): AppliedTheme {
 
 const FAVICON_LINK_ID = 'tenant-favicon'
 
-/** Aplica el tema al DOM: título de la pestaña, variables CSS en `:root` y favicon (S4.3). */
+/** Convierte un color HEX (`#rrggbb` o `#rgb`) al triplete `r g b` que esperan los tokens
+ * semánticos de `index.css` (formato `R G B` para las utilidades `<alpha-value>` de Tailwind).
+ * Devuelve `null` ante un valor mal formado: el acento cae entonces al fallback de marca. */
+export function hexToRgbTriplet(hex: string): string | null {
+  const clean = hex.trim().replace(/^#/, '')
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return null
+  const r = parseInt(full.slice(0, 2), 16)
+  const g = parseInt(full.slice(2, 4), 16)
+  const b = parseInt(full.slice(4, 6), 16)
+  return `${r} ${g} ${b}`
+}
+
+/** Aplica el tema al DOM: título de la pestaña, variables CSS en `:root` y favicon (S4.3).
+ * Además inyecta el acento del tenant como triplete RGB en `--tn-accent-rgb` para que las
+ * superficies semánticas (botones, badges, nav activo) hereden el color de la asesoría con
+ * opacidades, sin romper los hex `--color-primary`/`--color-secondary` que ya consume el resto. */
 export function applyTenantTheme(theme: AppliedTheme): void {
   document.title = theme.appName
   document.documentElement.style.setProperty('--color-primary', theme.colorPrimary)
   document.documentElement.style.setProperty('--color-secondary', theme.colorSecondary)
+  const accentTriplet = hexToRgbTriplet(theme.colorPrimary)
+  if (accentTriplet !== null) {
+    document.documentElement.style.setProperty('--tn-accent-rgb', accentTriplet)
+  }
   applyFavicon(theme.faviconUrl)
 }
 

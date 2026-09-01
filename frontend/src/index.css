@@ -2,9 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Tipografía auto-hospedada (PWA/offline: nada de CDN en runtime). Plus Jakarta Sans para
+ * títulos/display e Inter para texto/UI, ambas con font-display: swap y stack del sistema. */
+@import '@fontsource/plus-jakarta-sans/400.css';
+@import '@fontsource/plus-jakarta-sans/600.css';
+@import '@fontsource/plus-jakarta-sans/700.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+
 @layer base {
   :root {
     color-scheme: light;
+
+    /* Acento por tenant: theme.ts inyecta --tn-accent-rgb como triplete "r g b" (para
+     * <alpha-value>); --tn-accent lo consume. Fallback al naranja de marca #FA6703. */
+    --tn-accent-rgb: 250 103 3;
+    --tn-accent: rgb(var(--tn-accent-rgb));
+    /* Texto sobre acento naranja: NAVY (AA 6.18:1). Nunca blanco sobre #FA6703 (3.0:1, falla). */
+    --tn-accent-ink: #021231;
+    /* Variante oscura del acento para cuando se necesite texto blanco (pasa 4.5:1). */
+    --tn-accent-strong: #c24e00;
+
+    --tn-font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --tn-font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
     --app-background: #f4f7fb;
     --surface: #ffffff;
@@ -90,14 +111,106 @@
     --tn-shadow-glass: var(--tn-glass-shadow);
   }
 
+  /* Modo oscuro: se activa por data-theme="dark" en <html> (toggle de usuario) o por
+   * prefers-color-scheme cuando no hay override explícito. Solo se redefinen tokens, nunca
+   * componentes, para que ambos temas resuelvan como un conjunto coherente. */
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --app-background: #021231;
+    --background-primary: #021231;
+    --background-secondary: #06152c;
+    --surface: #0a1c39;
+    --surface-primary: #0a1c39;
+    --surface-secondary: #0e2242;
+    --surface-soft: #0e2242;
+    --text-primary: #eaf1fb;
+    --text-secondary: #93a6c4;
+    --text-tertiary: #5f75a0;
+    --text-on-navy: #eaf1fb;
+    --border-default: #1c3357;
+    --divider-default: #152a49;
+    --brand-orange: #ff7a3d;
+    --tn-accent-ink: #021231;
+    --success: #3ddc97;
+    --success-surface: #0f2a22;
+    --warning-surface: #2e2118;
+    --error: #ff7a72;
+    --error-surface: #2e1615;
+    --tn-background: var(--background-primary);
+    --tn-background-secondary: var(--background-secondary);
+    --tn-surface: var(--surface-primary);
+    --tn-surface-subtle: var(--surface-secondary);
+    --tn-text-primary: var(--text-primary);
+    --tn-text-secondary: var(--text-secondary);
+    --tn-text-tertiary: var(--text-tertiary);
+    --tn-text-on-glass: var(--text-on-navy);
+    --tn-border: var(--border-default);
+    --tn-divider: var(--divider-default);
+    --tn-success: var(--success);
+    --tn-success-surface: var(--success-surface);
+    --tn-warning: var(--brand-orange);
+    --tn-warning-surface: var(--warning-surface);
+    --tn-error: var(--error);
+    --tn-error-surface: var(--error-surface);
+    --tn-shadow-card: 0 5px 18px rgba(0, 0, 0, 0.4);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      color-scheme: dark;
+      --app-background: #021231;
+      --background-primary: #021231;
+      --background-secondary: #06152c;
+      --surface: #0a1c39;
+      --surface-primary: #0a1c39;
+      --surface-secondary: #0e2242;
+      --surface-soft: #0e2242;
+      --text-primary: #eaf1fb;
+      --text-secondary: #93a6c4;
+      --text-tertiary: #5f75a0;
+      --text-on-navy: #eaf1fb;
+      --border-default: #1c3357;
+      --divider-default: #152a49;
+      --brand-orange: #ff7a3d;
+      --tn-accent-ink: #021231;
+      --success: #3ddc97;
+      --success-surface: #0f2a22;
+      --warning-surface: #2e2118;
+      --error: #ff7a72;
+      --error-surface: #2e1615;
+      --tn-background: var(--background-primary);
+      --tn-background-secondary: var(--background-secondary);
+      --tn-surface: var(--surface-primary);
+      --tn-surface-subtle: var(--surface-secondary);
+      --tn-text-primary: var(--text-primary);
+      --tn-text-secondary: var(--text-secondary);
+      --tn-text-tertiary: var(--text-tertiary);
+      --tn-text-on-glass: var(--text-on-navy);
+      --tn-border: var(--border-default);
+      --tn-divider: var(--divider-default);
+      --tn-success: var(--success);
+      --tn-success-surface: var(--success-surface);
+      --tn-warning: var(--brand-orange);
+      --tn-warning-surface: var(--warning-surface);
+      --tn-error: var(--error);
+      --tn-error-surface: var(--error-surface);
+      --tn-shadow-card: 0 5px 18px rgba(0, 0, 0, 0.4);
+    }
+  }
+
   html {
     color-scheme: light;
+  }
+
+  html[data-theme='dark'] {
+    color-scheme: dark;
   }
 
   body {
     background: var(--background-primary);
     color: var(--tn-text-primary);
     overflow-x: hidden;
+    font-family: var(--tn-font-sans);
   }
 
   /* El texto de un botón nunca debe partirse en 2 líneas, en ninguna pantalla (plataforma o
@@ -483,8 +596,9 @@
     min-height: 56px;
     border: 1px solid var(--brand-navy) !important;
     border-radius: var(--tn-radius-pill) !important;
-    color: #fff !important;
-    background: var(--brand-navy) !important;
+    /* Texto navy sobre naranja de acento (AA 6.18:1); nunca blanco sobre #FA6703 (3.0:1, falla). */
+    color: var(--tn-accent-ink) !important;
+    background: var(--tn-accent) !important;
     box-shadow: 0 10px 24px rgba(var(--brand-navy-rgb), 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.42);
     transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), filter 140ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
@@ -695,6 +809,49 @@
   .tn-toggle-option:focus-within {
     outline: 3px solid rgba(25, 191, 242, 0.28);
     outline-offset: 2px;
+  }
+
+  /* Toggle de tema (Bloque 1): segmented claro/oscuro/sistema. Estado activo = acento naranja
+   * con texto navy (AA); el resto neutro sobre superficie. */
+  .tn-theme-toggle {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--tn-border);
+    border-radius: var(--tn-radius-pill);
+    background: var(--tn-surface-subtle);
+  }
+
+  .tn-theme-toggle-option {
+    display: inline-flex;
+    min-height: 44px;
+    min-width: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: var(--tn-radius-pill);
+    color: var(--tn-text-secondary);
+    background: transparent;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    transition: color 140ms ease, background 180ms ease;
+  }
+
+  .tn-theme-toggle-option-active {
+    color: var(--tn-accent-ink) !important;
+    background: var(--tn-accent);
+  }
+
+  .tn-theme-toggle-option:focus-visible {
+    outline: 2px solid var(--tn-accent);
+    outline-offset: 2px;
+  }
+
+  .tn-display {
+    font-family: var(--tn-font-display);
+    font-variant-numeric: tabular-nums;
   }
 
   .tn-preview-shell {
