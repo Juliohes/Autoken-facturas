@@ -755,7 +755,6 @@ export function CaptureScreen({ onUploaded }: Props) {
                 <span>Varias<br />hojas</span>
               </button>
             </div>
-            <p className="text-sm text-slate-600">Para subir documentos independientes, usa Subir Archivo.</p>
           </div>
         )}
       </div>
