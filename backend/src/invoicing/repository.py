@@ -47,12 +47,18 @@ INBOX_LIMIT = 20
 
 @dataclass(frozen=True)
 class HistoryEntry:
-    """Una entrada sin PII del historial de documentos aceptados (S6.12)."""
+    """Una entrada sin PII del historial de documentos aceptados (S6.12).
+
+    ``invoice_number`` es el número del documento propio (no dato de contraparte): mismo
+    criterio que importes/fecha, exponerlo es aceptable (paso 8, ajustes UI). Solo llega
+    cuando `list_history` encuentra una factura `confirmed`; nunca se inventa un valor.
+    """
 
     id: UUID
     status: str
     created_at: datetime
     direction: str | None
+    invoice_number: str | None
 
 
 @dataclass(frozen=True)
@@ -704,7 +710,8 @@ async def list_history(
     rows = (
         await session.execute(
             text(
-                "SELECT f.id, f.status, f.created_at, f.direction FROM uploaded_files f "
+                "SELECT f.id, f.status, f.created_at, f.direction, i.invoice_number "
+                "FROM uploaded_files f "
                 "JOIN invoices i ON i.uploaded_file_id = f.id "
                 "WHERE i.status = 'confirmed' "
                 "AND f.created_at >= current_timestamp - interval '4 months' "
@@ -731,6 +738,7 @@ async def list_history(
             status=row.status,
             created_at=row.created_at,
             direction=row.direction,
+            invoice_number=row.invoice_number,
         )
         for row in rows
     ]

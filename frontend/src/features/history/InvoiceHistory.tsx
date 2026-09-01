@@ -87,15 +87,16 @@ export function InvoiceHistory() {
 }
 
 function HistoryRow({ entry }: { entry: HistoryEntry }) {
+  // Fallback sin inventar (paso 8, ajustes UI): si el backend no manda invoice_number, texto neutro.
+  const title = entry.invoice_number ? `Factura Nº ${entry.invoice_number}` : 'Factura enviada'
   return (
     <li data-testid="history-row" className="flex items-center justify-between gap-3 py-3">
       <div className="min-w-0">
-        <p className="font-medium">Factura enviada</p>
+        <p className="font-medium">{title}</p>
         <time dateTime={entry.created_at} className="text-sm text-muted">{formatCreatedAt(entry.created_at)}</time>
       </div>
       <div className="shrink-0 space-y-1 text-right text-sm text-muted">
         <StatusBadge tone={STATUS_TONE[entry.status] ?? 'neutral'} label={STATUS_LABEL[entry.status] ?? entry.status} />
-        <p className="text-xs">Solo lectura</p>
       </div>
     </li>
   )

@@ -277,12 +277,17 @@ async def confirm_upload(identity: Reviewer, file_id: UUID, body: ConfirmIn) -> 
 
 
 class HistoryEntryOut(BaseModel):
-    """Una entrada privada de historial, sin PII de contraparte (S6.12)."""
+    """Una entrada privada de historial, sin PII de contraparte (S6.12).
+
+    ``invoice_number``: número del documento propio (no dato de contraparte, S6.12), solo presente
+    en facturas `confirmed`. `None` cuando la factura no tiene número, nunca un valor inventado.
+    """
 
     id: UUID
     status: str
     created_at: datetime
     direction: Literal["recibida", "emitida"] | None
+    invoice_number: str | None
 
 
 class HistoryOut(BaseModel):
@@ -398,6 +403,7 @@ async def invoice_history(
                 status=entry.status,
                 created_at=entry.created_at,
                 direction=cast(Literal["recibida", "emitida"] | None, entry.direction),
+                invoice_number=entry.invoice_number,
             )
             for entry in data.entries
         ],
