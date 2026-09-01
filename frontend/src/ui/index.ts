@@ -1,0 +1,11 @@
+// Punto de entrada de la librería de componentes src/ui (Bloque 2).
+export { Banner, type BannerProps, type BannerTone } from './Banner'
+export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from './Button'
+export { Card, Section, type CardProps, type SectionProps } from './Card'
+export { EmptyState, type EmptyStateProps } from './EmptyState'
+export { Field, type FieldProps } from './Field'
+export { SegmentedControl, type SegmentedControlProps, type SegmentedOption } from './SegmentedControl'
+export { Spinner, type SpinnerProps } from './Spinner'
+export { StatusBadge, type StatusBadgeProps, type StatusTone } from './StatusBadge'
+export { ThemeToggle } from './ThemeToggle'
+export { useThemeMode, type ThemeMode } from './useThemeMode'
