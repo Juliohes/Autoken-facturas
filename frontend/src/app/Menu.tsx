@@ -51,7 +51,11 @@ export function Menu({ role, isAdminTech, theme }: Props) {
       <>
         <nav aria-label="Navegación principal" className="tn-user-nav">
           <div className="flex items-center justify-between gap-3 px-4 py-3">
-            {theme.logoUrl && <img src={theme.logoUrl} alt={theme.appName} referrerPolicy="no-referrer" className="tn-brand-logo max-h-10" />}
+            {theme.logoUrl && (
+              <span className="tn-brand-logo-frame">
+                <img src={theme.logoUrl} alt={theme.appName} referrerPolicy="no-referrer" className="tn-brand-logo max-h-8" />
+              </span>
+            )}
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <button type="button" aria-label="Cerrar sesión" onClick={() => setLogoutOpen(true)} className="min-h-11 min-w-11 rounded border border-line px-3 text-xl text-fg">×</button>

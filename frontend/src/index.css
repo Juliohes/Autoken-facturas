@@ -46,8 +46,12 @@
     --background-secondary: #edf3f8;
     --surface-primary: #ffffff;
     --surface-secondary: #f8fafc;
-    /* Superficie de la navegación de usuario (Menu.tsx). Valor definitivo en el paso 4. */
-    --tn-nav-surface: var(--surface-primary);
+    /* Superficie de la navegación de usuario (Menu.tsx): azul clarito de marca, nunca blanco
+     * puro (el logo de Autofactu es blanco y desaparece sobre #fff). AA con texto/iconos navy. */
+    --tn-nav-surface: #dce6f4;
+    /* Texto/iconos inactivos de la nav sobre --tn-nav-surface: --text-secondary (#667085) solo
+     * da 3.95:1 sobre este azul, no llega a AA (4.5:1). Gris-navy dedicado: 5.82:1. */
+    --tn-nav-ink-muted: #4b5768;
     --text-primary: #101828;
     --text-secondary: #667085;
     --text-tertiary: #98a2b3;
@@ -146,6 +150,8 @@
     --tn-background-secondary: var(--background-secondary);
     --tn-surface: var(--surface-primary);
     --tn-surface-subtle: var(--surface-secondary);
+    --tn-nav-surface: var(--surface-primary);
+    --tn-nav-ink-muted: var(--text-secondary);
     --tn-text-primary: var(--text-primary);
     --tn-text-secondary: var(--text-secondary);
     --tn-text-tertiary: var(--text-tertiary);
@@ -190,6 +196,8 @@
       --tn-background-secondary: var(--background-secondary);
       --tn-surface: var(--surface-primary);
       --tn-surface-subtle: var(--surface-secondary);
+      --tn-nav-surface: var(--surface-primary);
+      --tn-nav-ink-muted: var(--text-secondary);
       --tn-text-primary: var(--text-primary);
       --tn-text-secondary: var(--text-secondary);
       --tn-text-tertiary: var(--text-tertiary);
@@ -260,6 +268,16 @@
     border-bottom: 1px solid var(--border-default);
   }
 
+  /* El logo de Autofactu es blanco: sobre el azul clarito de --tn-nav-surface necesita un fondo
+   * navy propio para seguir viéndose, en claro y en oscuro. */
+  .tn-brand-logo-frame {
+    display: inline-flex;
+    align-items: center;
+    background: var(--brand-navy);
+    border-radius: var(--tn-radius-md);
+    padding: 6px 10px;
+  }
+
   .tn-user-nav-links {
     position: fixed;
     right: 0;
@@ -285,7 +303,7 @@
     gap: 4px;
     padding: 8px 4px;
     text-align: center;
-    color: var(--text-secondary);
+    color: var(--tn-nav-ink-muted);
     font-size: 0.75rem;
     border-top: 2px solid transparent;
     transition: color 140ms ease, border-color 180ms ease;
