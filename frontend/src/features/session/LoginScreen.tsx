@@ -120,7 +120,7 @@ export function LoginScreen({ theme }: { theme: AppliedTheme }) {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-md bg-emerald-600 px-4 py-2 font-medium text-white disabled:opacity-40"
+          className="tn-btn tn-btn-primary tn-btn-lg w-full"
         >
           {submitting ? 'Entrando…' : 'Entrar'}
         </button>

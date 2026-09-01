@@ -78,8 +78,13 @@ export function InvoiceInbox() {
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="tn-summary-card rounded-md border px-3 py-2 text-center">
-      <p className="text-lg font-semibold text-emerald-300">{value}</p>
-      <p className="text-xs text-slate-400">{label}</p>
+      {/* Bloque 8 (a11y): sin `text-emerald-300` -- el remapeo legacy `.tn-panel-page
+          .text-emerald-300` (verde oscuro, para superficies claras) pisaba por especificidad
+          a `.tn-summary-card p:first-child` (acento sobre esta tarjeta glass oscura),
+          dejando el número con ~2.17:1 de contraste. Sin esa clase, aplica el color pensado
+          para esta superficie. */}
+      <p className="text-lg font-semibold">{value}</p>
+      <p className="text-xs text-muted">{label}</p>
     </div>
   )
 }

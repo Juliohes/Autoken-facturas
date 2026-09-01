@@ -56,6 +56,10 @@
     --success-surface: #eafaf4;
     --warning: var(--brand-orange);
     --warning-surface: var(--brand-orange-light);
+    /* Texto sobre warning-surface: el naranja de marca (#FA6703) sobre --warning-surface claro
+     * da ~2.5:1 (falla AA). --tn-warning-ink es un ámbar oscuro dedicado a TEXTO, distinto del
+     * acento de marca (regla del sistema: "semántica aparte del acento"), 6.2:1 en claro. */
+    --tn-warning-ink: #92400e;
     --error: #e5484d;
     --error-surface: #fff0f0;
     --glass-navy-background: rgba(2, 18, 49, 0.84);
@@ -150,6 +154,8 @@
     --tn-success-surface: var(--success-surface);
     --tn-warning: var(--brand-orange);
     --tn-warning-surface: var(--warning-surface);
+    /* En oscuro, el naranja de marca (#FF7A3D) ya pasa AA sobre warning-surface (~6.15:1). */
+    --tn-warning-ink: var(--brand-orange);
     --tn-error: var(--error);
     --tn-error-surface: var(--error-surface);
     --tn-shadow-card: 0 5px 18px rgba(0, 0, 0, 0.4);
@@ -192,6 +198,7 @@
       --tn-success-surface: var(--success-surface);
       --tn-warning: var(--brand-orange);
       --tn-warning-surface: var(--warning-surface);
+      --tn-warning-ink: var(--brand-orange);
       --tn-error: var(--error);
       --tn-error-surface: var(--error-surface);
       --tn-shadow-card: 0 5px 18px rgba(0, 0, 0, 0.4);
@@ -872,10 +879,13 @@
     border: 1px solid transparent;
   }
   .tn-status-ok { color: var(--tn-success); background: var(--tn-success-surface); border-color: var(--tn-success); }
-  .tn-status-warn { color: var(--tn-warning); background: var(--tn-warning-surface); border-color: var(--tn-warning); }
+  .tn-status-warn { color: var(--tn-warning-ink); background: var(--tn-warning-surface); border-color: var(--tn-warning); }
   .tn-status-bad { color: var(--tn-error); background: var(--tn-error-surface); border-color: var(--tn-error); }
   .tn-status-neutral { color: var(--tn-text-secondary); background: var(--tn-surface-subtle); border-color: var(--tn-border); }
-  .tn-status-info { color: var(--tn-accent-strong); background: var(--tn-accent-wash); border-color: var(--tn-accent-strong); }
+  /* Texto principal sobre superficie sólida (no el acento de marca ni --brand-navy, que no se
+   * redefine en oscuro): --tn-text-primary es dual-theme por diseño y siempre contrasta con
+   * --tn-surface-subtle de su propio tema, sin depender de un fondo con alpha. */
+  .tn-status-info { color: var(--tn-text-primary); background: var(--tn-surface-subtle); border-color: var(--tn-border); }
 
   .tn-spinner-wrap { display: inline-flex; align-items: center; }
   .tn-spinner {
@@ -891,7 +901,7 @@
   }
   .tn-banner-info { color: var(--tn-text-primary); background: var(--tn-surface-subtle); border-color: var(--tn-border); }
   .tn-banner-ok { color: var(--tn-success); background: var(--tn-success-surface); border-color: var(--tn-success); }
-  .tn-banner-warn { color: var(--tn-warning); background: var(--tn-warning-surface); border-color: var(--tn-warning); }
+  .tn-banner-warn { color: var(--tn-warning-ink); background: var(--tn-warning-surface); border-color: var(--tn-warning); }
   .tn-banner-bad { color: var(--tn-error); background: var(--tn-error-surface); border-color: var(--tn-error); }
 
   .tn-empty-state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 20px; text-align: center; }
@@ -1093,19 +1103,8 @@
   .tn-panel-page .text-sky-300,
   .tn-panel-page .text-cyan-300 { color: var(--brand-navy) !important; }
 
-  .tn-login-shell button[type='submit'] {
-    min-height: 48px;
-    border: 1px solid var(--tn-accent);
-    border-radius: var(--tn-radius-md);
-    /* Texto navy sobre naranja de acento (AA 6.18:1). */
-    color: var(--tn-accent-ink);
-    background: var(--tn-accent);
-    font-weight: 700;
-  }
-
-  .tn-login-shell button[type='submit']:hover:not(:disabled) {
-    filter: brightness(1.04);
-  }
+  /* El botón de "Entrar" ahora usa las clases del sistema (.tn-btn-primary) directamente en el
+   * JSX de LoginScreen.tsx; ya no necesita este override por selector de tag+atributo. */
 
   .tn-auth-layout {
     display: grid;
@@ -1188,6 +1187,18 @@
     .tn-capture-segment .tn-capture-icon {
       width: 22px;
       height: 22px;
+    }
+
+    /* Bloque 8: en móvil estrecho el ThemeToggle solo muestra icono (icono+aria-label siguen
+     * siendo accesibles; el texto visible se retira para no desbordar la cabecera junto al
+     * logo del tenant y el botón de cerrar sesión, sin generar scroll horizontal). */
+    .tn-theme-toggle-option {
+      min-width: 44px;
+      padding: 0 10px;
+    }
+
+    .tn-theme-toggle-option span {
+      display: none;
     }
   }
 }

@@ -69,7 +69,7 @@ export function UploadFileScreen() {
     <section className="tn-panel-page mx-auto w-full max-w-2xl space-y-6 p-6" aria-labelledby="upload-title">
       <div>
         <h1 id="upload-title" className="text-2xl font-semibold">Subir Archivo</h1>
-        <p className="mt-1 text-slate-600">Cada imagen o PDF se enviará como una factura independiente.</p>
+        <p className="mt-1 text-muted">Cada imagen o PDF se enviará como una factura independiente.</p>
       </div>
       <SegmentedControl
         label="Dirección de la factura"
