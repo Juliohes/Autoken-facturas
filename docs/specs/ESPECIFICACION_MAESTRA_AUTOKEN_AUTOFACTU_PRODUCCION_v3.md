@@ -624,6 +624,8 @@ La columna **Nivel** es un orden topológico: un nivel superior no debe implemen
 | R-049 | P1 | 10 | Security regression suite IDOR/RLS/PII/cache/storage | R-020,R-021,R-027 | 5 | 5 | 3 | Alto |
 | R-050 | P1 | 10 | Carga 10 usuarios × 10 invoices + degradación controlada | R-043,R-047 | 5 | 4 | 3 | Alto |
 | R-051 | P1 | 11 | Rollout por feature flags/canario + rollback por fase | R-049,R-050 | 5 | 3 | 2 | Alto |
+| R-052 | P1 | 10 | Revisión controlada, borrado seguro, deduplicación y medición de captura | R-020,R-022,R-024,R-025,R-049 | 5 | 5 | 3 | Alto |
+| R-053 | P2 | 9 | Paleta clara del app shell sin cambios funcionales | R-049,R-052 | 3 | 2 | 1 | Medio |
 
 
 
@@ -4503,6 +4505,8 @@ Esta tabla es normativa. Un agente no puede marcar un requisito como completado 
 | R-049 | suite IDOR/RLS/cache/log/minio pasa; búsqueda de logs de test no encuentra PII fixtures |
 | R-050 | escenario 100 uploads completa; reporta p50/p95/pool/Redis/429/recovery; 0 leaks |
 | R-051 | canary documentado; flags permiten rollback funcional sin downgrade destructivo |
+| R-052 | confirmación sin salto automático; pendientes borrables; duplicados exactos/fiscales bloqueados; latencia de captura medida sin PII |
+| R-053 | contenido autenticado crema/claro; barra superior y cámara conservan contraste oscuro; funciones y permisos sin cambios |
 
 ## 58.1. Evidencia que debe quedar en el repositorio
 

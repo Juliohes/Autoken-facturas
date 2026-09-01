@@ -1497,6 +1497,14 @@ la misma combinación de motor, modelo y tamaño del documento. Calcula las tand
 disponibles y muestra un intervalo, por ejemplo 20-35 segundos. Si todavía no hay suficientes datos, no
 inventa una cifra y deja la ETA sin mostrar.
 
+### Verificación HTTP de la ETA (R-048, 27/08/2026)
+
+Además de probar el cálculo aislado, se comprobó el recorrido real: se guardaron 30 muestras en Postgres
+y se consultó el endpoint de estado bajo las reglas de privacidad. Con una factura delante, cuatro trabajos
+posibles, cinco segundos de espera y veinte de procesamiento, la API devolvió un intervalo de 25 a 30
+segundos. La misma prueba confirma que con menos de 30 muestras no aparece una cifra. Falta comprobar la
+representación visual en la pantalla durante staging.
+
 ### Endurecimiento del flujo OCR (R-049, 22/08/2026)
 
 Se separó la puerta de “puedo leer” de la puerta de “puedo modificar”. Un administrador de asesoría
@@ -1543,6 +1551,30 @@ Antes de activar el canario existe un comprobador que revisa que los siete inter
 que la lista de tenants piloto contenga UUIDs válidos y que staging tenga sus secretos mínimos. No muestra
 ningún secreto. Si falla, el despliegue se detiene antes de probar con usuarios reales; aun pasando, todavía
 hay que comprobar conectividad y ejecutar el canario funcional.
+
+### Canario técnico de Setex (R-051, 25/08/2026)
+
+Se activaron los siete interruptores únicamente para el tenant piloto Setex mediante su UUID. El preflight
+devolvió `ready: true`, la API y el worker cargaron la misma configuración, y otro tenant de laboratorio
+mantiene todos los interruptores apagados. La configuración no publica la allowlist ni los secretos al
+navegador.
+
+Durante la comprobación se detectó que la base de datos estaba en la migración `0040` mientras el código
+actual necesitaba migraciones posteriores. Se aplicaron de forma transaccional las migraciones `0041` a
+`0054`, incluida la columna `ready` de la telemetría OCR y las estructuras de R-051. Después, health y
+métricas respondieron correctamente (`200`), Alembic quedó en `0054` y pasaron las nueve pruebas focalizadas
+de flags y preflight. Falta únicamente una prueba funcional con una factura real de Setex, que necesita
+credenciales y elegir explícitamente el documento de prueba.
+
+### Aislamiento de las suites de pruebas (25/08/2026)
+
+Las pruebas que necesitan una base de datos real crean una base efímera. En Docker, dos contenedores
+distintos pueden tener el mismo número de proceso, así que usar solo el PID podía hacer que una suite
+borrase la base de otra. Ahora cada ejecución añade un identificador aleatorio al nombre de su base.
+
+El Redis de test sigue usando el índice `/15` y cada caso lo limpia con `flushdb()`. Por eso las suites
+completas no deben lanzarse en paralelo hasta separar también ese espacio de Redis; la aplicación normal
+no comparte este mecanismo de pruebas.
 
 ### Esquema ORM y migraciones alineados (R-051, 23/08/2026)
 
@@ -1661,6 +1693,648 @@ En «Varias facturas», la cámara permanece abierta mientras se prepara y se su
 `201`, la misma cámara vuelve a estar disponible sin pedir permiso otra vez. Si el sistema operativo ha
 terminado el track, la aplicación lo detecta por `readyState` y solo entonces solicita una cámara nueva.
 
+### Retos de lectura de estructura (R-041/R-042, 24/08/2026)
+
+Además del lector principal de facturas, ahora existen dos servicios de laboratorio para comparar si otros
+programas entienden mejor la estructura visual de una factura: PaddleOCR/PP-StructureV3 y Surya. No se
+instalan dentro de la API ni se ejecutan para clientes automáticamente. Solo se levantan con el perfil
+opcional `lab` de Docker Compose y devuelven medidas comparables de líneas de impuestos, tablas, columnas,
+relación etiqueta/valor y orden de lectura. Así se puede medir una mejora real antes de asumir el coste de
+añadir otro motor a producción.
+
+La primera prueba real también enseñó por qué siguen siendo servicios de laboratorio: Paddle necesita una
+configuración especial de memoria y de oneDNN para sus modelos grandes, y Surya 2 en CPU tarda demasiado
+para el uso normal. El servicio Paddle tiene ahora un modo ligero (`PADDLE_PIPELINE=ocr`) como opción
+predeterminada; el modo estructural completo se construye aparte con sus dependencias pesadas. Por eso
+ninguno sustituye todavía al lector principal. Surya queda aparcado hasta tener una GPU o un servidor
+externo; Paddle solo podrá compararse de verdad cuando su caché de modelos y su memoria estén preparados
+en un entorno de benchmark.
+
+### Separación de colas de usuario y laboratorio (R-043/R-044, 24/08/2026)
+
+El trabajo que afecta a una persona y el trabajo experimental ya tienen dos colas distintas. La cola
+principal atiende la lectura de facturas y sus reintentos; la cola de fondo atiende comparativas,
+benchmarks y challengers. Además, el worker principal puede procesar cuatro trabajos a la vez y el de
+laboratorio solo uno, para que una prueba pesada no deje esperando a los usuarios. El cableado se probó
+encolando y consumiendo un trabajo real contra Redis.
+
+### Cortacircuitos del proveedor (R-045, 24/08/2026)
+
+Si un proveedor de OCR empieza a fallar repetidamente, el sistema deja de llamarlo durante unos segundos
+en vez de multiplicar el problema. Tras ese descanso solo deja pasar una prueba. Esa prueba se reserva
+con una llave temporal de Redis usando una operación atómica, de modo que dos workers no puedan probar a la
+vez. Si funciona, el circuito se cierra; si vuelve a fallar, sigue abierto.
+
+### Controles separados para producción y laboratorio (R-046, 24/08/2026)
+
+El panel de administración técnica distingue ahora la configuración que usa producción de la
+configuración del laboratorio. Producción muestra su motor, modelo, fallback, consenso y versión de
+política. El laboratorio tiene sus propios controles de visibilidad, benchmark automático, motores y
+variantes. El botón de desactivación apaga solo los benchmarks automáticos: la producción sigue usando
+su política fija. Una promoción a producción exige confirmación y guarda una copia de la política
+anterior, la nueva, el administrador y la fecha en un registro que no se puede modificar ni borrar.
+
+### Telemetría y estimación prudente (R-047/R-048, 24/08/2026)
+
+La aplicación publica métricas Prometheus de subida, espera y procesamiento OCR, fallback, fallos,
+borradores, revisión y tamaños de las colas. Las etiquetas están limitadas a datos técnicos y a grupos
+de número de páginas; nunca incluyen CIF, proveedor, número de factura ni importes. La pantalla solo
+calcula una ETA cuando existen al menos 30 ejecuciones recientes comparables. En ese caso muestra un
+rango aproximado teniendo en cuenta la concurrencia; si no hay suficientes datos, no inventa segundos.
+
+### Prueba de carga y recuperación (R-050, 24/08/2026)
+
+Existe un arnés que prepara el escenario de diez usuarios con diez subidas cada uno, mide el p50 y el
+p95, espera el resultado del OCR y comprueba que cada usuario solo ve su propia bandeja. El informe no
+guarda credenciales ni datos fiscales. Además de la profundidad y disponibilidad de Redis, ahora separa
+el estado de recuperación: pendientes, procesando, abandonados, fallidos y documentos expirados. La
+caída y recuperación de Redis se ejecuta manualmente en staging con un proveedor OCR de prueba, nunca
+contra servicios de pago.
+
+### Primera ejecución sintética de carga OCR (R-050, 26/08/2026)
+
+Se ejecutó la primera tanda real de 100 subidas en un tenant efímero separado de Setex. El entorno usó
+Redis en la base `/15`, MinIO, ClamAV y un extractor OCR determinista de `APP_ENV=load_test`, por lo que
+no llamó a Gemini ni generó coste. Las 100 peticiones respondieron `201`, las 100 facturas acabaron en
+`needs_review`, no hubo `429` y ningún usuario vio documentos de otro usuario.
+
+El p50 fue `3,68 s` y el p95 `4,44 s`. El p95 todavía supera el objetivo de `3 s`, así que R-050 sigue
+abierto aunque la parte de aislamiento, cola y estados terminales haya pasado. Las métricas de recuperación
+son globales para toda la instalación; por eso el informe guarda una línea base y un delta. El único
+fallo que aparecía en la foto global era anterior y pertenecía a otro tenant; el delta de la prueba fue
+cero. El tenant sintético, sus documentos y los contenedores temporales se eliminaron al terminar.
+
+### Interrupción y recuperación de Redis en una subida (R-050, 26/08/2026)
+
+Se hizo una segunda comprobación más agresiva con una cola Redis exclusiva. Tras completar los diez
+logins, se dejaron pasar algunas subidas y se apagó Redis: 8 peticiones fueron aceptadas y 92 fallaron
+durante la caída. Las 8 aceptadas no desaparecieron: quedaron guardadas en Postgres, 7 ya procesadas y 1
+pendiente de OCR. Se vació únicamente la base Redis de pruebas para representar un trabajo cuyo encolado
+se perdió, se arrancó el recuperador y este volvió a poner el pendiente en la cola. El worker terminó los
+8 documentos en `needs_review` usando el lector determinista de prueba, sin Gemini ni coste externo.
+
+Esto demuestra la diferencia entre "la subida se ha guardado" y "el trabajo en segundo plano ya se ha
+hecho": aunque Redis se caiga, la foto aceptada sigue en el archivador permanente y se puede volver a
+poner en la lista de trabajo. R-050 continúa abierto únicamente porque el p95 de subida medido fue mayor
+que el objetivo de 3 segundos.
+
+Para intentar reducir ese tiempo se dejó de preguntar a MinIO en cada subida si el bucket del tenant ya
+existe, manteniendo una comprobación de seguridad si MinIO dice que ha desaparecido. También se juntaron
+en un solo `EVAL` atómico los dos contadores Redis del límite de subidas y se redujo un viaje a Postgres
+al fijar simultáneamente el tenant y la empresa. La repetición válida más reciente quedó en `3,26 s` de
+p95, con cero fugas entre usuarios; sigue por encima de los 3 segundos, así que R-050 aún no está cerrado.
+
+Para no tocar la base de datos a ciegas se midieron sus planes reales. Las búsquedas de duplicados usan las
+restricciones únicas de empresa, usuario y hash; con la instalación actual tardaron `0,03 ms` para la fila
+principal y `0,09 ms` incluyendo las páginas. Por tanto no se añadió un índice especulativo: las décimas
+restantes del p95 están en la coordinación y el I/O del camino completo, no en esas búsquedas SQL.
+
+### Aislamiento y recuperación ante errores (R-049/R-051, 24/08/2026)
+
+La comprobación de seguridad contra accesos cruzados entre asesorías pasa con Postgres, Redis y MinIO
+reales: un usuario no puede operar sobre facturas ajenas ni ver la bandeja de otro usuario. Los flags de
+despliegue forman una lista cerrada y pueden apagarse sin deshacer migraciones. El preflight del canario
+comprueba los siete flags, la allowlist y la presencia de secretos, pero nunca imprime sus valores.
+
+### Preparación del host y PaddleOCR (25/08/2026)
+
+El servidor donde vive Autoken se ha preparado para probar PaddleOCR sin depender del ordenador de Julio:
+se actualizaron los paquetes del sistema y Docker Compose, se añadieron 4 GiB de memoria de emergencia y se
+dejó el laboratorio separado del API y de la web, con un límite de 2 CPU y 6 GiB de RAM. La caché de modelos
+queda guardada en un volumen persistente, así que apagar o recrear el contenedor no obliga a descargarla otra
+vez.
+
+PaddleOCR está levantado solo en localhost, bajo el perfil de laboratorio, y no lee facturas de clientes ni
+cambia el lector principal. El modelo medio que venía por defecto tardaba alrededor de 80-90 segundos por
+factura en esta máquina; para poder experimentar se dejaron los modelos `PP-OCRv5_mobile` y
+`latin_PP-OCRv5_mobile_rec` como predeterminados, que tardan aproximadamente 27-35 segundos. La primera
+factura real procesada devolvió texto, IVA, campos y orden de lectura. Eso demuestra que el servicio funciona,
+pero todavía hace falta comparar su precisión con la verdad humana antes de decidir si merece entrar en
+producción.
+
+### Cuenta de soporte para prueba móvil (25/08/2026)
+
+La cuenta `soporte@autoken.es` se conserva como usuario normal (`user`) activo para probar Autofactu
+desde un móvil. En el tenant real `setex`, tiene exactamente una empresa asignada: **Estudio Inghervi,
+S.L.U.**, CIF **B06400980**. Esa es la única dirección correcta para la prueba:
+`https://setex.autoken.es`.
+
+Se retiró la asociación de la empresa demo "Empresa Fantasma (prueba soporte)" en `ilex`. Como Inghervi
+no pertenece al tenant demo `ilex`, soporte no tiene empresa ni acceso de usuario allí. No se borró la
+empresa demo ni ningún documento; solo se quitó la asociación de la cuenta y se dejó registro de auditoría.
+
+### Corrección de lectura de importes españoles (25/08/2026)
+
+La prueba móvil descubrió que la foto sí llegaba al servidor, pero el lector automático fallaba al
+recibir importes escritos con coma decimal, como `450,00`. El lector entiende ese formato, pero una
+pieza posterior intentaba convertirlo como si fuera un número inglés y marcaba toda la factura como
+fallida. Se corrigió esa conversión para aceptar formatos españoles e ingleses, incluyendo separadores
+de miles. La misma factura real se volvió a procesar y terminó en `needs_review`, con sus importes
+disponibles para que la persona los revise, en lugar de mostrar el error y pedir otra foto.
+También se corrigió el permiso interno que guarda las muestras de tiempo del lector, para que el
+indicador de tiempo estimado pueda aprender de las facturas procesadas sin dar acceso directo de
+escritura a la aplicación.
+
+### Verificación del siguiente paso de Autofactu (26/08/2026)
+
+La aplicación web queda comprobada con 410 tests, comprobación de tipos y build de producción. También
+se actualizó el registro técnico a la migración `0056`, que es la versión real de la base de datos.
+El siguiente ensayo importante es R-050: 100 subidas sintéticas para medir carga, recuperación y
+aislamiento entre usuarios. No se ejecutará contra Setex porque el entorno actual usa Gemini real y el
+ensayo necesita un proveedor OCR controlado y diez usuarios de prueba; hacerlo sin eso produciría coste
+y datos de prueba en el tenant real.
+
+### Runbook general de rollback (26/08/2026)
+
+Se añadió `docs/runbooks/rollback.md` como procedimiento único para responder a incidentes. Primero
+explica el rollback funcional de una feature mediante flags, que conserva los datos y no necesita tocar
+Alembic. Después separa el rollback de una imagen, el downgrade excepcional de una migración y la
+restauración desde backup, siempre con API/worker controlados, backup verificado y comprobaciones de
+health, métricas, cola, ClamAV y aislamiento. No se permite arreglar el esquema borrando datos o con SQL
+manual, ni restaurar directamente encima de producción.
+
+### Acceso web por rol y corrección del proxy (26/08/2026)
+
+Se verificaron las tres entradas públicas: `panel-staging.autoken.es` para los administradores de
+plataforma, y `setex.autoken.es` para el administrador de asesoría y el usuario `soporte`. Los dominios
+tenían HTTPS válido y el frontend cargaba, pero el stack se había arrancado sin el overlay de producción;
+por eso Nginx devolvía la página web también para las llamadas `/api/*`. Se relanzaron API, worker y
+frontend con ambos ficheros Compose y se reinició Traefik. Ahora `/api/v1/health` llega a FastAPI y una
+petición sin sesión a `/api/v1/auth/me` recibe `401` JSON. El procedimiento de acceso y diagnóstico queda
+en `docs/runbooks/acceso-web.md`.
+
+### Protección definitiva del despliegue Traefik (26/08/2026)
+
+El incidente anterior podía repetirse porque Docker Compose permite ejecutar el fichero base sin el
+overlay de producción. Se añadió `DEPLOYMENT_PROFILE`: la pila base fija `standalone`, el overlay real
+fija `proxy`, y API/worker se niegan a arrancar en `staging` o `production` si no reciben `proxy`.
+Además, `infrastructure/deploy.sh` es ahora el punto de entrada del despliegue público: reconstruye las
+imágenes, espera los healthchecks, comprueba la red externa `proxy`, verifica las etiquetas de routers
+Traefik y consulta el health JSON por HTTPS. La decisión arquitectónica está registrada en
+`docs/adr/0020-despliegue-publico-con-overlay-proxy.md`.
+
+### Prueba funcional real del canario (26/08/2026)
+
+Se probó una factura nueva desde el móvil usando `soporte@autoken.es` en `setex.autoken.es`, con la
+empresa **Estudio Inghervi, S.L.U.**. La foto llegó, el lector entendió la factura emitida y el usuario la
+revisó y confirmó. La factura quedó guardada con base de **1.100,00 €**, IVA de **231,00 €**, IRPF de
+**209,00 €** y total de **1.122,00 €**; el cuadre es correcto porque `1.100 + 231 - 209 = 1.122`.
+
+El lector la dejó en `needs_review` antes de la confirmación porque varios importes tenían confianza baja.
+Eso significa «hay que revisarla», no «la foto ha fallado». Esta prueba confirma que el canario de R-051
+funciona de punta a punta con una factura real. Sigue pendiente únicamente cerrar R-050 por latencia y
+completar la verificación general de staging.
+
+### Coordinación de la primera subida de un tenant (26/08/2026)
+
+Cuando una asesoría nueva recibe su primera factura, la aplicación debe crear su espacio privado en MinIO.
+Con muchas subidas simultáneas, varias peticiones podían intentar crearlo a la vez y repetir trabajo. Ahora
+solo una petición comprueba y crea ese espacio por tenant; las demás esperan un instante y reutilizan el
+resultado. Los tenants distintos no se bloquean entre sí. La regresión concurrente pasa y se mantiene el
+requisito de que una factura nunca se guarda sin haber pasado antes por el antivirus.
+
+La oleada de control posterior aceptó las 100 facturas, procesó las 100 con el lector de prueba y no
+mezcló ninguna bandeja entre usuarios. Su p95 fue **4,52 segundos**, peor que la mejor medición anterior
+de 3,26 segundos, así que esta corrección arregla una carrera concreta pero no resuelve todavía el objetivo
+de latencia. R-050 sigue abierto hasta encontrar la causa del tiempo restante o justificar formalmente el
+objetivo en un entorno de red razonable.
+
+### Medición del tiempo por etapas de una subida (26/08/2026)
+
+Para investigar el retraso sin adivinar, la aplicación ahora mide por separado las etapas técnicas de una
+subida: permisos, límite de frecuencia, lectura, validación, deduplicación, antivirus, MinIO y guardado en
+la base de datos. Solo guarda tiempos agrupados; no guarda nombres, usuarios ni facturas dentro de estas
+métricas.
+
+En la nueva medición las 100 subidas fueron aceptadas, pero el p95 subió a **5,01 segundos**. El mayor
+tiempo acumulado apareció al comprobar duplicados y guardar los registros cuando todo ocurre a la vez. El
+antivirus y MinIO fueron bastante menores, así que el siguiente trabajo debe estudiar la espera y la
+coordinación de las conexiones de base de datos y Redis. Esta ejecución es diagnóstica, no sustituye la
+mejor evidencia anterior porque la bandeja estaba desactivada para ese tenant de prueba.
+
+### Medición de la identidad y del tamaño del pool (26/08/2026)
+
+También medimos el paso que ocurre antes de entrar en la función de subida: comprobar en la base de
+datos a qué empresa pertenece el usuario. En una corrida con la bandeja habilitada para el tenant
+efímero, las 100 subidas fueron aceptadas, no hubo fugas entre usuarios y el p95 fue **3,94 segundos**.
+La resolución de empresa acumuló **41,61 segundos** y el guardado/deduplicación siguieron siendo las
+etapas más costosas.
+
+Probamos reducir el tamaño del pool de conexiones a `30` sin conexiones extra. Aunque las subidas fueron
+aceptadas, el sistema se quedó sin conexiones al consultar los estados y acabó en timeout. Por eso no se
+aplica ese ajuste: el overflow es una reserva necesaria cuando coinciden subidas y consultas. Tampoco se
+añade una caché de pertenencia, porque podría mantener permisos revocados durante unos segundos.
+
+También probamos desactivar temporalmente el `pre-ping`, que es una comprobación para no reutilizar una
+conexión muerta con la base de datos. El p95 bajó solo de **3,94 a 3,86 segundos** y siguió sin cumplir el
+objetivo. Como esa comprobación protege frente a caídas de red o de Postgres, se mantiene activa por
+defecto y no se considera una solución.
+
+Finalmente se midió por separado el tiempo de conseguir una conexión y preparar su contexto privado de
+RLS. En la última prueba, esa preparación acumuló **24,83 segundos** en identidad, **33,05** al comprobar
+duplicados y **22,32** al guardar. Esto confirma que parte del retraso es esperar/preparar conexiones
+cuando coinciden muchas peticiones, no procesar la imagen. No se aumenta el pool sin calcular antes el
+límite total de conexiones de Postgres para la API, el worker y las réplicas.
+
+También probamos pools más grandes. El ajuste `30/0` dejó al sistema sin conexiones durante las consultas
+de estado y `40/20` fue incluso más lento, con un p95 de **4,86 segundos**. El tamaño actual `20/20` es el
+mejor equilibrio medido; el retraso no se arregla simplemente abriendo más conexiones.
+
+En la persistencia de una subida, la factura y su registro de auditoría se insertan en una sola operación
+de base de datos. Así se elimina un viaje de ida y vuelta sin perder la garantía de que ambos se guardan o
+ninguno. La prueba confirmó la garantía, pero el tiempo total aún queda por encima del objetivo de 3 s.
+
+### Decisión de prioridad de R-050 (26/08/2026)
+
+Julio ha decidido que el objetivo de tres segundos no es un bloqueo de producto. El flujo completo puede
+tardar aproximadamente entre ocho y diez segundos si mantiene las garantías importantes: la factura se
+acepta solo después del antivirus, no aparecen documentos de otros usuarios, el registro y la auditoría
+se guardan juntos y las subidas aceptadas se recuperan correctamente si falla la cola OCR. Por tanto, no
+se seguirá complicando el código para arañar milisegundos en el camino caliente; R-050 queda pendiente
+únicamente de la verificación completa de staging y recuperación.
+
+La última medición funcional válida aceptó las 100 subidas y no produjo fugas. La migración `0056_r050_ctx`
+reduce viajes de ida y vuelta en las comprobaciones RLS mediante funciones PostgreSQL acotadas, sin guardar
+permisos en caché ni retrasar revocaciones. Los gates focalizados de aislamiento, cabeceras, ETA, rollout
+y arnés pasan contra los servicios reales.
+
+### Verificación HTTP de la ETA (R-048, 27/08/2026)
+
+Además de probar el cálculo aislado, se comprobó el recorrido real: se guardaron 30 muestras en Postgres
+y se consultó el endpoint de estado bajo las reglas de privacidad. Con una factura delante, cuatro trabajos
+posibles, cinco segundos de espera y veinte de procesamiento, la API devolvió un intervalo de 25 a 30
+segundos. La misma prueba confirma que con menos de 30 muestras no aparece una cifra. Falta comprobar la
+representación visual en la pantalla durante staging.
+
+### Estado actual de la carga y del despliegue (27/08/2026)
+
+La carga sintética ya ha demostrado `100/100` subidas aceptadas, cero fugas entre usuarios, auditoría
+atómica y recuperación de documentos aceptados tras una caída de Redis. El p95 observado ronda 3,6-4,0
+segundos en las ejecuciones válidas; Julio ha decidido que el límite estricto de 3 segundos no bloquea si
+se conservan las garantías de integridad y aislamiento. R-050 y R-051 siguen abiertos únicamente para la
+verificación completa de staging, canario y rollback con el entorno final.
+
+El despliegue de staging quedó comprobado con el procedimiento oficial. API y worker arrancan con la
+protección `proxy`, Traefik dirige `/api` al servidor correcto y los dos dominios públicos devuelven el
+JSON de salud de FastAPI en lugar de la página web. El siguiente paso ya no es corregir infraestructura:
+es ejecutar la prueba de carga/recuperación y hacer el canario guiado con la factura que Julio elija.
+
+### Nueva prueba manual del canario (27/08/2026)
+
+Julio subió otra factura desde el navegador. El servidor la aceptó con `201`, la inteligencia artificial la
+leyó en unos 12 segundos y la dejó en `needs_review`, que significa que la persona debe revisar los datos,
+no que la lectura haya fallado. Después se guardó la revisión y se confirmó la factura. El archivador de
+Postgres terminó mostrando el estado `confirmed`, sin errores de OCR ni de cola.
+
+Esto confirma de nuevo el recorrido real de una factura, pero todavía no sustituye la prueba de 100 subidas
+simultáneas, la recuperación después de apagar Redis ni la comprobación del rollback.
+
+### Carga aislada y recuperación de Redis (R-050, 27/08/2026)
+
+La prueba de muchas facturas se ejecutó sin tocar Setex: se levantaron una API, un worker y una Redis
+temporales con un lector automático determinista. Diez usuarios sintéticos hicieron diez subidas cada uno.
+Las 100 subidas fueron aceptadas, no hubo documentos cruzados ni respuestas `429`, y todas terminaron en un
+estado final. El p95 fue de 3,97 segundos; se conserva la mejor medición anterior de 3,26 segundos como
+referencia, porque cada corrida mide también la carga del host.
+
+Después se apagó únicamente la Redis temporal durante otra oleada. Se aceptaron 69 facturas y 31 fueron
+rechazadas mientras la cola estaba caída. Al restaurarla, el recuperador volvió a poner las 69 aceptadas en
+la cola y el worker terminó todas, sin perderlas ni dejar ninguna pendiente. El tenant, usuarios, imágenes
+y contenedores de prueba se borraron al finalizar.
+
+### Proveedor OCR limitado por cuota (R-050, 27/08/2026)
+
+También se probó el caso en que el lector principal responde `429`, que significa «demasiadas peticiones».
+Un proveedor falso provocó esa respuesta y un lector alternativo falso completó la factura. Autofactu la
+dejó correctamente en `ocr_done`, aumentó el contador técnico de respuestas `429` y no guardó el mensaje
+del proveedor dentro de la factura. La prueba no llamó a Gemini ni utilizó credenciales reales.
+
+También se comprobó la frontera del adaptador Gemini: aunque el SDK entregue el `429` solo como atributo
+numérico y no dentro del texto del error, Autofactu conserva la clasificación para activar el tratamiento
+correspondiente. El contenido original del proveedor no se propaga como dato de factura.
+
+### Rollback de cualquier interruptor (R-051, 27/08/2026)
+
+Se simuló el apagado de cada uno de los siete interruptores con el tenant piloto dentro de la lista
+permitida. En todos los casos, `false` gana y la función queda desactivada. La simulación no cambió el
+fichero real de configuración ni reinició el servidor. Para apagar un interruptor real de Setex todavía
+hay que elegir cuál, observar el efecto y seguir el runbook con una confirmación explícita.
+
+Después se hizo esa comprobación real con el interruptor de aprendizaje de proveedores, que es el menos
+arriesgado: se apagó temporalmente, API y worker lo cargaron como `false`, health y preflight siguieron
+correctos y los otros interruptores no cambiaron. Finalmente se restauró a `true`. No se deshicieron
+migraciones ni se borró ningún dato.
+
+### Auditoría final de infraestructura antes del go-live (27/08/2026)
+
+La estructura real de la base de datos está en la migración `0056_r050_ctx`. Para comprobarlo no se usa la
+cuenta normal de la aplicación, porque esa cuenta no debe poder modificar ni leer el control de migraciones;
+se usa la herramienta administrativa separada. El resultado fue `0056_r050_ctx (head)`.
+
+También se comprobó el backup nocturno: el 27 de agosto se creó un fichero cifrado de 373.833 bytes en
+menos de un segundo y se subió a otra VPS. La copia y el restore drill ya habían sido comprobados antes.
+
+La parte técnica está preparada, pero aún no se debe hacer el cambio definitivo: faltan aprobar la versión
+de lanzamiento, decidir la noche de migración, confirmar exactamente las 51 empresas y 4 facturas que se
+van a trasladar, cambiar el DNS definitivo y tener las credenciales del correo remitente.
+
+### Base común de accesibilidad y branding del frontend (27/08/2026)
+
+Se ha puesto una base común para las ventanas emergentes de la aplicación. Ahora una ventana tiene un
+nombre que los lectores de pantalla pueden anunciar, coloca el cursor en el primer control al abrirse,
+mantiene el teclado dentro de ella, se cierra con `Escape` y devuelve el cursor al sitio anterior al
+cerrarse. Esto evita que cada pantalla tenga una versión ligeramente distinta y difícil de usar con
+teclado.
+
+También se conectó el color principal de los botones al color de la asesoría. Hasta ahora la aplicación
+conocía el color configurado por cada tenant, pero muchas pantallas seguían pintando el naranja fijo de
+Autoken. Ahora los botones principales respetan ese color sin cambiar la apariencia por defecto de
+Autoken. La suite frontend queda en 410 tests, con typecheck y build correctos.
+
+### Captura automática segura y modo manual (R-006/R-007, 27/08/2026)
+
+La cámara ya no se limita a enseñar una guía: al abrirse empieza en modo automático y observa si la
+factura está bien encuadrada, suficientemente nítida, bien iluminada, sin cortar los bordes y sin una
+perspectiva extrema. Además exige que el documento permanezca quieto durante al menos 700 milisegundos
+y cuatro imágenes antes de preparar la foto. Después espera 350 milisegundos más como confirmación para
+evitar disparos accidentales.
+
+El modo manual sigue siempre disponible. Ambos modos usan el mismo cierre de seguridad, por lo que una
+doble pulsación o un evento automático y otro manual al mismo tiempo no pueden crear dos subidas. Si
+faltan señales reales de calidad, el sistema no inventa valores: AUTO permanece sin armar y la persona
+puede decidir si captura manualmente. Falta probarlo en teléfonos reales para ajustar los umbrales si
+algún modelo de cámara se comporta distinto. La suite frontend queda en 419 tests.
+
+### Recorte conservador y recuperación ante fallos de cámara (R-009, 27/08/2026)
+
+Antes de recortar y enderezar una foto, Autofactu comprueba que las cuatro esquinas son números
+válidos, están dentro de la imagen, no tocan el borde, ocupan una superficie razonable y no tienen una
+perspectiva exagerada. Si una comprobación falla, conserva la foto completa en vez de fabricar un
+recorte posiblemente incorrecto.
+
+También se corrigió el camino de error de la cámara: si el dispositivo rechaza la captura, se libera
+el cierre de seguridad y se puede volver a intentarlo. Durante una vista previa o mientras se procesa
+una foto, el análisis automático queda temporalmente apagado para que no pueda iniciar una segunda
+captura por detrás. La suite frontend queda en 433 tests.
+
+### Transporte de subida separado y captura más resistente (R-009/R-011, 27/08/2026)
+
+La subida simple y la subida de varias páginas ahora tienen cada una su propia función de transporte,
+separada de los hooks que gestionan el estado visual. Esto hace más fácil comprobar que el navegador manda
+exactamente las partes correctas del formulario y que solo se considera aceptada una respuesta `201`.
+También se conserva la foto completa si falla el recorte de OpenCV, se cierran correctamente los recursos
+temporales de imagen y se mantiene el último preview reciente mientras el lector en segundo plano está ocupado.
+La suite frontend queda en 437 tests.
+
+### Confirmación sin guardado innecesario del borrador (R-022, 27/08/2026)
+
+Al confirmar una factura que ya tenía un borrador guardado, la pantalla intentaba guardarlo otra vez aunque
+no se hubiera cambiado ningún dato. Si otra actualización había avanzado la revisión, el servidor respondía
+`409` y la confirmación no llegaba a ejecutarse. Ahora solo se guarda el borrador cuando hay cambios pendientes
+o se está recuperando un error anterior; si ya está limpio, se confirma directamente. La suite frontend queda
+en 438 tests.
+
+### Revisión explícita antes de confirmar (S2.4/S6.1, 27/08/2026)
+
+La pantalla de revisión ya no pinta de rojo o amarillo los datos que la IA considera dudosos. Todos los
+campos tienen una apariencia neutral porque una confianza baja no significa automáticamente que el dato sea
+incorrecto: significa que una persona debe comprobarlo. Antes de guardar, la persona marca `He revisado todos
+los datos de la factura.` y acepta la responsabilidad. Si queda algún bloqueo real, como un CIF de contraparte
+inválido, el botón sigue desactivado pero ahora aparece una explicación concreta de lo que falta. Si se edita
+un dato después de marcar la revisión, la casilla vuelve a quedar desmarcada.
+La suite frontend queda en 441 tests.
+
+### Revisión controlada, borrado seguro y duplicados (R-052, 27/08/2026)
+
+Después de guardar una factura, la aplicación ya no salta sola a otra. Si quedan facturas listas para
+revisar, pregunta si se quiere abrir la siguiente: **Sí** la abre y **No** vuelve a `Mis facturas`. Si no
+queda ninguna, vuelve directamente a la bandeja.
+
+Una factura que todavía no se ha confirmado se puede eliminar desde la bandeja o desde la pantalla de
+revisión. Primero aparece una confirmación con el mensaje de que esa factura todavía no se ha confirmado ni
+guardado. El servidor borra la fila y sus datos relacionados dentro de la base de datos, y después intenta
+limpiar la imagen del almacén privado. Una factura confirmada no se puede borrar: el servidor lo rechaza.
+
+La aplicación conserva dos defensas contra duplicados. Si la imagen es exactamente la misma, el hash SHA-256
+evita crear otra fila y ofrece revisar la original o repetir la foto. Si la imagen cambia pero el OCR encuentra
+el mismo número de factura, CIF propio, CIF de contraparte e importe, el documento se marca como duplicado y
+no se puede guardar. Si coinciden número y ambos CIF pero falta o cambia el importe, se marca como sospecha y
+también exige revisar la original o eliminar la nueva factura pendiente. El servidor repite esta comprobación
+al confirmar para cubrir dos ventanas abiertas a la vez.
+
+Para investigar la espera entre **Tomar foto** y **Usar foto**, el navegador registra marcas locales separadas
+para capturar el frame, analizarlo, recortarlo/normalizarlo y mostrar la vista previa. No se guardan imágenes ni
+datos fiscales en esas medidas. Además, OpenCV empieza a cargarse al abrir la cámara, no después de pulsar el
+disparador. Falta medir el resultado con el PC concreto de Julio y repetirlo después en móvil.
+
+La suite frontend queda en 446 tests. R-052 sigue en verificación manual de experiencia de usuario; la
+validación backend sintética y el despliegue de staging ya pasan.
+
+### Hotfix de captura cuando falla OpenCV (R-052, 27/08/2026)
+
+Se reprodujo un problema real en el que la cámara capturaba el frame, pero cualquier fallo al analizarlo
+con OpenCV hacía que la aplicación mostrara "No se pudo preparar la foto" y descartara la vista previa.
+Ahora ese análisis es opcional: si OpenCV falla, se conserva la imagen completa y aparece **Usar foto**;
+solo se pierde temporalmente la información opcional de nitidez y recorte. Se añadió un test de comportamiento
+para impedir que vuelva a bloquear la captura. La suite frontend queda en 446 tests. El hotfix está desplegado
+en staging; falta comprobarlo con el móvil real de Julio.
+
+### Paleta clara del app shell (R-053, 27/08/2026)
+
+Se cambió únicamente la paleta de colores del contenido autenticado: ahora el fondo es crema claro, las
+superficies son blancas, el texto es oscuro y el acento naranja sigue respetando el tenant. La barra superior
+continúa oscura y la cámara conserva su fondo oscuro para que la factura se vea bien. No se cambiaron botones,
+textos, estructura, rutas ni funcionalidades. El cambio se aplica a usuarios, tenants y paneles de
+administración con los permisos que ya tenían. La suite frontend queda en 446 tests y el despliegue de
+staging está verificado; falta la revisión visual manual por cada rol.
+
+### Rediseño Tinted Navy Liquid Glass (R-054, 28/08/2026)
+
+Sobre la paleta clara se añadió un lenguaje visual nuevo, sin cambiar lo que la aplicación hace. El fondo de
+las pantallas autenticadas es claro, las tablas, formularios, importes y listas usan superficies blancas para
+que sigan siendo fáciles de leer, y la navegación superior, los botones principales y los diálogos usan un
+azul marino profundo con borde cian, reflejo interior y sombra suave. Es el efecto llamado **Liquid Glass**,
+pero tiene una versión opaca equivalente para navegadores que no permiten desenfocar el fondo.
+
+La captura mantiene la misma pantalla y las mismas decisiones, incluido el selector de empresa cuando corresponde.
+El visor de cámara continúa siendo oscuro para que la factura contraste, mientras que la previsualización vuelve
+al lenguaje claro del resto de la aplicación. La bandeja, historial, confirmación y paneles tenant/platform
+comparten los mismos colores, estados y controles visuales, pero conservan sus permisos y acciones originales.
+
+También se dejaron visibles los focos de teclado y se prepararon estados para movimiento reducido, contraste
+alto y forced colors. La suite frontend queda en 446 tests; typecheck, build y lint pasan. Falta la revisión
+visual manual en móvil, escritorio y con cada rol antes de cerrar R-054.
+
+### Ajuste del lenguaje glass en captura (R-054, 28/08/2026)
+
+Tras probar el primer diseño en staging, se reforzó el fondo con halos azul/cian y naranja para que el efecto
+glass se perciba de verdad. Las dos acciones principales, **Tomar foto** y **Subir archivo**, ahora forman una
+fila de botones de igual altura; debajo quedan **Varias facturas** y **Varias hojas**, cada uno con un icono
+que ayuda a reconocer su función. Ninguno usa una superficie blanca. **Recibida** y **Emitida** forman un único
+selector segmentado y **Recibida** continúa siendo la opción inicial.
+
+El color naranja del tenant se conserva, pero con degradado, transparencia, borde luminoso y reflejo interior
+para integrarlo con el acabado glass. La nueva versión se ha reconstruido y publicado en staging; el health
+público responde correctamente.
+
+En un ajuste posterior se redujo aproximadamente un 20% el tamaño de todos los botones de captura. Las dos
+opciones de varias facturas, **Varias facturas** y **Varias hojas**, permanecen siempre juntas en la misma fila,
+incluido el móvil, usando texto e iconos compactos.
+
+### Selector de captura y marca Autofactu (29/08/2026)
+
+La pantalla para subir facturas ahora tiene un único bloque principal de dos botones pegados: **Tomar foto**
+ocupa dos tercios y lleva un icono de cámara, mientras **Varias hojas** ocupa exactamente un tercio y lleva un
+icono de páginas apiladas. Solo hay una línea divisoria entre ambos y las esquinas redondeadas pertenecen al
+bloque completo, por lo que se comporta como una única pastilla. Las acciones menos frecuentes, como subir un
+archivo o capturar varias facturas, siguen disponibles debajo.
+
+También se sustituyó el logo por el de **Autofactu by Autoken** en el login y la cabecera. Se recortó el símbolo
+original, sin las palabras de la derecha, y ese recorte se usa en el favicon y en los iconos de instalación de la
+PWA. No se redibujó la marca: se reutilizó la imagen original y se prepararon los tamaños que necesita el móvil.
+El frontend se reconstruyó y publicó en staging; las dos rutas de imagen responden ya como ficheros PNG reales,
+no como una página antigua de la aplicación.
+
+En una revisión posterior se tomó el azul dominante exacto del fondo del logo, `#021232`, y se aplicó al shell
+superior, al panel glass de inicio de sesión, a los fondos navy de la aplicación y al color de la PWA. El fondo de
+los recortes también se aplanó a ese color hasta las esquinas, incluido el icono cuadrado de instalación, para que
+no aparezca un rectángulo de otro tono alrededor de la marca.
+
+Después se redujo el símbolo dentro del icono PWA al 75% y se dejó un margen azul uniforme alrededor. De esta
+forma el documento y el check quedan completamente visibles cuando el móvil aplica su propia máscara al icono.
+
+En el último ajuste se redujo otro 15% y se amplió el margen para que el símbolo respire aún más. La unión entre
+**Tomar foto** y **Varias hojas** ahora se hace con dos pastillas curvas solapadas, no con una línea recta. Se
+intercambiaron **Subir archivo** y **Varias facturas**, dejando la subida de archivo en naranja. El enlace **Ver
+historial** lleva al mismo panel **Mis facturas**; la ruta antigua se conserva solo como redirección para no romper
+enlaces guardados. Finalmente se recuperó un acabado glass en la aplicación, usando transparencias, bordes y
+sombras sobre el azul `#021232` y el naranja de marca.
+
+En un ajuste posterior se hizo visible ese acabado en todas las pantallas: el fondo general ahora tiene
+luces ambientales azul/cian y naranja, los paneles principales son translúcidos y tienen reflejo interior,
+borde luminoso y sombra, y las acciones antiguas adoptan el mismo cristal azul marino. Las tablas, campos
+de datos y la cámara siguen siendo superficies sólidas para que se puedan leer y usar correctamente.
+
+### Integración final del logo y mejoras de acceso (29/08/2026)
+
+El logo completo oficial de Autofactu que aparece en el login y en la barra superior ya no lleva un rectángulo
+azul pegado a la imagen: sus píxeles de fondo son transparentes y dejan ver el azul glass de la superficie
+donde se coloca. El favicon del navegador y los iconos cuadrados de instalación de la PWA usan, en cambio,
+el símbolo con fondo azul completo, porque esos formatos necesitan una base propia y no muestran el lockup
+completo con la palabra Autofactu.
+
+En la pantalla de captura se eliminó el enlace redundante a **Ver historial**. Las facturas siguen quedando
+guardadas y disponibles desde **Mis facturas**. En el login se añadió un ojo accesible para mostrar u ocultar
+la contraseña; empieza siempre oculto, no borra lo escrito y funciona igual para cualquier rol.
+
+Después se extendió el cristal al fondo completo del shell autenticado: ya no queda una zona blanca alrededor
+de los paneles, sino una superficie navy continua con luces ambientales y paneles glass encima. El botón
+**Tomar foto** conserva el naranja de marca. También se hizo más tolerante la apertura de cámara, con una
+resolución compatible para PC y móvil, conexión explícita del stream al vídeo y reproducción reintentada
+cuando el navegador informa de que ya puede mostrarlo.
+
+### Cierre del ajuste de cámara y selector dividido (29/08/2026)
+
+La cámara ahora usa una altura dinámica igual a la pantalla visible del dispositivo (`100dvh`) y evita que un
+contenedor interno con altura mínima empuje los controles fuera del móvil. El vídeo sigue ocupando todo el fondo,
+pero la barra inferior conserva siempre **Capturar foto**, **Subir archivo** y **Cerrar cámara** visibles.
+
+El selector inicial de captura quedó como dos botones reales e independientes: **Tomar foto** delante, en naranja,
+y **Varias hojas** detrás, con solape de 14 píxeles. El segundo botón tiene estado accesible para indicar cuándo el
+modo multipágina está activo, y puede volver al modo simple antes de capturar. Se corrigió además la cascada CSS que
+estaba aplicando por error el estilo glass genérico sobre estos botones.
+
+La validación final pasó con **449 tests**, typecheck, lint sin errores y build de producción. El despliegue oficial
+reconstruyó frontend, API y worker; los tres dominios públicos (`panel-staging.autoken.es`, `setex.autoken.es` e
+`ilex.autoken.es`) respondieron correctamente y API/worker quedaron saludables. Falta únicamente la comprobación
+manual con cámara física en móvil y escritorio, porque este entorno no tiene un navegador automatizado con permisos
+de cámara.
+
+### Cámara fullscreen sin recorte del panel glass (29/08/2026)
+
+Se corrigió el último problema visual de la captura. El recuadro de la cámara y sus controles ya no se dibujan
+dentro del panel glass de la pantalla: el overlay se coloca directamente en el cuerpo de la página. Esto evita que
+el desenfoque y el recorte del panel padre reduzcan su altura aparente. El layout tiene ahora una zona flexible para
+la imagen y una barra inferior independiente para los botones, respetando también la zona segura del móvil.
+
+La nueva estructura quedó cubierta por un test de comportamiento y se volvió a publicar con el despliegue oficial.
+La suite completa sigue en **449 tests verdes**, con typecheck y build correctos.
+
+### Aplicación del tema Tinted Navy Liquid Glass (30/08/2026)
+
+Se guardó en la raíz el prompt maestro `PROMPT-MAESTRO-REDISENO-FRONTEND-TINTED-NAVY-LIQUID-GLASS.md` y se
+aplicó su primera integración real al frontend existente, sin reconstruir la aplicación ni tocar backend, base de
+datos, API, permisos o lógica funcional.
+
+El azul de marca no se aproximó a ojo: se inspeccionó `frontend/public/autofactu-favicon-solid.png`, cuyo fondo
+uniforme dominante es `RGB(2, 18, 50)`, es decir, `#021232`. El lockup transparente `frontend/public/autofactu-logo.png`
+es el logo oficial que usa la interfaz. Ese valor alimenta el token `--brand-navy` y las superficies de identidad.
+
+La aplicación pasa a ser mayoritariamente clara: el shell y las pantallas de datos usan fondo y superficies blancas,
+los formularios permanecen sólidos, y el navy se reserva para navegación, identidad, resumen y cristal destacado. Se
+añadió un login con panel de marca separado del formulario, estados de foco visibles, fallback sin
+`backdrop-filter`, opción de desactivar el efecto mediante `data-liquid-glass="off"` y reglas para movimiento reducido.
+
+La integración conserva las rutas reales existentes: login, plataforma, ajustes, ranking OCR, laboratorio, pendientes,
+facturas, empresas, mis facturas, captura, confirmación y supervisión. No existen rutas independientes de registro,
+recuperación o activación de cuenta en este frontend.
+
+La suite completa mantiene **449 tests verdes**, typecheck y build correctos. El lint no tiene errores y conserva solo
+los dos avisos preexistentes de `SessionProvider.tsx`. El frontend se publicó mediante `infrastructure/deploy.sh` y
+los hosts públicos respondieron correctamente. La comprobación visual en cada tamaño y navegador queda pendiente de
+un navegador automatizado o una sesión manual con capturas reales.
+
+### Selector de captura ampliado (30/08/2026)
+
+El selector de captura se amplió al doble de altura, hasta **96 píxeles**, para que tenga una presencia más clara en
+móvil y escritorio. **Tomar foto** ocupa el espacio principal y **Varias hojas** se convirtió en una pieza estrecha y
+alta: su texto aparece en dos líneas y mantiene el nombre accesible completo para lectores de pantalla.
+
+La pieza de varias hojas usa ahora un cristal claro translúcido con desenfoque, borde cian y el mismo solape visual
+con el botón principal. Se mantuvo intacta la acción que abre el flujo multipágina. Los **449 tests** siguen verdes y
+el ajuste quedó publicado con el despliegue oficial.
+
+### Ajustes concretos del visor de captura (30/08/2026)
+
+Se aplicaron los ajustes específicos del visor sin cambiar su funcionamiento. **Tomar foto** usa ahora un azul de acción
+derivado de la marca, `--brand-action-blue` (`#164B82`), más luminoso que el navy estructural para no verse casi negro.
+**Subir factura** y **Capturar foto** usan `--brand-orange`, cuyo valor extraído del color naranja uniforme del logo es
+`#FD6702`; el texto usa navy para mantener contraste.
+
+El título **Capturar factura** sigue existiendo como encabezado accesible, pero se oculta visualmente para eliminar el
+espacio innecesario. La pantalla inicial ocupa toda la altura útil disponible, queda centrada en móvil y escritorio y
+tiene un ancho máximo para no ocupar toda la pantalla. **Subir factura** y **Varias facturas** quedan apilados, uno debajo
+de otro. El visor de cámara ya no muestra ningún botón de subida.
+
+La linterna conserva su lógica y ahora se representa con un icono más reconocible de linterna, tamaño táctil mínimo y estados
+`Activar linterna`/`Desactivar linterna` mediante `aria-label` y `aria-pressed`. Los controles **Cerrar cámara**,
+**Automático** y **Manual** usan texto claro sobre el fondo oscuro del visor.
+
+La investigación de marcos encontró que `camera-guide-frame` era un borde fijo decorativo del visor: no participaba en
+recorte, OCR, detección ni coordenadas. `DocumentOverlay` es el SVG que calcula el tamaño, transforma las esquinas
+detectadas y muestra la guía/feedback de detección. Se mantiene `DocumentOverlay` como único marco visible dominante,
+conservando toda su lógica; el borde fijo queda estructuralmente presente pero sin borde para evitar la doble guía. La
+guía base se amplió al 88% del ancho y al 80% del alto, acercándose a los bordes de la cámara.
+
+La pantalla inicial usa una superficie glass translúcida con desenfoque, reflejo superior, borde claro y sombra. Los
+iconos de instalación PWA conservan su diseño, pero ahora están centrados dentro de una envolvente un 5% menor con
+esquinas redondeadas. El favicon por defecto usa la misma envolvente redondeada.
+
+La suite frontend completa pasó con **449 tests**, typecheck, lint sin errores y build correcto. El despliegue oficial
+reconstruyó la imagen del frontend y verificó los hosts públicos. El backend, la API, los endpoints, la subida global de
+archivos y la infraestructura no se modificaron.
+
+### Tema visual Tinted Navy Liquid Glass (31/08/2026)
+
+Se alineó la capa visual común del frontend con la paleta exacta solicitada: navy `#021231`, naranja `#FA6703`, fondo
+`#F4F7FB`, superficies `#FFFFFF`/`#F8FAFC`, textos `#101828`/`#667085` y bordes `#E4E7EC`. Las pantallas claras
+siguen usando superficies sólidas para formularios, listados y datos fiscales; solo paneles, navegación, modales y
+controles destacados reciben el cristal azul marino con desenfoque, borde, reflejo y sombra.
+
+No se modificó backend, API, navegación, estructura JSX, orden, posición, tamaño estructural, eventos ni lógica de
+cámara/OCR/subida. Se añadió únicamente acabado visual común, foco visible, fallback sólido del cristal y prevención de
+scroll horizontal.
+
 ## 5. Qué queda por delante
 
 - **Sprint 3 completo** (S3.1-S3.5 cerrados 23/07/2026). Queda pendiente el frontend de la edición de
@@ -1694,4 +2368,16 @@ del todo — S4.9 es una tarea nueva, no estaba en el recuento original de 51, a
 hueco de integración detectado el 23/07/2026 — sin contar el módulo de Verifactu ni la limpieza
 final del servidor viejo, que van en paralelo y no bloquean el lanzamiento). **Sprint 2, Sprint 3,
 Sprint 4 y Sprint 5 completos. Lote de cierre de backlog previo al Sprint 5 COMPLETO. Siguiente: la
-Fase de Despliegue (go-live y migración de Setex) — ver PLAN MAESTRO.**
+   Fase de Despliegue (go-live y migración de Setex) — ver PLAN MAESTRO.**
+
+## 2026-08-31 - R-056: navegación y entradas de factura
+
+El usuario tiene ahora cuatro accesos claros: Escáner, Subir Archivo, Pendientes e Historial. La pantalla de
+subida acepta hasta diez imágenes o PDF independientes y si uno falla los demás siguen adelante. Pendientes
+usa el inbox existente y avisa cuando hay diez documentos que requieren atención. Historial solo muestra
+facturas confirmadas de los últimos cuatro meses y permite avanzar con un cursor, sin editar filas.
+
+La dirección recibida/emitida ya no se presupone en el flujo de usuario. Hay que elegirla antes de capturar o
+subir, y después de una subida la pantalla se limpia. El administrador mantiene su menú separado. El backend
+identifica los PDF por sus bytes, los almacena sin tratarlos como imágenes y filtra el historial en la base de
+datos por confirmación, fecha y propietario.
