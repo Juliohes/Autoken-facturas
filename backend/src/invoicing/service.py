@@ -242,6 +242,7 @@ class HistoryItem:
     status: str
     created_at: datetime
     direction: str | None
+    invoice_number: str | None
 
 
 @dataclass(frozen=True)
@@ -1001,6 +1002,7 @@ async def history(identity: AuthContext, *, cursor: str | None = None, limit: in
             status=entry.status,
             created_at=entry.created_at,
             direction=entry.direction,
+            invoice_number=entry.invoice_number,
         )
         for entry in page.entries
     ]

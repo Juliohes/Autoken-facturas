@@ -15,10 +15,13 @@ export function InvoiceInbox() {
 
   useEffect(() => {
     if (!inbox.data) return
+    // Defensa (paso 9, ajustes UI): una captura ilegible ni se ha leído, no es "pendiente de
+    // comprobación". El backend ya la excluye; esto es solo el respaldo si llegara igualmente.
+    const readable = inbox.data.items.filter((item) => item.status !== 'capture_unreadable')
     setItems((current) => {
-      if (cursor === null) return inbox.data.items
+      if (cursor === null) return readable
       const byId = new Map(current.map((item) => [item.id, item]))
-      for (const item of inbox.data.items) byId.set(item.id, item)
+      for (const item of readable) byId.set(item.id, item)
       return Array.from(byId.values())
     })
   }, [cursor, inbox.data])

@@ -427,6 +427,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/uploads/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Unconfirmed Upload
+         * @description Elimina un fichero propio todavía no confirmado; una factura guardada es inmutable.
+         */
+        delete: operations["delete_unconfirmed_upload_api_v1_uploads__file_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/uploads/batch": {
         parameters: {
             query?: never;
@@ -690,7 +710,7 @@ export interface paths {
         };
         /**
          * Invoice History
-         * @description Últimos documentos aceptados del contexto del usuario (S6.12). Solo lectura.
+         * @description Facturas confirmadas de los últimos cuatro meses, con cursor estable (R-056).
          */
         get: operations["invoice_history_api_v1_invoices_history_get"];
         put?: never;
@@ -1843,6 +1863,9 @@ export interface components {
         /**
          * HistoryEntryOut
          * @description Una entrada privada de historial, sin PII de contraparte (S6.12).
+         *
+         *     ``invoice_number``: número del documento propio (no dato de contraparte, S6.12), solo presente
+         *     en facturas `confirmed`. `None` cuando la factura no tiene número, nunca un valor inventado.
          */
         HistoryEntryOut: {
             /**
@@ -1859,6 +1882,8 @@ export interface components {
             created_at: string;
             /** Direction */
             direction: ("recibida" | "emitida") | null;
+            /** Invoice Number */
+            invoice_number: string | null;
         };
         /**
          * HistoryOut
@@ -3197,6 +3222,35 @@ export interface operations {
             };
         };
     };
+    delete_unconfirmed_upload_api_v1_uploads__file_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_batch_api_v1_uploads_batch_post: {
         parameters: {
             query?: never;
@@ -3615,6 +3669,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HistoryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

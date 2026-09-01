@@ -9,13 +9,14 @@ import { INBOX_QUERY_KEY } from './useInvoiceInbox'
 import { useDeleteUpload } from '../confirmation/useDeleteUpload'
 import type { InboxItem as InboxItemData } from './types'
 
+// capture_unreadable no aparece aquí (paso 9, ajustes UI): InvoiceInbox lo filtra antes de
+// renderizar ningún InboxItem, así que este componente no necesita conocer ese estado.
 const STATUS_LABEL: Record<string, string> = {
   pending_ocr: 'En cola',
   processing: 'Procesando OCR',
   ocr_done: 'Lista para revisar',
   needs_review: 'Pendiente de comprobación',
   ocr_failed: 'OCR no completado',
-  capture_unreadable: 'Foto ilegible',
   confirmed: 'Confirmada',
 }
 
@@ -26,7 +27,6 @@ const STATUS_TONE: Record<string, StatusTone> = {
   ocr_done: 'ok',
   needs_review: 'warn',
   ocr_failed: 'bad',
-  capture_unreadable: 'bad',
   confirmed: 'ok',
 }
 
@@ -53,7 +53,6 @@ export function InboxItem({ item }: { item: InboxItemData }) {
       <div className="shrink-0 text-right">
         {pending && <Link to={ROUTES.confirmation(item.id)} state={confirmationState} className="text-sm text-emerald-400">Ver progreso</Link>}
         {reviewable && <Link to={ROUTES.confirmation(item.id)} state={confirmationState} className="text-sm text-emerald-400">Revisar factura</Link>}
-        {item.status === 'capture_unreadable' && <Link to={ROUTES.capture} className="text-sm text-emerald-400">Repetir foto</Link>}
         {item.status !== 'confirmed' && (
           <button
             type="button"

@@ -25,6 +25,7 @@ function makeEntry(over: Partial<HistoryEntry> = {}): HistoryEntry {
     status: 'confirmed',
     created_at: '2026-08-14T10:30:00Z',
     direction: 'recibida',
+    invoice_number: null,
     ...over,
   }
 }
@@ -64,6 +65,31 @@ describe('InvoiceHistory (S6.12)', () => {
     expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument()
     expect(within(rows[0]).getByText('Factura enviada')).toBeInTheDocument()
     expect(within(rows[0]).getByText('Confirmada')).toBeInTheDocument()
+    // Paso 8, ajustes UI: "Solo lectura" ya no aparece en ninguna fila.
+    expect(within(rows[0]).queryByText('Solo lectura')).not.toBeInTheDocument()
+  })
+
+  it('paso 8: muestra el número de factura cuando el backend lo envía', async () => {
+    getMock.mockResolvedValue({
+      data: { entries: [makeEntry({ id: 'conf-1', invoice_number: 'FE-2026-004821' })] },
+      error: undefined,
+    })
+    renderScreen()
+
+    const rows = await screen.findAllByTestId('history-row')
+    expect(within(rows[0]).getByText('Factura Nº FE-2026-004821')).toBeInTheDocument()
+    expect(within(rows[0]).queryByText('Factura enviada')).not.toBeInTheDocument()
+  })
+
+  it('paso 8: sin número de factura, muestra un texto neutro en vez de inventar uno', async () => {
+    getMock.mockResolvedValue({
+      data: { entries: [makeEntry({ id: 'conf-1', invoice_number: null })] },
+      error: undefined,
+    })
+    renderScreen()
+
+    const rows = await screen.findAllByTestId('history-row')
+    expect(within(rows[0]).getByText('Factura enviada')).toBeInTheDocument()
   })
 
   it('C11: muestra los envíos confirmados con su fecha y estado, sin PII', async () => {

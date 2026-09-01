@@ -46,6 +46,12 @@
     --background-secondary: #edf3f8;
     --surface-primary: #ffffff;
     --surface-secondary: #f8fafc;
+    /* Superficie de la navegación de usuario (Menu.tsx): azul clarito de marca, nunca blanco
+     * puro (el logo de Autofactu es blanco y desaparece sobre #fff). AA con texto/iconos navy. */
+    --tn-nav-surface: #dce6f4;
+    /* Texto/iconos inactivos de la nav sobre --tn-nav-surface: --text-secondary (#667085) solo
+     * da 3.95:1 sobre este azul, no llega a AA (4.5:1). Gris-navy dedicado: 5.82:1. */
+    --tn-nav-ink-muted: #4b5768;
     --text-primary: #101828;
     --text-secondary: #667085;
     --text-tertiary: #98a2b3;
@@ -144,6 +150,8 @@
     --tn-background-secondary: var(--background-secondary);
     --tn-surface: var(--surface-primary);
     --tn-surface-subtle: var(--surface-secondary);
+    --tn-nav-surface: var(--surface-primary);
+    --tn-nav-ink-muted: var(--text-secondary);
     --tn-text-primary: var(--text-primary);
     --tn-text-secondary: var(--text-secondary);
     --tn-text-tertiary: var(--text-tertiary);
@@ -188,6 +196,8 @@
       --tn-background-secondary: var(--background-secondary);
       --tn-surface: var(--surface-primary);
       --tn-surface-subtle: var(--surface-secondary);
+      --tn-nav-surface: var(--surface-primary);
+      --tn-nav-ink-muted: var(--text-secondary);
       --tn-text-primary: var(--text-primary);
       --tn-text-secondary: var(--text-secondary);
       --tn-text-tertiary: var(--text-tertiary);
@@ -254,8 +264,18 @@
     position: sticky;
     top: 0;
     z-index: 40;
-    background: var(--surface-primary);
+    background: var(--tn-nav-surface);
     border-bottom: 1px solid var(--border-default);
+  }
+
+  /* El logo de Autofactu es blanco: sobre el azul clarito de --tn-nav-surface necesita un fondo
+   * navy propio para seguir viéndose, en claro y en oscuro. */
+  .tn-brand-logo-frame {
+    display: inline-flex;
+    align-items: center;
+    background: var(--brand-navy);
+    border-radius: var(--tn-radius-md);
+    padding: 6px 10px;
   }
 
   .tn-user-nav-links {
@@ -268,18 +288,22 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
     padding: 0 8px max(8px, env(safe-area-inset-bottom));
-    background: var(--surface-primary);
+    background: var(--tn-nav-surface);
+    border-top-left-radius: var(--tn-radius-lg);
+    border-top-right-radius: var(--tn-radius-lg);
     box-shadow: 0 -4px 16px rgba(2, 18, 49, 0.1);
   }
 
   .tn-user-nav-links a {
-    min-height: 44px;
+    min-height: 88px;
     display: inline-flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: 4px;
+    padding: 8px 4px;
     text-align: center;
-    color: var(--text-secondary);
+    color: var(--tn-nav-ink-muted);
     font-size: 0.75rem;
     border-top: 2px solid transparent;
     transition: color 140ms ease, border-color 180ms ease;
@@ -293,8 +317,19 @@
     border-top-color: var(--tn-accent);
   }
 
+  /* Envoltorio del icono: ancla el badge en su esquina superior derecha. */
+  .tn-user-nav-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   /* Badge de pendientes: acento naranja con texto navy (AA), nunca blanco sobre #FA6703. */
   .tn-user-nav-badge {
+    position: absolute;
+    top: -6px;
+    right: -10px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -316,6 +351,7 @@
       align-items: center;
       justify-content: space-between;
       padding: 0 24px;
+      background: var(--tn-nav-surface);
     }
 
     .tn-user-nav-links {
@@ -323,9 +359,14 @@
       display: flex;
       gap: 12px;
       padding: 8px 0;
+      border-radius: 0;
+      box-shadow: none;
+      background: transparent;
     }
 
     .tn-user-nav-links a {
+      min-height: 44px;
+      flex-direction: row;
       padding: 0 12px;
       font-size: 0.875rem;
     }
@@ -498,6 +539,12 @@
     z-index: -1;
     background: transparent;
     pointer-events: none;
+  }
+
+  /* Variante sin tarjeta: el contenido se apoya directamente sobre el fondo de la app
+   * (UploadFileScreen, paso 7). Solo color de texto, sin superficie/borde/sombra. */
+  .tn-page-plain {
+    color: var(--text-primary);
   }
 
   /* Las pantallas existentes usan una paleta slate diseñada para el shell oscuro anterior. */

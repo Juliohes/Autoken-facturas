@@ -97,6 +97,33 @@ async def test_inbox_es_self_only_no_expone_pii_y_calcula_paginas(authapi) -> No
     )
 
 
+async def test_inbox_no_muestra_capturas_ilegibles_ni_las_cuenta_en_attention(authapi) -> None:
+    """Una foto ilegible ni siquiera se ha leído: no ocupa Pendientes (paso 9, ajustes UI).
+
+    Ni en el listado de items ni en el resumen `attention` (antes contaba junto a
+    needs_review/ocr_failed): no se puede comprobar algo que no se ha llegado a leer.
+    """
+    client, dsns = authapi
+    seeded = await _seed_inbox(dsns)
+    await seed_uploaded_file(
+        dsns,
+        tenant_id=seeded["tenant_id"],
+        company_id=seeded["company_id"],
+        uploaded_by=seeded["user_id"],
+        content=JPEG + b"-unreadable",
+        status="capture_unreadable",
+    )
+    token = await token_for(client, email="uno@inbox.es", hostname="inbox.localhost")
+
+    response = await client.get("/api/v1/invoices/inbox", headers=auth(token, "inbox.localhost"))
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [item["id"] for item in body["items"]] == [seeded["own_file_id"]]
+    assert all(item["status"] != "capture_unreadable" for item in body["items"])
+    assert body["summary"] == {"processing": 1, "ready": 0, "attention": 0}
+
+
 async def test_inbox_tenant_admin_tambien_ve_solo_sus_subidas(authapi) -> None:
     """El rol tenant_admin no convierte la bandeja personal en supervisión del tenant."""
     client, dsns = authapi

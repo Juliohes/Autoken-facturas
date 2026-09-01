@@ -1,16 +1,18 @@
-// Toggle de tema (claro/oscuro/sistema) — Bloque 1. Iconos lucide (Sun/Moon/Monitor).
+// Toggle de tema (claro/oscuro) — Bloque 1. Iconos lucide (Sun/Moon).
 // Accesible: grupo con radiogroup, estado anunciado, objetivos táctiles >= 44px.
-import { Monitor, Moon, Sun } from 'lucide-react'
+// Solo ofrece Claro/Oscuro (paso 5 del SUPERPROMPT de ajustes de UI): el modo "sistema" sigue
+// existiendo en useThemeMode como valor inicial por defecto hasta que el usuario elige, pero deja
+// de ser una opción seleccionable en este control.
+import { Moon, Sun } from 'lucide-react'
 
 import { useThemeMode, type ThemeMode } from './useThemeMode'
 
-const OPTIONS: Array<{ value: ThemeMode; label: string; Icon: typeof Sun }> = [
+const OPTIONS: Array<{ value: Exclude<ThemeMode, 'system'>; label: string; Icon: typeof Sun }> = [
   { value: 'light', label: 'Claro', Icon: Sun },
   { value: 'dark', label: 'Oscuro', Icon: Moon },
-  { value: 'system', label: 'Sistema', Icon: Monitor },
 ]
 
-/** Control de tema claro/oscuro/sistema para el shell de usuario. */
+/** Control de tema claro/oscuro para el shell de usuario. */
 export function ThemeToggle() {
   const { mode, setMode } = useThemeMode()
   return (

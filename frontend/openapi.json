@@ -719,6 +719,43 @@
         }
       }
     },
+    "/api/v1/uploads/{file_id}": {
+      "delete": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Delete Unconfirmed Upload",
+        "description": "Elimina un fichero propio todav\u00eda no confirmado; una factura guardada es inmutable.",
+        "operationId": "delete_unconfirmed_upload_api_v1_uploads__file_id__delete",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/uploads/batch": {
       "post": {
         "tags": [
@@ -1340,20 +1377,36 @@
           "invoicing"
         ],
         "summary": "Invoice History",
-        "description": "\u00daltimos documentos aceptados del contexto del usuario (S6.12). Solo lectura.",
+        "description": "Facturas confirmadas de los \u00faltimos cuatro meses, con cursor estable (R-056).",
         "operationId": "invoice_history_api_v1_invoices_history_get",
         "parameters": [
           {
             "name": "cursor",
             "in": "query",
             "required": false,
-            "schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "default": null, "title": "Cursor" }
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
           },
           {
             "name": "limit",
             "in": "query",
             "required": false,
-            "schema": { "type": "integer", "maximum": 50, "minimum": 1, "default": 20, "title": "Limit" }
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
           }
         ],
         "responses": {
@@ -1363,6 +1416,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HistoryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -4412,6 +4475,17 @@
               }
             ],
             "title": "Direction"
+          },
+          "invoice_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Number"
           }
         },
         "type": "object",
@@ -4419,10 +4493,11 @@
           "id",
           "status",
           "created_at",
-          "direction"
+          "direction",
+          "invoice_number"
         ],
         "title": "HistoryEntryOut",
-        "description": "Una entrada privada de historial, sin PII de contraparte (S6.12)."
+        "description": "Una entrada privada de historial, sin PII de contraparte (S6.12).\n\n``invoice_number``: n\u00famero del documento propio (no dato de contraparte, S6.12), solo presente\nen facturas `confirmed`. `None` cuando la factura no tiene n\u00famero, nunca un valor inventado."
       },
       "HistoryOut": {
         "properties": {
@@ -4434,7 +4509,14 @@
             "title": "Entries"
           },
           "next_cursor": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Next Cursor"
           }
         },

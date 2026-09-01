@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation } from 'react-router-dom'
+import { Flashlight, FlashlightOff } from 'lucide-react'
 
 import { ROUTES } from '../../app/routes'
 import { useCompanyOptions } from '../companies/useCompanyOptions'
@@ -697,7 +698,6 @@ export function CaptureScreen({ onUploaded }: Props) {
 
   return (
     <section className="tn-panel-page tn-liquid-glass tn-capture-screen tn-capture-entry-screen mx-auto w-full max-w-none space-y-5 p-4 sm:p-6">
-      {DirectionSelector}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="sr-only">Capturar factura</h1>
       </div>
@@ -735,28 +735,30 @@ export function CaptureScreen({ onUploaded }: Props) {
         </section>
       )}
 
-      {camera.status === 'idle' && (
-        <div className="space-y-5">
-          <div className="tn-capture-segmented" role="group" aria-label="Añadir factura">
-            <button type="button" onClick={() => openCamera()} disabled={direction === null} className="tn-capture-segment tn-capture-segment-primary">
-              <svg aria-hidden="true" className="tn-capture-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M5 8.5h3l1.5-2h5L16 8.5h3A2 2 0 0 1 21 10.5v7A2 2 0 0 1 19 19.5H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z" />
-                <circle cx="12" cy="14" r="3.25" />
-              </svg>
-              <span>Tomar foto</span>
-            </button>
-            <button type="button" onClick={startMultiplePages} aria-label="Varias hojas" aria-pressed={multiplePages} disabled={direction === null} className="tn-capture-segment tn-capture-segment-secondary">
-              <svg aria-hidden="true" className="tn-capture-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M8 4h9a2 2 0 0 1 2 2v11" strokeLinecap="round" />
-                <path d="M6 7h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
-                <path d="M8 11h5M8 15h4" strokeLinecap="round" />
-              </svg>
-              <span>Varias<br />hojas</span>
-            </button>
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 pb-8">
+        {DirectionSelector}
+        {camera.status === 'idle' && (
+          <div className="flex flex-col items-center gap-5">
+            <div className="tn-capture-segmented" role="group" aria-label="Añadir factura">
+              <button type="button" onClick={() => openCamera()} disabled={direction === null} className="tn-capture-segment tn-capture-segment-primary">
+                <svg aria-hidden="true" className="tn-capture-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M5 8.5h3l1.5-2h5L16 8.5h3A2 2 0 0 1 21 10.5v7A2 2 0 0 1 19 19.5H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z" />
+                  <circle cx="12" cy="14" r="3.25" />
+                </svg>
+                <span>Tomar foto</span>
+              </button>
+              <button type="button" onClick={startMultiplePages} aria-label="Varias hojas" aria-pressed={multiplePages} disabled={direction === null} className="tn-capture-segment tn-capture-segment-secondary">
+                <svg aria-hidden="true" className="tn-capture-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M8 4h9a2 2 0 0 1 2 2v11" strokeLinecap="round" />
+                  <path d="M6 7h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
+                  <path d="M8 11h5M8 15h4" strokeLinecap="round" />
+                </svg>
+                <span>Varias<br />hojas</span>
+              </button>
+            </div>
           </div>
-          <p className="text-sm text-slate-600">Para subir documentos independientes, usa Subir Archivo.</p>
-        </div>
-      )}
+        )}
+      </div>
 
       {multiplePages && pages.length > 0 && camera.status === 'idle' && (
         <MultiPagePanel pages={pages} onRemove={removePage} onAdd={() => openCamera(true)} onSelectFiles={openFilePicker} onSend={() => void sendPages()} />
@@ -786,10 +788,9 @@ export function CaptureScreen({ onUploaded }: Props) {
                     onClick={() => void toggleTorch()}
                     className="camera-control absolute right-4 top-[max(1rem,env(safe-area-inset-top))] inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-white/40 bg-slate-950/80 p-2 text-white"
                   >
-                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-6 w-6">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m8 8 5-5 4 4-5 5-4 4-3-3 4-4Z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m12 12 3 3M5 19l-2 2M17 7l4-4M18 15l3 2M20 20l-3-3" />
-                    </svg>
+                    {torchOn
+                      ? <Flashlight aria-hidden="true" className="h-6 w-6" strokeWidth={1.8} />
+                      : <FlashlightOff aria-hidden="true" className="h-6 w-6" strokeWidth={1.8} />}
                   </button>
                 )}
               </>

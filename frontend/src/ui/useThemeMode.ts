@@ -1,6 +1,9 @@
 // Hook de tema (claro/oscuro/sistema) — Bloque 1 del sistema de diseño.
 // Escribe `data-theme` en <html> y persiste la elección en localStorage envuelto en try/catch
 // (modo incógnito puede lanzar). Por defecto "sistema": sigue prefers-color-scheme del SO.
+// El modo "sistema" ya no es seleccionable desde ThemeToggle (paso 5 del SUPERPROMPT de ajustes
+// de UI), pero se conserva aquí como valor inicial implícito hasta que el usuario elige claro u
+// oscuro explícitamente.
 import { useCallback, useEffect, useState } from 'react'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
