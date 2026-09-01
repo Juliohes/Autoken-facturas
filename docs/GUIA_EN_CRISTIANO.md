@@ -2381,3 +2381,45 @@ La dirección recibida/emitida ya no se presupone en el flujo de usuario. Hay qu
 subir, y después de una subida la pantalla se limpia. El administrador mantiene su menú separado. El backend
 identifica los PDF por sus bytes, los almacena sin tratarlos como imágenes y filtra el historial en la base de
 datos por confirmación, fecha y propietario.
+
+## 2026-09-01 - Ajustes de UI del flujo de usuario (9 pasos)
+
+Retoques sobre lo construido en R-056, pedidos por Julio para que el flujo de usuario (Escáner, Subir
+Archivo, Pendientes, Historial) se vea y se use mejor en el día a día:
+
+- El menú de abajo ahora es el doble de alto, con un icono propio por destino (una lupa para el
+  Escáner, una flecha hacia arriba para Subir Archivo, un triángulo de aviso para Pendientes, dos
+  hojas para Historial) encima del nombre, y las esquinas de arriba redondeadas.
+- El interruptor Recibida/Emitida del Escáner ya no está pegado arriba: ahora aparece justo encima
+  de los botones de "Tomar foto", centrado en la pantalla.
+- Se quitó una frase que sobraba bajo esos botones ("Para subir documentos independientes...").
+- Las dos barras de navegación (arriba y abajo) ya no son blancas en modo claro: llevan un azul
+  clarito de la marca, y el logo (que es blanco) va sobre un recuadro navy para que se siga viendo
+  bien en los dos temas.
+- El interruptor de tema ahora solo ofrece Claro/Oscuro (se quitó "Sistema" como opción visible,
+  aunque por dentro se sigue respetando el tema del móvil/ordenador mientras la persona no elija).
+- El icono de la linterna de la cámara es ahora una linterna de verdad (antes eran unos trazos que
+  no se entendían).
+- La pantalla de Subir Archivo ya no se ve "dentro de una tarjeta": el contenido flota sobre el
+  fondo de la app, centrado.
+- El Historial ahora muestra el número de cada factura (cuando existe) en vez de un genérico
+  "Factura enviada", y se quitó el texto "Solo lectura" de cada fila. El número de factura ya vivía
+  en la base de datos desde antes; solo hacía falta que el backend lo entregara y el frontend lo
+  pintara.
+- Pendientes ya no muestra las fotos que salieron ilegibles (esas ni se han llegado a leer, así que
+  no tiene sentido pedir que se "compruebe" algo que no se pudo procesar). Se limpian solas a los 90
+  días por el mismo mecanismo que ya limpiaba otros documentos sin confirmar; no hizo falta crear
+  nada nuevo para eso.
+
+Todo esto se hizo con tests que primero fallaban (describiendo el comportamiento nuevo) y luego se
+puso el código mínimo para que pasaran, tanto en frontend como en el backend que hizo falta tocar
+(número de factura e ilegibles). Al revisar la línea base del backend antes de tocar nada, aparecieron
+4 tests de historial que ya fallaban de antes (piden documentos sin confirmar en el historial, algo que
+R-056 cambió a "solo confirmadas" sin actualizar esos tests): no se tocaron por quedar fuera de este
+encargo, pero quedan anotados para que Julio decida si se corrigen o se retiran.
+
+**En cristiano:** "TDD" (a lo que se refiere el punto anterior) es escribir primero la prueba que
+comprueba que algo funciona como se pide -y verla fallar a propósito, en rojo- antes de escribir el
+código que lo hace funcionar. Sirve para no marcar algo como "hecho" solo porque compila: la prueba
+demuestra que el comportamiento pedido existe de verdad, y se queda ahí para avisar si alguien lo
+rompe sin querer en el futuro.
