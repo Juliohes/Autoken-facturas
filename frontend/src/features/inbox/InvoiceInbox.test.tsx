@@ -107,6 +107,35 @@ describe('InvoiceInbox (R-020)', () => {
     expect(eliminar).toHaveClass('tn-inbox-action', 'tn-inbox-action-danger')
   })
 
+  it('bloque E: la fecha de subida de cada factura pendiente no muestra segundos', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: 'file-1',
+            status: 'processing',
+            processing_stage: 'primary_ocr',
+            created_at: '2026-08-21T10:00:45Z',
+            direction: 'recibida',
+            page_count: 1,
+            capture_session_id: null,
+            capture_sequence: null,
+            draft_updated_at: null,
+          },
+        ],
+        summary: { processing: 1, ready: 0, attention: 0 },
+        next_cursor: null,
+      },
+      error: undefined,
+    })
+
+    renderInbox()
+
+    const item = await screen.findByTestId('inbox-item')
+    const timeNode = item.querySelector('time')
+    expect(timeNode?.textContent ?? '').not.toMatch(/:\d{2}:\d{2}(\D|$)/)
+  })
+
   it('permite cargar la siguiente página con una petición agregada', async () => {
     getMock
       .mockResolvedValueOnce({

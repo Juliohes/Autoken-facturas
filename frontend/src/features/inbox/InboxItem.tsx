@@ -88,7 +88,9 @@ export function InboxItem({ item }: { item: InboxItemData }) {
   )
 }
 
+// Sin segundos (bloque E, PROMPT-AUTOFACTU-AJUSTES-v3): dateStyle/timeStyle 'short' no los incluye,
+// a diferencia de toLocaleString('es-ES') por defecto.
 function formatCreatedAt(value: string): string {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('es-ES')
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' }).format(date)
 }

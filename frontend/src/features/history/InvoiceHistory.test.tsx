@@ -122,6 +122,18 @@ describe('InvoiceHistory (S6.12)', () => {
     expect(within(rows[0]).getByText(/^Subida: /)).toBeInTheDocument()
   })
 
+  it('bloque E: la fecha de subida no muestra segundos', async () => {
+    getMock.mockResolvedValue({
+      data: { entries: [makeEntry({ id: 'conf-1', created_at: '2026-08-14T10:30:45Z' })] },
+      error: undefined,
+    })
+    renderScreen()
+
+    const rows = await screen.findAllByTestId('history-row')
+    const uploadDate = within(rows[0]).getByText(/^Subida: /)
+    expect(uploadDate.textContent).not.toMatch(/:\d{2}:\d{2}(\D|$)/)
+  })
+
   it('bloque D: el desplegable de periodo muestra Total/Este mes/Este trimestre/Este año, con Total por defecto', async () => {
     getMock.mockResolvedValue({ data: { entries: [makeEntry()], count: 1 }, error: undefined })
     renderScreen()
@@ -172,7 +184,7 @@ describe('InvoiceHistory (S6.12)', () => {
     expect(rows).toHaveLength(2)
     expect(within(rows[0]).getByText('Sin número')).toBeInTheDocument()
     expect(within(rows[0]).getByText('Confirmada')).toBeInTheDocument()
-    expect(within(rows[0]).getByText(/14\/8\/2026.*10:30/)).toBeInTheDocument()
+    expect(within(rows[0]).getByText(/14\/8\/26.*10:30/)).toBeInTheDocument()
     // PII: no debe aparecer nombre de empresa ni CIF.
     expect(screen.queryByText(/B12345678|Proveedor/)).not.toBeInTheDocument()
   })
