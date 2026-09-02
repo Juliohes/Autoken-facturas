@@ -13,6 +13,13 @@ import type { Role } from '../features/session/SessionProvider'
 
 export const ROUTES = {
   login: '/login',
+  // Públicas, sin token (Bloque 4 de PROMPT-AUTOFACTU-AUTH-COMPLETO): no llevan `roles` en
+  // `ROUTE_DEFS` (no son protegidas ni aparecen en el menú), se montan directas en `AppRoutes.tsx`.
+  register: '/registro',
+  registerConfirm: '/registro/confirmar',
+  forgotPassword: '/recuperar',
+  resetPassword: '/restablecer',
+  activate: '/activar',
   platform: '/plataforma',
   platformSettings: '/plataforma/ajustes',
   platformOcrRanking: '/plataforma/ranking-ocr',

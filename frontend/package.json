@@ -20,6 +20,7 @@
     "@techstark/opencv-js": "^5.0.0-release.1",
     "lucide-react": "^1.39.0",
     "openapi-fetch": "^0.13.0",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.4"

@@ -88,7 +88,14 @@ export function PendingRegistrations() {
             <tbody className="divide-y divide-slate-700">
               {sortedRows.map((r) => (
                 <tr key={r.id} data-testid="registration-row">
-                  <td className="truncate p-2">{r.email}</td>
+                  <td className="truncate p-2">
+                    <span>{r.email}</span>
+                    {r.email_verified ? (
+                      <span className="ml-1 text-xs text-emerald-400">(email verificado)</span>
+                    ) : (
+                      <span className="ml-1 text-xs text-slate-500">(email sin verificar)</span>
+                    )}
+                  </td>
                   <td className="truncate p-2">
                     {r.company ?? '—'}
                     {r.joins_existing_company && (
