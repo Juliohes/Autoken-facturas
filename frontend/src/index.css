@@ -814,18 +814,28 @@
   .tn-capture-primary-btn {
     height: 96px;
     padding: 0 28px;
-    border: 0;
     border-radius: 28px;
     font-size: 1.25rem;
-    /* Naranja de marca con texto navy (AA), mismo tratamiento que .tn-primary-action (bloque A.2). */
+    /* Mismo tratamiento que .tn-primary-action (p. ej. "Elegir imágenes o PDF" en Subir Archivo):
+     * naranja de marca con texto navy (AA) y el mismo borde/sombra, para que se lean igual de bien
+     * en oscuro (a petición de Julio tras ver el Escáner desplegado). */
+    border: 1px solid var(--brand-navy) !important;
     color: var(--tn-accent-ink) !important;
     background: var(--tn-accent) !important;
+    box-shadow: 0 10px 24px rgba(var(--brand-navy-rgb), 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  }
+
+  .tn-capture-primary-btn:hover:not(:disabled) {
+    box-shadow: 0 14px 28px rgba(2, 18, 49, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.5);
   }
 
   .tn-capture-secondary-btn {
     min-height: 64px;
     padding: 14px 28px;
-    color: var(--brand-navy);
+    /* Texto dual-theme (no --brand-navy fijo): en oscuro el fondo también es oscuro y el navy fijo
+     * se volvía ilegible (letra oscura sobre fondo oscuro). --text-primary da navy en claro y
+     * blanco en oscuro, igual que el resto de la app. */
+    color: var(--text-primary);
     background: color-mix(in srgb, var(--surface-primary) 72%, transparent);
     border: 1px solid var(--tn-glass-border);
     border-radius: 22px;
