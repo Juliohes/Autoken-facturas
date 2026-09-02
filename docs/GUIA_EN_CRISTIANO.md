@@ -2471,3 +2471,53 @@ significa lo mismo en Madrid que en México). Aquí se ha fijado esa zona a "Eur
 fija en el código, en vez de preguntársela a cada gestoría, porque de momento todas están en el
 mismo sitio. El día que eso cambie, habrá que guardar la zona horaria de cada gestoría en la base
 de datos en vez de tenerla fija.
+
+## 2026-09-02 - Autenticación completa: recuperar contraseña, verificar email, avisos por email de verdad
+
+Antes de este encargo, el login ya existía pero faltaban las piezas que cualquier aplicación con
+usuarios reales necesita: si alguien olvida su contraseña no tenía forma de recuperarla sin pedirle
+a Julio que se la cambiara a mano, y ningún email salía de verdad (todo se quedaba "grabado" en
+memoria, solo visible en los tests).
+
+- **Recuperar contraseña:** en `/recuperar`, cualquiera puede pedir un enlace de restablecimiento
+  escribiendo su email. La respuesta es SIEMPRE el mismo mensaje ("si existe una cuenta con ese
+  email, te hemos enviado un enlace"), exista o no esa cuenta -- si la respuesta cambiara según
+  exista o no, cualquiera podría usarlo para averiguar qué emails están registrados
+  ("anti-enumeración"). El enlace del email lleva a `/restablecer`, donde se elige la contraseña
+  nueva; al guardarla se cierran TODAS las demás sesiones abiertas de esa cuenta (si alguien más
+  tenía acceso con la contraseña vieja, se queda fuera).
+- **Verificar el email al registrarse:** al darse de alta en `/registro`, además del aviso al
+  admin de la gestoría (que ya existía), ahora también se manda un correo al propio registrante
+  con un enlace de confirmación (`/registro/confirmar`). Confirmar el email NO aprueba el alta --
+  eso lo sigue decidiendo el admin a mano -- solo dice "este correo es de verdad tuyo".
+- **Activar cuenta con verificación en dos pasos:** `/activar` (para cuentas que el propio Julio da
+  de alta) ahora tiene una pantalla con dos pasos: primero se elige la contraseña, después se
+  enseña un código QR para escanear con una app como Google Authenticator y activar la
+  verificación en dos pasos, obligatoria para los administradores de la plataforma.
+- **Emails de verdad, no solo "grabados":** hasta ahora, todos los avisos por email (nuevo
+  registro, verificación, activación, restablecimiento) se guardaban en memoria para los tests,
+  pero no salía nada de verdad. Ahora existe un envío real por SMTP con plantillas en español, con
+  la marca Autofactu, en texto y en HTML. Mientras el servidor no tenga configuradas las
+  credenciales de correo (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD` en el `.env` del VPS), sigue
+  funcionando como antes (nada se rompe, simplemente no sale el correo real) -- el día que Julio
+  rellene esas credenciales, empieza a salir de verdad sin tocar nada más.
+- **Consentimiento legal:** el formulario de alta ahora exige marcar una casilla de aceptación de
+  términos y política de privacidad antes de poder registrarse, y esa aceptación queda anotada de
+  forma permanente e inalterable en el registro de auditoría de la aplicación (igual que cualquier
+  otra acción importante), no solo "marcada visualmente" en la pantalla.
+
+Decisión técnica documentada: la función que cambia la contraseña por este camino de autoservicio
+es DISTINTA de la que usa Julio a mano para resetear una cuenta bloqueada -- la de Julio también
+borra el segundo factor (TOTP) de la cuenta a propósito (para que la persona lo vuelva a configurar
+delante de él), mientras que la de autoservicio deja el TOTP como estaba (quien pide un
+restablecimiento por email sigue necesitando su código de verificación en dos pasos para entrar,
+justo lo que se busca).
+
+**En cristiano:** un "token de un solo uso" es un código largo y aleatorio, imposible de adivinar,
+que vive un tiempo limitado (por ejemplo, una hora) y que se "quema" en cuanto se usa una vez --
+como un vale de descuento de un solo uso. El enlace de "recuperar contraseña" lleva ese código en
+la URL; en cuanto se usa para cambiar la contraseña, deja de servir, así que aunque alguien
+reenviara ese mismo correo más tarde, el enlace ya no funcionaría. El "2FA" o "verificación en dos
+pasos" (el QR de `/activar`) es pedir, además de la contraseña, un código de 6 dígitos que cambia
+cada 30 segundos y que solo genera la app de autenticación de esa persona -- así, aunque alguien
+robara la contraseña, no podría entrar sin tener también el móvil con esa app.
