@@ -43,21 +43,20 @@ export function InboxItem({ item }: { item: InboxItemData }) {
       <div className="min-w-0">
         <p className="font-medium text-slate-100">Factura enviada</p>
         <p className="text-sm text-muted flex items-center gap-2">
-          <StatusBadge tone={STATUS_TONE[item.status] ?? 'neutral'} label={STATUS_LABEL[item.status] ?? item.status} />
-          <span>{item.page_count} {item.page_count === 1 ? 'página' : 'páginas'}</span>
+          <StatusBadge plain tone={STATUS_TONE[item.status] ?? 'neutral'} label={STATUS_LABEL[item.status] ?? item.status} />
         </p>
         <time dateTime={item.created_at} className="text-xs text-slate-500">
           {formatCreatedAt(item.created_at)}
         </time>
       </div>
-      <div className="shrink-0 text-right">
-        {pending && <Link to={ROUTES.confirmation(item.id)} state={confirmationState} className="text-sm text-emerald-400">Ver progreso</Link>}
-        {reviewable && <Link to={ROUTES.confirmation(item.id)} state={confirmationState} className="text-sm text-emerald-400">Revisar factura</Link>}
+      <div className="shrink-0 flex items-center gap-3">
+        {pending && <Link to={ROUTES.confirmation(item.id)} state={confirmationState} className="tn-inbox-action tn-inbox-action-neutral">Ver progreso</Link>}
+        {reviewable && <Link to={ROUTES.confirmation(item.id)} state={confirmationState} className="tn-inbox-action tn-inbox-action-success">Revisar factura</Link>}
         {item.status !== 'confirmed' && (
           <button
             type="button"
             onClick={() => setShowDeleteDialog(true)}
-            className="ml-3 text-sm text-red-300"
+            className="tn-inbox-action tn-inbox-action-danger"
           >
             Eliminar
           </button>

@@ -52,9 +52,8 @@ export function InvoiceInbox() {
           {(location.state as { message: string }).message}
         </p>
       )}
-      <div className="grid grid-cols-3 gap-2" aria-label="Resumen de facturas">
+      <div className="grid grid-cols-2 gap-2" aria-label="Resumen de facturas">
         <SummaryCard label="Procesando" value={summary.processing} />
-        <SummaryCard label="Listas" value={summary.ready} />
         <SummaryCard label="Revisar" value={summary.attention} />
       </div>
       {items.length === 0 ? (

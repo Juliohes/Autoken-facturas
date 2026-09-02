@@ -60,6 +60,9 @@
     --divider-default: #eaecf0;
     --success: #20b486;
     --success-surface: #eafaf4;
+    /* Texto sobre success-surface: --success (#20B486) da solo 2.46:1 en claro (falla AA).
+     * --tn-success-ink es un verde oscuro dedicado a TEXTO, mismo criterio que --tn-warning-ink. */
+    --tn-success-ink: #0c6e49;
     --warning: var(--brand-orange);
     --warning-surface: var(--brand-orange-light);
     /* Texto sobre warning-surface: el naranja de marca (#FA6703) sobre --warning-surface claro
@@ -68,6 +71,9 @@
     --tn-warning-ink: #92400e;
     --error: #e5484d;
     --error-surface: #fff0f0;
+    /* Texto sobre error-surface: --error (#E5484D) da solo 3.54:1 en claro (falla AA 4.5:1).
+     * --tn-error-ink es un rojo oscuro dedicado a TEXTO, mismo criterio que --tn-success-ink. */
+    --tn-error-ink: #a5221b;
     --glass-navy-background: rgba(2, 18, 49, 0.84);
     --glass-navy-background-strong: rgba(2, 18, 49, 0.94);
     --glass-navy-background-soft: rgba(2, 18, 49, 0.72);
@@ -169,12 +175,16 @@
     --tn-divider: var(--divider-default);
     --tn-success: var(--success);
     --tn-success-surface: var(--success-surface);
+    /* En oscuro, --success (#3DDC97) ya pasa AA sobre success-surface (~8.64:1). */
+    --tn-success-ink: var(--success);
     --tn-warning: var(--brand-orange);
     --tn-warning-surface: var(--warning-surface);
     /* En oscuro, el naranja de marca (#FF7A3D) ya pasa AA sobre warning-surface (~6.15:1). */
     --tn-warning-ink: var(--brand-orange);
     --tn-error: var(--error);
     --tn-error-surface: var(--error-surface);
+    /* En oscuro, --error (#FF7A72) ya pasa AA sobre error-surface (~6.67:1). */
+    --tn-error-ink: var(--error);
     --tn-shadow-card: 0 5px 18px rgba(0, 0, 0, 0.4);
     --tn-capture-glass-bg: linear-gradient(145deg, rgba(15, 42, 82, 0.86), rgba(2, 18, 49, 0.94));
     --tn-capture-glass-border: 1px solid var(--glass-navy-border);
@@ -221,11 +231,13 @@
       --tn-divider: var(--divider-default);
       --tn-success: var(--success);
       --tn-success-surface: var(--success-surface);
+      --tn-success-ink: var(--success);
       --tn-warning: var(--brand-orange);
       --tn-warning-surface: var(--warning-surface);
       --tn-warning-ink: var(--brand-orange);
       --tn-error: var(--error);
       --tn-error-surface: var(--error-surface);
+      --tn-error-ink: var(--error);
       --tn-shadow-card: 0 5px 18px rgba(0, 0, 0, 0.4);
       --tn-capture-glass-bg: linear-gradient(145deg, rgba(15, 42, 82, 0.86), rgba(2, 18, 49, 0.94));
       --tn-capture-glass-border: 1px solid var(--glass-navy-border);
@@ -936,14 +948,25 @@
     font-size: 0.8125rem; font-weight: 600; line-height: 1.4;
     border: 1px solid transparent;
   }
-  .tn-status-ok { color: var(--tn-success); background: var(--tn-success-surface); border-color: var(--tn-success); }
+  /* color: el ink dedicado (AA), no el tono crudo -- --tn-success/--tn-error dan 2.46:1/3.54:1
+   * sobre su propia surface en claro, no llegan a 4.5:1. */
+  .tn-status-ok { color: var(--tn-success-ink); background: var(--tn-success-surface); border-color: var(--tn-success); }
   .tn-status-warn { color: var(--tn-warning-ink); background: var(--tn-warning-surface); border-color: var(--tn-warning); }
-  .tn-status-bad { color: var(--tn-error); background: var(--tn-error-surface); border-color: var(--tn-error); }
+  .tn-status-bad { color: var(--tn-error-ink); background: var(--tn-error-surface); border-color: var(--tn-error); }
   .tn-status-neutral { color: var(--tn-text-secondary); background: var(--tn-surface-subtle); border-color: var(--tn-border); }
   /* Texto principal sobre superficie sólida (no el acento de marca ni --brand-navy, que no se
    * redefine en oscuro): --tn-text-primary es dual-theme por diseño y siempre contrasta con
    * --tn-surface-subtle de su propio tema, sin depender de un fondo con alpha. */
   .tn-status-info { color: var(--tn-text-primary); background: var(--tn-surface-subtle); border-color: var(--tn-border); }
+
+  /* Variante sin caja (bloque C): conserva el color del tono, icono y texto (AA), sin fondo ni
+   * borde sólido -- p. ej. el estado dentro de InboxItem. */
+  .tn-status-badge.tn-status-plain {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
 
   .tn-spinner-wrap { display: inline-flex; align-items: center; }
   .tn-spinner {
@@ -1057,6 +1080,49 @@
     border: 1px solid var(--border-default);
     border-radius: var(--tn-radius-md);
     box-shadow: var(--tn-shadow-card);
+  }
+
+  /* Acciones de Pendientes (bloque C): botones con recuadro, padding cómodo, AA en claro y
+   * oscuro. "Revisar factura" verde, "Eliminar" rojo, "Ver progreso" neutro suave. */
+  .tn-inbox-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 8px 16px;
+    border: 1px solid transparent;
+    border-radius: var(--tn-radius-md);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    transition: filter 140ms ease;
+  }
+
+  .tn-inbox-action:hover {
+    filter: brightness(1.05);
+  }
+
+  .tn-inbox-action:disabled {
+    opacity: 0.5;
+  }
+
+  .tn-inbox-action-success {
+    color: var(--tn-success-ink);
+    background: var(--tn-success-surface);
+    border-color: var(--tn-success);
+  }
+
+  .tn-inbox-action-danger {
+    color: var(--tn-error-ink);
+    background: var(--tn-error-surface);
+    border-color: var(--tn-error);
+  }
+
+  .tn-inbox-action-neutral {
+    color: var(--text-primary);
+    background: var(--surface-secondary);
+    border-color: var(--tn-border);
   }
 
   .tn-summary-card {
