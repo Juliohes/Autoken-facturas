@@ -742,7 +742,7 @@ export function CaptureScreen({ onUploaded }: Props) {
               type="button"
               onClick={() => openCamera()}
               disabled={direction === null}
-              className="tn-primary-action flex min-h-[88px] w-full max-w-[430px] items-center justify-center gap-3 px-8 text-xl disabled:opacity-50"
+              className="tn-primary-action flex min-h-[88px] w-full max-w-[430px] items-center justify-center gap-3 px-8 text-xl disabled:cursor-not-allowed"
             >
               <svg aria-hidden="true" className="tn-capture-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M5 8.5h3l1.5-2h5L16 8.5h3A2 2 0 0 1 21 10.5v7A2 2 0 0 1 19 19.5H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z" />
@@ -756,7 +756,7 @@ export function CaptureScreen({ onUploaded }: Props) {
               aria-label="Varias hojas"
               aria-pressed={multiplePages}
               disabled={direction === null}
-              className="tn-btn tn-btn-secondary flex min-h-[72px] w-full max-w-[430px] items-center justify-center gap-3 px-8 text-lg disabled:opacity-50"
+              className="tn-btn tn-btn-secondary tn-capture-secondary-solid flex min-h-[72px] w-full max-w-[430px] items-center justify-center gap-3 px-8 text-lg disabled:cursor-not-allowed"
             >
               <svg aria-hidden="true" className="tn-capture-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M8 4h9a2 2 0 0 1 2 2v11" strokeLinecap="round" />

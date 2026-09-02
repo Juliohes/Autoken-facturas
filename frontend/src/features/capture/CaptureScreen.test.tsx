@@ -142,10 +142,16 @@ describe('CaptureScreen (S6.11)', () => {
 
     expect(screen.getByRole('radio', { name: 'Recibida' })).not.toBeChecked()
     expect(screen.getByRole('radio', { name: 'Emitida' })).not.toBeChecked()
-    expect(screen.getByRole('button', { name: 'Tomar foto' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Varias hojas' })).toBeDisabled()
+    const takePhoto = screen.getByRole('button', { name: 'Tomar foto' })
+    const multiplePages = screen.getByRole('button', { name: 'Varias hojas' })
+    expect(takePhoto).toBeDisabled()
+    expect(multiplePages).toBeDisabled()
     // R-056: "Subir factura" vive en la pestaña Subir Archivo, no en el escáner.
     expect(screen.queryByRole('button', { name: 'Subir factura' })).not.toBeInTheDocument()
+    // Bloqueados pero sin verse "pálidos" (feedback de Julio): bloqueados vía disabled (a11y +
+    // clic real bloqueado), no atenuando el color por opacidad como en la versión anterior.
+    expect(takePhoto.className).not.toMatch(/opacity-/)
+    expect(multiplePages).toHaveClass('tn-capture-secondary-solid')
   })
 
   it('R-056 C4: el escáner no muestra la entrada visible de captura continua', () => {
