@@ -772,26 +772,24 @@ async def count_history(
 ) -> int:
     """Recuento total de facturas del historial que cumplen el mismo filtro que `list_history`,
     ignorando cursor/limit (bloque D: número junto al desplegable de periodo)."""
-    row = (
-        await session.execute(
-            text(
-                "SELECT count(*) AS total "
-                "FROM uploaded_files f "
-                "JOIN invoices i ON i.uploaded_file_id = f.id "
-                "WHERE i.status = 'confirmed' "
-                "AND f.created_at >= current_timestamp - interval '4 months' "
-                "AND i.is_test = false "
-                "AND ((:uploaded_by)::uuid IS NULL OR f.uploaded_by = (:uploaded_by)::uuid) "
-                + _HISTORY_PERIOD_FILTER
-            ),
-            {
-                "uploaded_by": str(uploaded_by) if uploaded_by is not None else None,
-                "period_start": period_start,
-                "period_end": period_end,
-            },
-        )
-    ).one()
-    return row.total
+    count = await session.scalar(
+        text(
+            "SELECT count(*) "
+            "FROM uploaded_files f "
+            "JOIN invoices i ON i.uploaded_file_id = f.id "
+            "WHERE i.status = 'confirmed' "
+            "AND f.created_at >= current_timestamp - interval '4 months' "
+            "AND i.is_test = false "
+            "AND ((:uploaded_by)::uuid IS NULL OR f.uploaded_by = (:uploaded_by)::uuid) "
+            + _HISTORY_PERIOD_FILTER
+        ),
+        {
+            "uploaded_by": str(uploaded_by) if uploaded_by is not None else None,
+            "period_start": period_start,
+            "period_end": period_end,
+        },
+    )
+    return int(count or 0)
 
 
 async def list_inbox(
