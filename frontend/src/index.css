@@ -312,10 +312,13 @@
     background: var(--tn-nav-surface);
     border-top-left-radius: var(--tn-radius-lg);
     border-top-right-radius: var(--tn-radius-lg);
+    /* Recorta cualquier cosa (la barra del activo incluida) a las esquinas curvas (bloque B.2). */
+    overflow: hidden;
     box-shadow: 0 -4px 16px rgba(2, 18, 49, 0.1);
   }
 
   .tn-user-nav-links a {
+    position: relative;
     min-height: 88px;
     display: inline-flex;
     flex-direction: column;
@@ -326,16 +329,34 @@
     text-align: center;
     color: var(--tn-nav-ink-muted);
     font-size: 0.75rem;
-    border-top: 2px solid transparent;
-    transition: color 140ms ease, border-color 180ms ease;
+    transition: color 140ms ease;
   }
 
-  /* Estado activo: texto navy + línea de acento naranja (color + forma, no solo color). */
+  /* Barra del activo (bloque B): 3px (antes 2px), centrada al ~60% del ancho del ítem con margen
+   * a los dos lados -- nunca toca los extremos del primer/último ítem ni invade la curva. */
+  .tn-user-nav-links a::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 60%;
+    height: 3px;
+    background: transparent;
+    border-radius: var(--tn-radius-pill);
+    transform: translateX(-50%);
+    transition: background-color 180ms ease;
+  }
+
+  /* Estado activo: texto navy + barra de acento naranja (color + forma, no solo color). */
   .tn-user-nav-links a[aria-current='page'],
   .tn-user-nav-links a.active {
     color: var(--text-primary);
     font-weight: 600;
-    border-top-color: var(--tn-accent);
+  }
+
+  .tn-user-nav-links a[aria-current='page']::before,
+  .tn-user-nav-links a.active::before {
+    background: var(--tn-accent);
   }
 
   /* Envoltorio del icono: ancla el badge en su esquina superior derecha. */
