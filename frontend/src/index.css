@@ -1005,6 +1005,22 @@
   .tn-segmented-option-active { color: var(--tn-accent-ink); background: var(--tn-accent); box-shadow: 0 4px 10px rgba(var(--brand-navy-rgb), 0.16); }
   .tn-segmented-option:focus-visible { outline: 3px solid rgb(var(--tn-accent-rgb) / 0.4); outline-offset: 2px; }
 
+  /* Desplegable de periodo del Historial (bloque D). */
+  .tn-select {
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--tn-border);
+    border-radius: var(--tn-radius-md);
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+  .tn-select:focus-visible {
+    outline: 3px solid rgb(var(--tn-accent-rgb) / 0.4);
+    outline-offset: 2px;
+  }
+
   .tn-card {
     background: var(--tn-surface); border: 1px solid var(--tn-border);
     border-radius: var(--tn-radius-md); box-shadow: var(--tn-shadow-card); padding: 18px;

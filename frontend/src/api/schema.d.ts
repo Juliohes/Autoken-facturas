@@ -711,6 +711,9 @@ export interface paths {
         /**
          * Invoice History
          * @description Facturas confirmadas de los últimos cuatro meses, con cursor estable (R-056).
+         *
+         *     `period` (bloque D, PROMPT-AUTOFACTU-AJUSTES-v3) filtra server-side por `invoice_date`, con
+         *     trimestres naturales; "total" (por defecto) no filtra.
          */
         get: operations["invoice_history_api_v1_invoices_history_get"];
         put?: never;
@@ -1864,8 +1867,8 @@ export interface components {
          * HistoryEntryOut
          * @description Una entrada privada de historial, sin PII de contraparte (S6.12).
          *
-         *     ``invoice_number``: número del documento propio (no dato de contraparte, S6.12), solo presente
-         *     en facturas `confirmed`. `None` cuando la factura no tiene número, nunca un valor inventado.
+         *     ``invoice_number``/``invoice_date``: datos del documento propio (no de contraparte, S6.12),
+         *     solo presentes en facturas `confirmed`. `None` cuando falta el dato, nunca un valor inventado.
          */
         HistoryEntryOut: {
             /**
@@ -1884,16 +1887,23 @@ export interface components {
             direction: ("recibida" | "emitida") | null;
             /** Invoice Number */
             invoice_number: string | null;
+            /** Invoice Date */
+            invoice_date: string | null;
         };
         /**
          * HistoryOut
          * @description Respuesta de `GET /invoices/history`: últimos envíos, más reciente primero.
+         *
+         *     ``count``: total de facturas que cumplen el filtro `period` (bloque D), no solo las de esta
+         *     página -- el número junto al desplegable de periodo en el frontend.
          */
         HistoryOut: {
             /** Entries */
             entries: components["schemas"]["HistoryEntryOut"][];
             /** Next Cursor */
             next_cursor: string | null;
+            /** Count */
+            count: number;
         };
         /**
          * ImportReportOut
@@ -3655,6 +3665,7 @@ export interface operations {
             query?: {
                 cursor?: string | null;
                 limit?: number;
+                period?: "total" | "month" | "quarter" | "year";
             };
             header?: never;
             path?: never;
