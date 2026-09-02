@@ -119,14 +119,21 @@ describe('CaptureScreen (S6.11)', () => {
     expect(screen.getByRole('heading', { name: 'Capturar factura' }).closest('section')).toHaveClass('tn-capture-entry-screen')
     expect(directionSelector.compareDocumentPosition(takePhoto)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     // "Tomar foto" y "Varias hojas" son botones independientes (bloque A.4): ya no comparten el
-    // contenedor .tn-capture-segmented ni sus clases de segmento solapado.
-    expect(takePhoto).toHaveClass('tn-capture-primary-btn')
-    expect(multiplePages).toHaveClass('tn-capture-secondary-btn')
-    expect(multiplePages).not.toHaveClass('tn-capture-primary-btn')
+    // contenedor .tn-capture-segmented ni sus clases de segmento solapado. "Tomar foto" reutiliza
+    // .tn-primary-action tal cual (idéntico a "Elegir imágenes o PDF" en Subir Archivo, feedback de
+    // Julio); "Varias hojas" reutiliza .tn-btn/.tn-btn-secondary (sólido, sin blur/transparencia).
+    expect(takePhoto).toHaveClass('tn-primary-action')
+    expect(multiplePages).toHaveClass('tn-btn', 'tn-btn-secondary')
+    expect(multiplePages).not.toHaveClass('tn-primary-action')
     expect(screen.queryByRole('group', { name: 'Añadir factura' })).not.toBeInTheDocument()
     expect(multiplePages).toHaveAttribute('aria-pressed', 'false')
     expect(takePhoto.querySelector('svg')).toBeInTheDocument()
     expect(multiplePages.querySelector('svg')).toBeInTheDocument()
+    // Fondo liso como Subir Archivo (feedback de Julio): sin .tn-liquid-glass ni .tn-panel-page.
+    const section = screen.getByRole('heading', { name: 'Capturar factura' }).closest('section')
+    expect(section).toHaveClass('tn-page-plain')
+    expect(section).not.toHaveClass('tn-liquid-glass')
+    expect(section).not.toHaveClass('tn-panel-page')
   })
 
   it('R-056 C3: entra sin dirección seleccionada y bloquea las acciones de captura', () => {

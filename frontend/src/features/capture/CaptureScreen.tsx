@@ -694,7 +694,7 @@ export function CaptureScreen({ onUploaded }: Props) {
   }
 
   return (
-    <section className="tn-panel-page tn-liquid-glass tn-capture-screen tn-capture-entry-screen mx-auto w-full max-w-none space-y-5 p-4 sm:p-6">
+    <section className="tn-page-plain tn-capture-entry-screen mx-auto w-full max-w-none space-y-5 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="sr-only">Capturar factura</h1>
       </div>
@@ -738,14 +738,26 @@ export function CaptureScreen({ onUploaded }: Props) {
           // "Tomar foto" y "Varias hojas" separados (bloque A.4): ya no comparten borde ni se
           // solapan; el mismo gap-6 que separa el toggle de "Tomar foto" los separa entre sí.
           <div className="flex w-full flex-col items-center gap-6">
-            <button type="button" onClick={() => openCamera()} disabled={direction === null} className="tn-capture-primary-btn">
+            <button
+              type="button"
+              onClick={() => openCamera()}
+              disabled={direction === null}
+              className="tn-primary-action flex min-h-[88px] w-full max-w-[430px] items-center justify-center gap-3 px-8 text-xl disabled:opacity-50"
+            >
               <svg aria-hidden="true" className="tn-capture-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M5 8.5h3l1.5-2h5L16 8.5h3A2 2 0 0 1 21 10.5v7A2 2 0 0 1 19 19.5H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z" />
                 <circle cx="12" cy="14" r="3.25" />
               </svg>
               <span>Tomar foto</span>
             </button>
-            <button type="button" onClick={startMultiplePages} aria-label="Varias hojas" aria-pressed={multiplePages} disabled={direction === null} className="tn-capture-secondary-btn">
+            <button
+              type="button"
+              onClick={startMultiplePages}
+              aria-label="Varias hojas"
+              aria-pressed={multiplePages}
+              disabled={direction === null}
+              className="tn-btn tn-btn-secondary flex min-h-[72px] w-full max-w-[430px] items-center justify-center gap-3 px-8 text-lg disabled:opacity-50"
+            >
               <svg aria-hidden="true" className="tn-capture-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M8 4h9a2 2 0 0 1 2 2v11" strokeLinecap="round" />
                 <path d="M6 7h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
