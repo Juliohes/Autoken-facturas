@@ -4,6 +4,7 @@ export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from '.
 export { Card, Section, type CardProps, type SectionProps } from './Card'
 export { EmptyState, type EmptyStateProps } from './EmptyState'
 export { Field, type FieldProps } from './Field'
+export { PasswordField, type PasswordFieldProps } from './PasswordField'
 export { SegmentedControl, type SegmentedControlProps, type SegmentedOption } from './SegmentedControl'
 export { Spinner, type SpinnerProps } from './Spinner'
 export { StatusBadge, type StatusBadgeProps, type StatusTone } from './StatusBadge'

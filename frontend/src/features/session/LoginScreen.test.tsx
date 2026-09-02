@@ -1,8 +1,10 @@
 // Tests de comportamiento de `LoginScreen` (S4.9, C1-C3). Aislado de `SessionProvider`: se
 // mockea `useSession` directamente, la pantalla solo debe orquestar el formulario y mostrar el
-// resultado de `login()`, sin saber nada de rutas.
+// resultado de `login()`, sin saber nada de rutas. Envuelto en `MemoryRouter` (Bloque 4): los dos
+// enlaces al pie (recuperar contraseña, solicitar acceso) usan `<Link>`, que exige un Router.
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AppliedTheme } from '../tenancy/theme'
@@ -22,6 +24,14 @@ const THEME: AppliedTheme = {
   faviconUrl: null,
 }
 
+function renderLogin() {
+  return render(
+    <MemoryRouter>
+      <LoginScreen theme={THEME} />
+    </MemoryRouter>,
+  )
+}
+
 beforeEach(() => {
   useSessionMock.mockReset()
 })
@@ -29,7 +39,7 @@ beforeEach(() => {
 describe('LoginScreen (S4.9)', () => {
   it('usa el tono azul de marca en el shell y un panel con acabado glass', () => {
     useSessionMock.mockReturnValue({ status: 'unauthenticated', user: null, login: vi.fn(), logout: vi.fn() })
-    render(<LoginScreen theme={THEME} />)
+    renderLogin()
 
     expect(screen.getByRole('main')).toHaveClass('tn-login-shell')
     expect(screen.getByRole('form', { name: 'Inicio de sesión' })).toHaveClass('tn-login-card')
@@ -39,7 +49,7 @@ describe('LoginScreen (S4.9)', () => {
     const login = vi.fn().mockResolvedValue({ outcome: 'ok' })
     useSessionMock.mockReturnValue({ status: 'unauthenticated', user: null, login, logout: vi.fn() })
     const user = userEvent.setup()
-    render(<LoginScreen theme={THEME} />)
+    renderLogin()
 
     await user.type(screen.getByLabelText('Email'), 'ana@ilex.es')
     await user.type(screen.getByLabelText('Contraseña'), 's3cret')
@@ -53,7 +63,7 @@ describe('LoginScreen (S4.9)', () => {
     const login = vi.fn().mockResolvedValue({ outcome: 'ok' })
     useSessionMock.mockReturnValue({ status: 'unauthenticated', user: null, login, logout: vi.fn() })
     const user = userEvent.setup()
-    render(<LoginScreen theme={THEME} />)
+    renderLogin()
 
     const password = screen.getByLabelText('Contraseña')
     await user.type(screen.getByLabelText('Email'), 'ana@ilex.es')
@@ -76,7 +86,7 @@ describe('LoginScreen (S4.9)', () => {
     const login = vi.fn().mockResolvedValue({ outcome: 'error', message: 'Invalid credentials' })
     useSessionMock.mockReturnValue({ status: 'unauthenticated', user: null, login, logout: vi.fn() })
     const user = userEvent.setup()
-    render(<LoginScreen theme={THEME} />)
+    renderLogin()
 
     await user.type(screen.getByLabelText('Email'), 'ana@ilex.es')
     await user.type(screen.getByLabelText('Contraseña'), 'mala')
@@ -93,7 +103,7 @@ describe('LoginScreen (S4.9)', () => {
       .mockResolvedValueOnce({ outcome: 'ok' })
     useSessionMock.mockReturnValue({ status: 'unauthenticated', user: null, login, logout: vi.fn() })
     const user = userEvent.setup()
-    render(<LoginScreen theme={THEME} />)
+    renderLogin()
 
     await user.type(screen.getByLabelText('Email'), 'ana@ilex.es')
     await user.type(screen.getByLabelText('Contraseña'), 's3cret')
@@ -106,5 +116,18 @@ describe('LoginScreen (S4.9)', () => {
     await waitFor(() =>
       expect(login).toHaveBeenLastCalledWith('ana@ilex.es', 's3cret', '123456'),
     )
+  })
+
+  it('Bloque 4: enlaza a recuperar contraseña y a solicitar acceso', () => {
+    useSessionMock.mockReturnValue({ status: 'unauthenticated', user: null, login: vi.fn(), logout: vi.fn() })
+    renderLogin()
+
+    expect(screen.getByRole('link', { name: '¿No recuerdas tu contraseña?' })).toHaveAttribute(
+      'href',
+      '/recuperar',
+    )
+    expect(
+      screen.getByRole('link', { name: '¿No tienes cuenta? Solicita acceso' }),
+    ).toHaveAttribute('href', '/registro')
   })
 })

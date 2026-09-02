@@ -29,6 +29,11 @@ import { PlatformLab } from '../features/platform/PlatformLab'
 import { GlobalPendingPanel } from '../features/platform/GlobalPendingPanel'
 import { PlatformSettings } from '../features/platform/PlatformSettings'
 import { PlatformTenants } from '../features/platform/PlatformTenants'
+import { ActivateScreen } from '../features/auth/ActivateScreen'
+import { ForgotPasswordScreen } from '../features/auth/ForgotPasswordScreen'
+import { RegisterScreen } from '../features/auth/RegisterScreen'
+import { ResetPasswordScreen } from '../features/auth/ResetPasswordScreen'
+import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen'
 import { LoginScreen } from '../features/session/LoginScreen'
 import { useSession } from '../features/session/SessionProvider'
 import type { AppliedTheme } from '../features/tenancy/theme'
@@ -157,6 +162,13 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path={ROUTES.login} element={<LoginRoute theme={theme} />} />
+        {/* Públicas, sin token (Bloque 4 de PROMPT-AUTOFACTU-AUTH-COMPLETO): fuera de `ProtectedRoute`,
+            cada una resuelve su propio estado (token de la URL, éxito/error) sin depender de la sesión. */}
+        <Route path={ROUTES.register} element={<RegisterScreen theme={theme} />} />
+        <Route path={ROUTES.registerConfirm} element={<VerifyEmailScreen theme={theme} />} />
+        <Route path={ROUTES.forgotPassword} element={<ForgotPasswordScreen theme={theme} />} />
+        <Route path={ROUTES.resetPassword} element={<ResetPasswordScreen theme={theme} />} />
+        <Route path={ROUTES.activate} element={<ActivateScreen theme={theme} />} />
         <Route
           path={ROUTES.platform}
           element={

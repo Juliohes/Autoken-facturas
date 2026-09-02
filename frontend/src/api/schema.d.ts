@@ -225,6 +225,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/password/forgot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Forgot Password
+         * @description Solicita un enlace de restablecimiento. Respuesta genérica: 200 exista o no la cuenta.
+         *
+         *     Tope por (IP+email) e IP -> 429. Sin Redis no se puede aplicar el anti-spam ni sembrar el
+         *     token: la petición falla cerrada (503).
+         */
+        post: operations["forgot_password_api_v1_auth_password_forgot_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Password
+         * @description Fija la nueva contraseña con un token de restablecimiento válido y cierra otras sesiones.
+         *
+         *     Token inválido/caducado/consumido, o de otro tenant (F2) -> 401 (no distingue el motivo).
+         *     Contraseña débil -> 422.
+         */
+        post: operations["reset_password_api_v1_auth_password_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/register": {
         parameters: {
             query?: never;
@@ -262,6 +308,28 @@ export interface paths {
         get: operations["list_registrations_api_v1_registrations_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/register/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Registration Email
+         * @description Confirma el email del registrante. NO aprueba el registro (eso sigue siendo del admin).
+         *
+         *     Token inválido/caducado/consumido, o de otro tenant (F2) -> 401 (no distingue el motivo).
+         */
+        post: operations["verify_registration_email_api_v1_auth_register_verify_email_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1807,6 +1875,23 @@ export interface components {
             /** Ratio */
             ratio: number | null;
         };
+        /**
+         * ForgotPasswordRequest
+         * @description Cuerpo de `POST /auth/password/forgot`.
+         */
+        ForgotPasswordRequest: {
+            /** Email */
+            email: string;
+        };
+        /**
+         * ForgotPasswordResponse
+         * @description Respuesta genérica del olvido de contraseña (idéntica exista o no la cuenta:
+         *     anti-enumeración).
+         */
+        ForgotPasswordResponse: {
+            /** Status */
+            status: string;
+        };
         /** GlobalPendingOut */
         GlobalPendingOut: {
             /**
@@ -2350,6 +2435,8 @@ export interface components {
             cif: string;
             /** Password */
             password: string;
+            /** Legal Consent */
+            legal_consent: boolean;
         };
         /**
          * RegisterResponse
@@ -2378,6 +2465,26 @@ export interface components {
             company: string | null;
             /** Joins Existing Company */
             joins_existing_company: boolean;
+            /** Email Verified */
+            email_verified: boolean;
+        };
+        /**
+         * ResetPasswordRequest
+         * @description Cuerpo de `POST /auth/password/reset`.
+         */
+        ResetPasswordRequest: {
+            /** Token */
+            token: string;
+            /** Password */
+            password: string;
+        };
+        /**
+         * ResetPasswordResponse
+         * @description Respuesta del restablecimiento efectivo.
+         */
+        ResetPasswordResponse: {
+            /** Status */
+            status: string;
         };
         /**
          * ReviewDraftIn
@@ -2653,6 +2760,22 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * VerifyEmailRequest
+         * @description Cuerpo de `POST /auth/register/verify-email`.
+         */
+        VerifyEmailRequest: {
+            /** Token */
+            token: string;
+        };
+        /**
+         * VerifyEmailResponse
+         * @description Respuesta de la verificación de email del registrante.
+         */
+        VerifyEmailResponse: {
+            /** Status */
+            status: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -2905,6 +3028,72 @@ export interface operations {
             };
         };
     };
+    forgot_password_api_v1_auth_password_forgot_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForgotPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForgotPasswordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_password_api_v1_auth_password_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetPasswordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     register_api_v1_register_post: {
         parameters: {
             query?: never;
@@ -2954,6 +3143,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegistrationOut"][];
+                };
+            };
+        };
+    };
+    verify_registration_email_api_v1_auth_register_verify_email_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifyEmailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

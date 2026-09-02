@@ -258,11 +258,32 @@ class Settings(BaseSettings):
     register_max_per_ip: int = 20
     register_window_seconds: int = 60 * 60  # ventana del rate-limit de registro (1 h)
 
-    # Notificaciones (aviso al `tenant_admin` de un registro pendiente). El envío real por SMTP está
-    # diferido (spec S1.4 §6): SIN `smtp_host` se usa el grabador en memoria (RecordingNotifier);
-    # cuando existan las credenciales de soporte@autoken.es se cablea el transporte SMTP. Secreto:
-    # llega por env var en el VPS (§9.1), nunca en el repo.
+    # Verificación del email del registrante (PROMPT-AUTOFACTU-AUTH-COMPLETO, bloque 2): token de un
+    # solo uso, mismo patrón que la activación. No bloquea la aprobación del admin (solo informa),
+    # así que un TTL más corto que la activación (24h) es suficiente: si caduca, no bloquea el alta.
+    email_verification_ttl: int = 24 * 60 * 60
+
+    # Recuperación de contraseña (bloque 1): token de un solo uso ligado a user+tenant, TTL corto
+    # (más corto que la activación: el riesgo de un enlace de reset filtrado es mayor que el de
+    # activación, que ya exige conocer el email exacto que sembró el operador). Rate-limit mismo
+    # patrón que login (IP+email e IP), cubos propios para no compartir contador con intentos de
+    # login fallidos (semántica distinta: "olvidé mi contraseña" no es un login fallido).
+    password_reset_ttl: int = 60 * 60
+    password_reset_max_per_email: int = 5
+    password_reset_max_per_ip: int = 20
+    password_reset_window_seconds: int = 15 * 60
+
+    # Notificaciones (aviso al `tenant_admin` de un registro pendiente, verificación de email,
+    # activación, restablecer contraseña). SIN `smtp_host` se usa el grabador en memoria
+    # (RecordingNotifier, test/dev); con `smtp_host` configurado se usa `SmtpNotifier` (bloque 3).
+    # Secretos: llegan por env var en el VPS (§9.1), nunca en el repo (mismo criterio que
+    # `jwt_secret`/`db_encryption_master_key`: no se usa `SecretStr`, ver comentario ahí).
     smtp_host: str | None = None
+    smtp_port: int = 587  # 465 = SSL directo, 587 = STARTTLS (smtp_use_tls decide cuál)
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None  # remitente (p. ej. "Autofactu <soporte@autoken.es>")
+    smtp_use_tls: bool = True  # True = STARTTLS (587); False = SSL directo (465)
 
     # --- Importación de empresas S1.5 (companies) ----------------------------------------------
     # Guardarraíles anti-DoS por memoria del `POST /companies/import` (proceso compartido por todas

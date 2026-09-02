@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from companies.router import router as companies_router
+from identity.password_reset_router import router as password_reset_router
 from identity.registration_router import router as registration_router
 from identity.router import router as auth_router
 from invoice_intake.router import duplicate_upload_handler
@@ -95,6 +96,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics_router, prefix=settings.api_prefix)
     app.include_router(tenancy_router, prefix=settings.api_prefix)
     app.include_router(auth_router, prefix=settings.api_prefix)
+    app.include_router(password_reset_router, prefix=settings.api_prefix)
     app.include_router(registration_router, prefix=settings.api_prefix)
     app.include_router(companies_router, prefix=settings.api_prefix)
     app.include_router(intake_router, prefix=settings.api_prefix)

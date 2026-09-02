@@ -26,9 +26,10 @@ from companies import repository as companies_repo
 from companies.service import InvalidTaxId, is_cif_unique_violation, validated_cif
 from companies.service import cif_blind_index as company_cif_blind_index
 from companies.service import tenant_encryption_key as company_encryption_key
-from identity import ratelimit, registration_repo
+from identity import email_verification, ratelimit, registration_repo
 from identity.passwords import hash_password, validate_password_policy
 from notifications import Message, Notifier
+from notifications import templates as email_templates
 from shared.audit import write_audit
 from shared.config import Settings
 from shared.integrity import violates_unique_constraint
@@ -56,6 +57,11 @@ class RegistrationError(Exception):
 
 class WeakPassword(RegistrationError):
     """La contraseña no cumple la política (S1.3) (-> 422)."""
+
+
+class LegalConsentRequired(RegistrationError):
+    """El registrante no aceptó los términos/condiciones (Bloque 5, PROMPT-AUTOFACTU-AUTH-COMPLETO)
+    (-> 422). Sin esto no hay alta: es el propio consentimiento, no un detalle accesorio."""
 
 
 class InvalidCif(RegistrationError):
@@ -88,21 +94,26 @@ async def register(
     redis: aioredis.Redis,
     ip: str,
     tenant_id: UUID,
+    tenant_slug: str,
     email: str,
     company_name: str,
     cif: str,
     password: str,
+    legal_consent: bool,
     settings: Settings,
     notifier: Notifier,
 ) -> None:
     """Da de alta un registro pendiente: usuario + empresa (1-A) + membership, todo o nada.
 
-    Limita por IP (429), valida contraseña (422) y CIF (422) antes de tocar nada. La contraseña se
+    Limita por IP (429), exige el consentimiento legal (422) y valida contraseña (422) y CIF (422)
+    antes de tocar nada. La contraseña se
     **hashea siempre** antes de ramificar por la existencia del email, para no filtrar por latencia
     si el email ya existe (mismo criterio que `verify_password` en el login). Si el email ya existe
     no crea un segundo usuario ni avisa: la respuesta la genera el router de forma **genérica e
-    idéntica** (anti-enumeración). Deja traza `user.register` (actor = el propio usuario nuevo) y
-    avisa al `tenant_admin` tras el commit, nunca al usuario final.
+    idéntica** (anti-enumeración). Deja traza `user.register` (actor = el propio usuario nuevo),
+    avisa al `tenant_admin` tras el commit, y (bloque 2) siembra un token de verificación de email y
+    avisa TAMBIÉN al propio registrante -- no como aprobación (sigue pendiente del admin), solo para
+    confirmar que el email es suyo.
     """
     if await ratelimit.register_attempt_exceeds_ip(
         redis,
@@ -111,6 +122,8 @@ async def register(
         window_seconds=settings.register_window_seconds,
     ):
         raise RegistrationRateLimited
+    if not legal_consent:
+        raise LegalConsentRequired
     if not validate_password_policy(password, settings):
         raise WeakPassword
     canonical_cif = _validated_cif(cif)
@@ -121,7 +134,7 @@ async def register(
     if await registration_repo.email_exists(session, email):
         return  # anti-enumeración (fast-path): email ya presente, respuesta genérica sin crear nada
 
-    if not await _persist_registration(
+    user_id = await _persist_registration(
         session,
         tenant_id=tenant_id,
         settings=settings,
@@ -129,10 +142,27 @@ async def register(
         company_name=company_name,
         canonical_cif=canonical_cif,
         password_hash=password_hash,
-    ):
+    )
+    if user_id is None:
         return  # carrera de email: otra alta ganó el UNIQUE; respuesta genérica, sin crear
 
-    _dispatch_after_commit(session, notifier, await _admin_messages(session, new_email=email))
+    messages = await _admin_messages(session, new_email=email)
+    verification_token = await email_verification.issue_verification_token(
+        redis,
+        user_id=user_id,
+        tenant_id=tenant_id,
+        ttl_seconds=settings.email_verification_ttl,
+    )
+    messages.append(
+        email_templates.email_verification(
+            email=email,
+            url=email_verification.verification_url(
+                settings, slug=tenant_slug, token=verification_token
+            ),
+            ttl_seconds=settings.email_verification_ttl,
+        )
+    )
+    _dispatch_after_commit(session, notifier, messages)
 
 
 def _validated_cif(cif: str) -> str:
@@ -152,12 +182,13 @@ async def _persist_registration(
     company_name: str,
     canonical_cif: str,
     password_hash: str,
-) -> bool:
-    """Inserta usuario + empresa (1-A) + membership + traza en un SAVEPOINT; True si se creó.
+) -> UUID | None:
+    """Inserta usuario + empresa (1-A) + membership + traza en un SAVEPOINT; el id del usuario si se
+    creó, o `None` si no se creó nada.
 
     El pre-check de unicidad no es atómico: dos altas concurrentes pueden esquivarlo y chocar en un
     UNIQUE. Se capturan esas carreras (TOCTOU):
-    - UNIQUE de email -> devuelve False (nada creado): el router responde igual que un alta buena.
+    - UNIQUE de email -> devuelve `None` (nada creado): el router responde igual que un alta buena.
     - UNIQUE de CIF -> reintenta dentro del SAVEPOINT: al reintentar el SELECT encuentra la empresa
       recién creada por la otra alta y se vincula a ella (1-A), sin duplicarla.
     El SAVEPOINT único evita dejar una empresa huérfana si el alta del usuario falla en la carrera.
@@ -186,11 +217,14 @@ async def _persist_registration(
                     action=AUDIT_ACTION_REGISTER,
                     entity=_AUDIT_ENTITY,
                     entity_id=user_id,
+                    # `legal_consent` deja constancia verificable (hash) de que el alta se dio con
+                    # el consentimiento aceptado (Bloque 5): llegar aquí ya lo exigió `register()`.
+                    payload={"legal_consent": True, "email": email, "cif": canonical_cif},
                 )
-            return True
+            return user_id
         except IntegrityError as exc:
             if violates_unique_constraint(exc, _USERS_EMAIL_UNIQUE):
-                return False  # carrera de email: nada creado, respuesta genérica
+                return None  # carrera de email: nada creado, respuesta genérica
             if is_cif_unique_violation(exc) and attempts < _MAX_PERSIST_ATTEMPTS:
                 continue  # carrera de CIF: la empresa ya existe; reintenta y vincúlate a ella
             raise  # cualquier otra violación de integridad no se enmascara
@@ -220,17 +254,17 @@ async def _resolve_company(
 
 
 async def _admin_messages(session: AsyncSession, *, new_email: str) -> list[Message]:
-    """Construye el aviso (mock) a cada `tenant_admin` activo del registro pendiente (C12).
+    """Construye el aviso a cada `tenant_admin` activo del registro pendiente (C12).
 
-    Se avisa SOLO al admin; nunca al usuario final en esta fase (spec S1.4). Los destinatarios se
-    leen ahora (dentro del contexto RLS de la transacción); el envío se difiere al post-commit.
+    En S1.4 original, el usuario final no recibía ningún aviso; el bloque 2
+    (PROMPT-AUTOFACTU-AUTH-COMPLETO) añade el aviso de verificación de email al registrante
+    (`notifications.templates.email_verification`), que sigue sin ser una notificación de
+    aprobación: eso sigue siendo solo cosa del admin. Los destinatarios se leen ahora (dentro del
+    contexto RLS de la transacción); el envío se difiere al post-commit.
     """
     return [
-        Message(
-            to=admin_email,
-            subject="Nuevo registro pendiente de aprobación",
-            body=f"El usuario {new_email} se ha registrado y está pendiente de tu aprobación.",
-            kind="registration_pending",
+        email_templates.registration_pending_admin(
+            admin_email=admin_email, registrant_email=new_email
         )
         for admin_email in await registration_repo.tenant_admin_emails(session)
     ]

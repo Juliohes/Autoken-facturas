@@ -43,6 +43,15 @@ _PUBLIC_ROUTES = {
     ("POST", f"{API}/auth/activate"),
     ("POST", f"{API}/auth/activate/confirm"),
     ("POST", f"{API}/register"),
+    # Recuperación de contraseña (PROMPT-AUTOFACTU-AUTH-COMPLETO bloque 1): igual que activate*,
+    # públicos sin bearer token, gobernados por un token de un solo uso o por rate-limit. Su cruce
+    # de tenant lo cubre test_password_reset.py::test_reset_con_token_de_otro_tenant_da_401 (F2),
+    # no el vector 403 de este fichero (no hay identidad Bearer que cruzar).
+    ("POST", f"{API}/auth/password/forgot"),
+    ("POST", f"{API}/auth/password/reset"),
+    # Verificación del email del registrante (bloque 2): mismo criterio -- su cruce de tenant lo
+    # cubre test_registration.py::test_verify_email_de_otro_tenant_da_401 (F2).
+    ("POST", f"{API}/auth/register/verify-email"),
 }
 
 # Endpoints de negocio cubiertos por el vector 403 (token de A en subdominio de B).
@@ -375,6 +384,7 @@ async def test_c4_registro_publico_escribe_solo_en_su_subdominio(authapi: Api) -
             "company_name": "Nueva SL",
             "cif": "76072394D",
             "password": USER_PASSWORD,
+            "legal_consent": True,
         },
         headers=host("otra.localhost"),
     )

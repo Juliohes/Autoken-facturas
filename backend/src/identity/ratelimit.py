@@ -64,6 +64,14 @@ def _ip_key(ip: str) -> str:
     return f"login:ipfail:{ip}"
 
 
+def _password_reset_ip_email_key(ip: str, email: str) -> str:
+    return f"pwreset:fail:{ip}:{email}"
+
+
+def _password_reset_ip_key(ip: str) -> str:
+    return f"pwreset:ipfail:{ip}"
+
+
 def _register_ip_key(ip: str) -> str:
     return f"register:ip:{ip}"
 
@@ -115,6 +123,28 @@ async def record_failure(
 async def reset(redis: aioredis.Redis, ip: str, email: str) -> None:
     """Borra el contador por (IP+email) tras un login correcto."""
     await redis.delete(_ip_email_key(ip, email))
+
+
+async def password_reset_attempt_exceeds(
+    redis: aioredis.Redis,
+    ip: str,
+    email: str,
+    *,
+    max_per_email: int,
+    max_per_ip: int,
+    window_seconds: int,
+) -> bool:
+    """Cuenta una solicitud de "olvidé mi contraseña" y dice si supera el tope de (IP+email) o IP.
+
+    A diferencia del login (que solo cuenta *fallos*), aquí se cuenta CADA solicitud, exista o no la
+    cuenta: como la respuesta es genérica y no puede distinguir un email real de uno inventado
+    (anti-enumeración), el propio conteo tampoco puede depender de esa distinción -- si solo
+    contara cuando la cuenta existe, el tope alcanzado revelaría por sí mismo que el email es real
+    (mismo oráculo de enumeración que ya evita `activation_confirm_blocked`).
+    """
+    email_count = await _record_hit(redis, _password_reset_ip_email_key(ip, email), window_seconds)
+    ip_count = await _record_hit(redis, _password_reset_ip_key(ip), window_seconds)
+    return email_count > max_per_email or ip_count > max_per_ip
 
 
 async def register_attempt_exceeds_ip(

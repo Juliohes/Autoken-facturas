@@ -14,6 +14,15 @@ const AUTH_EXCLUDED_PATHS = new Set([
   '/api/v1/auth/login',
   '/api/v1/auth/refresh',
   '/api/v1/auth/logout',
+  // Bloque 4 (PROMPT-AUTOFACTU-AUTH-COMPLETO): endpoints públicos sin token. Un 401 aquí (token de
+  // activación/restablecimiento/verificación inválido o caducado) no tiene nada que ver con la
+  // sesión del navegador -- no debe disparar un refresh silencioso ni un `notifyUnauthorized()`.
+  '/api/v1/auth/password/forgot',
+  '/api/v1/auth/password/reset',
+  '/api/v1/register',
+  '/api/v1/auth/register/verify-email',
+  '/api/v1/auth/activate',
+  '/api/v1/auth/activate/confirm',
 ])
 
 type MultipartPath = '/api/v1/uploads' | '/api/v1/uploads/batch'
