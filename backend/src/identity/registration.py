@@ -59,6 +59,11 @@ class WeakPassword(RegistrationError):
     """La contraseña no cumple la política (S1.3) (-> 422)."""
 
 
+class LegalConsentRequired(RegistrationError):
+    """El registrante no aceptó los términos/condiciones (Bloque 5, PROMPT-AUTOFACTU-AUTH-COMPLETO)
+    (-> 422). Sin esto no hay alta: es el propio consentimiento, no un detalle accesorio."""
+
+
 class InvalidCif(RegistrationError):
     """El CIF no supera la validación estructural/de dígito de control (-> 422).
 
@@ -94,12 +99,14 @@ async def register(
     company_name: str,
     cif: str,
     password: str,
+    legal_consent: bool,
     settings: Settings,
     notifier: Notifier,
 ) -> None:
     """Da de alta un registro pendiente: usuario + empresa (1-A) + membership, todo o nada.
 
-    Limita por IP (429), valida contraseña (422) y CIF (422) antes de tocar nada. La contraseña se
+    Limita por IP (429), exige el consentimiento legal (422) y valida contraseña (422) y CIF (422)
+    antes de tocar nada. La contraseña se
     **hashea siempre** antes de ramificar por la existencia del email, para no filtrar por latencia
     si el email ya existe (mismo criterio que `verify_password` en el login). Si el email ya existe
     no crea un segundo usuario ni avisa: la respuesta la genera el router de forma **genérica e
@@ -115,6 +122,8 @@ async def register(
         window_seconds=settings.register_window_seconds,
     ):
         raise RegistrationRateLimited
+    if not legal_consent:
+        raise LegalConsentRequired
     if not validate_password_policy(password, settings):
         raise WeakPassword
     canonical_cif = _validated_cif(cif)
@@ -208,6 +217,9 @@ async def _persist_registration(
                     action=AUDIT_ACTION_REGISTER,
                     entity=_AUDIT_ENTITY,
                     entity_id=user_id,
+                    # `legal_consent` deja constancia verificable (hash) de que el alta se dio con
+                    # el consentimiento aceptado (Bloque 5): llegar aquí ya lo exigió `register()`.
+                    payload={"legal_consent": True, "email": email, "cif": canonical_cif},
                 )
             return user_id
         except IntegrityError as exc:

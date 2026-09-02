@@ -2435,6 +2435,8 @@ export interface components {
             cif: string;
             /** Password */
             password: string;
+            /** Legal Consent */
+            legal_consent: boolean;
         };
         /**
          * RegisterResponse

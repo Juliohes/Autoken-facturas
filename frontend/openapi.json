@@ -5971,6 +5971,10 @@
           "password": {
             "type": "string",
             "title": "Password"
+          },
+          "legal_consent": {
+            "type": "boolean",
+            "title": "Legal Consent"
           }
         },
         "type": "object",
@@ -5978,7 +5982,8 @@
           "email",
           "company_name",
           "cif",
-          "password"
+          "password",
+          "legal_consent"
         ],
         "title": "RegisterRequest",
         "description": "Cuerpo de `POST /register`."

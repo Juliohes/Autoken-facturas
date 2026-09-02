@@ -43,9 +43,16 @@ async def _register(
     company: str = "Empresa Nueva SL",
     password: str = USER_PASSWORD,
     hostname: str = "ilex.localhost",
+    legal_consent: bool = True,
 ) -> httpx.Response:
     """Alta autoservicio en el subdominio `hostname`."""
-    body = {"email": email, "company_name": company, "cif": cif, "password": password}
+    body = {
+        "email": email,
+        "company_name": company,
+        "cif": cif,
+        "password": password,
+        "legal_consent": legal_consent,
+    }
     return await client.post(REGISTER, json=body, headers=host(hostname))
 
 
@@ -109,6 +116,17 @@ async def test_c3_password_floja_rechaza_el_registro(authapi: Api) -> None:
     resp = await _register(client, email="x@correo.es", cif=VALID_CIF, password="corta")
     assert resp.status_code == 422
     assert await _user_row(dsns, tid, "x@correo.es") is None
+
+
+async def test_c3b_sin_aceptar_las_condiciones_rechaza_el_registro(authapi: Api) -> None:
+    """Bloque 5 (PROMPT-AUTOFACTU-AUTH-COMPLETO): sin consentimiento legal -> 422, nada creado."""
+    client, dsns = authapi
+    tid, _ = await seed_admin(dsns)
+    resp = await _register(
+        client, email="sinconsentir@correo.es", cif=VALID_CIF, legal_consent=False
+    )
+    assert resp.status_code == 422
+    assert await _user_row(dsns, tid, "sinconsentir@correo.es") is None
 
 
 async def test_c4_email_duplicado_no_crea_duplicado(authapi: Api) -> None:

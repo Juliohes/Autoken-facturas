@@ -46,6 +46,7 @@ class RegisterRequest(BaseModel):
     company_name: str
     cif: str
     password: str
+    legal_consent: bool
 
 
 class RegisterResponse(BaseModel):
@@ -108,6 +109,7 @@ async def register(
             company_name=body.company_name,
             cif=body.cif,
             password=body.password,
+            legal_consent=body.legal_consent,
             settings=settings,
             notifier=notifier,
         )
@@ -117,6 +119,8 @@ async def register(
         raise HTTPException(status_code=503, detail="Service unavailable") from exc
     except registration.RegistrationRateLimited as exc:
         raise HTTPException(status_code=429, detail="Too many registrations") from exc
+    except registration.LegalConsentRequired as exc:
+        raise HTTPException(status_code=422, detail="legal consent is required") from exc
     except registration.WeakPassword as exc:
         raise HTTPException(status_code=422, detail="password does not meet policy") from exc
     except registration.InvalidCif as exc:
