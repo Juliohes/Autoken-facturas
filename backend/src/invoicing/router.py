@@ -279,8 +279,8 @@ async def confirm_upload(identity: Reviewer, file_id: UUID, body: ConfirmIn) -> 
 class HistoryEntryOut(BaseModel):
     """Una entrada privada de historial, sin PII de contraparte (S6.12).
 
-    ``invoice_number``: número del documento propio (no dato de contraparte, S6.12), solo presente
-    en facturas `confirmed`. `None` cuando la factura no tiene número, nunca un valor inventado.
+    ``invoice_number``/``invoice_date``: datos del documento propio (no de contraparte, S6.12),
+    solo presentes en facturas `confirmed`. `None` cuando falta el dato, nunca un valor inventado.
     """
 
     id: UUID
@@ -288,13 +288,19 @@ class HistoryEntryOut(BaseModel):
     created_at: datetime
     direction: Literal["recibida", "emitida"] | None
     invoice_number: str | None
+    invoice_date: date | None
 
 
 class HistoryOut(BaseModel):
-    """Respuesta de `GET /invoices/history`: últimos envíos, más reciente primero."""
+    """Respuesta de `GET /invoices/history`: últimos envíos, más reciente primero.
+
+    ``count``: total de facturas que cumplen el filtro `period` (bloque D), no solo las de esta
+    página -- el número junto al desplegable de periodo en el frontend.
+    """
 
     entries: list[HistoryEntryOut]
     next_cursor: str | None
+    count: int
 
 
 class InboxItemOut(BaseModel):
@@ -390,10 +396,15 @@ async def invoice_history(
     identity: HistoryViewer,
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=50)] = service.INBOX_LIMIT,
+    period: Literal["total", "month", "quarter", "year"] = "total",
 ) -> HistoryOut:
-    """Facturas confirmadas de los últimos cuatro meses, con cursor estable (R-056)."""
+    """Facturas confirmadas de los últimos cuatro meses, con cursor estable (R-056).
+
+    `period` (bloque D, PROMPT-AUTOFACTU-AJUSTES-v3) filtra server-side por `invoice_date`, con
+    trimestres naturales; "total" (por defecto) no filtra.
+    """
     try:
-        data = await service.history(identity, cursor=cursor, limit=limit)
+        data = await service.history(identity, cursor=cursor, limit=limit, period=period)
     except service.InvalidInboxCursor as exc:
         raise HTTPException(status_code=422, detail="Cursor de historial no válido") from exc
     return HistoryOut(
@@ -404,10 +415,12 @@ async def invoice_history(
                 created_at=entry.created_at,
                 direction=cast(Literal["recibida", "emitida"] | None, entry.direction),
                 invoice_number=entry.invoice_number,
+                invoice_date=entry.invoice_date,
             )
             for entry in data.entries
         ],
         next_cursor=data.next_cursor,
+        count=data.count,
     )
 
 

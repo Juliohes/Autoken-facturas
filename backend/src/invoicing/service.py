@@ -13,13 +13,15 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import calendar
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -243,12 +245,14 @@ class HistoryItem:
     created_at: datetime
     direction: str | None
     invoice_number: str | None
+    invoice_date: date | None
 
 
 @dataclass(frozen=True)
 class HistoryData:
     entries: list[HistoryItem]
     next_cursor: str | None
+    count: int
 
 
 class InvalidInboxCursor(InvoicingError):
@@ -976,7 +980,47 @@ def _enqueue_benchmark_after_commit(
     event.listen(session.sync_session, "after_commit", _enqueue, once=True)
 
 
-async def history(identity: AuthContext, *, cursor: str | None = None, limit: int = repository.INBOX_LIMIT) -> HistoryData:
+HistoryPeriod = Literal["total", "month", "quarter", "year"]
+
+# "Zona horaria del tenant" (bloque D, PROMPT-AUTOFACTU-AJUSTES-v3): el modelo de datos no tiene
+# hoy una zona horaria por tenant (no existe columna ni tabla para ello); todos los tenants actuales
+# operan en España, así que se fija Europe/Madrid como constante única. Si algún día hay tenants en
+# otro huso, esto necesitará una columna real en `tenants` y dejar de ser un valor fijo.
+HISTORY_TIMEZONE = ZoneInfo("Europe/Madrid")
+
+
+def _last_day_of_month(first_of_month: date) -> date:
+    _, last_day = calendar.monthrange(first_of_month.year, first_of_month.month)
+    return first_of_month.replace(day=last_day)
+
+
+def _history_period_range(period: HistoryPeriod, today: date) -> tuple[date | None, date | None]:
+    """Rango [inicio, fin] de `invoice_date` para `period`, o (None, None) para "total" (sin
+    filtro).
+
+    "month"/"year": mes/año natural en curso. "quarter": trimestre natural en curso (Ene-Mar,
+    Abr-Jun, Jul-Sep, Oct-Dic) -- no un trimestre móvil de 90 días.
+    """
+    if period == "month":
+        start = today.replace(day=1)
+        return start, _last_day_of_month(start)
+    if period == "quarter":
+        quarter_start_month = ((today.month - 1) // 3) * 3 + 1
+        start = date(today.year, quarter_start_month, 1)
+        end = _last_day_of_month(date(today.year, quarter_start_month + 2, 1))
+        return start, end
+    if period == "year":
+        return date(today.year, 1, 1), date(today.year, 12, 31)
+    return None, None
+
+
+async def history(
+    identity: AuthContext,
+    *,
+    cursor: str | None = None,
+    limit: int = repository.INBOX_LIMIT,
+    period: HistoryPeriod = "total",
+) -> HistoryData:
     """Historial confirmado de los últimos cuatro meses, con cursor y solo lectura (R-056).
 
     Autorización de fichero por-fila no aplica aquí (a diferencia de `review`/`confirm`, que cargan
@@ -984,17 +1028,32 @@ async def history(identity: AuthContext, *, cursor: str | None = None, limit: in
     §4). Un `user` recibe además el filtro `confirmed_by` (2026-08-02, cumplimiento): dentro de su
     propia empresa, solo ve lo que confirmó él mismo, nunca lo de un compañero. Un `tenant_admin`
     conserva la vista completa de su asesoría (spec original, sin cambios).
+
+    `period` (bloque D) filtra por la fecha de la propia factura (`invoice_date`), no por la fecha
+    de subida: server-side, porque la lista está paginada por cursor y filtrar solo en cliente daría
+    cuentas (`count`) incorrectas sobre páginas que el cliente no ha cargado todavía.
     """
     cursor_created_at: datetime | None = None
     cursor_id: UUID | None = None
     if cursor is not None:
         cursor_created_at, cursor_id = _decode_inbox_cursor(cursor)
+    uploaded_by = identity.user_id if identity.role == Role.USER else None
+    today = datetime.now(HISTORY_TIMEZONE).date()
+    period_start, period_end = _history_period_range(period, today)
     page = await repository.list_history(
         identity.session,
-        uploaded_by=identity.user_id if identity.role == Role.USER else None,
+        uploaded_by=uploaded_by,
         cursor_created_at=cursor_created_at,
         cursor_id=cursor_id,
+        period_start=period_start,
+        period_end=period_end,
         limit=limit,
+    )
+    count = await repository.count_history(
+        identity.session,
+        uploaded_by=uploaded_by,
+        period_start=period_start,
+        period_end=period_end,
     )
     entries = [
         HistoryItem(
@@ -1003,11 +1062,14 @@ async def history(identity: AuthContext, *, cursor: str | None = None, limit: in
             created_at=entry.created_at,
             direction=entry.direction,
             invoice_number=entry.invoice_number,
+            invoice_date=entry.invoice_date,
         )
         for entry in page.entries
     ]
-    next_cursor = _encode_inbox_cursor(entries[-1].created_at, entries[-1].id) if page.has_more else None
-    return HistoryData(entries=entries, next_cursor=next_cursor)
+    next_cursor = (
+        _encode_inbox_cursor(entries[-1].created_at, entries[-1].id) if page.has_more else None
+    )
+    return HistoryData(entries=entries, next_cursor=next_cursor, count=count)
 
 
 def _encode_inbox_cursor(created_at: datetime, item_id: UUID) -> str:

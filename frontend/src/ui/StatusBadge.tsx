@@ -11,6 +11,9 @@ export interface StatusBadgeProps {
   label: string
   /** Icono opcional; si no se pasa, se elige por el tono. */
   icon?: LucideIcon
+  /** Sin caja (bloque C, PROMPT-AUTOFACTU-AJUSTES-v3): mantiene color + icono + texto (AA),
+   * sin fondo ni borde sólido. */
+  plain?: boolean
 }
 
 const DEFAULT_ICON: Record<StatusTone, LucideIcon> = {
@@ -30,10 +33,11 @@ const TONE_CLASS: Record<StatusTone, string> = {
 }
 
 /** Insignia de estado accesible: color + icono + texto. */
-export function StatusBadge({ tone, label, icon }: StatusBadgeProps) {
+export function StatusBadge({ tone, label, icon, plain }: StatusBadgeProps) {
   const Icon = icon ?? DEFAULT_ICON[tone]
+  const className = `tn-status-badge ${TONE_CLASS[tone]}${plain ? ' tn-status-plain' : ''}`
   return (
-    <span className={`tn-status-badge ${TONE_CLASS[tone]}`} data-tone={tone}>
+    <span className={className} data-tone={tone}>
       <Icon aria-hidden="true" size={14} strokeWidth={2.2} className="tn-status-icon" />
       <span>{label}</span>
     </span>

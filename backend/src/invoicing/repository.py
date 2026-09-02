@@ -49,9 +49,9 @@ INBOX_LIMIT = 20
 class HistoryEntry:
     """Una entrada sin PII del historial de documentos aceptados (S6.12).
 
-    ``invoice_number`` es el número del documento propio (no dato de contraparte): mismo
-    criterio que importes/fecha, exponerlo es aceptable (paso 8, ajustes UI). Solo llega
-    cuando `list_history` encuentra una factura `confirmed`; nunca se inventa un valor.
+    ``invoice_number``/``invoice_date`` son datos del documento propio (no de contraparte): mismo
+    criterio que importes/fecha de subida, exponerlos es aceptable (pasos 8 y D, ajustes UI).
+    ``invoice_date`` es `invoices.issue_date`; ninguno de los dos se inventa cuando falta.
     """
 
     id: UUID
@@ -59,6 +59,7 @@ class HistoryEntry:
     created_at: datetime
     direction: str | None
     invoice_number: str | None
+    invoice_date: date | None
 
 
 @dataclass(frozen=True)
@@ -697,27 +698,41 @@ async def list_edits(
     ]
 
 
+_HISTORY_PERIOD_FILTER = (
+    "AND (CAST(:period_start AS date) IS NULL OR i.issue_date >= CAST(:period_start AS date)) "
+    "AND (CAST(:period_end AS date) IS NULL OR i.issue_date <= CAST(:period_end AS date)) "
+)
+
+
 async def list_history(
-    session: AsyncSession, *, uploaded_by: UUID | None = None,
-    cursor_created_at: datetime | None = None, cursor_id: UUID | None = None,
+    session: AsyncSession,
+    *,
+    uploaded_by: UUID | None = None,
+    cursor_created_at: datetime | None = None,
+    cursor_id: UUID | None = None,
+    period_start: date | None = None,
+    period_end: date | None = None,
     limit: int = HISTORY_LIMIT,
 ) -> HistoryPage:
     """Facturas confirmadas de los últimos cuatro meses, más recientes primero (R-056).
 
     La RLS acota el tenant. El usuario conserva además su frontera de propietario y el cursor usa la
-    misma pareja fecha/id que inbox para no saltar ni duplicar filas.
+    misma pareja fecha/id que inbox para no saltar ni duplicar filas. `period_start`/`period_end`
+    (bloque D, PROMPT-AUTOFACTU-AJUSTES-v3) filtran por `invoices.issue_date` (fecha de la propia
+    factura, no la de subida); `None` en ambos = sin filtro de periodo ("total").
     """
     rows = (
         await session.execute(
             text(
-                "SELECT f.id, f.status, f.created_at, f.direction, i.invoice_number "
+                "SELECT f.id, f.status, f.created_at, f.direction, i.invoice_number, i.issue_date "
                 "FROM uploaded_files f "
                 "JOIN invoices i ON i.uploaded_file_id = f.id "
                 "WHERE i.status = 'confirmed' "
                 "AND f.created_at >= current_timestamp - interval '4 months' "
                 "AND i.is_test = false "
                 "AND ((:uploaded_by)::uuid IS NULL OR f.uploaded_by = (:uploaded_by)::uuid) "
-                "AND (CAST(:cursor_created_at AS timestamptz) IS NULL OR "
+                + _HISTORY_PERIOD_FILTER
+                + "AND (CAST(:cursor_created_at AS timestamptz) IS NULL OR "
                 "     f.created_at < CAST(:cursor_created_at AS timestamptz) OR "
                 "     (f.created_at = CAST(:cursor_created_at AS timestamptz) "
                 "      AND f.id < CAST(:cursor_id AS uuid))) "
@@ -729,6 +744,8 @@ async def list_history(
                 "uploaded_by": str(uploaded_by) if uploaded_by is not None else None,
                 "cursor_created_at": cursor_created_at,
                 "cursor_id": str(cursor_id) if cursor_id is not None else None,
+                "period_start": period_start,
+                "period_end": period_end,
             },
         )
     ).all()
@@ -739,10 +756,40 @@ async def list_history(
             created_at=row.created_at,
             direction=row.direction,
             invoice_number=row.invoice_number,
+            invoice_date=row.issue_date,
         )
         for row in rows
     ]
     return HistoryPage(entries=entries[:limit], has_more=len(entries) > limit)
+
+
+async def count_history(
+    session: AsyncSession,
+    *,
+    uploaded_by: UUID | None = None,
+    period_start: date | None = None,
+    period_end: date | None = None,
+) -> int:
+    """Recuento total de facturas del historial que cumplen el mismo filtro que `list_history`,
+    ignorando cursor/limit (bloque D: número junto al desplegable de periodo)."""
+    count = await session.scalar(
+        text(
+            "SELECT count(*) "
+            "FROM uploaded_files f "
+            "JOIN invoices i ON i.uploaded_file_id = f.id "
+            "WHERE i.status = 'confirmed' "
+            "AND f.created_at >= current_timestamp - interval '4 months' "
+            "AND i.is_test = false "
+            "AND ((:uploaded_by)::uuid IS NULL OR f.uploaded_by = (:uploaded_by)::uuid) "
+            + _HISTORY_PERIOD_FILTER
+        ),
+        {
+            "uploaded_by": str(uploaded_by) if uploaded_by is not None else None,
+            "period_start": period_start,
+            "period_end": period_end,
+        },
+    )
+    return int(count or 0)
 
 
 async def list_inbox(

@@ -65,14 +65,75 @@ describe('InvoiceInbox (R-020)', () => {
     renderInbox()
 
     // R-VPS-v2 bloque 7: el H1 pasa de "Mis facturas" a "Pendientes" (deuda §1.1/§4.6, unifica
-    // el nombre con el destino de navegación "Pendientes"); el estado ahora se muestra con
-    // StatusBadge (color+icono+texto) separado del recuento de páginas, no como un único string.
+    // el nombre con el destino de navegación "Pendientes"). Bloque C (PROMPT-AUTOFACTU-AJUSTES-v3):
+    // el estado se muestra sin caja (color+icono+texto, AA) y ya no se enseña el número de páginas.
     expect(await screen.findByText('Pendientes')).toBeInTheDocument()
     expect(screen.getByText('Procesando OCR')).toBeInTheDocument()
-    expect(screen.getByText('2 páginas')).toBeInTheDocument()
+    expect(screen.queryByText(/páginas?/)).not.toBeInTheDocument()
+    // Resumen sin "Listas" (bloque C.3): solo Procesando (1) y Revisar (3).
     expect(screen.getByText('1')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.queryByText('Listas')).not.toBeInTheDocument()
     expect(screen.queryByText(/CIF|Proveedor|Importe|Número/)).not.toBeInTheDocument()
+  })
+
+  it('bloque C: "Revisar factura" en caja verde, "Eliminar" en caja roja, "Ver progreso" neutro', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: 'reviewable-1',
+            status: 'needs_review',
+            processing_stage: null,
+            created_at: '2026-08-21T10:00:00Z',
+            direction: 'recibida',
+            page_count: 1,
+            capture_session_id: null,
+            capture_sequence: null,
+            draft_updated_at: null,
+          },
+        ],
+        summary: { processing: 0, ready: 0, attention: 1 },
+        next_cursor: null,
+      },
+      error: undefined,
+    })
+
+    renderInbox()
+
+    const revisar = await screen.findByRole('link', { name: 'Revisar factura' })
+    const eliminar = screen.getByRole('button', { name: 'Eliminar' })
+    expect(revisar).toHaveClass('tn-inbox-action', 'tn-inbox-action-success')
+    expect(eliminar).toHaveClass('tn-inbox-action', 'tn-inbox-action-danger')
+  })
+
+  it('bloque E: la fecha de subida de cada factura pendiente no muestra segundos', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: 'file-1',
+            status: 'processing',
+            processing_stage: 'primary_ocr',
+            created_at: '2026-08-21T10:00:45Z',
+            direction: 'recibida',
+            page_count: 1,
+            capture_session_id: null,
+            capture_sequence: null,
+            draft_updated_at: null,
+          },
+        ],
+        summary: { processing: 1, ready: 0, attention: 0 },
+        next_cursor: null,
+      },
+      error: undefined,
+    })
+
+    renderInbox()
+
+    const item = await screen.findByTestId('inbox-item')
+    const timeNode = item.querySelector('time')
+    expect(timeNode?.textContent ?? '').not.toMatch(/:\d{2}:\d{2}(\D|$)/)
   })
 
   it('permite cargar la siguiente página con una petición agregada', async () => {

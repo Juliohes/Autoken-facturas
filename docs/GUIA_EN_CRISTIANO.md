@@ -2423,3 +2423,51 @@ comprueba que algo funciona como se pide -y verla fallar a propósito, en rojo- 
 código que lo hace funcionar. Sirve para no marcar algo como "hecho" solo porque compila: la prueba
 demuestra que el comportamiento pedido existe de verdad, y se queda ahí para avisar si alguien lo
 rompe sin querer en el futuro.
+
+## 2026-09-02 - Ajustes de UI v3: Escáner, menú, Pendientes e Historial con filtro de periodo
+
+Segunda ronda de retoques (encargo separado del anterior), sobre lo ya construido en los 9 pasos
+del 2026-09-01:
+
+- **Escáner:** en modo claro ya no aparece un recuadro oscuro flotando sobre el fondo (antes se
+  veía un "bloque de cristal" navy encima de la pantalla blanca); en oscuro sigue igual que
+  siempre. El botón "Tomar foto" pasa de navy a naranja de marca (con texto navy, para que se lea
+  bien). El interruptor Recibida/Emitida usa ahora el mismo componente que Subir Archivo, en vez
+  de uno propio. "Tomar foto" y "Varias hojas" eran antes dos mitades de un mismo botón pegadas
+  (una encima solapaba a la otra); ahora son dos botones independientes, uno debajo del otro, con
+  espacio de verdad entre ambos.
+- **Menú de abajo:** la rayita naranja que marca en qué pantalla estás es un poco más gruesa y
+  ahora se recorta bien dentro de las esquinas redondeadas de la barra (antes, en el primer o
+  último icono, podía asomar por la curva).
+- **Pendientes:** ya no se enseña el número de páginas de cada documento. El estado ("Pendiente de
+  comprobación", etc.) ya no lleva una etiqueta con recuadro de color, solo el icono y el texto.
+  "Revisar factura" tiene ahora un recuadro verde, "Eliminar" uno rojo, y "Ver progreso" uno gris
+  neutro, todos con más espacio interior para que no se vean apretados. La tarjeta "Listas" del
+  resumen de arriba desaparece (ese número se traslada al Historial).
+- **Historial:** aparece un desplegable arriba (Total / Este mes / Este trimestre / Este año) que
+  filtra las facturas por su propia fecha (no por cuándo se subieron), con el número de facturas
+  que hay en ese periodo al lado. Cada fila muestra ahora, bien diferenciadas, tres cosas: el
+  número de la factura, la fecha de la factura ("Fecha factura: ...") y la fecha en que se subió
+  ("Subida: ..."). Si falta un dato, se dice "Sin número" o "Sin fecha", nunca se inventa nada.
+  La hora de subida, tanto aquí como en Pendientes, ya no enseña los segundos (antes decía algo
+  como "10:30:45", ahora solo "10:30").
+
+Decisión técnica documentada: filtrar por "este trimestre" o "este mes" necesita saber en qué zona
+horaria vive cada gestoría, pero el sistema todavía no guarda esa información por gestoría. Como
+hoy todas las gestorías que usan la aplicación están en España, se ha fijado la hora de Madrid como
+válida para todas, dejado anotado en el código que el día que haya una gestoría en otro país habrá
+que añadir una zona horaria configurable de verdad.
+
+Al revisar toda la batería de pruebas del backend (no solo lo tocado en este encargo) aparecieron
+6 fallos que ya existían de antes, sin relación con este trabajo: 5 son pruebas de Historial
+escritas antes de que se decidiera que solo enseña facturas ya confirmadas, y 1 es un aviso de que
+falta una comprobación de seguridad (que una gestoría no pueda borrar un documento de otra) en un
+botón de borrado que ya existía. Se dejan anotados para que Julio decida qué hacer con ellos, en
+vez de tocarlos sin que los pidiera este encargo.
+
+**En cristiano:** cuando el código pide la hora de "ahora mismo" a un ordenador, ese ordenador
+tiene que decir también EN QUÉ ZONA HORARIA está esa hora (si no, "las 10 de la mañana" no
+significa lo mismo en Madrid que en México). Aquí se ha fijado esa zona a "Europa/Madrid" de forma
+fija en el código, en vez de preguntársela a cada gestoría, porque de momento todas están en el
+mismo sitio. El día que eso cambie, habrá que guardar la zona horaria de cada gestoría en la base
+de datos en vez de tenerla fija.

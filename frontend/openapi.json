@@ -1377,7 +1377,7 @@
           "invoicing"
         ],
         "summary": "Invoice History",
-        "description": "Facturas confirmadas de los \u00faltimos cuatro meses, con cursor estable (R-056).",
+        "description": "Facturas confirmadas de los \u00faltimos cuatro meses, con cursor estable (R-056).\n\n`period` (bloque D, PROMPT-AUTOFACTU-AJUSTES-v3) filtra server-side por `invoice_date`, con\ntrimestres naturales; \"total\" (por defecto) no filtra.",
         "operationId": "invoice_history_api_v1_invoices_history_get",
         "parameters": [
           {
@@ -1406,6 +1406,22 @@
               "minimum": 1,
               "default": 20,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "total",
+                "month",
+                "quarter",
+                "year"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Period"
             }
           }
         ],
@@ -4486,6 +4502,18 @@
               }
             ],
             "title": "Invoice Number"
+          },
+          "invoice_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Date"
           }
         },
         "type": "object",
@@ -4494,10 +4522,11 @@
           "status",
           "created_at",
           "direction",
-          "invoice_number"
+          "invoice_number",
+          "invoice_date"
         ],
         "title": "HistoryEntryOut",
-        "description": "Una entrada privada de historial, sin PII de contraparte (S6.12).\n\n``invoice_number``: n\u00famero del documento propio (no dato de contraparte, S6.12), solo presente\nen facturas `confirmed`. `None` cuando la factura no tiene n\u00famero, nunca un valor inventado."
+        "description": "Una entrada privada de historial, sin PII de contraparte (S6.12).\n\n``invoice_number``/``invoice_date``: datos del documento propio (no de contraparte, S6.12),\nsolo presentes en facturas `confirmed`. `None` cuando falta el dato, nunca un valor inventado."
       },
       "HistoryOut": {
         "properties": {
@@ -4518,15 +4547,20 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
           }
         },
         "type": "object",
         "required": [
           "entries",
-          "next_cursor"
+          "next_cursor",
+          "count"
         ],
         "title": "HistoryOut",
-        "description": "Respuesta de `GET /invoices/history`: \u00faltimos env\u00edos, m\u00e1s reciente primero."
+        "description": "Respuesta de `GET /invoices/history`: \u00faltimos env\u00edos, m\u00e1s reciente primero.\n\n``count``: total de facturas que cumplen el filtro `period` (bloque D), no solo las de esta\np\u00e1gina -- el n\u00famero junto al desplegable de periodo en el frontend."
       },
       "ImportReportOut": {
         "properties": {
