@@ -19,7 +19,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from identity import registration
+from identity import email_verification, registration
 from identity.authz import require_roles
 from identity.client_ip import client_ip
 from identity.dependencies import AuthContext
@@ -65,10 +65,23 @@ class RegistrationOut(BaseModel):
     email: str
     company: str | None
     joins_existing_company: bool
+    email_verified: bool
 
 
 class ApprovalResponse(BaseModel):
     """Respuesta de la aprobación de un registro."""
+
+    status: str
+
+
+class VerifyEmailRequest(BaseModel):
+    """Cuerpo de `POST /auth/register/verify-email`."""
+
+    token: str
+
+
+class VerifyEmailResponse(BaseModel):
+    """Respuesta de la verificación de email del registrante."""
 
     status: str
 
@@ -90,6 +103,7 @@ async def register(
             redis=get_redis(),
             ip=ip,
             tenant_id=context.tenant.id,
+            tenant_slug=context.tenant.slug,
             email=body.email,
             company_name=body.company_name,
             cif=body.cif,
@@ -122,9 +136,32 @@ async def list_registrations(identity: TenantAdmin) -> list[RegistrationOut]:
             email=r.email,
             company=r.company,
             joins_existing_company=r.joins_existing_company,
+            email_verified=r.email_verified,
         )
         for r in rows
     ]
+
+
+@router.post("/auth/register/verify-email")
+async def verify_registration_email(
+    body: VerifyEmailRequest, context: PublicContext
+) -> VerifyEmailResponse:
+    """Confirma el email del registrante. NO aprueba el registro (eso sigue siendo del admin).
+
+    Token inválido/caducado/consumido, o de otro tenant (F2) -> 401 (no distingue el motivo).
+    """
+    try:
+        await email_verification.verify_email(
+            get_redis(),
+            context.session,
+            token=body.token,
+            expected_tenant_id=context.tenant.id,
+        )
+    except RedisError as exc:
+        raise HTTPException(status_code=503, detail="Service unavailable") from exc
+    except email_verification.InvalidVerificationToken as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
+    return VerifyEmailResponse(status="verified")
 
 
 @router.post("/registrations/{user_id}/approve")

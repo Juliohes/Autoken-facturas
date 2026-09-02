@@ -435,6 +435,48 @@
         }
       }
     },
+    "/api/v1/auth/register/verify-email": {
+      "post": {
+        "tags": [
+          "registration"
+        ],
+        "summary": "Verify Registration Email",
+        "description": "Confirma el email del registrante. NO aprueba el registro (eso sigue siendo del admin).\n\nToken inv\u00e1lido/caducado/consumido, o de otro tenant (F2) -> 401 (no distingue el motivo).",
+        "operationId": "verify_registration_email_api_v1_auth_register_verify_email_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyEmailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/registrations/{user_id}/approve": {
       "post": {
         "tags": [
@@ -5980,6 +6022,10 @@
           "joins_existing_company": {
             "type": "boolean",
             "title": "Joins Existing Company"
+          },
+          "email_verified": {
+            "type": "boolean",
+            "title": "Email Verified"
           }
         },
         "type": "object",
@@ -5987,7 +6033,8 @@
           "id",
           "email",
           "company",
-          "joins_existing_company"
+          "joins_existing_company",
+          "email_verified"
         ],
         "title": "RegistrationOut",
         "description": "Un registro pendiente en el listado del admin (email + empresa + se\u00f1al de uni\u00f3n a existente).\n\n`joins_existing_company` avisa a la pantalla de aprobaci\u00f3n de que el CIF casaba con una empresa\nya activa (el usuario se une a ella, no crea empresa nueva): defensa ante secuestro por CIF."
@@ -6825,6 +6872,34 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VerifyEmailRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "VerifyEmailRequest",
+        "description": "Cuerpo de `POST /auth/register/verify-email`."
+      },
+      "VerifyEmailResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "VerifyEmailResponse",
+        "description": "Respuesta de la verificaci\u00f3n de email del registrante."
       }
     }
   }

@@ -29,12 +29,15 @@ class PendingRegistration:
     `joins_existing_company` señala que el CIF del registro coincidía con una empresa **ya activa**
     de la asesoría (el usuario se une a ella, regla 1-A), no un alta de empresa nueva: la pantalla
     de aprobación puede marcar "se une a una empresa ya existente" (defensa ante secuestro por CIF).
+    `email_verified` (bloque 2, PROMPT-AUTOFACTU-AUTH-COMPLETO): informa, no bloquea -- un admin
+    puede aprobar igual un registro con el email todavía sin confirmar.
     """
 
     id: UUID
     email: str
     company: str | None
     joins_existing_company: bool
+    email_verified: bool
 
 
 @dataclass(frozen=True)
@@ -116,7 +119,7 @@ async def list_pending(session: AsyncSession, *, encryption_key: str) -> list[Pe
     rows = (
         await session.execute(
             text(
-                "SELECT u.id, u.email, "
+                "SELECT u.id, u.email, u.email_verified_at, "
                 " pgp_sym_decrypt(c.name, :key)::text AS company, c.status AS company_status "
                 "FROM users u "
                 "LEFT JOIN memberships m ON m.user_id = u.id "
@@ -133,9 +136,19 @@ async def list_pending(session: AsyncSession, *, encryption_key: str) -> list[Pe
             email=r.email,
             company=r.company,
             joins_existing_company=r.company_status == CompanyStatus.ACTIVE.value,
+            email_verified=r.email_verified_at is not None,
         )
         for r in rows
     ]
+
+
+async def mark_email_verified(session: AsyncSession, user_id: UUID) -> None:
+    """Marca el email del registrante como verificado (bloque 2). No-op si el usuario no existe en
+    el contexto (RLS): un token de otro tenant ya se descarta antes de llegar aquí (F2)."""
+    await session.execute(
+        text("UPDATE users SET email_verified_at = now() WHERE id = :id"),
+        {"id": str(user_id)},
+    )
 
 
 async def get_user(session: AsyncSession, user_id: UUID) -> RegisteredUser | None:

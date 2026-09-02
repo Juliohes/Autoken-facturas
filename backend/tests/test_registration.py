@@ -8,6 +8,8 @@ al admin, sin email al usuario final. Fase roja: `/register` y `/registrations` 
 
 from __future__ import annotations
 
+import re
+
 import asyncpg
 import httpx
 import pytest
@@ -21,7 +23,7 @@ from tests._companies import (
     seed_admin,
     valid_nif,
 )
-from tests._dbtest import cif_blind_index_for, seed_company, seed_membership, seed_user
+from tests._dbtest import cif_blind_index_for, seed_company, seed_membership, seed_tenant, seed_user
 
 Api = tuple[httpx.AsyncClient, dict[str, str]]
 
@@ -285,8 +287,11 @@ async def test_c11_gestion_acotada_a_la_asesoria(authapi: Api) -> None:
 # --- Notificación (mock), trazabilidad y anti-abuso ---------------------------------------------
 
 
-async def test_c12_al_registrarse_avisa_solo_al_admin(authapi: Api) -> None:
-    """C12: al registrarse se avisa (mock) SOLO al admin; no se genera email al usuario final."""
+async def test_c12_al_registrarse_avisa_al_admin_y_pide_verificar_el_email_al_registrante(
+    authapi: Api,
+) -> None:
+    """C12 + bloque 2: se avisa al admin (pendiente de aprobación) Y al registrante (verificación de
+    su email) -- pero a NADIE más, y el mensaje al registrante no es una aprobación."""
     from notifications import get_notifier  # seam del backend mock (aún no existe -> rojo)
 
     client, dsns = authapi
@@ -294,9 +299,14 @@ async def test_c12_al_registrarse_avisa_solo_al_admin(authapi: Api) -> None:
     get_notifier().reset()
     resp = await _register(client, email="nuevo@correo.es", cif=VALID_CIF)
     assert resp.status_code in (201, 202)
-    destinatarios = [m.to for m in get_notifier().messages]
-    assert "admin@ilex.es" in destinatarios
-    assert "nuevo@correo.es" not in destinatarios
+    mensajes = {m.to: m for m in get_notifier().messages}
+    assert set(mensajes) == {"admin@ilex.es", "nuevo@correo.es"}
+    assert mensajes["admin@ilex.es"].kind == "registration_pending"
+    assert mensajes["nuevo@correo.es"].kind == "email_verification"
+    # El mensaje al registrante pide confirmar el email, nunca da por aprobada la solicitud.
+    cuerpo_registrante = mensajes["nuevo@correo.es"].body.lower()
+    assert "confirma" in cuerpo_registrante
+    assert "aprobad" not in cuerpo_registrante  # ni "aprobado" ni "aprobada"
 
 
 async def test_c13_registro_y_aprobacion_dejan_rastro_en_audit(authapi: Api) -> None:
@@ -337,3 +347,93 @@ async def test_c14_registro_limitado_por_ip(authapi: Api, monkeypatch: pytest.Mo
     assert extra.status_code == 429
 
     config.get_settings.cache_clear()
+
+
+# --- Verificación del email del registrante (bloque 2, PROMPT-AUTOFACTU-AUTH-COMPLETO) ----------
+
+VERIFY_EMAIL = "/api/v1/auth/register/verify-email"
+
+
+def _verification_token_from(body: str) -> str:
+    match = re.search(r"registro/confirmar\?token=([^\s]+)", body)
+    assert match, f"no se encontró un enlace de verificación en: {body!r}"
+    return match.group(1)
+
+
+async def test_verify_email_marca_el_registro_como_verificado_sin_aprobarlo(authapi: Api) -> None:
+    from notifications import get_notifier
+
+    client, dsns = authapi
+    await seed_admin(dsns)
+    get_notifier().reset()
+    resp = await _register(client, email="nuevo@correo.es", cif=VALID_CIF)
+    assert resp.status_code in (201, 202)
+    mensaje = next(m for m in get_notifier().messages if m.to == "nuevo@correo.es")
+    token = _verification_token_from(mensaje.body)
+
+    verificar = await client.post(
+        VERIFY_EMAIL, json={"token": token}, headers=host("ilex.localhost")
+    )
+    assert verificar.status_code == 200
+
+    admin = await admin_token(client)
+    lista = await client.get(REGISTRATIONS, headers=_auth(admin))
+    entrada = next(x for x in lista.json() if x["email"] == "nuevo@correo.es")
+    assert entrada["email_verified"] is True
+    assert entrada["id"]  # sigue pendiente de aprobación: no ha desaparecido del listado
+
+
+async def test_registro_sin_verificar_el_email_sigue_aprobable(authapi: Api) -> None:
+    """La verificación informa, no bloquea: el admin puede aprobar sin que nadie confirme nada."""
+    client, dsns = authapi
+    await seed_admin(dsns)
+    resp = await _register(client, email="nuevo@correo.es", cif=VALID_CIF)
+    assert resp.status_code in (201, 202)
+    admin = await admin_token(client)
+    lista = await client.get(REGISTRATIONS, headers=_auth(admin))
+    entrada = next(x for x in lista.json() if x["email"] == "nuevo@correo.es")
+    assert entrada["email_verified"] is False
+
+    aprob = await client.post(f"{REGISTRATIONS}/{entrada['id']}/approve", headers=_auth(admin))
+    assert aprob.status_code == 200
+
+
+async def test_verify_email_token_desconocido_da_401(authapi: Api) -> None:
+    client, dsns = authapi
+    await seed_admin(dsns)
+    resp = await client.post(
+        VERIFY_EMAIL, json={"token": "no-es-un-token-real"}, headers=host("ilex.localhost")
+    )
+    assert resp.status_code == 401
+
+
+async def test_verify_email_consume_el_token_de_un_solo_uso(authapi: Api) -> None:
+    from notifications import get_notifier
+
+    client, dsns = authapi
+    await seed_admin(dsns)
+    get_notifier().reset()
+    await _register(client, email="nuevo@correo.es", cif=VALID_CIF)
+    mensaje = next(m for m in get_notifier().messages if m.to == "nuevo@correo.es")
+    token = _verification_token_from(mensaje.body)
+
+    primero = await client.post(VERIFY_EMAIL, json={"token": token}, headers=host("ilex.localhost"))
+    assert primero.status_code == 200
+    reuso = await client.post(VERIFY_EMAIL, json={"token": token}, headers=host("ilex.localhost"))
+    assert reuso.status_code == 401
+
+
+async def test_verify_email_de_otro_tenant_da_401(authapi: Api) -> None:
+    """F2: un token de verificación sembrado en un tenant no vale desde el subdominio de otro."""
+    from notifications import get_notifier
+
+    client, dsns = authapi
+    await seed_admin(dsns)  # ilex
+    await seed_tenant(dsns["admin"], "otra", "Otra Asesoría SL")
+    get_notifier().reset()
+    await _register(client, email="nuevo@correo.es", cif=VALID_CIF)
+    mensaje = next(m for m in get_notifier().messages if m.to == "nuevo@correo.es")
+    token = _verification_token_from(mensaje.body)
+
+    cruzado = await client.post(VERIFY_EMAIL, json={"token": token}, headers=host("otra.localhost"))
+    assert cruzado.status_code == 401

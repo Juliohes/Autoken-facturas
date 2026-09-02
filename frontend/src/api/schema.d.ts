@@ -314,6 +314,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/register/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Registration Email
+         * @description Confirma el email del registrante. NO aprueba el registro (eso sigue siendo del admin).
+         *
+         *     Token inválido/caducado/consumido, o de otro tenant (F2) -> 401 (no distingue el motivo).
+         */
+        post: operations["verify_registration_email_api_v1_auth_register_verify_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/registrations/{user_id}/approve": {
         parameters: {
             query?: never;
@@ -2441,6 +2463,8 @@ export interface components {
             company: string | null;
             /** Joins Existing Company */
             joins_existing_company: boolean;
+            /** Email Verified */
+            email_verified: boolean;
         };
         /**
          * ResetPasswordRequest
@@ -2733,6 +2757,22 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * VerifyEmailRequest
+         * @description Cuerpo de `POST /auth/register/verify-email`.
+         */
+        VerifyEmailRequest: {
+            /** Token */
+            token: string;
+        };
+        /**
+         * VerifyEmailResponse
+         * @description Respuesta de la verificación de email del registrante.
+         */
+        VerifyEmailResponse: {
+            /** Status */
+            status: string;
         };
     };
     responses: never;
@@ -3101,6 +3141,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegistrationOut"][];
+                };
+            };
+        };
+    };
+    verify_registration_email_api_v1_auth_register_verify_email_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifyEmailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
