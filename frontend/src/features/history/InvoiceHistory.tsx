@@ -73,7 +73,7 @@ export function InvoiceHistory() {
 
   if (entries.length === 0 && cursor === null) {
     return (
-      <section className="tn-panel-page mx-auto max-w-2xl space-y-4 p-6">
+      <section className="tn-panel-page tn-scroll-clear-bottom-nav mx-auto max-w-2xl space-y-4 p-6">
         <h1 className="text-xl font-semibold">Historial</h1>
         <PeriodFilter period={period} count={count} onChange={changePeriod} />
         <EmptyState title="Todavía no tienes facturas confirmadas en los últimos cuatro meses." />
@@ -82,7 +82,7 @@ export function InvoiceHistory() {
   }
 
   return (
-    <section className="tn-panel-page mx-auto max-w-2xl space-y-4 p-6">
+    <section className="tn-panel-page tn-scroll-clear-bottom-nav mx-auto max-w-2xl space-y-4 p-6">
       <h1 className="text-xl font-semibold">Historial de facturas</h1>
       <PeriodFilter period={period} count={count} onChange={changePeriod} />
       <ul className="divide-y divide-line" data-testid="history-list">

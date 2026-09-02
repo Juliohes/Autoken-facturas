@@ -201,6 +201,17 @@ describe('InvoiceHistory (S6.12)', () => {
     expect(await screen.findAllByTestId('history-row')).toHaveLength(20)
   })
 
+  it('deja hueco al final para que la última factura no quede tapada por la barra inferior fija', async () => {
+    getMock.mockResolvedValue({
+      data: { entries: [makeEntry({ id: 'conf-1' })] },
+      error: undefined,
+    })
+    renderScreen()
+
+    const list = await screen.findByTestId('history-list')
+    expect(list.closest('section')).toHaveClass('tn-scroll-clear-bottom-nav')
+  })
+
   it('C11: lista vacía muestra el mensaje de historial vacío de los últimos cuatro meses', async () => {
     getMock.mockResolvedValue({ data: { entries: [] }, error: undefined })
     renderScreen()

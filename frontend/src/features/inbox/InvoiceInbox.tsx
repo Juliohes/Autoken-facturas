@@ -42,7 +42,7 @@ export function InvoiceInbox() {
   const hasMore = inbox.data?.next_cursor !== null && inbox.data?.next_cursor !== undefined
 
   return (
-    <section className="tn-panel-page mx-auto max-w-2xl space-y-5 p-6">
+    <section className="tn-panel-page tn-scroll-clear-bottom-nav mx-auto max-w-2xl space-y-5 p-6">
       <div>
         <h1 className="text-xl font-semibold">Pendientes</h1>
         <p className="mt-1 text-sm text-muted">Solo aparecen las facturas que has subido tú.</p>

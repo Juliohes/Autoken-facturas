@@ -75,6 +75,9 @@ describe('InvoiceInbox (R-020)', () => {
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.queryByText('Listas')).not.toBeInTheDocument()
     expect(screen.queryByText(/CIF|Proveedor|Importe|Número/)).not.toBeInTheDocument()
+    // La última factura no debe quedar tapada por la barra inferior fija en móvil (Julio: "apenas
+    // se ve la última factura"): deja hueco al final equivalente a la altura de esa barra.
+    expect(screen.getByTestId('inbox-list').closest('section')).toHaveClass('tn-scroll-clear-bottom-nav')
   })
 
   it('bloque C: "Revisar factura" en caja verde, "Eliminar" en caja roja, "Ver progreso" neutro', async () => {

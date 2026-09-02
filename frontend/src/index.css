@@ -125,6 +125,11 @@
     --tn-radius-pill: 999px;
     --tn-shadow-card: 0 5px 18px rgba(16, 24, 40, 0.07);
     --tn-shadow-glass: var(--tn-glass-shadow);
+    /* Altura de cada ítem de la barra inferior fija (.tn-user-nav-links a, por debajo de 768px).
+     * Token compartido con --tn-bottom-nav-clearance para que el contenido scrolleable de Pendientes
+     * e Historial no quede tapado detrás de la barra (Julio: "la última factura apenas se ve"). */
+    --tn-bottom-nav-height: 88px;
+    --tn-bottom-nav-clearance: calc(var(--tn-bottom-nav-height) + max(8px, env(safe-area-inset-bottom)) + 16px);
   }
 
   /* Modo oscuro: se activa por data-theme="dark" en <html> (toggle de usuario) o por
@@ -310,7 +315,7 @@
 
   .tn-user-nav-links a {
     position: relative;
-    min-height: 88px;
+    min-height: var(--tn-bottom-nav-height);
     display: inline-flex;
     flex-direction: column;
     align-items: center;
@@ -578,6 +583,19 @@
    * (UploadFileScreen, paso 7). Solo color de texto, sin superficie/borde/sombra. */
   .tn-page-plain {
     color: var(--text-primary);
+  }
+
+  /* Deja hueco al final para que la barra inferior fija (.tn-user-nav-links, por debajo de 768px)
+   * no tape el último elemento al hacer scroll (Pendientes, Historial). En escritorio la barra deja
+   * de ser fija (pasa a fila estática en la cabecera), así que ahí no hace falta hueco extra. */
+  .tn-scroll-clear-bottom-nav {
+    padding-bottom: calc(1.5rem + var(--tn-bottom-nav-clearance)) !important;
+  }
+
+  @media (min-width: 768px) {
+    .tn-scroll-clear-bottom-nav {
+      padding-bottom: 1.5rem !important;
+    }
   }
 
   /* Las pantallas existentes usan una paleta slate diseñada para el shell oscuro anterior. */
