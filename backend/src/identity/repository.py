@@ -272,6 +272,26 @@ async def set_activation_password(user_id: str, password_hash: str) -> IdentityR
     return IdentityRow(id=str(row.id), email=row.email, role=row.role)
 
 
+async def set_reset_password(user_id: str, password_hash: str) -> IdentityRow | None:
+    """Fija la contraseña SOLO si la cuenta es RESTABLECIBLE (activa y ya tenía contraseña).
+
+    Guard `status = 'active' AND password_hash IS NOT NULL` (migración 0057), inverso exacto del de
+    `set_activation_password`: no toca `totp_secret` (a diferencia del reset por operador, 0024) —
+    la propia persona conserva su 2FA ya enrolado, no hace falta re-enrolarlo.
+    """
+    async with db_session() as sess:
+        row = (
+            await sess.execute(
+                text("SELECT id, email, role FROM password_reset_set_password(:uid, :hash)"),
+                {"uid": user_id, "hash": password_hash},
+            )
+        ).first()
+        await sess.commit()
+    if row is None:
+        return None
+    return IdentityRow(id=str(row.id), email=row.email, role=row.role)
+
+
 async def enroll_totp(user_id: str, secret: str) -> None:
     """Enrola el secreto TOTP al confirmar la activación (guard `totp_secret IS NULL`, F3)."""
     async with db_session() as sess:

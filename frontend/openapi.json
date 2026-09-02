@@ -283,6 +283,90 @@
         }
       }
     },
+    "/api/v1/auth/password/forgot": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Forgot Password",
+        "description": "Solicita un enlace de restablecimiento. Respuesta gen\u00e9rica: 200 exista o no la cuenta.\n\nTope por (IP+email) e IP -> 429. Sin Redis no se puede aplicar el anti-spam ni sembrar el\ntoken: la petici\u00f3n falla cerrada (503).",
+        "operationId": "forgot_password_api_v1_auth_password_forgot_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgotPasswordResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password/reset": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Reset Password",
+        "description": "Fija la nueva contrase\u00f1a con un token de restablecimiento v\u00e1lido y cierra otras sesiones.\n\nToken inv\u00e1lido/caducado/consumido, o de otro tenant (F2) -> 401 (no distingue el motivo).\nContrase\u00f1a d\u00e9bil -> 422.",
+        "operationId": "reset_password_api_v1_auth_password_reset_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetPasswordResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/register": {
       "post": {
         "tags": [
@@ -4324,6 +4408,34 @@
         ],
         "title": "FieldGroupRankingOut"
       },
+      "ForgotPasswordRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "ForgotPasswordRequest",
+        "description": "Cuerpo de `POST /auth/password/forgot`."
+      },
+      "ForgotPasswordResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ForgotPasswordResponse",
+        "description": "Respuesta gen\u00e9rica del olvido de contrase\u00f1a (id\u00e9ntica exista o no la cuenta:\nanti-enumeraci\u00f3n)."
+      },
       "GlobalPendingOut": {
         "properties": {
           "tenant_id": {
@@ -5879,6 +5991,39 @@
         ],
         "title": "RegistrationOut",
         "description": "Un registro pendiente en el listado del admin (email + empresa + se\u00f1al de uni\u00f3n a existente).\n\n`joins_existing_company` avisa a la pantalla de aprobaci\u00f3n de que el CIF casaba con una empresa\nya activa (el usuario se une a ella, no crea empresa nueva): defensa ante secuestro por CIF."
+      },
+      "ResetPasswordRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "ResetPasswordRequest",
+        "description": "Cuerpo de `POST /auth/password/reset`."
+      },
+      "ResetPasswordResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ResetPasswordResponse",
+        "description": "Respuesta del restablecimiento efectivo."
       },
       "ReviewDraftIn": {
         "properties": {
