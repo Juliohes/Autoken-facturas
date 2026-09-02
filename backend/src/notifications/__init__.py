@@ -1,7 +1,9 @@
-"""Módulo de notificaciones: factoría `get_notifier` sobre el seam `Notifier` (S1.4).
+"""Módulo de notificaciones: factoría `get_notifier` sobre el seam `Notifier` (S1.4, bloque 3 de
+PROMPT-AUTOFACTU-AUTH-COMPLETO.md).
 
 El dominio pide `get_notifier()` y le manda `Message`s, sin saber si detrás hay un grabador en
-memoria (test/dev) o un transporte SMTP real (futuro). La selección vive aquí, en un único sitio.
+memoria (test/dev, sin `SMTP_HOST`) o un transporte SMTP real (`SmtpNotifier`, con `SMTP_HOST`
+configurado). La selección vive aquí, en un único sitio.
 """
 
 from __future__ import annotations
@@ -18,8 +20,9 @@ _notifier: Notifier | None = None
 def get_notifier() -> Notifier:
     """Devuelve el notificador del proceso (perezoso, reutilizado).
 
-    Sin SMTP configurado (test/dev) es un `RecordingNotifier` en memoria. Cuando se cablee el SMTP
-    real (spec S1.4 §6), la selección se hará aquí según la configuración, sin tocar el dominio.
+    Sin `SMTP_HOST` (test/dev, y producción hasta tener credenciales de soporte@autoken.es) es un
+    `RecordingNotifier` en memoria: no rompe nada, pero no envía ningún email de verdad. Con
+    `SMTP_HOST` configurado es un `SmtpNotifier` de verdad.
     """
     global _notifier
     if _notifier is None:
@@ -28,17 +31,19 @@ def get_notifier() -> Notifier:
 
 
 def _build_notifier() -> Notifier:
-    """Elige el backend de notificación según la configuración.
-
-    Sin `SMTP_HOST` (test/dev, y producción hasta tener credenciales de soporte@autoken.es) se usa
-    el grabador en memoria. Con SMTP configurado se fallaría en alto: el transporte real está
-    diferido (spec §6) y no debe simularse un envío que no ocurre (regla de oro 8, anti-mentiras).
-    """
+    """Elige el backend de notificación según la configuración."""
     from shared.config import get_settings
 
-    if get_settings().smtp_host:
-        raise NotImplementedError(
-            "Envío SMTP real diferido (spec S1.4 §6): implementa un Notifier SMTP y selecciónalo "
-            "aquí. Sin SMTP_HOST se usa el grabador en memoria (RecordingNotifier)."
+    settings = get_settings()
+    if settings.smtp_host:
+        from notifications.smtp_notifier import SmtpNotifier
+
+        return SmtpNotifier(
+            host=settings.smtp_host,
+            port=settings.smtp_port,
+            user=settings.smtp_user,
+            password=settings.smtp_password,
+            sender=settings.smtp_from or settings.smtp_host,
+            use_tls=settings.smtp_use_tls,
         )
     return RecordingNotifier()

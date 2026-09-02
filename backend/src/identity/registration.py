@@ -29,6 +29,7 @@ from companies.service import tenant_encryption_key as company_encryption_key
 from identity import email_verification, ratelimit, registration_repo
 from identity.passwords import hash_password, validate_password_policy
 from notifications import Message, Notifier
+from notifications import templates as email_templates
 from shared.audit import write_audit
 from shared.config import Settings
 from shared.integrity import violates_unique_constraint
@@ -144,7 +145,7 @@ async def register(
         ttl_seconds=settings.email_verification_ttl,
     )
     messages.append(
-        _registrant_verification_message(
+        email_templates.email_verification(
             email=email,
             url=email_verification.verification_url(
                 settings, slug=tenant_slug, token=verification_token
@@ -245,35 +246,16 @@ async def _admin_messages(session: AsyncSession, *, new_email: str) -> list[Mess
 
     En S1.4 original, el usuario final no recibía ningún aviso; el bloque 2
     (PROMPT-AUTOFACTU-AUTH-COMPLETO) añade el aviso de verificación de email al registrante
-    (`_registrant_verification_message`), que sigue sin ser una notificación de aprobación: eso
-    sigue siendo solo cosa del admin. Los destinatarios se leen ahora (dentro del contexto RLS de la
-    transacción); el envío se difiere al post-commit.
+    (`notifications.templates.email_verification`), que sigue sin ser una notificación de
+    aprobación: eso sigue siendo solo cosa del admin. Los destinatarios se leen ahora (dentro del
+    contexto RLS de la transacción); el envío se difiere al post-commit.
     """
     return [
-        Message(
-            to=admin_email,
-            subject="Nuevo registro pendiente de aprobación",
-            body=f"El usuario {new_email} se ha registrado y está pendiente de tu aprobación.",
-            kind="registration_pending",
+        email_templates.registration_pending_admin(
+            admin_email=admin_email, registrant_email=new_email
         )
         for admin_email in await registration_repo.tenant_admin_emails(session)
     ]
-
-
-def _registrant_verification_message(*, email: str, url: str, ttl_seconds: int) -> Message:
-    """Aviso de verificación al propio registrante (bloque 2): NO es una aprobación, solo confirma
-    que el email es suyo. La aprobación sigue siendo, únicamente, decisión del `tenant_admin`."""
-    return Message(
-        to=email,
-        subject="Confirma tu email para Autofactu",
-        body=(
-            "Gracias por solicitar acceso a Autofactu. Confirma que este email es tuyo abriendo "
-            f"este enlace (caduca en {ttl_seconds // 3600} horas): {url}\n\n"
-            "Confirmar tu email no aprueba tu solicitud: eso lo decide el administrador de tu "
-            "asesoría, que ya ha sido avisado."
-        ),
-        kind="email_verification",
-    )
 
 
 def _dispatch_after_commit(

@@ -29,7 +29,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from identity import password_reset_repo, ratelimit, repository
 from identity.passwords import hash_password, validate_password_policy
 from identity.sessions import revoke_all_sessions
-from notifications import Message, Notifier
+from notifications import Notifier
+from notifications import templates as email_templates
 from shared.audit import write_audit
 from shared.config import Settings
 
@@ -104,17 +105,10 @@ async def request_reset(
         entity_id=user.id,
     )
     notifier.send(
-        Message(
-            to=email,
-            subject="Restablece tu contraseña de Autofactu",
-            body=(
-                "Hemos recibido una solicitud para restablecer tu contraseña. Si has sido tú, "
-                f"abre este enlace (caduca en {settings.password_reset_ttl // 60} minutos): "
-                f"{_reset_url(settings, slug=tenant_slug, token=token)}\n\n"
-                "Si no has sido tú, puedes ignorar este mensaje: tu contraseña actual sigue "
-                "siendo válida."
-            ),
-            kind="password_reset",
+        email_templates.password_reset(
+            email=email,
+            url=_reset_url(settings, slug=tenant_slug, token=token),
+            ttl_seconds=settings.password_reset_ttl,
         )
     )
 
