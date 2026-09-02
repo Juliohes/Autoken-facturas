@@ -384,6 +384,7 @@ async def test_c4_registro_publico_escribe_solo_en_su_subdominio(authapi: Api) -
             "company_name": "Nueva SL",
             "cif": "76072394D",
             "password": USER_PASSWORD,
+            "legal_consent": True,
         },
         headers=host("otra.localhost"),
     )
