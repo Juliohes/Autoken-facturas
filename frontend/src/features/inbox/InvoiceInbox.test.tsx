@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
@@ -105,6 +105,42 @@ describe('InvoiceInbox (R-020)', () => {
     const eliminar = screen.getByRole('button', { name: 'Eliminar' })
     expect(revisar).toHaveClass('tn-inbox-action', 'tn-inbox-action-success')
     expect(eliminar).toHaveClass('tn-inbox-action', 'tn-inbox-action-danger')
+    // Mismo diseño (misma clase base .tn-inbox-action), solo cambia el color.
+    expect(revisar.className.replace(/tn-inbox-action-success/, '')).toBe(eliminar.className.replace(/tn-inbox-action-danger/, ''))
+  })
+
+  it('el estado va arriba a la derecha de "Factura enviada", no en la misma fila que los botones (no se solapan)', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: 'reviewable-1',
+            status: 'needs_review',
+            processing_stage: null,
+            created_at: '2026-08-21T10:00:00Z',
+            direction: 'recibida',
+            page_count: 1,
+            capture_session_id: null,
+            capture_sequence: null,
+            draft_updated_at: null,
+          },
+        ],
+        summary: { processing: 0, ready: 0, attention: 1 },
+        next_cursor: null,
+      },
+      error: undefined,
+    })
+
+    renderInbox()
+
+    const item = await screen.findByTestId('inbox-item')
+    const title = within(item).getByText('Factura enviada')
+    const status = within(item).getByText('Pendiente de comprobación')
+    const revisar = within(item).getByRole('link', { name: 'Revisar factura' })
+    // El estado comparte fila con el título (arriba a la derecha)...
+    expect(status.closest('div')).toBe(title.closest('div'))
+    // ...y esa fila NO es la misma que la de los botones de acción.
+    expect(status.closest('div')).not.toBe(revisar.closest('div'))
   })
 
   it('bloque E: la fecha de subida de cada factura pendiente no muestra segundos', async () => {

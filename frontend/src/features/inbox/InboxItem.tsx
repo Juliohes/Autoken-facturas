@@ -39,28 +39,32 @@ export function InboxItem({ item }: { item: InboxItemData }) {
   const reviewable = item.status === 'ocr_done' || item.status === 'needs_review'
 
   return (
-    <li className="tn-inbox-item flex items-center justify-between gap-4" data-testid="inbox-item">
-      <div className="min-w-0">
+    <li className="tn-inbox-item flex flex-col gap-2" data-testid="inbox-item">
+      {/* Fila 1: título + estado arriba a la derecha (antes el estado se solapaba con los botones
+          de la fila de abajo cuando el texto del estado era largo, p. ej. "Pendiente de
+          comprobación"). */}
+      <div className="flex items-start justify-between gap-3">
         <p className="font-medium text-slate-100">Factura enviada</p>
-        <p className="text-sm text-muted flex items-center gap-2">
-          <StatusBadge plain tone={STATUS_TONE[item.status] ?? 'neutral'} label={STATUS_LABEL[item.status] ?? item.status} />
-        </p>
+        <StatusBadge plain tone={STATUS_TONE[item.status] ?? 'neutral'} label={STATUS_LABEL[item.status] ?? item.status} />
+      </div>
+      {/* Fila 2: fecha y hora juntas a la izquierda, acciones a la derecha (debajo del estado). */}
+      <div className="flex items-end justify-between gap-3">
         <time dateTime={item.created_at} className="text-xs text-slate-500">
           {formatCreatedAt(item.created_at)}
         </time>
-      </div>
-      <div className="shrink-0 flex items-center gap-3">
-        {pending && <Link to={ROUTES.confirmation(item.id)} state={confirmationState} className="tn-inbox-action tn-inbox-action-neutral">Ver progreso</Link>}
-        {reviewable && <Link to={ROUTES.confirmation(item.id)} state={confirmationState} className="tn-inbox-action tn-inbox-action-success">Revisar factura</Link>}
-        {item.status !== 'confirmed' && (
-          <button
-            type="button"
-            onClick={() => setShowDeleteDialog(true)}
-            className="tn-inbox-action tn-inbox-action-danger"
-          >
-            Eliminar
-          </button>
-        )}
+        <div className="shrink-0 flex items-center gap-3">
+          {pending && <Link to={ROUTES.confirmation(item.id)} state={confirmationState} className="tn-inbox-action tn-inbox-action-neutral">Ver progreso</Link>}
+          {reviewable && <Link to={ROUTES.confirmation(item.id)} state={confirmationState} className="tn-inbox-action tn-inbox-action-success">Revisar factura</Link>}
+          {item.status !== 'confirmed' && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteDialog(true)}
+              className="tn-inbox-action tn-inbox-action-danger"
+            >
+              Eliminar
+            </button>
+          )}
+        </div>
       </div>
       {showDeleteDialog && (
         <Modal title="Eliminar factura" onClose={() => setShowDeleteDialog(false)} panelClassName="max-w-md space-y-4">
