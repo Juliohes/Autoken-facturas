@@ -20,6 +20,7 @@ import { processCapturedFrame } from './processCapture'
 import { loadOpenCv } from './opencv/loadOpenCv'
 import { startCaptureTiming } from './capturePerformance'
 import { Modal } from '../../shared/Modal'
+import { SegmentedControl } from '../../ui'
 import type { CaptureProductMode, Direction } from './types'
 import { useAutoCapture } from './useAutoCapture'
 import { useCameraStream } from './useCameraStream'
@@ -614,19 +615,15 @@ export function CaptureScreen({ onUploaded }: Props) {
     return <p role="alert" className="tn-panel-page p-6 text-red-400">No se pudo cargar tu empresa. Inténtalo de nuevo más tarde.</p>
   }
 
-  const directionButtonClass = 'tn-toggle-option cursor-pointer border px-6 py-3 text-base font-medium'
+  // Mismo componente compartido que Subir Archivo, en la misma posición (bloque A.3,
+  // PROMPT-AUTOFACTU-AJUSTES-v3): encima de la acción, centrado.
   const DirectionSelector = (
-    <fieldset className="tn-direction-toggle flex gap-1 text-sm">
-      <legend className="sr-only">Dirección</legend>
-      <label className={directionButtonClass}>
-        <input type="radio" name="direction" className="sr-only" checked={direction === 'recibida'} onChange={() => setDirection('recibida')} />
-        Recibida
-      </label>
-      <label className={directionButtonClass}>
-        <input type="radio" name="direction" className="sr-only" checked={direction === 'emitida'} onChange={() => setDirection('emitida')} />
-        Emitida
-      </label>
-    </fieldset>
+    <SegmentedControl
+      label="Dirección"
+      value={direction}
+      onChange={setDirection}
+      options={[{ value: 'recibida', label: 'Recibida' }, { value: 'emitida', label: 'Emitida' }]}
+    />
   )
 
   const autoCaptureReason: Record<string, string> = {
@@ -738,24 +735,24 @@ export function CaptureScreen({ onUploaded }: Props) {
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 pb-8">
         {DirectionSelector}
         {camera.status === 'idle' && (
-          <div className="flex flex-col items-center gap-5">
-            <div className="tn-capture-segmented" role="group" aria-label="Añadir factura">
-              <button type="button" onClick={() => openCamera()} disabled={direction === null} className="tn-capture-segment tn-capture-segment-primary">
-                <svg aria-hidden="true" className="tn-capture-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M5 8.5h3l1.5-2h5L16 8.5h3A2 2 0 0 1 21 10.5v7A2 2 0 0 1 19 19.5H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z" />
-                  <circle cx="12" cy="14" r="3.25" />
-                </svg>
-                <span>Tomar foto</span>
-              </button>
-              <button type="button" onClick={startMultiplePages} aria-label="Varias hojas" aria-pressed={multiplePages} disabled={direction === null} className="tn-capture-segment tn-capture-segment-secondary">
-                <svg aria-hidden="true" className="tn-capture-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M8 4h9a2 2 0 0 1 2 2v11" strokeLinecap="round" />
-                  <path d="M6 7h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
-                  <path d="M8 11h5M8 15h4" strokeLinecap="round" />
-                </svg>
-                <span>Varias<br />hojas</span>
-              </button>
-            </div>
+          // "Tomar foto" y "Varias hojas" separados (bloque A.4): ya no comparten borde ni se
+          // solapan; el mismo gap-6 que separa el toggle de "Tomar foto" los separa entre sí.
+          <div className="flex w-full flex-col items-center gap-6">
+            <button type="button" onClick={() => openCamera()} disabled={direction === null} className="tn-capture-primary-btn">
+              <svg aria-hidden="true" className="tn-capture-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M5 8.5h3l1.5-2h5L16 8.5h3A2 2 0 0 1 21 10.5v7A2 2 0 0 1 19 19.5H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z" />
+                <circle cx="12" cy="14" r="3.25" />
+              </svg>
+              <span>Tomar foto</span>
+            </button>
+            <button type="button" onClick={startMultiplePages} aria-label="Varias hojas" aria-pressed={multiplePages} disabled={direction === null} className="tn-capture-secondary-btn">
+              <svg aria-hidden="true" className="tn-capture-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M8 4h9a2 2 0 0 1 2 2v11" strokeLinecap="round" />
+                <path d="M6 7h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
+                <path d="M8 11h5M8 15h4" strokeLinecap="round" />
+              </svg>
+              <span>Varias hojas</span>
+            </button>
           </div>
         )}
       </div>

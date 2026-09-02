@@ -108,7 +108,7 @@ describe('CaptureScreen (S6.11)', () => {
     useSessionMock.mockReturnValue(USER_SESSION)
     renderScreen()
 
-    const directionSelector = screen.getByRole('group', { name: 'Dirección' })
+    const directionSelector = screen.getByRole('radiogroup', { name: 'Dirección' })
     const takePhoto = screen.getByRole('button', { name: 'Tomar foto' })
     const multiplePages = screen.getByRole('button', { name: 'Varias hojas' })
 
@@ -118,11 +118,13 @@ describe('CaptureScreen (S6.11)', () => {
     expect(screen.getByRole('heading', { name: 'Capturar factura' })).toHaveClass('sr-only')
     expect(screen.getByRole('heading', { name: 'Capturar factura' }).closest('section')).toHaveClass('tn-capture-entry-screen')
     expect(directionSelector.compareDocumentPosition(takePhoto)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
-    expect(takePhoto).toHaveClass('tn-capture-segment', 'tn-capture-segment-primary')
-    expect(multiplePages).toHaveClass('tn-capture-segment', 'tn-capture-segment-secondary')
+    // "Tomar foto" y "Varias hojas" son botones independientes (bloque A.4): ya no comparten el
+    // contenedor .tn-capture-segmented ni sus clases de segmento solapado.
+    expect(takePhoto).toHaveClass('tn-capture-primary-btn')
+    expect(multiplePages).toHaveClass('tn-capture-secondary-btn')
+    expect(multiplePages).not.toHaveClass('tn-capture-primary-btn')
+    expect(screen.queryByRole('group', { name: 'Añadir factura' })).not.toBeInTheDocument()
     expect(multiplePages).toHaveAttribute('aria-pressed', 'false')
-    expect(takePhoto.parentElement).toHaveClass('tn-capture-segmented')
-    expect(multiplePages.parentElement).toBe(takePhoto.parentElement)
     expect(takePhoto.querySelector('svg')).toBeInTheDocument()
     expect(multiplePages.querySelector('svg')).toBeInTheDocument()
   })

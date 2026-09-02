@@ -119,6 +119,15 @@
     --tn-radius-pill: 999px;
     --tn-shadow-card: 0 5px 18px rgba(16, 24, 40, 0.07);
     --tn-shadow-glass: var(--tn-glass-shadow);
+    /* Escáner en claro sin bloque glass (bloque A.1, PROMPT-AUTOFACTU-AJUSTES-v3): el panel de
+     * entrada queda del color del fondo. En oscuro se restaura el mismo navy-glass de siempre
+     * (ver overrides en los bloques de tema oscuro más abajo). */
+    --tn-capture-glass-bg: transparent;
+    --tn-capture-glass-border: 0;
+    --tn-capture-glass-shadow: none;
+    --tn-capture-glass-blur: none;
+    --tn-capture-glass-sheen: transparent;
+    --tn-capture-glass-inset: none;
   }
 
   /* Modo oscuro: se activa por data-theme="dark" en <html> (toggle de usuario) o por
@@ -167,6 +176,12 @@
     --tn-error: var(--error);
     --tn-error-surface: var(--error-surface);
     --tn-shadow-card: 0 5px 18px rgba(0, 0, 0, 0.4);
+    --tn-capture-glass-bg: linear-gradient(145deg, rgba(15, 42, 82, 0.86), rgba(2, 18, 49, 0.94));
+    --tn-capture-glass-border: 1px solid var(--glass-navy-border);
+    --tn-capture-glass-shadow: var(--tn-shadow-glass);
+    --tn-capture-glass-blur: blur(18px) saturate(145%);
+    --tn-capture-glass-sheen: linear-gradient(130deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.1) 20%, transparent 48%);
+    --tn-capture-glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 1px 0 0 rgba(141, 230, 255, 0.12), inset -1px 0 0 rgba(141, 230, 255, 0.08);
   }
 
   @media (prefers-color-scheme: dark) {
@@ -212,6 +227,12 @@
       --tn-error: var(--error);
       --tn-error-surface: var(--error-surface);
       --tn-shadow-card: 0 5px 18px rgba(0, 0, 0, 0.4);
+      --tn-capture-glass-bg: linear-gradient(145deg, rgba(15, 42, 82, 0.86), rgba(2, 18, 49, 0.94));
+      --tn-capture-glass-border: 1px solid var(--glass-navy-border);
+      --tn-capture-glass-shadow: var(--tn-shadow-glass);
+      --tn-capture-glass-blur: blur(18px) saturate(145%);
+      --tn-capture-glass-sheen: linear-gradient(130deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.1) 20%, transparent 48%);
+      --tn-capture-glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 1px 0 0 rgba(141, 230, 255, 0.12), inset -1px 0 0 rgba(141, 230, 255, 0.08);
     }
   }
 
@@ -655,7 +676,7 @@
 
   /* La aplicación tenía muchos botones antiguos sin una clase propia. Esta capa les da el mismo
      tratamiento glass sin tocar botones con estado semántico explícito (éxito, error o aviso). */
-  .tn-panel-page button:not(.tn-primary-action):not(.tn-capture-segment):not(.tn-capture-secondary-action):not([class*='bg-emerald']):not([class*='bg-red']):not([class*='bg-sky']):not([class*='bg-amber']),
+  .tn-panel-page button:not(.tn-primary-action):not(.tn-capture-segment):not(.tn-capture-primary-btn):not(.tn-capture-secondary-btn):not(.tn-capture-secondary-action):not([class*='bg-emerald']):not([class*='bg-red']):not([class*='bg-sky']):not([class*='bg-amber']),
   .tn-panel-page a[class*='border-'] {
     min-height: 44px;
     border: 1px solid var(--tn-glass-border) !important;
@@ -665,7 +686,7 @@
     box-shadow: var(--tn-shadow-card);
   }
 
-  .tn-panel-page button:not(.tn-primary-action):not(.tn-capture-segment):not(.tn-capture-secondary-action):not([class*='bg-emerald']):not([class*='bg-red']):not([class*='bg-sky']):not([class*='bg-amber']):hover:not(:disabled),
+  .tn-panel-page button:not(.tn-primary-action):not(.tn-capture-segment):not(.tn-capture-primary-btn):not(.tn-capture-secondary-btn):not(.tn-capture-secondary-action):not([class*='bg-emerald']):not([class*='bg-red']):not([class*='bg-sky']):not([class*='bg-amber']):hover:not(:disabled),
   .tn-panel-page a[class*='border-']:hover {
     border-color: var(--tn-cyan-edge) !important;
     box-shadow: 0 14px 28px rgba(2, 18, 49, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.46);
@@ -699,16 +720,26 @@
   }
 
   .tn-capture-screen {
-    background: color-mix(in srgb, var(--surface-primary) 62%, transparent);
-    border: 1px solid rgba(255, 255, 255, 0.68);
     border-radius: var(--tn-radius-xl);
-    box-shadow: var(--tn-shadow-glass);
-    -webkit-backdrop-filter: blur(20px) saturate(135%);
-    backdrop-filter: blur(20px) saturate(135%);
   }
 
-  .tn-capture-screen::before {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.06) 42%, transparent 72%);
+  /* Anula el navy-glass de .tn-liquid-glass en el Escáner: en claro queda transparente, del color
+   * del fondo; en oscuro se restaura el mismo tratamiento de siempre vía los tokens
+   * --tn-capture-glass-* (bloque A.1, PROMPT-AUTOFACTU-AJUSTES-v3). */
+  .tn-capture-screen.tn-liquid-glass {
+    background: var(--tn-capture-glass-bg) !important;
+    border: var(--tn-capture-glass-border);
+    box-shadow: var(--tn-capture-glass-shadow);
+    -webkit-backdrop-filter: var(--tn-capture-glass-blur);
+    backdrop-filter: var(--tn-capture-glass-blur);
+  }
+
+  .tn-capture-screen.tn-liquid-glass::before {
+    background: var(--tn-capture-glass-sheen);
+  }
+
+  .tn-capture-screen.tn-liquid-glass::after {
+    box-shadow: var(--tn-capture-glass-inset);
   }
 
   .tn-capture-entry-screen {
@@ -722,10 +753,6 @@
     width: min(100%, 620px);
   }
 
-  .tn-capture-entry-screen > .tn-direction-toggle {
-    width: fit-content;
-  }
-
   .tn-capture-entry-screen > .space-y-5 {
     display: flex;
     flex: 1;
@@ -734,80 +761,70 @@
     align-items: center;
   }
 
-  .tn-capture-segmented {
-    display: inline-flex;
+  /* "Tomar foto" y "Varias hojas": botones independientes y separados (bloque A.4,
+   * PROMPT-AUTOFACTU-AJUSTES-v3) — ya no comparten borde ni se solapan (antes .tn-capture-segmented
+   * con margin-left negativo). El espacio entre ambos lo pone el gap-6 del contenedor en JSX. */
+  .tn-capture-primary-btn,
+  .tn-capture-secondary-btn {
+    display: flex;
     width: min(100%, 430px);
     max-width: 100%;
-    height: 96px;
-    overflow: visible;
-    border: 1px solid var(--tn-glass-border);
-    border-radius: 28px;
-  }
-
-  .tn-capture-segment {
-    position: relative;
-    display: flex;
-    min-width: 0;
-    height: 96px;
-    flex: 1 1 auto;
     align-items: center;
     justify-content: center;
     gap: 12px;
-    padding: 0 28px;
-    border: 0;
-    font-size: 1.25rem;
     font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
     transition: background-color 160ms ease, color 160ms ease, transform 160ms ease, filter 160ms ease;
   }
 
-  .tn-capture-segment-primary {
-    z-index: 2;
-    color: #fff;
-    background: var(--brand-navy) !important;
+  .tn-capture-primary-btn {
+    height: 96px;
+    padding: 0 28px;
+    border: 0;
     border-radius: 28px;
+    font-size: 1.25rem;
+    /* Naranja de marca con texto navy (AA), mismo tratamiento que .tn-primary-action (bloque A.2). */
+    color: var(--tn-accent-ink) !important;
+    background: var(--tn-accent) !important;
   }
 
-  .tn-capture-segment-secondary {
-    z-index: 1;
-    flex: 0 0 92px;
-    width: 92px;
-    margin-left: -28px;
-    flex-direction: column;
-    gap: 5px;
-    padding: 0 8px 0 36px;
+  .tn-capture-secondary-btn {
+    min-height: 64px;
+    padding: 14px 28px;
     color: var(--brand-navy);
-    background: color-mix(in srgb, white 72%, transparent);
-    border: 1px solid rgba(22, 75, 130, 0.3);
+    background: color-mix(in srgb, var(--surface-primary) 72%, transparent);
+    border: 1px solid var(--tn-glass-border);
+    border-radius: 22px;
+    font-size: 1.0625rem;
     -webkit-backdrop-filter: blur(14px) saturate(145%);
     backdrop-filter: blur(14px) saturate(145%);
-    border-radius: 0 28px 28px 0;
   }
 
-  .tn-capture-segment-secondary[aria-pressed='true'] {
+  .tn-capture-secondary-btn[aria-pressed='true'] {
     color: #fff;
     background: var(--brand-cyan);
   }
 
-  .tn-capture-segment-secondary .tn-capture-icon {
-    width: 25px;
-    height: 25px;
-  }
-
-  .tn-capture-segment:hover {
+  .tn-capture-primary-btn:hover:not(:disabled),
+  .tn-capture-secondary-btn:hover:not(:disabled) {
     filter: brightness(1.04);
   }
 
-  .tn-capture-segment:active {
+  .tn-capture-primary-btn:active:not(:disabled),
+  .tn-capture-secondary-btn:active:not(:disabled) {
     transform: scale(0.985);
   }
 
-  .tn-capture-segment:focus-visible {
-    position: relative;
-    z-index: 3;
+  .tn-capture-primary-btn:focus-visible,
+  .tn-capture-secondary-btn:focus-visible {
     outline: 3px solid rgba(25, 191, 242, 0.45);
-    outline-offset: -3px;
+    outline-offset: 2px;
+  }
+
+  .tn-capture-primary-btn:disabled,
+  .tn-capture-secondary-btn:disabled {
+    opacity: 0.5;
   }
 
   .tn-capture-secondary-actions {
@@ -859,36 +876,9 @@
     flex: 0 0 auto;
   }
 
-  .tn-direction-toggle {
-    width: fit-content;
-    padding: 4px;
-    border: 1px solid var(--tn-glass-border);
-    border-radius: var(--tn-radius-pill);
-    background: rgba(2, 18, 49, 0.12);
-    box-shadow: inset 0 1px 2px rgba(2, 18, 49, 0.12);
-  }
-
-  .tn-toggle-option {
-    min-width: 108px;
-    border-color: transparent !important;
-    border-radius: var(--tn-radius-pill) !important;
-    color: var(--brand-navy) !important;
-    background: transparent !important;
-    text-align: center;
-    transition: color 140ms ease, background 180ms ease, box-shadow 180ms ease;
-  }
-
-  .tn-toggle-option:has(input:checked) {
-    color: #fff !important;
-    background: var(--brand-navy) !important;
-    box-shadow: 0 5px 12px rgba(var(--brand-navy-rgb), 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.38);
-  }
-
-
-  .tn-toggle-option:focus-within {
-    outline: 3px solid rgba(25, 191, 242, 0.28);
-    outline-offset: 2px;
-  }
+  /* .tn-direction-toggle / .tn-toggle-option: retirados (bloque A.3, PROMPT-AUTOFACTU-AJUSTES-v3).
+   * El Escáner usa ahora el SegmentedControl compartido (.tn-segmented / .tn-segmented-option),
+   * igual que Subir Archivo. Ningún componente usa ya estas clases. */
 
   /* ---- src/ui (Bloque 2): primitivos del sistema de diseño ---- */
   .tn-btn {
@@ -1212,28 +1202,16 @@
   }
 
   @media (max-width: 419px) {
-    .tn-toggle-option {
-      min-width: 96px;
-    }
-
-    .tn-capture-segment {
+    .tn-capture-primary-btn {
       gap: 7px;
       padding-inline: 18px;
       font-size: 1.125rem;
     }
 
-    .tn-capture-segment-secondary {
-      flex-basis: 78px;
-      width: 78px;
-      margin-left: -28px;
-      padding-right: 6px;
-      padding-left: 32px;
-      font-size: 0.8125rem;
-    }
-
-    .tn-capture-segment .tn-capture-icon {
-      width: 22px;
-      height: 22px;
+    .tn-capture-secondary-btn {
+      gap: 7px;
+      padding-inline: 18px;
+      font-size: 0.9375rem;
     }
 
     /* Bloque 8: en móvil estrecho el ThemeToggle solo muestra icono (icono+aria-label siguen
