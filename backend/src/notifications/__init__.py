@@ -45,5 +45,8 @@ def _build_notifier() -> Notifier:
             password=settings.smtp_password,
             sender=settings.smtp_from or settings.smtp_host,
             use_tls=settings.smtp_use_tls,
+            blocklist=frozenset(
+                email for email in settings.smtp_blocklist.split(",") if email.strip()
+            ),
         )
     return RecordingNotifier()

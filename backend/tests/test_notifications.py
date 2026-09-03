@@ -115,6 +115,50 @@ def _notifier(**overrides: object) -> SmtpNotifier:
     return SmtpNotifier(**defaults)  # type: ignore[arg-type]
 
 
+def test_smtp_notifier_no_envia_a_un_destinatario_bloqueado(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hallazgo real (Julio, 2026-09-03): dos correos de clientes reales (no de prueba) recibieron
+    un aviso de un registro de prueba. Lista de bloqueo a nivel de transporte, efectiva para
+    cualquier tipo de mensaje, sin tocar el dominio ni el rol de esas cuentas."""
+    _FakeSmtp.last_instance = None  # no depender del orden de ejecución de los demás tests
+    monkeypatch.setattr(smtplib, "SMTP", _FakeSmtp)
+    notifier = _notifier(blocklist={"bloqueado@ilex.es"})
+
+    notifier.send(
+        templates.password_reset(email="bloqueado@ilex.es", url="https://x/y", ttl_seconds=60)
+    )
+
+    assert _FakeSmtp.last_instance is None  # ni siquiera abre la conexión
+
+
+def test_smtp_notifier_la_lista_de_bloqueo_no_distingue_mayusculas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _FakeSmtp.last_instance = None
+    monkeypatch.setattr(smtplib, "SMTP", _FakeSmtp)
+    notifier = _notifier(blocklist={"bloqueado@ilex.es"})
+
+    notifier.send(
+        templates.password_reset(email="Bloqueado@Ilex.es", url="https://x/y", ttl_seconds=60)
+    )
+
+    assert _FakeSmtp.last_instance is None
+
+
+def test_smtp_notifier_sin_lista_de_bloqueo_envia_con_normalidad(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _FakeSmtp.last_instance = None
+    monkeypatch.setattr(smtplib, "SMTP", _FakeSmtp)
+    notifier = _notifier()
+
+    notifier.send(templates.password_reset(email="ana@ilex.es", url="https://x/y", ttl_seconds=60))
+
+    assert _FakeSmtp.last_instance is not None
+    assert len(_FakeSmtp.last_instance.sent) == 1
+
+
 def test_smtp_notifier_con_starttls_hace_starttls_login_y_envia(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

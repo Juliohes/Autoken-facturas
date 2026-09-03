@@ -287,6 +287,11 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from: str | None = None  # remitente (p. ej. "Autofactu <soporte@autoken.es>")
     smtp_use_tls: bool = True  # True = STARTTLS (587); False = SSL directo (465)
+    # Lista de bloqueo de emergencia (Julio, 2026-09-03): direcciones que NUNCA deben recibir
+    # ningún correo de la app, sea cual sea el motivo (registro, restablecimiento...). Coma-
+    # separado, sin espacios necesarios (se recortan). Filtro en SmtpNotifier, no en el dominio: un
+    # solo sitio para cualquier tipo de aviso presente o futuro.
+    smtp_blocklist: str = ""
 
     # --- Importación de empresas S1.5 (companies) ----------------------------------------------
     # Guardarraíles anti-DoS por memoria del `POST /companies/import` (proceso compartido por todas

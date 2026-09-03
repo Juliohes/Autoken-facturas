@@ -41,6 +41,7 @@ class SmtpNotifier(Notifier):
         sender: str,
         use_tls: bool,
         timeout: float = 10.0,
+        blocklist: frozenset[str] | set[str] = frozenset(),
     ) -> None:
         self._host = host
         self._port = port
@@ -49,8 +50,16 @@ class SmtpNotifier(Notifier):
         self._sender = sender
         self._use_tls = use_tls
         self._timeout = timeout
+        # Lista de bloqueo (Julio, 2026-09-03): dos direcciones de clientes reales recibieron un
+        # aviso de una prueba de registro. Filtro a nivel de transporte -- vale para CUALQUIER
+        # tipo de mensaje (registro, restablecimiento, activación...), sin tocar el dominio ni el
+        # rol de esas cuentas. En minúsculas para que la comparación no distinga mayúsculas.
+        self._blocklist = frozenset(email.strip().lower() for email in blocklist if email.strip())
 
     def send(self, message: Message) -> None:
+        if message.to.strip().lower() in self._blocklist:
+            logger.info("smtp.send_blocked", extra={"to": message.to, "kind": message.kind})
+            return
         mime = self._build_mime(message)
         try:
             if self._use_tls:
