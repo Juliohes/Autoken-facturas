@@ -89,11 +89,11 @@ export function LoginScreen({ theme }: { theme: AppliedTheme }) {
         </button>
 
         <div className="flex flex-col items-center gap-1 text-sm">
+          <Link to="/registro" className="tn-auth-link">
+            Regístrate
+          </Link>
           <Link to="/recuperar" className="tn-auth-link">
             ¿No recuerdas tu contraseña?
-          </Link>
-          <Link to="/registro" className="tn-auth-link">
-            ¿No tienes cuenta? Solicita acceso
           </Link>
         </div>
       </form>

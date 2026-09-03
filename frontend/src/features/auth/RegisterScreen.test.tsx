@@ -35,7 +35,7 @@ function renderScreen() {
 
 async function fillForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('Email'), 'nuevo@correo.es')
-  await user.type(screen.getByLabelText('Nombre de la empresa'), 'Empresa Nueva SL')
+  await user.type(screen.getByLabelText('Razón Social'), 'Empresa Nueva SL')
   await user.type(screen.getByLabelText('CIF'), 'B12345674')
   await user.type(screen.getByLabelText('Contraseña'), 'UnaClaveSegura1!')
   await user.type(screen.getByLabelText('Repite la contraseña'), 'UnaClaveSegura1!')
@@ -73,7 +73,7 @@ describe('RegisterScreen (Bloque 4)', () => {
     const user = userEvent.setup()
     renderScreen()
     await user.type(screen.getByLabelText('Email'), 'nuevo@correo.es')
-    await user.type(screen.getByLabelText('Nombre de la empresa'), 'Empresa Nueva SL')
+    await user.type(screen.getByLabelText('Razón Social'), 'Empresa Nueva SL')
     await user.type(screen.getByLabelText('CIF'), 'B12345674')
     await user.type(screen.getByLabelText('Contraseña'), 'UnaClaveSegura1!')
     await user.type(screen.getByLabelText('Repite la contraseña'), 'UnaClaveSegura1!')
@@ -86,7 +86,7 @@ describe('RegisterScreen (Bloque 4)', () => {
     renderScreen()
 
     await user.type(screen.getByLabelText('Email'), 'nuevo@correo.es')
-    await user.type(screen.getByLabelText('Nombre de la empresa'), 'Empresa Nueva SL')
+    await user.type(screen.getByLabelText('Razón Social'), 'Empresa Nueva SL')
     await user.type(screen.getByLabelText('CIF'), 'B12345674')
     await user.type(screen.getByLabelText('Contraseña'), 'UnaClaveSegura1!')
     await user.type(screen.getByLabelText('Repite la contraseña'), 'Otra')

@@ -89,7 +89,7 @@ export function RegisterScreen({ theme }: { theme: AppliedTheme }) {
         </label>
 
         <label className="tn-login-label flex flex-col text-sm">
-          Nombre de la empresa
+          Razón Social
           <input
             type="text"
             required

@@ -118,16 +118,16 @@ describe('LoginScreen (S4.9)', () => {
     )
   })
 
-  it('Bloque 4: enlaza a recuperar contraseña y a solicitar acceso', () => {
+  it('Bloque 4: enlaza a registrarse y a recuperar contraseña, en ese orden', () => {
     useSessionMock.mockReturnValue({ status: 'unauthenticated', user: null, login: vi.fn(), logout: vi.fn() })
     renderLogin()
 
+    const links = screen.getAllByRole('link')
+    expect(links.map((l) => l.textContent)).toEqual(['Regístrate', '¿No recuerdas tu contraseña?'])
+    expect(screen.getByRole('link', { name: 'Regístrate' })).toHaveAttribute('href', '/registro')
     expect(screen.getByRole('link', { name: '¿No recuerdas tu contraseña?' })).toHaveAttribute(
       'href',
       '/recuperar',
     )
-    expect(
-      screen.getByRole('link', { name: '¿No tienes cuenta? Solicita acceso' }),
-    ).toHaveAttribute('href', '/registro')
   })
 })
