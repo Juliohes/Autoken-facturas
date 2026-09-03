@@ -81,6 +81,19 @@ describe('RegisterScreen (Bloque 4)', () => {
     expect(screen.getByRole('checkbox')).toBeRequired()
   })
 
+  it('el consentimiento enlaza a los términos del servicio y a la política de privacidad', () => {
+    renderScreen()
+
+    expect(screen.getByRole('link', { name: 'términos del servicio' })).toHaveAttribute(
+      'href',
+      '/terminos',
+    )
+    expect(screen.getByRole('link', { name: 'política de privacidad' })).toHaveAttribute(
+      'href',
+      '/privacidad',
+    )
+  })
+
   it('contraseñas distintas no llaman al backend y muestran el error', async () => {
     const user = userEvent.setup()
     renderScreen()
@@ -125,5 +138,22 @@ describe('RegisterScreen (Bloque 4)', () => {
     await user.click(screen.getByRole('button', { name: 'Solicitar acceso' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/Demasiadas solicitudes/)
+  })
+
+  it('un 404 (dominio sin gestoría, p. ej. la consola de plataforma) explica por qué, sin enseñar "Not found"', async () => {
+    postMock.mockResolvedValue({
+      data: undefined,
+      error: { detail: 'Not found' },
+      response: { status: 404 },
+    })
+    const user = userEvent.setup()
+    renderScreen()
+
+    await fillForm(user)
+    await user.click(screen.getByRole('button', { name: 'Solicitar acceso' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/dirección de tu asesoría/)
+    expect(alert).not.toHaveTextContent('Not found')
   })
 })

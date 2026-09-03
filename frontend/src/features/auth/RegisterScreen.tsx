@@ -8,6 +8,7 @@ import { api } from '../../api/client'
 import { errorDetail } from '../../api/errors'
 import { Banner, PasswordField } from '../../ui'
 import type { AppliedTheme } from '../tenancy/theme'
+import { TENANT_NOT_FOUND_MESSAGE } from './authErrors'
 import { AuthShell } from '../session/AuthShell'
 
 type Status = 'idle' | 'submitting' | 'done'
@@ -37,6 +38,8 @@ export function RegisterScreen({ theme }: { theme: AppliedTheme }) {
       setStatus('idle')
       if (response.status === 429) {
         setError('Demasiadas solicitudes desde tu conexión. Inténtalo más tarde.')
+      } else if (response.status === 404) {
+        setError(TENANT_NOT_FOUND_MESSAGE)
       } else {
         setError(errorDetail(apiError) ?? 'No se pudo completar el alta. Revisa los datos.')
       }
@@ -137,7 +140,15 @@ export function RegisterScreen({ theme }: { theme: AppliedTheme }) {
             className="mt-0.5"
           />
           <span>
-            Acepto los términos del servicio y la política de privacidad de Autofactu.
+            Acepto los{' '}
+            <Link to="/terminos" target="_blank" className="tn-auth-link">
+              términos del servicio
+            </Link>{' '}
+            y la{' '}
+            <Link to="/privacidad" target="_blank" className="tn-auth-link">
+              política de privacidad
+            </Link>{' '}
+            de Autofactu.
           </span>
         </label>
 

@@ -7,6 +7,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client'
 import { Banner, PasswordField } from '../../ui'
 import type { AppliedTheme } from '../tenancy/theme'
+import { TENANT_NOT_FOUND_MESSAGE } from './authErrors'
 import { AuthShell } from '../session/AuthShell'
 
 type Status = 'idle' | 'submitting' | 'done'
@@ -37,6 +38,8 @@ export function ResetPasswordScreen({ theme }: { theme: AppliedTheme }) {
         setError('El enlace no es válido o ha caducado. Solicita uno nuevo.')
       } else if (response.status === 422) {
         setError('La contraseña no cumple los requisitos de seguridad.')
+      } else if (response.status === 404) {
+        setError(TENANT_NOT_FOUND_MESSAGE)
       } else {
         setError('El servicio no está disponible ahora mismo. Inténtalo más tarde.')
       }

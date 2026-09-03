@@ -7,9 +7,10 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client'
 import { Banner, Spinner } from '../../ui'
 import type { AppliedTheme } from '../tenancy/theme'
+import { TENANT_NOT_FOUND_MESSAGE } from './authErrors'
 import { AuthShell } from '../session/AuthShell'
 
-type Result = 'pending' | 'ok' | 'invalid' | 'unavailable'
+type Result = 'pending' | 'ok' | 'invalid' | 'unavailable' | 'tenant_not_found'
 
 export function VerifyEmailScreen({ theme }: { theme: AppliedTheme }) {
   const [searchParams] = useSearchParams()
@@ -28,7 +29,9 @@ export function VerifyEmailScreen({ theme }: { theme: AppliedTheme }) {
         setResult('ok')
         return
       }
-      setResult(response.status === 401 ? 'invalid' : 'unavailable')
+      if (response.status === 401) setResult('invalid')
+      else if (response.status === 404) setResult('tenant_not_found')
+      else setResult('unavailable')
     })()
     return () => {
       cancelled = true
@@ -60,6 +63,8 @@ export function VerifyEmailScreen({ theme }: { theme: AppliedTheme }) {
         {result === 'unavailable' && (
           <Banner tone="warn">El servicio no está disponible ahora mismo. Inténtalo más tarde.</Banner>
         )}
+
+        {result === 'tenant_not_found' && <Banner tone="bad">{TENANT_NOT_FOUND_MESSAGE}</Banner>}
 
         <Link to="/login" className="tn-auth-link text-sm">
           Volver a iniciar sesión

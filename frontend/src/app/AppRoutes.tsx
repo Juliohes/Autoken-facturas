@@ -34,6 +34,8 @@ import { ForgotPasswordScreen } from '../features/auth/ForgotPasswordScreen'
 import { RegisterScreen } from '../features/auth/RegisterScreen'
 import { ResetPasswordScreen } from '../features/auth/ResetPasswordScreen'
 import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen'
+import { PrivacidadScreen } from '../features/legal/PrivacidadScreen'
+import { TerminosScreen } from '../features/legal/TerminosScreen'
 import { LoginScreen } from '../features/session/LoginScreen'
 import { useSession } from '../features/session/SessionProvider'
 import type { AppliedTheme } from '../features/tenancy/theme'
@@ -169,6 +171,8 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
         <Route path={ROUTES.forgotPassword} element={<ForgotPasswordScreen theme={theme} />} />
         <Route path={ROUTES.resetPassword} element={<ResetPasswordScreen theme={theme} />} />
         <Route path={ROUTES.activate} element={<ActivateScreen theme={theme} />} />
+        <Route path={ROUTES.terms} element={<TerminosScreen theme={theme} />} />
+        <Route path={ROUTES.privacy} element={<PrivacidadScreen theme={theme} />} />
         <Route
           path={ROUTES.platform}
           element={

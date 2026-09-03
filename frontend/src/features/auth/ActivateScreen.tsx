@@ -9,6 +9,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client'
 import { Banner, PasswordField } from '../../ui'
 import type { AppliedTheme } from '../tenancy/theme'
+import { TENANT_NOT_FOUND_MESSAGE } from './authErrors'
 import { AuthShell } from '../session/AuthShell'
 
 type Step =
@@ -52,6 +53,8 @@ export function ActivateScreen({ theme }: { theme: AppliedTheme }) {
         setError('El enlace de activación no es válido o ha caducado. Pide a tu administrador que te lo reenvíe.')
       } else if (response.status === 422) {
         setError('La contraseña no cumple los requisitos de seguridad.')
+      } else if (response.status === 404) {
+        setError(TENANT_NOT_FOUND_MESSAGE)
       } else {
         setError('El servicio no está disponible ahora mismo. Inténtalo más tarde.')
       }
@@ -74,6 +77,8 @@ export function ActivateScreen({ theme }: { theme: AppliedTheme }) {
         setError('Demasiados intentos con este código. Espera un momento y vuelve a probarlo.')
       } else if (response.status === 401) {
         setError('El enlace de activación no es válido o ha caducado. Pide a tu administrador que te lo reenvíe.')
+      } else if (response.status === 404) {
+        setError(TENANT_NOT_FOUND_MESSAGE)
       } else {
         setError('Código incorrecto. Revisa la app de autenticación e inténtalo de nuevo.')
       }

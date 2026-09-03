@@ -64,6 +64,19 @@ describe('VerifyEmailScreen (Bloque 4)', () => {
     expect(await screen.findByText(/no es válido o ha caducado/)).toBeInTheDocument()
   })
 
+  it('un 404 (dominio sin gestoría) explica por qué, sin enseñar "Not found"', async () => {
+    postMock.mockResolvedValue({
+      data: undefined,
+      error: { detail: 'Not found' },
+      response: { status: 404 },
+    })
+    renderScreen()
+
+    const banner = await screen.findByText(/dirección de tu asesoría/)
+    expect(banner).toBeInTheDocument()
+    expect(screen.queryByText('Not found')).not.toBeInTheDocument()
+  })
+
   it('un 503 (Redis caído) muestra que el servicio no está disponible', async () => {
     postMock.mockResolvedValue({
       data: undefined,

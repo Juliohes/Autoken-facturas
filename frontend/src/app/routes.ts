@@ -20,6 +20,8 @@ export const ROUTES = {
   forgotPassword: '/recuperar',
   resetPassword: '/restablecer',
   activate: '/activar',
+  terms: '/terminos',
+  privacy: '/privacidad',
   platform: '/plataforma',
   platformSettings: '/plataforma/ajustes',
   platformOcrRanking: '/plataforma/ranking-ocr',

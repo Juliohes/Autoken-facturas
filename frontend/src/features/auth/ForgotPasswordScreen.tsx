@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../../api/client'
 import { Banner } from '../../ui'
 import type { AppliedTheme } from '../tenancy/theme'
+import { TENANT_NOT_FOUND_MESSAGE } from './authErrors'
 import { AuthShell } from '../session/AuthShell'
 
 type Status = 'idle' | 'submitting' | 'done'
@@ -28,6 +29,8 @@ export function ForgotPasswordScreen({ theme }: { theme: AppliedTheme }) {
       setStatus('idle')
       if (response.status === 429) {
         setError('Demasiadas solicitudes. Espera unos minutos antes de volver a intentarlo.')
+      } else if (response.status === 404) {
+        setError(TENANT_NOT_FOUND_MESSAGE)
       } else {
         setError('El servicio no está disponible ahora mismo. Inténtalo más tarde.')
       }
