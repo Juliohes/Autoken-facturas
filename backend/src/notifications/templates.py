@@ -46,15 +46,20 @@ def _button_html(url: str, label: str) -> str:
     )
 
 
-def registration_pending_admin(*, admin_email: str, registrant_email: str) -> Message:
+def registration_pending_admin(
+    *, admin_email: str, registrant_email: str, panel_url: str
+) -> Message:
     """Aviso al `tenant_admin`: hay un registro nuevo pendiente de su aprobación."""
-    text = f"El usuario {registrant_email} se ha registrado y está pendiente de tu aprobación."
+    text = (
+        f"El usuario {registrant_email} se ha registrado y está pendiente de tu aprobación.\n\n"
+        f"Revísalo en {panel_url}"
+    )
     html = _html_wrapper(
         preheader=text,
         title="Nuevo registro pendiente de aprobación",
         body_html=(
             f"<p>El usuario <strong>{registrant_email}</strong> se ha registrado y está "
-            "pendiente de tu aprobación.</p><p>Entra en el panel de tu asesoría para revisarlo.</p>"
+            "pendiente de tu aprobación.</p>" + _button_html(panel_url, "Revisar en el panel")
         ),
     )
     return Message(

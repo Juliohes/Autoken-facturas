@@ -7,7 +7,18 @@ from urllib.parse import urlparse
 import httpx
 import pytest
 
-from main import app
+# Mismo hallazgo que _TEST_MINIO_DEFAULTS más abajo, pero tiene que aplicarse ANTES del `import
+# main` de la línea siguiente: `main.py` llama a `get_settings()` (cacheada) al definir `app` a
+# nivel de módulo, así que si el `.env` real de esta VPS ya trae `SMTP_HOST` puesto (despliegue
+# real en el mismo checkout, 2026-09-03), la primera vez que cualquier test importa `main` deja
+# cacheado un `Settings` con SMTP real -- y con él, `notifications.get_notifier()` (singleton de
+# proceso) construye un `SmtpNotifier` en vez del `RecordingNotifier` que casi toda la suite da por
+# hecho (`.reset()`, `.messages`). `setdefault` en una variable de entorno de verdad SÍ gana al
+# `.env` del fichero (pydantic-settings), a diferencia de `monkeypatch.delenv` sobre una clave que
+# nunca estuvo en `os.environ` para empezar.
+os.environ.setdefault("SMTP_HOST", "")
+
+from main import app  # noqa: E402 (después del setdefault de SMTP_HOST, a propósito)
 
 _LOCAL_REDIS_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "redis"})
 

@@ -146,7 +146,9 @@ async def register(
     if user_id is None:
         return  # carrera de email: otra alta ganó el UNIQUE; respuesta genérica, sin crear
 
-    messages = await _admin_messages(session, new_email=email)
+    messages = await _admin_messages(
+        session, new_email=email, settings=settings, tenant_slug=tenant_slug
+    )
     verification_token = await email_verification.issue_verification_token(
         redis,
         user_id=user_id,
@@ -253,7 +255,19 @@ async def _resolve_company(
     return record.id
 
 
-async def _admin_messages(session: AsyncSession, *, new_email: str) -> list[Message]:
+def _admin_panel_url(settings: Settings, *, slug: str) -> str:
+    """Enlace directo a "Empresas -> Registros pendientes de aprobación", en el subdominio del
+    propio tenant (nunca cruzado, mismo criterio que `_reset_url`/`verification_url`).
+
+    Hallazgo real (Julio, 2026-09-03): el aviso al admin decía "entra en el panel de tu asesoría
+    para revisarlo" sin ningún enlace, así que había que ir a buscar la pantalla a mano.
+    """
+    return f"https://{slug}.{settings.base_domain}/empresas"
+
+
+async def _admin_messages(
+    session: AsyncSession, *, new_email: str, settings: Settings, tenant_slug: str
+) -> list[Message]:
     """Construye el aviso a cada `tenant_admin` activo del registro pendiente (C12).
 
     En S1.4 original, el usuario final no recibía ningún aviso; el bloque 2
@@ -262,9 +276,10 @@ async def _admin_messages(session: AsyncSession, *, new_email: str) -> list[Mess
     aprobación: eso sigue siendo solo cosa del admin. Los destinatarios se leen ahora (dentro del
     contexto RLS de la transacción); el envío se difiere al post-commit.
     """
+    panel_url = _admin_panel_url(settings, slug=tenant_slug)
     return [
         email_templates.registration_pending_admin(
-            admin_email=admin_email, registrant_email=new_email
+            admin_email=admin_email, registrant_email=new_email, panel_url=panel_url
         )
         for admin_email in await registration_repo.tenant_admin_emails(session)
     ]

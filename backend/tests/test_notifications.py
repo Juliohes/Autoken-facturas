@@ -54,12 +54,25 @@ class _FailingFakeSmtp(_FakeSmtp):
 
 def test_registration_pending_admin_incluye_el_email_del_registrante() -> None:
     msg = templates.registration_pending_admin(
-        admin_email="admin@ilex.es", registrant_email="nuevo@correo.es"
+        admin_email="admin@ilex.es",
+        registrant_email="nuevo@correo.es",
+        panel_url="https://ilex.autoken.es/empresas",
     )
     assert msg.to == "admin@ilex.es"
     assert msg.kind == "registration_pending"
     assert "nuevo@correo.es" in msg.body
     assert msg.html_body and "nuevo@correo.es" in msg.html_body
+
+
+def test_registration_pending_admin_incluye_el_enlace_al_panel() -> None:
+    """Hallazgo real (Julio, 2026-09-03): el aviso decía "entra en el panel" sin ningún enlace."""
+    msg = templates.registration_pending_admin(
+        admin_email="admin@ilex.es",
+        registrant_email="nuevo@correo.es",
+        panel_url="https://ilex.autoken.es/empresas",
+    )
+    assert "https://ilex.autoken.es/empresas" in msg.body
+    assert msg.html_body and "https://ilex.autoken.es/empresas" in msg.html_body
 
 
 def test_email_verification_incluye_el_enlace_en_texto_y_html() -> None:
@@ -184,7 +197,11 @@ def test_sin_smtp_host_la_factoria_elige_el_grabador_en_memoria(
     from notifications import RecordingNotifier, _build_notifier
     from shared import config
 
-    monkeypatch.delenv("SMTP_HOST", raising=False)
+    # `setenv("", ...)`, no `delenv`: en esta VPS el `.env` real ya trae SMTP_HOST puesto
+    # (despliegue en el mismo checkout, 2026-09-03) -- `delenv` sobre una clave que solo vive en el
+    # fichero (no en `os.environ`) es un no-op, y pydantic-settings seguiría leyendo el valor real
+    # del fichero. Un valor de proceso vacío sí le gana (mismo criterio que conftest.py).
+    monkeypatch.setenv("SMTP_HOST", "")
     config.get_settings.cache_clear()
     try:
         assert isinstance(_build_notifier(), RecordingNotifier)
