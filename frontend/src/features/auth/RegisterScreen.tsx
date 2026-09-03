@@ -9,7 +9,10 @@ import { errorDetail } from '../../api/errors'
 import { Banner, PasswordField } from '../../ui'
 import type { AppliedTheme } from '../tenancy/theme'
 import { TENANT_NOT_FOUND_MESSAGE } from './authErrors'
+import { PASSWORD_POLICY_ERROR, PASSWORD_POLICY_HINT, WEAK_PASSWORD_DETAIL } from './passwordPolicy'
 import { AuthShell } from '../session/AuthShell'
+
+const LEGAL_CONSENT_REQUIRED_DETAIL = 'legal consent is required'
 
 type Status = 'idle' | 'submitting' | 'done'
 
@@ -36,12 +39,17 @@ export function RegisterScreen({ theme }: { theme: AppliedTheme }) {
     })
     if (apiError) {
       setStatus('idle')
+      const detail = errorDetail(apiError)
       if (response.status === 429) {
         setError('Demasiadas solicitudes desde tu conexión. Inténtalo más tarde.')
       } else if (response.status === 404) {
         setError(TENANT_NOT_FOUND_MESSAGE)
+      } else if (detail === WEAK_PASSWORD_DETAIL) {
+        setError(PASSWORD_POLICY_ERROR)
+      } else if (detail === LEGAL_CONSENT_REQUIRED_DETAIL) {
+        setError('Tienes que aceptar los términos del servicio y la política de privacidad para continuar.')
       } else {
-        setError(errorDetail(apiError) ?? 'No se pudo completar el alta. Revisa los datos.')
+        setError(detail ?? 'No se pudo completar el alta. Revisa los datos.')
       }
       return
     }
@@ -120,6 +128,7 @@ export function RegisterScreen({ theme }: { theme: AppliedTheme }) {
           onChange={(e) => setPassword(e.target.value)}
           required
           autoComplete="new-password"
+          hint={PASSWORD_POLICY_HINT}
         />
 
         <PasswordField

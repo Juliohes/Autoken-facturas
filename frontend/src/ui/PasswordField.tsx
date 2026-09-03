@@ -12,6 +12,8 @@ export interface PasswordFieldProps {
   id?: string
   required?: boolean
   autoComplete?: string
+  /** Texto de ayuda opcional bajo el campo (p. ej. la política de longitud). */
+  hint?: string
 }
 
 /** Campo de contraseña accesible con alternador de visibilidad (mismo patrón que LoginScreen). */
@@ -22,20 +24,23 @@ export function PasswordField({
   id,
   required,
   autoComplete,
+  hint,
 }: PasswordFieldProps) {
   const autoId = useId()
   const controlId = id ?? autoId
+  const hintId = hint ? `${controlId}-hint` : undefined
   const [visible, setVisible] = useState(false)
 
   return (
-    <label className="tn-login-label flex flex-col text-sm">
-      {label}
+    <div className="tn-login-label flex flex-col text-sm">
+      <label htmlFor={controlId}>{label}</label>
       <span className="tn-password-field">
         <input
           id={controlId}
           type={visible ? 'text' : 'password'}
           required={required}
           autoComplete={autoComplete}
+          aria-describedby={hintId}
           value={value}
           onChange={onChange}
           className="tn-login-input rounded px-2 py-1"
@@ -77,6 +82,11 @@ export function PasswordField({
           </svg>
         </button>
       </span>
-    </label>
+      {hint && (
+        <span id={hintId} className="tn-field-hint">
+          {hint}
+        </span>
+      )}
+    </div>
   )
 }

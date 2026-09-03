@@ -125,6 +125,28 @@ describe('RegisterScreen (Bloque 4)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('invalid check digit')
   })
 
+  it('Hallazgo real (Julio, 2026-09-03): una contraseña floja explica en español cuál es la política, no el "password does not meet policy" crudo', async () => {
+    postMock.mockResolvedValue({
+      data: undefined,
+      error: { detail: 'password does not meet policy' },
+      response: { status: 422 },
+    })
+    const user = userEvent.setup()
+    renderScreen()
+
+    await fillForm(user)
+    await user.click(screen.getByRole('button', { name: 'Solicitar acceso' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/al menos 12 caracteres/)
+    expect(alert).not.toHaveTextContent('password does not meet policy')
+  })
+
+  it('el campo de contraseña muestra la política mínima como ayuda', () => {
+    renderScreen()
+    expect(screen.getByText(/Mínimo 12 caracteres/)).toBeInTheDocument()
+  })
+
   it('un 429 muestra el mensaje de límite de solicitudes', async () => {
     postMock.mockResolvedValue({
       data: undefined,
