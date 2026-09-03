@@ -2521,3 +2521,37 @@ reenviara ese mismo correo más tarde, el enlace ya no funcionaría. El "2FA" o 
 pasos" (el QR de `/activar`) es pedir, además de la contraseña, un código de 6 dígitos que cambia
 cada 30 segundos y que solo genera la app de autenticación de esa persona -- así, aunque alguien
 robara la contraseña, no podría entrar sin tener también el móvil con esa app.
+
+## 2026-09-03 - SMTP puesto en marcha de verdad + decidir altas por email en vez de por verificación
+
+Cierre de la tarde de configurar el correo en producción, con varias vueltas reales por el camino
+que merece la pena dejar anotadas.
+
+- **El envío de email quedó funcionando de verdad**, tras dos escollos que no eran del código:
+  primero un `.env` con el puerto de Hostinger (465) mezclado con el modo de cifrado pensado para
+  el otro puerto (587) -- Hostinger cortaba la conexión en silencio. Arreglado el puerto, Hostinger
+  seguía rechazando el envío con "outbound sending is disabled for this account" (una restricción
+  de su lado, de cuentas de correo nuevas, no nuestra). Se cambió a Gmail con una "contraseña de
+  aplicación" como solución mientras se resuelve con Hostinger, y ese sí funciona de verdad.
+- **Se quitó la verificación de email del registrante** (la de la sesión anterior, 2026-09-02):
+  Julio decidió, tras ver el flujo de cerca, que no aportaba nada -- quien de verdad decide si
+  alguien entra es el admin de la gestoría, no que el registrante confirme su correo. Quitarla
+  también quita una dependencia de correo del camino crítico del alta.
+- **Cada admin de la gestoría ahora puede aprobar o rechazar un alta directamente desde el propio
+  email de aviso**, sin tener que entrar en el panel: el correo lleva un enlace personal, de un
+  solo uso, que lleva a una pantalla con dos botones, "Aprobar" y "Rechazar". Si hay varios admins
+  y uno ya decide, el enlace de los demás (o el panel) dice "ya se decidió", sin errores raros.
+
+Decisión técnica documentada: ese enlace del email NO decide nada por sí solo al abrirlo (eso sería
+peligroso: los propios gestores de correo a veces "visitan" los enlaces de un email de forma
+automática para comprobar que no son virus, y si abrir el enlace ya aprobara el alta, ese chequeo
+automático podría aprobar altas sin que ningún humano lo pidiera). Abrir el enlace solo enseña la
+pantalla de confirmación; aprobar o rechazar de verdad exige pulsar uno de los dos botones.
+
+**En cristiano:** cuando entras en Gmail, Outlook o cualquier correo desde una aplicación que no es
+la web/app oficial (como hace Autofactu para enviar avisos), Google/Microsoft no te dejan usar tu
+contraseña normal por seguridad -- piden una "contraseña de aplicación", una clave larga y aparte,
+solo válida para eso, que puedes revocar sin cambiar tu contraseña de verdad si alguna vez hiciera
+falta. Y lo de "el enlace no decide nada al abrirlo, solo al pulsar el botón": es la misma lógica
+por la que, para borrar algo importante en cualquier aplicación bien hecha, primero te preguntan
+"¿seguro?" en vez de borrarlo en el momento en que haces clic la primera vez.
