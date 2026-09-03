@@ -261,7 +261,10 @@ class Settings(BaseSettings):
     # Verificación del email del registrante (PROMPT-AUTOFACTU-AUTH-COMPLETO, bloque 2): token de un
     # solo uso, mismo patrón que la activación. No bloquea la aprobación del admin (solo informa),
     # así que un TTL más corto que la activación (24h) es suficiente: si caduca, no bloquea el alta.
-    email_verification_ttl: int = 24 * 60 * 60
+    # Enlace de decisión (aprobar/rechazar) por email a cada tenant_admin (a petición de Julio,
+    # 2026-09-03, sustituye la verificación de email del registrante): generoso a propósito, un
+    # admin puede tardar días en revisar su bandeja.
+    registration_decision_ttl: int = 7 * 24 * 60 * 60
 
     # Recuperación de contraseña (bloque 1): token de un solo uso ligado a user+tenant, TTL corto
     # (más corto que la activación: el riesgo de un enlace de reset filtrado es mayor que el de

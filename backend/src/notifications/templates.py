@@ -47,19 +47,24 @@ def _button_html(url: str, label: str) -> str:
 
 
 def registration_pending_admin(
-    *, admin_email: str, registrant_email: str, panel_url: str
+    *, admin_email: str, registrant_email: str, panel_url: str, decision_url: str
 ) -> Message:
-    """Aviso al `tenant_admin`: hay un registro nuevo pendiente de su aprobación."""
+    """Aviso al `tenant_admin`: hay un registro nuevo pendiente de su aprobación, con un enlace
+    propio para decidir directamente (2026-09-03, a petición de Julio) o revisarlo en el panel."""
     text = (
         f"El usuario {registrant_email} se ha registrado y está pendiente de tu aprobación.\n\n"
-        f"Revísalo en {panel_url}"
+        f"Apruébalo o recházalo directamente aquí: {decision_url}\n\n"
+        f"O revísalo en el panel de tu asesoría: {panel_url}"
     )
     html = _html_wrapper(
         preheader=text,
         title="Nuevo registro pendiente de aprobación",
         body_html=(
             f"<p>El usuario <strong>{registrant_email}</strong> se ha registrado y está "
-            "pendiente de tu aprobación.</p>" + _button_html(panel_url, "Revisar en el panel")
+            "pendiente de tu aprobación.</p>"
+            + _button_html(decision_url, "Aprobar o rechazar")
+            + f'<p style="font-size:13px;color:{_TEXT_MUTED};">También puedes revisarlo en el '
+            f'<a href="{panel_url}">panel de tu asesoría</a>.</p>'
         ),
     )
     return Message(
@@ -68,36 +73,6 @@ def registration_pending_admin(
         body=text,
         html_body=html,
         kind="registration_pending",
-    )
-
-
-def email_verification(*, email: str, url: str, ttl_seconds: int) -> Message:
-    """Pide al registrante confirmar que el email es suyo. NO es una aprobación."""
-    hours = ttl_seconds // 3600
-    text = (
-        "Gracias por solicitar acceso a Autofactu. Confirma que este email es tuyo abriendo "
-        f"este enlace (caduca en {hours} horas): {url}\n\n"
-        "Confirmar tu email no aprueba tu solicitud: eso lo decide el administrador de tu "
-        "asesoría, que ya ha sido avisado."
-    )
-    html = _html_wrapper(
-        preheader="Confirma tu email para completar tu solicitud de acceso a Autofactu.",
-        title="Confirma tu email",
-        body_html=(
-            "<p>Gracias por solicitar acceso a Autofactu.</p>"
-            + _button_html(url, "Confirmar mi email")
-            + f'<p style="font-size:13px;color:{_TEXT_MUTED};">Este enlace caduca en {hours} '
-            "horas.</p>"
-            "<p>Confirmar tu email no aprueba tu solicitud: eso lo decide el administrador de tu "
-            "asesoría, que ya ha sido avisado.</p>"
-        ),
-    )
-    return Message(
-        to=email,
-        subject="Confirma tu email para Autofactu",
-        body=text,
-        html_body=html,
-        kind="email_verification",
     )
 
 

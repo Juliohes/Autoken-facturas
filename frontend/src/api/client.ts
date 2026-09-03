@@ -20,9 +20,11 @@ const AUTH_EXCLUDED_PATHS = new Set([
   '/api/v1/auth/password/forgot',
   '/api/v1/auth/password/reset',
   '/api/v1/register',
-  '/api/v1/auth/register/verify-email',
   '/api/v1/auth/activate',
   '/api/v1/auth/activate/confirm',
+  // Decisión de un alta por email (2026-09-03): mismo motivo, un token inválido/caducado del
+  // enlace del email no tiene nada que ver con la sesión del navegador.
+  '/api/v1/auth/registrations/decision',
 ])
 
 type MultipartPath = '/api/v1/uploads' | '/api/v1/uploads/batch'

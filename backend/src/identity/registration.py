@@ -26,7 +26,7 @@ from companies import repository as companies_repo
 from companies.service import InvalidTaxId, is_cif_unique_violation, validated_cif
 from companies.service import cif_blind_index as company_cif_blind_index
 from companies.service import tenant_encryption_key as company_encryption_key
-from identity import email_verification, ratelimit, registration_repo
+from identity import ratelimit, registration_decision, registration_repo
 from identity.passwords import hash_password, validate_password_policy
 from notifications import Message, Notifier
 from notifications import templates as email_templates
@@ -106,14 +106,15 @@ async def register(
     """Da de alta un registro pendiente: usuario + empresa (1-A) + membership, todo o nada.
 
     Limita por IP (429), exige el consentimiento legal (422) y valida contraseña (422) y CIF (422)
-    antes de tocar nada. La contraseña se
-    **hashea siempre** antes de ramificar por la existencia del email, para no filtrar por latencia
-    si el email ya existe (mismo criterio que `verify_password` en el login). Si el email ya existe
-    no crea un segundo usuario ni avisa: la respuesta la genera el router de forma **genérica e
-    idéntica** (anti-enumeración). Deja traza `user.register` (actor = el propio usuario nuevo),
-    avisa al `tenant_admin` tras el commit, y (bloque 2) siembra un token de verificación de email y
-    avisa TAMBIÉN al propio registrante -- no como aprobación (sigue pendiente del admin), solo para
-    confirmar que el email es suyo.
+    antes de tocar nada. La contraseña se **hashea siempre** antes de ramificar por la existencia
+    del email, para no filtrar por latencia si el email ya existe (mismo criterio que
+    `verify_password` en el login). Si el email ya existe no crea un segundo usuario ni avisa: la
+    respuesta la genera el router de forma **genérica e idéntica** (anti-enumeración). Deja traza
+    `user.register` (actor = el propio usuario nuevo) y avisa a cada `tenant_admin` tras el commit,
+    con su propio enlace de un solo uso para aprobar o rechazar directamente desde el email
+    (`identity.registration_decision`) -- al registrante no se le avisa de nada (a petición de
+    Julio, 2026-09-03: la puerta de entrada de verdad es la decisión del admin, no que el
+    registrante confirme su email).
     """
     if await ratelimit.register_attempt_exceeds_ip(
         redis,
@@ -147,22 +148,13 @@ async def register(
         return  # carrera de email: otra alta ganó el UNIQUE; respuesta genérica, sin crear
 
     messages = await _admin_messages(
-        session, new_email=email, settings=settings, tenant_slug=tenant_slug
-    )
-    verification_token = await email_verification.issue_verification_token(
-        redis,
+        session,
+        redis=redis,
+        new_email=email,
         user_id=user_id,
         tenant_id=tenant_id,
-        ttl_seconds=settings.email_verification_ttl,
-    )
-    messages.append(
-        email_templates.email_verification(
-            email=email,
-            url=email_verification.verification_url(
-                settings, slug=tenant_slug, token=verification_token
-            ),
-            ttl_seconds=settings.email_verification_ttl,
-        )
+        tenant_slug=tenant_slug,
+        settings=settings,
     )
     _dispatch_after_commit(session, notifier, messages)
 
@@ -266,23 +258,42 @@ def _admin_panel_url(settings: Settings, *, slug: str) -> str:
 
 
 async def _admin_messages(
-    session: AsyncSession, *, new_email: str, settings: Settings, tenant_slug: str
+    session: AsyncSession,
+    *,
+    redis: aioredis.Redis,
+    new_email: str,
+    user_id: UUID,
+    tenant_id: UUID,
+    tenant_slug: str,
+    settings: Settings,
 ) -> list[Message]:
-    """Construye el aviso a cada `tenant_admin` activo del registro pendiente (C12).
-
-    En S1.4 original, el usuario final no recibía ningún aviso; el bloque 2
-    (PROMPT-AUTOFACTU-AUTH-COMPLETO) añade el aviso de verificación de email al registrante
-    (`notifications.templates.email_verification`), que sigue sin ser una notificación de
-    aprobación: eso sigue siendo solo cosa del admin. Los destinatarios se leen ahora (dentro del
-    contexto RLS de la transacción); el envío se difiere al post-commit.
+    """Construye el aviso a cada `tenant_admin` activo del registro pendiente (C12), con su propio
+    enlace de decisión de un solo uso (`registration_decision`, 2026-09-03): cada admin puede
+    aprobar o rechazar directamente desde ese enlace, sin iniciar sesión, o desde el panel de
+    siempre -- lo que decida antes. Los destinatarios se leen ahora (dentro del contexto RLS de la
+    transacción); el envío se difiere al post-commit.
     """
     panel_url = _admin_panel_url(settings, slug=tenant_slug)
-    return [
-        email_templates.registration_pending_admin(
-            admin_email=admin_email, registrant_email=new_email, panel_url=panel_url
+    messages = []
+    for admin in await registration_repo.tenant_admins(session):
+        token = await registration_decision.issue_decision_token(
+            redis,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            admin_id=admin.id,
+            ttl_seconds=settings.registration_decision_ttl,
         )
-        for admin_email in await registration_repo.tenant_admin_emails(session)
-    ]
+        messages.append(
+            email_templates.registration_pending_admin(
+                admin_email=admin.email,
+                registrant_email=new_email,
+                panel_url=panel_url,
+                decision_url=registration_decision.decision_url(
+                    settings, slug=tenant_slug, token=token
+                ),
+            )
+        )
+    return messages
 
 
 def _dispatch_after_commit(

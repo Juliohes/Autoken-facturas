@@ -314,22 +314,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/auth/register/verify-email": {
+    "/api/v1/auth/registrations/decision": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Registration Decision Info
+         * @description Lo que muestra la pantalla de decisión por email antes de elegir. Nunca muta nada (F5): un
+         *     escáner de enlaces de email que precargue esta URL no aprueba ni rechaza nada.
+         */
+        get: operations["registration_decision_info_api_v1_auth_registrations_decision_get"];
         put?: never;
         /**
-         * Verify Registration Email
-         * @description Confirma el email del registrante. NO aprueba el registro (eso sigue siendo del admin).
-         *
-         *     Token inválido/caducado/consumido, o de otro tenant (F2) -> 401 (no distingue el motivo).
+         * Registration Decide
+         * @description Aprueba o rechaza un registro desde el enlace de un solo uso del email (2026-09-03, a
+         *     petición de Julio): sin token de sesión, sin panel, la única llamada que de verdad decide.
          */
-        post: operations["verify_registration_email_api_v1_auth_register_verify_email_post"];
+        post: operations["registration_decide_api_v1_auth_registrations_decision_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1781,6 +1785,44 @@ export interface components {
             custom_domain?: string | null;
         };
         /**
+         * DecideRequest
+         * @description Cuerpo de `POST /auth/registrations/decision`: la única llamada que de verdad aprueba o
+         *     rechaza (F5, ver `identity.registration_decision`).
+         */
+        DecideRequest: {
+            /** Token */
+            token: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+        };
+        /**
+         * DecideResponse
+         * @description Respuesta de la decisión por email.
+         */
+        DecideResponse: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "approved" | "rejected" | "already_decided";
+        };
+        /**
+         * DecisionInfoOut
+         * @description Lo que ve la pantalla de decisión por email antes de que el admin elija (`GET
+         *     /auth/registrations/decision`): nunca muta nada, solo informa.
+         */
+        DecisionInfoOut: {
+            /** Email */
+            email: string;
+            /** Company */
+            company: string | null;
+            /** Already Decided */
+            already_decided: boolean;
+        };
+        /**
          * DeleteTenantIn
          * @description Cuerpo de `DELETE /platform/tenants/{tenant_id}` (S4.7): segundo factor de confirmación
          *     verificado en servidor, spec §3 decisión 4.
@@ -2465,8 +2507,6 @@ export interface components {
             company: string | null;
             /** Joins Existing Company */
             joins_existing_company: boolean;
-            /** Email Verified */
-            email_verified: boolean;
         };
         /**
          * ResetPasswordRequest
@@ -2759,22 +2799,6 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
-        };
-        /**
-         * VerifyEmailRequest
-         * @description Cuerpo de `POST /auth/register/verify-email`.
-         */
-        VerifyEmailRequest: {
-            /** Token */
-            token: string;
-        };
-        /**
-         * VerifyEmailResponse
-         * @description Respuesta de la verificación de email del registrante.
-         */
-        VerifyEmailResponse: {
-            /** Status */
-            status: string;
         };
     };
     responses: never;
@@ -3147,7 +3171,38 @@ export interface operations {
             };
         };
     };
-    verify_registration_email_api_v1_auth_register_verify_email_post: {
+    registration_decision_info_api_v1_auth_registrations_decision_get: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionInfoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registration_decide_api_v1_auth_registrations_decision_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3156,7 +3211,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["VerifyEmailRequest"];
+                "application/json": components["schemas"]["DecideRequest"];
             };
         };
         responses: {
@@ -3166,7 +3221,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VerifyEmailResponse"];
+                    "application/json": components["schemas"]["DecideResponse"];
                 };
             };
             /** @description Validation Error */

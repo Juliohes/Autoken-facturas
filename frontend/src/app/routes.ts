@@ -16,10 +16,12 @@ export const ROUTES = {
   // Públicas, sin token (Bloque 4 de PROMPT-AUTOFACTU-AUTH-COMPLETO): no llevan `roles` en
   // `ROUTE_DEFS` (no son protegidas ni aparecen en el menú), se montan directas en `AppRoutes.tsx`.
   register: '/registro',
-  registerConfirm: '/registro/confirmar',
   forgotPassword: '/recuperar',
   resetPassword: '/restablecer',
   activate: '/activar',
+  // Decisión de un alta por email (2026-09-03, sustituye la verificación de email del
+  // registrante): cada admin recibe su propio enlace de un solo uso a esta pantalla.
+  registrationDecision: '/decidir-alta',
   terms: '/terminos',
   privacy: '/privacidad',
   platform: '/plataforma',

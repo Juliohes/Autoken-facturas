@@ -41,7 +41,6 @@ function makeRegistration(over: Partial<PendingRegistration> = {}): PendingRegis
     email: 'nuevo@ilex.es',
     company: 'Empresa Nueva',
     joins_existing_company: false,
-    email_verified: false,
     ...over,
   }
 }
@@ -333,22 +332,6 @@ describe('CompaniesPanel (S3.4)', () => {
     expect(within(row).getByText('a@ilex.es')).toBeInTheDocument()
     expect(within(row).getByText('Empresa X')).toBeInTheDocument()
     expect(within(row).getByText(/se une a empresa existente/)).toBeInTheDocument()
-  })
-
-  it('Bloque 2 (PROMPT-AUTOFACTU-AUTH-COMPLETO): muestra si el registrante verificó su email, sin bloquear la aprobación', async () => {
-    mockRoutes({
-      companies: [],
-      registrations: [
-        makeRegistration({ id: 'u1', email: 'verificado@ilex.es', email_verified: true }),
-        makeRegistration({ id: 'u2', email: 'sinverificar@ilex.es', email_verified: false }),
-      ],
-    })
-    renderPanel()
-
-    const rows = await screen.findAllByTestId('registration-row')
-    expect(within(rows[0]).getByText(/email verificado/)).toBeInTheDocument()
-    expect(within(rows[1]).getByText(/email sin verificar/)).toBeInTheDocument()
-    within(rows[1]).getByRole('button', { name: 'Aprobar' })
   })
 
   it('C7: aprobar un registro llama al endpoint de aprobación', async () => {

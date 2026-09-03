@@ -57,6 +57,7 @@ def test_registration_pending_admin_incluye_el_email_del_registrante() -> None:
         admin_email="admin@ilex.es",
         registrant_email="nuevo@correo.es",
         panel_url="https://ilex.autoken.es/empresas",
+        decision_url="https://ilex.autoken.es/decidir-alta?token=abc123",
     )
     assert msg.to == "admin@ilex.es"
     assert msg.kind == "registration_pending"
@@ -64,25 +65,19 @@ def test_registration_pending_admin_incluye_el_email_del_registrante() -> None:
     assert msg.html_body and "nuevo@correo.es" in msg.html_body
 
 
-def test_registration_pending_admin_incluye_el_enlace_al_panel() -> None:
-    """Hallazgo real (Julio, 2026-09-03): el aviso decía "entra en el panel" sin ningún enlace."""
+def test_registration_pending_admin_incluye_el_enlace_al_panel_y_a_la_decision() -> None:
+    """Hallazgo real (Julio, 2026-09-03): el aviso decía "entra en el panel" sin ningún enlace, y
+    Julio pidió además poder decidir directamente desde el propio email."""
     msg = templates.registration_pending_admin(
         admin_email="admin@ilex.es",
         registrant_email="nuevo@correo.es",
         panel_url="https://ilex.autoken.es/empresas",
+        decision_url="https://ilex.autoken.es/decidir-alta?token=abc123",
     )
     assert "https://ilex.autoken.es/empresas" in msg.body
     assert msg.html_body and "https://ilex.autoken.es/empresas" in msg.html_body
-
-
-def test_email_verification_incluye_el_enlace_en_texto_y_html() -> None:
-    url = "https://ilex.autoken.es/registro/confirmar?token=abc123"
-    msg = templates.email_verification(email="nuevo@correo.es", url=url, ttl_seconds=86400)
-    assert msg.to == "nuevo@correo.es"
-    assert msg.kind == "email_verification"
-    assert url in msg.body
-    assert msg.html_body and url in msg.html_body
-    assert "24 horas" in msg.body
+    assert "https://ilex.autoken.es/decidir-alta?token=abc123" in msg.body
+    assert msg.html_body and "https://ilex.autoken.es/decidir-alta?token=abc123" in msg.html_body
 
 
 def test_password_reset_incluye_el_enlace_y_los_minutos_de_caducidad() -> None:

@@ -49,9 +49,10 @@ _PUBLIC_ROUTES = {
     # no el vector 403 de este fichero (no hay identidad Bearer que cruzar).
     ("POST", f"{API}/auth/password/forgot"),
     ("POST", f"{API}/auth/password/reset"),
-    # Verificación del email del registrante (bloque 2): mismo criterio -- su cruce de tenant lo
-    # cubre test_registration.py::test_verify_email_de_otro_tenant_da_401 (F2).
-    ("POST", f"{API}/auth/register/verify-email"),
+    # Decisión de un alta por email (2026-09-03): mismo criterio -- su cruce de tenant lo cubre
+    # test_registration.py::test_decision_de_otro_tenant_da_401 (F2).
+    ("GET", f"{API}/auth/registrations/decision"),
+    ("POST", f"{API}/auth/registrations/decision"),
 }
 
 # Endpoints de negocio cubiertos por el vector 403 (token de A en subdominio de B).

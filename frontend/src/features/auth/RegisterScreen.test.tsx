@@ -66,7 +66,7 @@ describe('RegisterScreen (Bloque 4)', () => {
         },
       }),
     )
-    expect(await screen.findByText(/Hemos enviado un correo/)).toBeInTheDocument()
+    expect(await screen.findByText(/revisará tu solicitud/)).toBeInTheDocument()
   })
 
   it('sin aceptar las condiciones, el navegador bloquea el envío (checkbox required)', async () => {

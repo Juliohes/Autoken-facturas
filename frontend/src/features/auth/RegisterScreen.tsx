@@ -62,8 +62,7 @@ export function RegisterScreen({ theme }: { theme: AppliedTheme }) {
         <div className="tn-login-card tn-auth-form-card w-full max-w-sm space-y-4 rounded-xl p-8">
           <h1 className="text-xl font-semibold">Solicitud enviada</h1>
           <Banner tone="ok">
-            Hemos enviado un correo a <strong>{email}</strong> para que confirmes tu email. Un
-            administrador de tu asesoría revisará el alta antes de darte acceso.
+            Un administrador de tu asesoría revisará tu solicitud antes de darte acceso.
           </Banner>
           <Link to="/login" className="tn-auth-link text-sm">
             Volver a iniciar sesión

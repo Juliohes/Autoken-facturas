@@ -29,15 +29,32 @@ class PendingRegistration:
     `joins_existing_company` señala que el CIF del registro coincidía con una empresa **ya activa**
     de la asesoría (el usuario se une a ella, regla 1-A), no un alta de empresa nueva: la pantalla
     de aprobación puede marcar "se une a una empresa ya existente" (defensa ante secuestro por CIF).
-    `email_verified` (bloque 2, PROMPT-AUTOFACTU-AUTH-COMPLETO): informa, no bloquea -- un admin
-    puede aprobar igual un registro con el email todavía sin confirmar.
     """
 
     id: UUID
     email: str
     company: str | None
     joins_existing_company: bool
-    email_verified: bool
+
+
+@dataclass(frozen=True)
+class TenantAdmin:
+    """Un `tenant_admin` activo al que avisar del registro (id, para atribuir la decisión en la
+    auditoría si decide por email; email, para el propio aviso)."""
+
+    id: UUID
+    email: str
+
+
+@dataclass(frozen=True)
+class RegistrationSummary:
+    """Lo mínimo que necesita mostrar la pantalla de decisión por email antes de decidir
+    (`identity.registration_decision`): quién es, para qué empresa, y si sigue pendiente."""
+
+    id: UUID
+    email: str
+    company: str | None
+    status: str
 
 
 @dataclass(frozen=True)
@@ -97,15 +114,17 @@ async def insert_membership(session: AsyncSession, *, user_id: UUID, company_id:
     )
 
 
-async def tenant_admin_emails(session: AsyncSession) -> list[str]:
-    """Emails de los `tenant_admin` activos de la asesoría (a quienes se avisa del registro)."""
+async def tenant_admins(session: AsyncSession) -> list[TenantAdmin]:
+    """`tenant_admin` activos de la asesoría (a quienes se avisa del registro, cada uno con su
+    propio enlace de decisión por email -- se necesita el id, no solo el email, para atribuir en
+    `audit_log` quién decidió si lo hace por ese camino en vez del panel)."""
     rows = (
         await session.execute(
-            text("SELECT email FROM users WHERE role = :role AND status = :active"),
+            text("SELECT id, email FROM users WHERE role = :role AND status = :active"),
             {"role": Role.TENANT_ADMIN.value, "active": UserStatus.ACTIVE.value},
         )
     ).all()
-    return [r.email for r in rows]
+    return [TenantAdmin(id=r.id, email=r.email) for r in rows]
 
 
 async def list_pending(session: AsyncSession, *, encryption_key: str) -> list[PendingRegistration]:
@@ -119,7 +138,7 @@ async def list_pending(session: AsyncSession, *, encryption_key: str) -> list[Pe
     rows = (
         await session.execute(
             text(
-                "SELECT u.id, u.email, u.email_verified_at, "
+                "SELECT u.id, u.email, "
                 " pgp_sym_decrypt(c.name, :key)::text AS company, c.status AS company_status "
                 "FROM users u "
                 "LEFT JOIN memberships m ON m.user_id = u.id "
@@ -136,19 +155,33 @@ async def list_pending(session: AsyncSession, *, encryption_key: str) -> list[Pe
             email=r.email,
             company=r.company,
             joins_existing_company=r.company_status == CompanyStatus.ACTIVE.value,
-            email_verified=r.email_verified_at is not None,
         )
         for r in rows
     ]
 
 
-async def mark_email_verified(session: AsyncSession, user_id: UUID) -> None:
-    """Marca el email del registrante como verificado (bloque 2). No-op si el usuario no existe en
-    el contexto (RLS): un token de otro tenant ya se descarta antes de llegar aquí (F2)."""
-    await session.execute(
-        text("UPDATE users SET email_verified_at = now() WHERE id = :id"),
-        {"id": str(user_id)},
-    )
+async def get_registration_summary(
+    session: AsyncSession, user_id: UUID, *, encryption_key: str
+) -> RegistrationSummary | None:
+    """Para la pantalla de decisión por email: email + empresa + estado actual (`identity.
+    registration_decision`). `None` si el usuario no existe en el contexto (RLS ya descarta otro
+    tenant; F2 lo comprueba antes de llegar aquí)."""
+    row = (
+        await session.execute(
+            text(
+                "SELECT u.id, u.email, u.status, "
+                " pgp_sym_decrypt(c.name, :key)::text AS company "
+                "FROM users u "
+                "LEFT JOIN memberships m ON m.user_id = u.id "
+                "LEFT JOIN companies c ON c.id = m.company_id "
+                "WHERE u.id = :id"
+            ),
+            {"id": str(user_id), "key": encryption_key},
+        )
+    ).first()
+    if row is None:
+        return None
+    return RegistrationSummary(id=row.id, email=row.email, company=row.company, status=row.status)
 
 
 async def get_user(session: AsyncSession, user_id: UUID) -> RegisteredUser | None:

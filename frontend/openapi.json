@@ -435,23 +435,64 @@
         }
       }
     },
-    "/api/v1/auth/register/verify-email": {
+    "/api/v1/auth/registrations/decision": {
+      "get": {
+        "tags": [
+          "registration"
+        ],
+        "summary": "Registration Decision Info",
+        "description": "Lo que muestra la pantalla de decisi\u00f3n por email antes de elegir. Nunca muta nada (F5): un\nesc\u00e1ner de enlaces de email que precargue esta URL no aprueba ni rechaza nada.",
+        "operationId": "registration_decision_info_api_v1_auth_registrations_decision_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionInfoOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "registration"
         ],
-        "summary": "Verify Registration Email",
-        "description": "Confirma el email del registrante. NO aprueba el registro (eso sigue siendo del admin).\n\nToken inv\u00e1lido/caducado/consumido, o de otro tenant (F2) -> 401 (no distingue el motivo).",
-        "operationId": "verify_registration_email_api_v1_auth_register_verify_email_post",
+        "summary": "Registration Decide",
+        "description": "Aprueba o rechaza un registro desde el enlace de un solo uso del email (2026-09-03, a\npetici\u00f3n de Julio): sin token de sesi\u00f3n, sin panel, la \u00fanica llamada que de verdad decide.",
+        "operationId": "registration_decide_api_v1_auth_registrations_decision_post",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/VerifyEmailRequest"
+                "$ref": "#/components/schemas/DecideRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -459,7 +500,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VerifyEmailResponse"
+                  "$ref": "#/components/schemas/DecideResponse"
                 }
               }
             }
@@ -4232,6 +4273,79 @@
         "title": "CustomDomainIn",
         "description": "Cuerpo de `PATCH /platform/tenants/{tenant_id}/custom-domain` (S4.6). `None` lo quita."
       },
+      "DecideRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "decision"
+        ],
+        "title": "DecideRequest",
+        "description": "Cuerpo de `POST /auth/registrations/decision`: la \u00fanica llamada que de verdad aprueba o\nrechaza (F5, ver `identity.registration_decision`)."
+      },
+      "DecideResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected",
+              "already_decided"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "DecideResponse",
+        "description": "Respuesta de la decisi\u00f3n por email."
+      },
+      "DecisionInfoOut": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "already_decided": {
+            "type": "boolean",
+            "title": "Already Decided"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "company",
+          "already_decided"
+        ],
+        "title": "DecisionInfoOut",
+        "description": "Lo que ve la pantalla de decisi\u00f3n por email antes de que el admin elija (`GET\n/auth/registrations/decision`): nunca muta nada, solo informa."
+      },
       "DeleteTenantIn": {
         "properties": {
           "confirm_slug": {
@@ -6027,10 +6141,6 @@
           "joins_existing_company": {
             "type": "boolean",
             "title": "Joins Existing Company"
-          },
-          "email_verified": {
-            "type": "boolean",
-            "title": "Email Verified"
           }
         },
         "type": "object",
@@ -6038,8 +6148,7 @@
           "id",
           "email",
           "company",
-          "joins_existing_company",
-          "email_verified"
+          "joins_existing_company"
         ],
         "title": "RegistrationOut",
         "description": "Un registro pendiente en el listado del admin (email + empresa + se\u00f1al de uni\u00f3n a existente).\n\n`joins_existing_company` avisa a la pantalla de aprobaci\u00f3n de que el CIF casaba con una empresa\nya activa (el usuario se une a ella, no crea empresa nueva): defensa ante secuestro por CIF."
@@ -6877,34 +6986,6 @@
           "type"
         ],
         "title": "ValidationError"
-      },
-      "VerifyEmailRequest": {
-        "properties": {
-          "token": {
-            "type": "string",
-            "title": "Token"
-          }
-        },
-        "type": "object",
-        "required": [
-          "token"
-        ],
-        "title": "VerifyEmailRequest",
-        "description": "Cuerpo de `POST /auth/register/verify-email`."
-      },
-      "VerifyEmailResponse": {
-        "properties": {
-          "status": {
-            "type": "string",
-            "title": "Status"
-          }
-        },
-        "type": "object",
-        "required": [
-          "status"
-        ],
-        "title": "VerifyEmailResponse",
-        "description": "Respuesta de la verificaci\u00f3n de email del registrante."
       }
     }
   }
