@@ -2,7 +2,9 @@
 // `POST confirm` (spec §2, C8; ampliado spec S6.1: número de factura + coma decimal).
 // Lógica pura, separada del componente y testeable.
 import { fromAmountInputValue, toAmountInputValue } from '../../shared/format'
+import type { Direction } from '../capture/types'
 import { formatIvaPercentage } from './percentage'
+import type { components } from '../../api/schema'
 import type { ConfirmBody, ReviewFields, ReviewResponse, ReviewTaxLine } from './types'
 
 /** Un tramo de IVA editable en el formulario (strings de los inputs). */
@@ -102,4 +104,28 @@ export function formStateToConfirmBody(
 /** Atajo: estado editable inicial a partir de la respuesta completa de review. */
 export function initialFormState(review: ReviewResponse): ConfirmFormState {
   return reviewToFormState(review.fields)
+}
+
+/** Proyecta el mismo formulario al snapshot de borrador (sin responsabilidad ni confirmación). */
+export function formStateToDraftBody(
+  form: ConfirmFormState,
+  options: { direction: Direction | null; revision: number },
+): components['schemas']['ReviewDraftIn'] {
+  return {
+    revision: options.revision,
+    direction: options.direction,
+    issue_date: toBody(form.issue_date),
+    invoice_number: toBody(form.invoice_number),
+    counterparty_tax_id: toBody(form.counterparty_tax_id),
+    counterparty_name: toBody(form.counterparty_name),
+    net_amount: fromAmountInputValue(form.net_amount),
+    tax_amount: fromAmountInputValue(form.tax_amount),
+    total_amount: fromAmountInputValue(form.total_amount),
+    irpf_amount: fromAmountInputValue(form.irpf_amount),
+    tax_lines: form.tax_lines.map((line) => ({
+      iva_pct: toBody(line.iva_pct),
+      base: fromAmountInputValue(line.base),
+      cuota: fromAmountInputValue(line.cuota),
+    })),
+  }
 }

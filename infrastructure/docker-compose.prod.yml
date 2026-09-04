@@ -8,7 +8,13 @@
 # si se despliega otro entorno (p. ej. producción real, D.1) sin tocar este fichero.
 
 services:
+  worker:
+    environment:
+      DEPLOYMENT_PROFILE: proxy
+
   api:
+    environment:
+      DEPLOYMENT_PROFILE: proxy
     networks:
       - default
       - proxy

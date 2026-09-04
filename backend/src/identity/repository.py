@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from companies.service import tenant_encryption_key as company_encryption_key
 from shared.config import get_settings
-from shared.db import platform_session, tenant_session
+from shared.db import platform_session, tenant_session, tenant_statement_session
 from shared.db import session as db_session
 from tenancy.resolution import ResolvedTenant
 
@@ -217,6 +217,22 @@ async def resolve_user_company(tenant_id: UUID, user_id: str) -> CompanyRef:
     return CompanyRef(id=row.id, name=row.name)
 
 
+async def resolve_user_company_id(tenant_id: UUID, user_id: str) -> UUID:
+    """Resuelve solo el id de empresa para dependencias que no necesitan el nombre descifrado."""
+    async with tenant_statement_session() as sess:
+        rows = (
+            await sess.execute(
+                text(
+                    "SELECT id FROM public.resolve_user_company_id_for_app(:tid, :uid)"
+                ),
+                {"tid": str(tenant_id), "uid": user_id},
+            )
+        ).all()
+    if len(rows) != 1:
+        raise MisconfiguredUserCompany
+    return UUID(str(rows[0].id))
+
+
 async def find_platform_admin_for_reissue(email: str) -> tuple[str, bool] | None:
     """(user_id, ya_activada) de un `platform_admin` por email, o `None` si no existe.
 
@@ -247,6 +263,26 @@ async def set_activation_password(user_id: str, password_hash: str) -> IdentityR
         row = (
             await sess.execute(
                 text("SELECT id, email, role FROM activation_set_password(:uid, :hash)"),
+                {"uid": user_id, "hash": password_hash},
+            )
+        ).first()
+        await sess.commit()
+    if row is None:
+        return None
+    return IdentityRow(id=str(row.id), email=row.email, role=row.role)
+
+
+async def set_reset_password(user_id: str, password_hash: str) -> IdentityRow | None:
+    """Fija la contraseña SOLO si la cuenta es RESTABLECIBLE (activa y ya tenía contraseña).
+
+    Guard `status = 'active' AND password_hash IS NOT NULL` (migración 0057), inverso exacto del de
+    `set_activation_password`: no toca `totp_secret` (a diferencia del reset por operador, 0024) —
+    la propia persona conserva su 2FA ya enrolado, no hace falta re-enrolarlo.
+    """
+    async with db_session() as sess:
+        row = (
+            await sess.execute(
+                text("SELECT id, email, role FROM password_reset_set_password(:uid, :hash)"),
                 {"uid": user_id, "hash": password_hash},
             )
         ).first()

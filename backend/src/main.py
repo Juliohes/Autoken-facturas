@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from companies.router import router as companies_router
+from identity.password_reset_router import router as password_reset_router
 from identity.registration_router import router as registration_router
 from identity.router import router as auth_router
 from invoice_intake.router import duplicate_upload_handler
@@ -22,8 +23,11 @@ from platform_admin.benchmark_batch_router import router as platform_benchmark_b
 from platform_admin.benchmark_ranking_router import router as platform_benchmark_ranking_router
 from platform_admin.health import router as health_router
 from platform_admin.lab_router import router as platform_lab_router
+from platform_admin.lab_settings_router import router as platform_lab_settings_router
+from platform_admin.ocr_policy_router import router as ocr_policy_router
 from platform_admin.ranking_router import router as platform_ranking_router
 from platform_admin.settings_router import router as platform_settings_router
+from platform_admin.supervision_router import router as platform_supervision_router
 from platform_admin.tenants_router import router as platform_tenants_router
 from reporting.router import router as reporting_router
 from shared.config import Settings, get_settings
@@ -92,6 +96,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics_router, prefix=settings.api_prefix)
     app.include_router(tenancy_router, prefix=settings.api_prefix)
     app.include_router(auth_router, prefix=settings.api_prefix)
+    app.include_router(password_reset_router, prefix=settings.api_prefix)
     app.include_router(registration_router, prefix=settings.api_prefix)
     app.include_router(companies_router, prefix=settings.api_prefix)
     app.include_router(intake_router, prefix=settings.api_prefix)
@@ -100,8 +105,11 @@ def create_app() -> FastAPI:
     app.include_router(reporting_router, prefix=settings.api_prefix)
     app.include_router(platform_tenants_router, prefix=settings.api_prefix)
     app.include_router(platform_settings_router, prefix=settings.api_prefix)
+    app.include_router(ocr_policy_router, prefix=settings.api_prefix)
+    app.include_router(platform_supervision_router, prefix=settings.api_prefix)
     app.include_router(platform_ranking_router, prefix=settings.api_prefix)
     app.include_router(platform_lab_router, prefix=settings.api_prefix)
+    app.include_router(platform_lab_settings_router, prefix=settings.api_prefix)
     app.include_router(platform_benchmark_batch_router, prefix=settings.api_prefix)
     app.include_router(platform_benchmark_ranking_router, prefix=settings.api_prefix)
 

@@ -4,21 +4,18 @@
 import type { CurrentTenant } from './types'
 
 export const DEFAULT_APP_NAME = 'Autoken Facturas'
-// Logo real de Autoken (variante clara, pensada para fondo oscuro — la misma que ya usa la web
-// corporativa `autoken.es` en su cabecera). Sirve de tenant estático (`frontend/public/`, mismo
-// origen), no una URL de terceros: no aplica el motivo de `referrerPolicy` de un logo de tenant.
-export const DEFAULT_LOGO_URL = '/autoken-logo.png'
-// Solo el icono (cerebro/circuito), sin el lockup "AUTOKEN / Automatización e IA": al tamaño de un
-// favicon de pestaña el texto queda ilegible y sobra (Julio, 2026-07-29). El logo con texto de
-// arriba sigue siendo el que se ve DENTRO de la app (login, cabecera del menú); este solo es el
-// fallback de `faviconUrl` cuando el tenant no tiene uno propio.
-export const DEFAULT_FAVICON_URL = '/autoken-favicon.png'
+// Logo estático de Autofactu (`frontend/public/`, mismo origen). Se usa como fallback cuando un
+// tenant no tiene branding propio, tanto en el login como en la cabecera de la app.
+export const DEFAULT_LOGO_URL = '/autofactu-logo.png'
+// El favicon usa exclusivamente el símbolo recortado sobre fondo azul: el texto no es legible en
+// tamaños pequeños y el fondo sólido evita que el navegador lo muestre como una marca transparente.
+export const DEFAULT_FAVICON_URL = '/autofactu-favicon-rounded.svg'
 // Naranja real de la marca Autoken (logo + web corporativa) — mismo valor que `emerald-600` en
 // `tailwind.config.js`, que es lo que de verdad pintan los botones principales de cada pantalla.
-export const DEFAULT_COLOR_PRIMARY = '#F26522'
+export const DEFAULT_COLOR_PRIMARY = '#FA6703'
 // Navy real de la marca Autoken (fondo del logo) — mismo valor que `slate-900`, mismo valor que
 // `theme_color`/`background_color` del manifest.
-export const DEFAULT_COLOR_SECONDARY = '#0B1322'
+export const DEFAULT_COLOR_SECONDARY = '#021231'
 
 export interface AppliedTheme {
   appName: string
@@ -30,9 +27,8 @@ export interface AppliedTheme {
 
 /** Branding del tenant (o su ausencia) -> tema a aplicar. Cada campo cae a su propio default.
  *
- * `faviconUrl` reutiliza `DEFAULT_LOGO_URL` (mismo fichero estático): revierte la decisión S4.3 de
- * no tener favicon por defecto (Julio, 2026-07-28) para que la pestaña del navegador muestre el
- * logo real de Autoken en vez del icono genérico, incluso sin branding propio configurado. */
+ * `faviconUrl` usa el símbolo cuadrado de Autofactu con fondo, separado del lockup transparente para
+ * que la pestaña del navegador muestre un icono nítido incluso sin branding propio configurado. */
 export function resolveTheme(tenant: CurrentTenant | undefined): AppliedTheme {
   return {
     appName: tenant?.app_name ?? DEFAULT_APP_NAME,
@@ -45,11 +41,31 @@ export function resolveTheme(tenant: CurrentTenant | undefined): AppliedTheme {
 
 const FAVICON_LINK_ID = 'tenant-favicon'
 
-/** Aplica el tema al DOM: título de la pestaña, variables CSS en `:root` y favicon (S4.3). */
+/** Convierte un color HEX (`#rrggbb` o `#rgb`) al triplete `r g b` que esperan los tokens
+ * semánticos de `index.css` (formato `R G B` para las utilidades `<alpha-value>` de Tailwind).
+ * Devuelve `null` ante un valor mal formado: el acento cae entonces al fallback de marca. */
+export function hexToRgbTriplet(hex: string): string | null {
+  const clean = hex.trim().replace(/^#/, '')
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return null
+  const r = parseInt(full.slice(0, 2), 16)
+  const g = parseInt(full.slice(2, 4), 16)
+  const b = parseInt(full.slice(4, 6), 16)
+  return `${r} ${g} ${b}`
+}
+
+/** Aplica el tema al DOM: título de la pestaña, variables CSS en `:root` y favicon (S4.3).
+ * Además inyecta el acento del tenant como triplete RGB en `--tn-accent-rgb` para que las
+ * superficies semánticas (botones, badges, nav activo) hereden el color de la asesoría con
+ * opacidades, sin romper los hex `--color-primary`/`--color-secondary` que ya consume el resto. */
 export function applyTenantTheme(theme: AppliedTheme): void {
   document.title = theme.appName
   document.documentElement.style.setProperty('--color-primary', theme.colorPrimary)
   document.documentElement.style.setProperty('--color-secondary', theme.colorSecondary)
+  const accentTriplet = hexToRgbTriplet(theme.colorPrimary)
+  if (accentTriplet !== null) {
+    document.documentElement.style.setProperty('--tn-accent-rgb', accentTriplet)
+  }
   applyFavicon(theme.faviconUrl)
 }
 

@@ -1,9 +1,14 @@
 // Pantalla de login (S4.9, C1-C3). Solo conoce la sesión (`useSession`), nunca el router: la
 // decisión de a dónde navegar tras un login correcto vive en `app/AppRoutes.tsx` (`LoginRoute`),
-// que re-renderiza en cuanto el contexto de sesión pasa a `authenticated`.
+// que re-renderiza en cuanto el contexto de sesión pasa a `authenticated`. Los dos enlaces al pie
+// (recuperar contraseña, solicitar acceso, Bloque 4 de PROMPT-AUTOFACTU-AUTH-COMPLETO) usan rutas
+// literales, no `app/routes.ts` (esta pantalla no depende de `app/`, ver `routes.ts` §11).
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 
+import { PasswordField } from '../../ui'
 import type { AppliedTheme } from '../tenancy/theme'
+import { AuthShell } from './AuthShell'
 import { useSession } from './SessionProvider'
 
 export function LoginScreen({ theme }: { theme: AppliedTheme }) {
@@ -29,60 +34,48 @@ export function LoginScreen({ theme }: { theme: AppliedTheme }) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-900 text-slate-100">
+    <AuthShell theme={theme}>
       <form
         onSubmit={(e) => void handleSubmit(e)}
-        className="w-full max-w-sm space-y-4 rounded-xl border border-slate-700 bg-slate-800 p-8"
+        aria-label="Inicio de sesión"
+        className="tn-login-card tn-auth-form-card w-full max-w-sm space-y-4 rounded-xl p-8"
       >
-        {theme.logoUrl && (
-          // `referrerPolicy="no-referrer"`: el logo lo aloja el propio tenant (URL de terceros
-          // potencialmente), evita filtrar el Referer (con el subdominio del tenant) a ese host.
-          <img
-            src={theme.logoUrl}
-            alt={theme.appName}
-            referrerPolicy="no-referrer"
-            className="mx-auto mb-2 max-h-16"
-          />
-        )}
         <h1 className="text-xl font-semibold">Iniciar sesión</h1>
 
         {error && (
-          <p role="alert" className="text-sm text-red-400">
+          <p role="alert" className="text-sm text-fg" style={{ color: 'var(--tn-error)' }}>
             {error}
           </p>
         )}
 
-        <label className="flex flex-col text-sm text-slate-300">
+        <label className="tn-login-label flex flex-col text-sm">
           Email
           <input
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="rounded border border-slate-600 bg-slate-900 px-2 py-1"
+            className="tn-login-input rounded px-2 py-1"
           />
         </label>
 
-        <label className="flex flex-col text-sm text-slate-300">
-          Contraseña
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="rounded border border-slate-600 bg-slate-900 px-2 py-1"
-          />
-        </label>
+        <PasswordField
+          label="Contraseña"
+          id="login-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
 
         {totpRequired && (
-          <label className="flex flex-col text-sm text-slate-300">
+          <label className="tn-login-label flex flex-col text-sm">
             Código de verificación
             <input
               type="text"
               required
               value={totpCode}
               onChange={(e) => setTotpCode(e.target.value)}
-              className="rounded border border-slate-600 bg-slate-900 px-2 py-1"
+              className="tn-login-input rounded px-2 py-1"
             />
           </label>
         )}
@@ -90,11 +83,20 @@ export function LoginScreen({ theme }: { theme: AppliedTheme }) {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-md bg-emerald-600 px-4 py-2 font-medium text-white disabled:opacity-40"
+          className="tn-btn tn-btn-primary tn-btn-lg w-full"
         >
           {submitting ? 'Entrando…' : 'Entrar'}
         </button>
+
+        <div className="flex flex-col items-center gap-1 text-sm">
+          <Link to="/registro" className="tn-auth-link">
+            Regístrate
+          </Link>
+          <Link to="/recuperar" className="tn-auth-link">
+            ¿No recuerdas tu contraseña?
+          </Link>
+        </div>
       </form>
-    </main>
+    </AuthShell>
   )
 }

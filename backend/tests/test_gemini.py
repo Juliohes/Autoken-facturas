@@ -142,7 +142,7 @@ def test_tipo_no_soportado_da_error(tmp_path: Path) -> None:  # C6
         engine._mime_for(ruta)
 
 
-def test_registro_construye_flash_y_pro(tmp_path: Path) -> None:  # C7
+def test_r030_registro_construye_candidatos_con_ids_estables(tmp_path: Path) -> None:  # C7
     sa = tmp_path / "sa.json"
     sa.write_text("{}")
     settings = Settings(
@@ -153,8 +153,17 @@ def test_registro_construye_flash_y_pro(tmp_path: Path) -> None:  # C7
     engines = build_gemini_engines(settings)
 
     names = {e.name for e in engines}
-    assert names == {"gemini-3-flash", "gemini-3-pro"}
+    assert names == {"gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"}
     assert all(isinstance(e, GeminiEngine) for e in engines)
+
+
+def test_r030_produccion_apunta_a_flash_estable() -> None:
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.gemini_flash_model == "gemini-3.5-flash"
+    assert settings.gemini_35_flash_model == "gemini-3.5-flash"
+    assert settings.gemini_36_flash_model == "gemini-3.6-flash"
+    assert settings.gemini_35_flash_lite_model == "gemini-3.5-flash-lite"
 
 
 def test_registro_sin_credenciales_lanza_error_tipado() -> None:  # C7

@@ -50,11 +50,18 @@ _UPSERT = text(
     f"INSERT INTO ocr_benchmark_results "
     f"(tenant_id, company_id, uploaded_file_id, variant, engine, model, "
     f" counterparty_tax_id, counterparty_name, reading, field_results, tax_lines_matched, "
-    f" aciertos, comparables, error, duration_ms) "
+    f" aciertos, comparables, error, duration_ms, benchmark_contract_version, schema_version, "
+    f" normalization_version, ground_truth_hash, document_sha256, variant_sha256, pages, "
+    f" field_exact_accuracy, critical_field_accuracy, all_critical_exact, arithmetic_valid, "
+    f" hallucination_flags, manual_corrections_per_invoice, api_cost_usd) "
     f"VALUES ({_TENANT_FROM_CONTEXT}, :company_id, :uploaded_file_id, :variant, :engine, :model, "
     f" pgp_sym_encrypt(:counterparty_tax_id, :key), pgp_sym_encrypt(:counterparty_name, :key), "
     f" CAST(:reading AS jsonb), CAST(:field_results AS jsonb), :tax_lines_matched, "
-    f" :aciertos, :comparables, :error, :duration_ms) "
+    f" :aciertos, :comparables, :error, :duration_ms, :benchmark_contract_version, "
+    f" :schema_version, "
+    f" :normalization_version, :ground_truth_hash, :document_sha256, :variant_sha256, :pages, "
+    f" :field_exact_accuracy, :critical_field_accuracy, :all_critical_exact, :arithmetic_valid, "
+    f" CAST(:hallucination_flags AS jsonb), :manual_corrections_per_invoice, :api_cost_usd) "
     f"ON CONFLICT (uploaded_file_id, variant, engine) DO UPDATE SET "
     f" model = EXCLUDED.model, "
     f" counterparty_tax_id = EXCLUDED.counterparty_tax_id, "
@@ -66,6 +73,20 @@ _UPSERT = text(
     f" comparables = EXCLUDED.comparables, "
     f" error = EXCLUDED.error, "
     f" duration_ms = EXCLUDED.duration_ms, "
+    f" benchmark_contract_version = EXCLUDED.benchmark_contract_version, "
+    f" schema_version = EXCLUDED.schema_version, "
+    f" normalization_version = EXCLUDED.normalization_version, "
+    f" ground_truth_hash = EXCLUDED.ground_truth_hash, "
+    f" document_sha256 = EXCLUDED.document_sha256, "
+    f" variant_sha256 = EXCLUDED.variant_sha256, "
+    f" pages = EXCLUDED.pages, "
+    f" field_exact_accuracy = EXCLUDED.field_exact_accuracy, "
+    f" critical_field_accuracy = EXCLUDED.critical_field_accuracy, "
+    f" all_critical_exact = EXCLUDED.all_critical_exact, "
+    f" arithmetic_valid = EXCLUDED.arithmetic_valid, "
+    f" hallucination_flags = EXCLUDED.hallucination_flags, "
+    f" manual_corrections_per_invoice = EXCLUDED.manual_corrections_per_invoice, "
+    f" api_cost_usd = EXCLUDED.api_cost_usd, "
     f" updated_at = now()"
 )
 
@@ -87,6 +108,20 @@ async def upsert_benchmark_result(
     comparables: int,
     error: str | None,
     duration_ms: int | None,
+    benchmark_contract_version: str,
+    schema_version: str,
+    normalization_version: str,
+    ground_truth_hash: str,
+    document_sha256: str,
+    variant_sha256: str | None,
+    pages: int,
+    field_exact_accuracy: float | None,
+    critical_field_accuracy: float | None,
+    all_critical_exact: bool | None,
+    arithmetic_valid: bool | None,
+    hallucination_flags: list[str],
+    manual_corrections_per_invoice: int | None,
+    api_cost_usd: str | None,
     encryption_key: str,
 ) -> None:
     """Inserta o reemplaza el resultado de esta combinación (variante, motor) para este fichero
@@ -110,6 +145,20 @@ async def upsert_benchmark_result(
             "comparables": comparables,
             "error": error,
             "duration_ms": duration_ms,
+            "benchmark_contract_version": benchmark_contract_version,
+            "schema_version": schema_version,
+            "normalization_version": normalization_version,
+            "ground_truth_hash": ground_truth_hash,
+            "document_sha256": document_sha256,
+            "variant_sha256": variant_sha256,
+            "pages": pages,
+            "field_exact_accuracy": field_exact_accuracy,
+            "critical_field_accuracy": critical_field_accuracy,
+            "all_critical_exact": all_critical_exact,
+            "arithmetic_valid": arithmetic_valid,
+            "hallucination_flags": json.dumps(hallucination_flags),
+            "manual_corrections_per_invoice": manual_corrections_per_invoice,
+            "api_cost_usd": api_cost_usd,
             "key": encryption_key,
         },
     )

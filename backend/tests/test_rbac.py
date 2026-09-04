@@ -269,6 +269,13 @@ _PUBLIC_ROUTES = frozenset(
         # Registro autoservicio (S1.4): público en el subdominio a propósito (no hay token; el
         # contexto se abre desde el host). Se acota por RLS del subdominio + rate-limit por IP.
         ("POST", "/api/v1/register"),
+        # Recuperación de contraseña y decisión de un alta por email (PROMPT-AUTOFACTU-AUTH-
+        # COMPLETO bloque 1; decisión por email, 2026-09-03): públicas por el mismo motivo -- sin
+        # token, el portero es el rate-limit o el token de un solo uso, no `require_roles`.
+        ("POST", "/api/v1/auth/password/forgot"),
+        ("POST", "/api/v1/auth/password/reset"),
+        ("GET", "/api/v1/auth/registrations/decision"),
+        ("POST", "/api/v1/auth/registrations/decision"),
     }
 )
 # Rutas abiertas a propósito a cualquier usuario autenticado (exigen identidad, pero no restringen

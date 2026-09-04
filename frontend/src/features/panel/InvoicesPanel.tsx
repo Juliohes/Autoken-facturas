@@ -202,7 +202,7 @@ export function InvoicesPanel({ initialFilters }: Props = {}) {
   const sortedRows = table.getRowModel().rows.map((r) => r.original)
 
   return (
-    <section className="mx-auto max-w-5xl space-y-4 p-6 text-slate-100">
+    <section className="tn-panel-page mx-auto max-w-5xl space-y-4 p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">Panel de facturas</h1>
         {/* Un único botón activa la edición de TODAS las celdas de TODAS las filas a la vez

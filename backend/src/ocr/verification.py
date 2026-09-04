@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
+from pydantic import BaseModel
+
 # El primitivo de validación fiscal/IBAN vive en `shared.tax_id`. Se reexporta aquí para no romper
 # los llamadores históricos de la capa OCR (`from ocr.verification import validate_tax_id, ...`).
 from shared.tax_id import (
@@ -42,6 +44,9 @@ __all__ = [
     "validate_iban",
     "check_tax_line",
     "check_invoice_totals",
+    "TaxLineCheck",
+    "InvoiceMathCheck",
+    "check_invoice_totals_detailed",
     "DEFAULT_MONEY_TOLERANCE",
 ]
 
@@ -66,6 +71,27 @@ class TaxLine:
     base: Decimal
     iva_pct: Decimal
     cuota: Decimal
+
+
+class TaxLineCheck(BaseModel):
+    """Diagnóstico de un tramo de IVA, además del veredicto global histórico."""
+
+    index: int
+    expected_quota: Decimal
+    actual_quota: Decimal
+    delta: Decimal
+    valid: bool
+
+
+class InvoiceMathCheck(BaseModel):
+    """Diagnóstico completo del cuadre de una factura."""
+
+    line_checks: list[TaxLineCheck]
+    expected_total: Decimal | None
+    actual_total: Decimal | None
+    total_delta: Decimal | None
+    valid: bool | None
+    reasons: list[str]
 
 
 def _is_finite(*values: Decimal) -> bool:
@@ -149,3 +175,69 @@ def check_invoice_totals(
         if not line_result.valid:
             return CheckResult(False, f"Tramo {index}: {line_result.reason}")
     return _check_global_sum(lines, total, irpf_cuota, tolerance)
+
+
+def check_invoice_totals_detailed(
+    lines: list[TaxLine],
+    total: Decimal | None,
+    *,
+    irpf_cuota: Decimal = Decimal(0),
+    tolerance: Decimal = DEFAULT_MONEY_TOLERANCE,
+) -> InvoiceMathCheck:
+    """Devuelve el detalle por tramo sin cambiar el `CheckResult` histórico."""
+    line_checks: list[TaxLineCheck] = []
+    reasons: list[str] = []
+    all_finite = _is_finite(irpf_cuota) and all(
+        _is_finite(line.base, line.iva_pct, line.cuota) for line in lines
+    )
+    for index, line in enumerate(lines, start=1):
+        if not _is_finite(line.base, line.iva_pct, line.cuota):
+            line_checks.append(
+                TaxLineCheck(
+                    index=index,
+                    expected_quota=Decimal(0),
+                    actual_quota=Decimal(0),
+                    delta=Decimal(0),
+                    valid=False,
+                )
+            )
+            reasons.append(f"tax_line_{index}_non_finite")
+            continue
+        expected = line.base * line.iva_pct / _PERCENT_BASE
+        delta = line.cuota - expected
+        line_valid = _within_tolerance(expected, line.cuota, tolerance)
+        line_checks.append(
+            TaxLineCheck(
+                index=index,
+                expected_quota=expected,
+                actual_quota=line.cuota,
+                delta=delta,
+                valid=line_valid,
+            )
+        )
+        if not line_valid:
+            reasons.append(f"tax_line_{index}_mismatch")
+
+    expected_total: Decimal | None = None
+    actual_total = total if total is not None and _is_finite(total) else None
+    total_delta: Decimal | None = None
+    if not all_finite:
+        reasons.append("non_finite_value")
+    elif total is not None:
+        expected_total = sum((line.base + line.cuota for line in lines), Decimal(0)) - irpf_cuota
+        total_delta = total - expected_total
+        if not _within_tolerance(expected_total, total, tolerance):
+            reasons.append("total_mismatch")
+
+    if total is None:
+        valid: bool | None = None
+    else:
+        valid = not reasons
+    return InvoiceMathCheck(
+        line_checks=line_checks,
+        expected_total=expected_total,
+        actual_total=actual_total,
+        total_delta=total_delta,
+        valid=valid,
+        reasons=reasons,
+    )

@@ -42,16 +42,75 @@ _UPLOADED_FILE_UNIQUE = "invoices_uploaded_file_unique"
 # El historial privado es una vista operativa de los últimos documentos aceptados, no un listado
 # contable de facturas confirmadas. La cota es parte del contrato S6.12.
 HISTORY_LIMIT = 20
+INBOX_LIMIT = 20
 
 
 @dataclass(frozen=True)
 class HistoryEntry:
-    """Una entrada sin PII del historial de documentos aceptados (S6.12)."""
+    """Una entrada sin PII del historial de documentos aceptados (S6.12).
+
+    ``invoice_number``/``invoice_date`` son datos del documento propio (no de contraparte): mismo
+    criterio que importes/fecha de subida, exponerlos es aceptable (pasos 8 y D, ajustes UI).
+    ``invoice_date`` es `invoices.issue_date`; ninguno de los dos se inventa cuando falta.
+    """
 
     id: UUID
     status: str
     created_at: datetime
     direction: str | None
+    invoice_number: str | None
+    invoice_date: date | None
+
+
+@dataclass(frozen=True)
+class HistoryPage:
+    entries: list[HistoryEntry]
+    has_more: bool
+
+
+@dataclass(frozen=True)
+class InboxEntry:
+    """Documento operativo de la bandeja personal, sin campos fiscales ni OCR (R-020)."""
+
+    id: UUID
+    status: str
+    processing_stage: str | None
+    created_at: datetime
+    direction: str | None
+    page_count: int
+    capture_session_id: UUID | None
+    capture_sequence: int | None
+
+
+@dataclass(frozen=True)
+class InboxSummary:
+    processing: int
+    ready: int
+    attention: int
+
+
+@dataclass(frozen=True)
+class InboxPage:
+    items: list[InboxEntry]
+    summary: InboxSummary
+    has_more: bool
+
+
+@dataclass(frozen=True)
+class SupervisionEntry:
+    id: UUID
+    user_email: str
+    company_name: str
+    status: str
+    created_at: datetime
+    direction: str | None
+    page_count: int
+
+
+@dataclass(frozen=True)
+class SupervisionPage:
+    items: list[SupervisionEntry]
+    has_more: bool
 
 
 @dataclass(frozen=True)
@@ -91,6 +150,16 @@ class InvoiceRecord:
     confirmed_by: UUID
     confirmed_at: datetime
     tax_lines: list[tuple[Decimal | None, Decimal | None, Decimal | None]]
+
+
+@dataclass(frozen=True)
+class DuplicateCandidate:
+    uploaded_file_id: UUID
+    invoice_id: UUID | None
+    invoice_number: str | None
+    own_tax_id: str | None
+    counterparty_tax_id: str | None
+    total_amount: Decimal | None
 
 
 def is_duplicate_invoice(exc: IntegrityError) -> bool:
@@ -249,6 +318,62 @@ async def invoice_exists_for_file(session: AsyncSession, uploaded_file_id: UUID)
         )
     ).first()
     return row is not None
+
+
+async def list_duplicate_candidates(
+    session: AsyncSession,
+    *,
+    company_id: UUID,
+    uploaded_file_id: UUID,
+    encryption_key: str,
+) -> list[DuplicateCandidate]:
+    """Lee candidatos confirmados y OCR visibles de la misma empresa, sin cruzar RLS."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT i.uploaded_file_id, i.id AS invoice_id, i.invoice_number, "
+                "pgp_sym_decrypt(c.cif, :key)::text AS own_tax_id, "
+                "pgp_sym_decrypt(i.counterparty_tax_id, :key)::text "
+                "AS counterparty_tax_id, i.total_amount "
+                "FROM invoices i JOIN companies c ON c.id = i.company_id "
+                "WHERE i.company_id = :company_id AND i.uploaded_file_id <> :file_id "
+                "UNION ALL "
+                "SELECT e.uploaded_file_id, NULL AS invoice_id, e.invoice_number, "
+                "pgp_sym_decrypt(c.cif, :key)::text AS own_tax_id, "
+                "pgp_sym_decrypt(e.counterparty_tax_id, :key)::text "
+                "AS counterparty_tax_id, e.total_amount "
+                "FROM ocr_extractions e "
+                "JOIN uploaded_files f ON f.id = e.uploaded_file_id "
+                "JOIN companies c ON c.id = f.company_id "
+                "WHERE f.company_id = :company_id AND e.uploaded_file_id <> :file_id "
+                "UNION ALL "
+                "SELECT d.uploaded_file_id, NULL AS invoice_id, d.invoice_number, "
+                "pgp_sym_decrypt(c.cif, :key)::text AS own_tax_id, "
+                "pgp_sym_decrypt(d.counterparty_tax_id, :key)::text AS counterparty_tax_id, "
+                "d.total_amount "
+                "FROM review_drafts d "
+                "JOIN uploaded_files f ON f.id = d.uploaded_file_id "
+                "JOIN companies c ON c.id = f.company_id "
+                "WHERE f.company_id = :company_id AND d.uploaded_file_id <> :file_id"
+            ),
+            {
+                "company_id": str(company_id),
+                "file_id": str(uploaded_file_id),
+                "key": encryption_key,
+            },
+        )
+    ).all()
+    return [
+        DuplicateCandidate(
+            uploaded_file_id=row.uploaded_file_id,
+            invoice_id=row.invoice_id,
+            invoice_number=row.invoice_number,
+            own_tax_id=row.own_tax_id,
+            counterparty_tax_id=row.counterparty_tax_id,
+            total_amount=row.total_amount,
+        )
+        for row in rows
+    ]
 
 
 async def insert_invoice(
@@ -459,6 +584,15 @@ async def list_corrections(session: AsyncSession, uploaded_file_id: UUID) -> lis
     ]
 
 
+async def count_corrections(session: AsyncSession, uploaded_file_id: UUID) -> int:
+    """Cuenta las correcciones humanas registradas para una factura confirmada."""
+    count = await session.scalar(
+        text("SELECT count(*) FROM ocr_corrections WHERE uploaded_file_id = :fid"),
+        {"fid": str(uploaded_file_id)},
+    )
+    return int(count or 0)
+
+
 # Campos sensibles cuyo old_value/new_value en `invoice_edits` se cifran (spec S5.2 C7): el resto
 # (importe, fecha, líneas de IVA...) sigue en claro, como antes de S5.2. `invoice_edits.old_value`/
 # `new_value` son columnas TEXT (no bytea, spec del esquema original): para las filas sensibles se
@@ -564,37 +698,235 @@ async def list_edits(
     ]
 
 
-async def list_history(
-    session: AsyncSession, *, uploaded_by: UUID | None = None
-) -> list[HistoryEntry]:
-    """Últimos documentos aceptados del contexto, la más reciente primero (S6.12).
+_HISTORY_PERIOD_FILTER = (
+    "AND (CAST(:period_start AS date) IS NULL OR i.issue_date >= CAST(:period_start AS date)) "
+    "AND (CAST(:period_end AS date) IS NULL OR i.issue_date <= CAST(:period_end AS date)) "
+)
 
-    La RLS de `uploaded_files` acota tenant y empresa. `uploaded_by` añade la frontera por usuario
-    para empleados; `None` conserva la vista de asesoría del administrador. Excluye solo las raíces
-    ligadas a factura de prueba y ordena también por id para un corte estable con igual timestamp.
+
+async def list_history(
+    session: AsyncSession,
+    *,
+    uploaded_by: UUID | None = None,
+    cursor_created_at: datetime | None = None,
+    cursor_id: UUID | None = None,
+    period_start: date | None = None,
+    period_end: date | None = None,
+    limit: int = HISTORY_LIMIT,
+) -> HistoryPage:
+    """Facturas confirmadas de los últimos cuatro meses, más recientes primero (R-056).
+
+    La RLS acota el tenant. El usuario conserva además su frontera de propietario y el cursor usa la
+    misma pareja fecha/id que inbox para no saltar ni duplicar filas. `period_start`/`period_end`
+    (bloque D, PROMPT-AUTOFACTU-AJUSTES-v3) filtran por `invoices.issue_date` (fecha de la propia
+    factura, no la de subida); `None` en ambos = sin filtro de periodo ("total").
     """
     rows = (
         await session.execute(
             text(
-                "SELECT f.id, f.status, f.created_at, f.direction FROM uploaded_files f "
-                "WHERE ((:uploaded_by)::uuid IS NULL OR f.uploaded_by = (:uploaded_by)::uuid) "
-                "AND NOT EXISTS (SELECT 1 FROM invoices i "
-                "                WHERE i.uploaded_file_id = f.id AND i.is_test = true) "
+                "SELECT f.id, f.status, f.created_at, f.direction, i.invoice_number, i.issue_date "
+                "FROM uploaded_files f "
+                "JOIN invoices i ON i.uploaded_file_id = f.id "
+                "WHERE i.status = 'confirmed' "
+                "AND f.created_at >= current_timestamp - interval '4 months' "
+                "AND i.is_test = false "
+                "AND ((:uploaded_by)::uuid IS NULL OR f.uploaded_by = (:uploaded_by)::uuid) "
+                + _HISTORY_PERIOD_FILTER
+                + "AND (CAST(:cursor_created_at AS timestamptz) IS NULL OR "
+                "     f.created_at < CAST(:cursor_created_at AS timestamptz) OR "
+                "     (f.created_at = CAST(:cursor_created_at AS timestamptz) "
+                "      AND f.id < CAST(:cursor_id AS uuid))) "
                 "ORDER BY f.created_at DESC, f.id DESC "
                 "LIMIT :limit"
             ),
             {
-                "limit": HISTORY_LIMIT,
+                "limit": limit + 1,
                 "uploaded_by": str(uploaded_by) if uploaded_by is not None else None,
+                "cursor_created_at": cursor_created_at,
+                "cursor_id": str(cursor_id) if cursor_id is not None else None,
+                "period_start": period_start,
+                "period_end": period_end,
             },
         )
     ).all()
-    return [
+    entries = [
         HistoryEntry(
             id=row.id,
             status=row.status,
             created_at=row.created_at,
             direction=row.direction,
+            invoice_number=row.invoice_number,
+            invoice_date=row.issue_date,
         )
         for row in rows
     ]
+    return HistoryPage(entries=entries[:limit], has_more=len(entries) > limit)
+
+
+async def count_history(
+    session: AsyncSession,
+    *,
+    uploaded_by: UUID | None = None,
+    period_start: date | None = None,
+    period_end: date | None = None,
+) -> int:
+    """Recuento total de facturas del historial que cumplen el mismo filtro que `list_history`,
+    ignorando cursor/limit (bloque D: número junto al desplegable de periodo)."""
+    count = await session.scalar(
+        text(
+            "SELECT count(*) "
+            "FROM uploaded_files f "
+            "JOIN invoices i ON i.uploaded_file_id = f.id "
+            "WHERE i.status = 'confirmed' "
+            "AND f.created_at >= current_timestamp - interval '4 months' "
+            "AND i.is_test = false "
+            "AND ((:uploaded_by)::uuid IS NULL OR f.uploaded_by = (:uploaded_by)::uuid) "
+            + _HISTORY_PERIOD_FILTER
+        ),
+        {
+            "uploaded_by": str(uploaded_by) if uploaded_by is not None else None,
+            "period_start": period_start,
+            "period_end": period_end,
+        },
+    )
+    return int(count or 0)
+
+
+async def list_inbox(
+    session: AsyncSession,
+    *,
+    uploaded_by: UUID,
+    limit: int,
+    cursor_created_at: datetime | None = None,
+    cursor_id: UUID | None = None,
+) -> InboxPage:
+    """Lista la bandeja SELF ONLY con cursor compuesto y resumen agregado (R-020).
+
+    `capture_unreadable` (S6.14: la imagen en sí es el problema, ni se ha llegado a leer) queda
+    fuera tanto del listado como del resumen `attention` (paso 9, ajustes UI): no es "pendiente de
+    comprobación", es una captura que hay que repetir. Su limpieza/expiración no necesita un job
+    nuevo: `jobs.retention.purge_expired_unconfirmed_documents` (R-028) ya purga cualquier
+    `uploaded_file` con `status <> 'confirmed'` (incluido este) a los 90 días.
+    """
+    rows = (
+        await session.execute(
+            text(
+                "SELECT f.id, f.status, f.processing_stage, f.created_at, f.direction, "
+                "       f.capture_session_id, f.capture_sequence, "
+                "       1 + (SELECT count(*) FROM uploaded_file_pages p "
+                "            WHERE p.root_uploaded_file_id = f.id) AS page_count "
+                "FROM uploaded_files f "
+                "WHERE f.uploaded_by = :uploaded_by "
+                "  AND f.status != 'capture_unreadable' "
+                "  AND NOT EXISTS (SELECT 1 FROM invoices i "
+                "                  WHERE i.uploaded_file_id = f.id) "
+                "  AND (CAST(:cursor_created_at AS timestamptz) IS NULL OR "
+                "       f.created_at < CAST(:cursor_created_at AS timestamptz) OR "
+                "       (f.created_at = CAST(:cursor_created_at AS timestamptz) "
+                "        AND f.id < CAST(:cursor_id AS uuid))) "
+                "ORDER BY f.created_at DESC, f.id DESC LIMIT :limit"
+            ),
+            {
+                "uploaded_by": str(uploaded_by),
+                "cursor_created_at": cursor_created_at,
+                "cursor_id": str(cursor_id) if cursor_id is not None else None,
+                "limit": limit + 1,
+            },
+        )
+    ).all()
+    summary_row = (
+        await session.execute(
+            text(
+                "SELECT count(*) FILTER (WHERE f.status IN "
+                "                    ('pending_ocr', 'processing')) AS processing, "
+                "       count(*) FILTER (WHERE f.status IN ('ocr_done', 'confirmed')) AS ready, "
+                "       count(*) FILTER (WHERE f.status IN "
+                "                    ('needs_review', 'ocr_failed')) "
+                "                    AS attention "
+                "FROM uploaded_files f "
+                "WHERE f.uploaded_by = :uploaded_by "
+                "  AND f.status != 'capture_unreadable' "
+                "  AND NOT EXISTS (SELECT 1 FROM invoices i "
+                "                  WHERE i.uploaded_file_id = f.id)"
+            ),
+            {"uploaded_by": str(uploaded_by)},
+        )
+    ).one()
+    return InboxPage(
+        items=[
+            InboxEntry(
+                id=row.id,
+                status=row.status,
+                processing_stage=row.processing_stage,
+                created_at=row.created_at,
+                direction=row.direction,
+                page_count=row.page_count,
+                capture_session_id=row.capture_session_id,
+                capture_sequence=row.capture_sequence,
+            )
+            for row in rows[:limit]
+        ],
+        summary=InboxSummary(
+            processing=summary_row.processing,
+            ready=summary_row.ready,
+            attention=summary_row.attention,
+        ),
+        has_more=len(rows) > limit,
+    )
+
+
+async def list_supervision(
+    session: AsyncSession,
+    *,
+    actor_user_id: UUID,
+    limit: int,
+    cursor_created_at: datetime | None = None,
+    cursor_id: UUID | None = None,
+    encryption_key: str,
+) -> SupervisionPage:
+    """Lista pendientes de otros usuarios del tenant para `tenant_admin` (R-026)."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT f.id, u.email AS user_email, "
+                "       pgp_sym_decrypt(c.name, :key)::text AS company_name, "
+                "       f.status, f.created_at, f.direction, "
+                "       1 + (SELECT count(*) FROM uploaded_file_pages p "
+                "            WHERE p.root_uploaded_file_id = f.id) AS page_count "
+                "FROM uploaded_files f "
+                "JOIN users u ON u.id = f.uploaded_by "
+                "JOIN companies c ON c.id = f.company_id "
+                "WHERE f.uploaded_by <> :actor_user_id "
+                "  AND f.status <> 'confirmed' "
+                "  AND NOT EXISTS (SELECT 1 FROM invoices i "
+                "                  WHERE i.uploaded_file_id = f.id AND i.is_test = true) "
+                "  AND (CAST(:cursor_created_at AS timestamptz) IS NULL OR "
+                "       f.created_at < CAST(:cursor_created_at AS timestamptz) OR "
+                "       (f.created_at = CAST(:cursor_created_at AS timestamptz) "
+                "        AND f.id < CAST(:cursor_id AS uuid))) "
+                "ORDER BY f.created_at DESC, f.id DESC LIMIT :limit"
+            ),
+            {
+                "actor_user_id": str(actor_user_id),
+                "key": encryption_key,
+                "cursor_created_at": cursor_created_at,
+                "cursor_id": str(cursor_id) if cursor_id is not None else None,
+                "limit": limit + 1,
+            },
+        )
+    ).all()
+    return SupervisionPage(
+        items=[
+            SupervisionEntry(
+                id=row.id,
+                user_email=row.user_email,
+                company_name=row.company_name,
+                status=row.status,
+                created_at=row.created_at,
+                direction=row.direction,
+                page_count=row.page_count,
+            )
+            for row in rows[:limit]
+        ],
+        has_more=len(rows) > limit,
+    )

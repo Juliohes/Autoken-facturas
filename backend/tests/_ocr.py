@@ -291,7 +291,9 @@ async def set_ocr_experiment_enabled(dsns: dict[str, str], enabled: bool) -> Non
     conn = await asyncpg.connect(dsns["admin"])
     try:
         await conn.execute(
-            "UPDATE platform_settings SET ocr_experiment_enabled = $1 WHERE id = true", enabled
+            "UPDATE platform_settings SET ocr_experiment_enabled = $1, "
+            "ocr_auto_benchmark_enabled = $1 WHERE id = true",
+            enabled,
         )
     finally:
         await conn.close()

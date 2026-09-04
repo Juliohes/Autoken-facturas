@@ -10,10 +10,45 @@ import {
   makeRoundedCornerDocumentImageData,
   makeUnevenLightingDocumentImageData,
 } from '../test/fixtures'
-import { detectDocumentCorners, warpToCorners, MIN_LONG_EDGE_PX } from './documentEdges'
+import { detectDocument, detectDocumentCorners, scoreCandidate, warpToCorners, MIN_LONG_EDGE_PX } from './documentEdges'
 import type { Corner } from '../types'
 
 describe('detectDocumentCorners (OpenCV.js real)', () => {
+  it('prefiere una factura centrada frente a una mesa rectangular que toca los bordes', () => {
+    const tableScore = scoreCandidate({
+      areaRatio: 0.92,
+      rectangularity: 1,
+      convexity: 1,
+      centerScore: 0.5,
+      edgeContinuity: 1,
+      marginScore: 0,
+      aspectPlausibility: 1,
+      method: 'approx',
+    })
+    const invoiceScore = scoreCandidate({
+      areaRatio: 0.55,
+      rectangularity: 0.96,
+      convexity: 0.98,
+      centerScore: 1,
+      edgeContinuity: 0.95,
+      marginScore: 1,
+      aspectPlausibility: 1,
+      method: 'approx',
+    })
+
+    expect(invoiceScore).toBeGreaterThan(tableScore)
+  })
+
+  it('devuelve confianza acotada y el método que produjo la detección', async () => {
+    const cv = await loadOpenCvForTests()
+    const detection = detectDocument(cv, makeDocumentImageData())
+
+    expect(detection.corners).toHaveLength(4)
+    expect(detection.method).toBe('approx')
+    expect(detection.confidence).toBeGreaterThanOrEqual(0)
+    expect(detection.confidence).toBeLessThanOrEqual(1)
+  })
+
   it('encuentra las 4 esquinas del documento en una imagen con bordes claros', async () => {
     const cv = await loadOpenCvForTests()
     const corners = detectDocumentCorners(cv, makeDocumentImageData())

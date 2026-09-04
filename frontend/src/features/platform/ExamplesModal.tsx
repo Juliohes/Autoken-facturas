@@ -4,6 +4,7 @@
 // contraparte de la respuesta (dato identificable de un cliente real, S5.2 §6); este componente no
 // necesita filtrar nada más, solo mostrar lo que llega.
 import { useOcrRankingExamples } from './useOcrRankingExamples'
+import { Modal } from '../../shared/Modal'
 
 interface Props {
   engine: string
@@ -23,24 +24,16 @@ export function ExamplesModal({ engine, onClose }: Props) {
   const examples = useOcrRankingExamples(engine)
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Ejemplos de ${engine}`}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onClick={onClose}
+    <Modal
+      title={`Ejemplos de ${engine}`}
+      onClose={onClose}
+      panelClassName="max-h-[90vh] max-w-2xl overflow-y-auto"
+      headerAction={
+        <button type="button" onClick={onClose} className="text-sm text-slate-400 underline">
+          Cerrar
+        </button>
+      }
     >
-      <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-600 bg-slate-800 p-4 text-slate-100"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Ejemplos de {engine}</h2>
-          <button type="button" onClick={onClose} className="text-sm text-slate-400 underline">
-            Cerrar
-          </button>
-        </div>
-
         {examples.isLoading && <p className="text-slate-400">Cargando…</p>}
         {examples.isError && (
           <p role="alert" className="text-red-400">
@@ -74,7 +67,6 @@ export function ExamplesModal({ engine, onClose }: Props) {
             ))}
           </ul>
         )}
-      </div>
-    </div>
+    </Modal>
   )
 }

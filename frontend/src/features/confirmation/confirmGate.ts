@@ -11,6 +11,8 @@ export interface ConfirmGateInput {
   submitting: boolean
   /** Un user solo puede continuar sin CIF propio si acepta expresamente esa excepción. */
   ownTaxIdExceptionAccepted?: boolean
+  /** Confirmación explícita de que la persona ha revisado los datos mostrados. */
+  reviewAcknowledged: boolean
 }
 
 /**
@@ -24,6 +26,7 @@ export function isConfirmEnabled(input: ConfirmGateInput): boolean {
   return (
     effectiveReasons.length === 0 &&
     input.responsibilityAccepted &&
+    input.reviewAcknowledged &&
     !input.submitting
   )
 }

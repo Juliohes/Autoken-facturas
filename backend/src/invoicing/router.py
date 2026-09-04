@@ -13,14 +13,16 @@ from decimal import Decimal
 from typing import Annotated, Literal, NoReturn, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from identity.authz import require_roles
 from identity.dependencies import AuthContext
 from identity.ratelimit import draft_counterparty_attempt_exceeds
-from invoicing import service
+from invoicing import draft_service, service
+from shared.config import get_settings
 from shared.redis import get_redis
+from shared.rollout import FeatureFlag, is_rollout_enabled
 from tenancy.constants import Role
 
 router = APIRouter(prefix="/uploads", tags=["invoicing"])
@@ -36,6 +38,10 @@ Reviewer = Annotated[AuthContext, Depends(require_roles(Role.USER, Role.TENANT_A
 # Mismo conjunto de roles que `Reviewer` (S2.6 no añade un rol nuevo), con su propio nombre: ver el
 # historial no "revisa" un fichero, así que el gate se nombra por lo que autoriza aquí.
 HistoryViewer = Reviewer
+
+# Supervisión de pendientes: solo `tenant_admin`, y la apertura usa un endpoint distinto del review
+# editable para no convertir un parámetro `readonly=true` en una falsa frontera de seguridad.
+Supervisor = Annotated[AuthContext, Depends(require_roles(Role.TENANT_ADMIN))]
 
 # Editar una factura ya confirmada es exclusivo de `tenant_admin` (spec S3.3, decisión de dominio
 # 1): a diferencia de `Reviewer`, el empleado no entra aquí.
@@ -87,11 +93,33 @@ class DraftCounterpartyVerdictOut(BaseModel):
     blocking_reasons: list[str]
 
 
+class ReviewDraftIn(BaseModel):
+    """Snapshot editable previo a confirmar una factura (R-022)."""
+
+    revision: int = Field(ge=0)
+    direction: Literal["recibida", "emitida"] | None = None
+    issue_date: date | None = None
+    invoice_number: str | None = None
+    counterparty_tax_id: str | None = None
+    counterparty_name: str | None = None
+    net_amount: Decimal | None = None
+    tax_amount: Decimal | None = None
+    total_amount: Decimal | None = None
+    irpf_amount: Decimal | None = None
+    tax_lines: list[TaxLineIn] = Field(default_factory=list)
+
+
+class ReviewDraftOut(BaseModel):
+    revision: int
+    updated_at: datetime
+
+
 # Traducción única de cada excepción de dominio a su código HTTP (spec §3).
 _ERROR_STATUS: list[tuple[type[Exception], int, str]] = [
     (service.CompanyForbidden, 403, "No perteneces a la empresa del fichero"),
     (service.FileNotVisible, 404, "Fichero no encontrado"),
     (service.AlreadyConfirmed, 409, "El fichero ya tiene una factura confirmada"),
+    (service.DuplicateInvoice, 409, "La factura parece estar duplicada"),
     # `PendingOcr`/`CaptureUnreadable` antes que `NotConfirmable`: son sus subclases, y
     # `_raise_http` usa el PRIMER match — si `NotConfirmable` fuera antes, nunca se alcanzarían.
     (service.PendingOcr, 409, "La factura todavía se está procesando con IA"),
@@ -122,6 +150,52 @@ def _raise_http(exc: service.InvoicingError) -> NoReturn:
     raise exc  # pragma: no cover - toda subclase de dominio está mapeada arriba
 
 
+@router.put("/{file_id}/draft", response_model=ReviewDraftOut)
+async def save_review_draft(
+    identity: Reviewer, file_id: UUID, body: ReviewDraftIn
+) -> ReviewDraftOut:
+    """Guarda un borrador con control optimista de revisión (R-022)."""
+    if not is_rollout_enabled(get_settings(), FeatureFlag.DRAFT_AUTOSAVE, identity.tenant_id):
+        raise HTTPException(status_code=404, detail="Recurso no encontrado")
+    try:
+        result = await draft_service.save(
+            identity,
+            file_id,
+            draft_service.DraftCommand(
+                revision=body.revision,
+                direction=body.direction,
+                issue_date=body.issue_date,
+                invoice_number=body.invoice_number,
+                counterparty_tax_id=body.counterparty_tax_id,
+                counterparty_name=body.counterparty_name,
+                net_amount=body.net_amount,
+                tax_amount=body.tax_amount,
+                total_amount=body.total_amount,
+                irpf_amount=body.irpf_amount,
+                tax_lines=[
+                    {
+                        "iva_pct": str(line.iva_pct) if line.iva_pct is not None else None,
+                        "base": str(line.base) if line.base is not None else None,
+                        "cuota": str(line.cuota) if line.cuota is not None else None,
+                    }
+                    for line in body.tax_lines
+                ],
+            ),
+        )
+    except draft_service.DraftFileForbidden as exc:
+        raise HTTPException(
+            status_code=403, detail="No perteneces a la empresa del fichero"
+        ) from exc
+    except draft_service.DraftFileNotVisible as exc:
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
+    except draft_service.DraftRevisionConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "draft_revision_conflict", "current_revision": exc.current_revision},
+        ) from exc
+    return ReviewDraftOut(revision=result.revision, updated_at=result.updated_at)
+
+
 @router.get("/{file_id}/review")
 async def review_upload(identity: Reviewer, file_id: UUID) -> dict[str, object]:
     """Datos de revisión de un fichero ya leído (S2.4). 200 con datos; 403/404/409 por acceso."""
@@ -137,6 +211,11 @@ async def review_upload(identity: Reviewer, file_id: UUID) -> dict[str, object]:
         "warnings": data.warnings,
         "blocking_reasons": data.blocking_reasons,
         "direction": data.direction,
+        "source": data.source,
+        "draft_revision": data.draft_revision,
+        "draft_updated_at": data.draft_updated_at,
+        "page_count": data.page_count,
+        "duplicate": data.duplicate,
     }
 
 
@@ -198,24 +277,136 @@ async def confirm_upload(identity: Reviewer, file_id: UUID, body: ConfirmIn) -> 
 
 
 class HistoryEntryOut(BaseModel):
-    """Una entrada privada de historial, sin PII de contraparte (S6.12)."""
+    """Una entrada privada de historial, sin PII de contraparte (S6.12).
+
+    ``invoice_number``/``invoice_date``: datos del documento propio (no de contraparte, S6.12),
+    solo presentes en facturas `confirmed`. `None` cuando falta el dato, nunca un valor inventado.
+    """
 
     id: UUID
     status: str
     created_at: datetime
     direction: Literal["recibida", "emitida"] | None
+    invoice_number: str | None
+    invoice_date: date | None
 
 
 class HistoryOut(BaseModel):
-    """Respuesta de `GET /invoices/history`: últimos envíos, más reciente primero."""
+    """Respuesta de `GET /invoices/history`: últimos envíos, más reciente primero.
+
+    ``count``: total de facturas que cumplen el filtro `period` (bloque D), no solo las de esta
+    página -- el número junto al desplegable de periodo en el frontend.
+    """
 
     entries: list[HistoryEntryOut]
+    next_cursor: str | None
+    count: int
+
+
+class InboxItemOut(BaseModel):
+    """Documento de la bandeja personal, sin PII fiscal (R-020)."""
+
+    id: UUID
+    status: str
+    processing_stage: str | None
+    created_at: datetime
+    direction: Literal["recibida", "emitida"] | None
+    page_count: int
+    capture_session_id: UUID | None
+    capture_sequence: int | None
+    draft_updated_at: datetime | None
+
+
+class InboxSummaryOut(BaseModel):
+    processing: int
+    ready: int
+    attention: int
+
+
+class InboxOut(BaseModel):
+    items: list[InboxItemOut]
+    summary: InboxSummaryOut
+    next_cursor: str | None
+
+
+class SupervisionItemOut(BaseModel):
+    """Metadata de un pendiente ajeno para `tenant_admin`, sin acciones de escritura (R-026)."""
+
+    id: UUID
+    user_email: str
+    company_name: str
+    status: str
+    created_at: datetime
+    direction: Literal["recibida", "emitida"] | None
+    page_count: int
+
+
+class SupervisionOut(BaseModel):
+    items: list[SupervisionItemOut]
+    next_cursor: str | None
+
+
+def _review_payload(data: service.ReviewData) -> dict[str, object]:
+    return {
+        "fields": data.fields,
+        "confidences": data.confidences,
+        "counterparty_verdict": data.counterparty_verdict,
+        "own": data.own,
+        "warnings": data.warnings,
+        "blocking_reasons": data.blocking_reasons,
+        "direction": data.direction,
+        "source": data.source,
+        "draft_revision": data.draft_revision,
+        "draft_updated_at": data.draft_updated_at,
+        "page_count": data.page_count,
+        "duplicate": data.duplicate,
+    }
+
+
+@invoices_router.get("/pending-supervision", response_model=SupervisionOut)
+async def pending_supervision(
+    identity: Supervisor,
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = service.INBOX_LIMIT,
+) -> SupervisionOut:
+    """Pendientes de otros usuarios del tenant, solo metadata y paginación estable (R-026)."""
+    try:
+        data = await service.supervision(identity, cursor=cursor, limit=limit)
+    except service.InvalidInboxCursor as exc:
+        raise HTTPException(status_code=422, detail="Cursor de supervisión no válido") from exc
+    return SupervisionOut(
+        items=[
+            SupervisionItemOut(
+                id=item.id,
+                user_email=item.user_email,
+                company_name=item.company_name,
+                status=item.status,
+                created_at=item.created_at,
+                direction=cast(Literal["recibida", "emitida"] | None, item.direction),
+                page_count=item.page_count,
+            )
+            for item in data.items
+        ],
+        next_cursor=data.next_cursor,
+    )
 
 
 @invoices_router.get("/history")
-async def invoice_history(identity: HistoryViewer) -> HistoryOut:
-    """Últimos documentos aceptados del contexto del usuario (S6.12). Solo lectura."""
-    entries = await service.history(identity)
+async def invoice_history(
+    identity: HistoryViewer,
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = service.INBOX_LIMIT,
+    period: Literal["total", "month", "quarter", "year"] = "total",
+) -> HistoryOut:
+    """Facturas confirmadas de los últimos cuatro meses, con cursor estable (R-056).
+
+    `period` (bloque D, PROMPT-AUTOFACTU-AJUSTES-v3) filtra server-side por `invoice_date`, con
+    trimestres naturales; "total" (por defecto) no filtra.
+    """
+    try:
+        data = await service.history(identity, cursor=cursor, limit=limit, period=period)
+    except service.InvalidInboxCursor as exc:
+        raise HTTPException(status_code=422, detail="Cursor de historial no válido") from exc
     return HistoryOut(
         entries=[
             HistoryEntryOut(
@@ -223,9 +414,60 @@ async def invoice_history(identity: HistoryViewer) -> HistoryOut:
                 status=entry.status,
                 created_at=entry.created_at,
                 direction=cast(Literal["recibida", "emitida"] | None, entry.direction),
+                invoice_number=entry.invoice_number,
+                invoice_date=entry.invoice_date,
             )
-            for entry in entries
-        ]
+            for entry in data.entries
+        ],
+        next_cursor=data.next_cursor,
+        count=data.count,
+    )
+
+
+@router.get("/{file_id}/review-readonly")
+async def review_upload_readonly(identity: Supervisor, file_id: UUID) -> dict[str, object]:
+    """Abre un pendiente ajeno para supervisión sin exponer acciones de escritura (R-026)."""
+    try:
+        data = await service.review(identity, file_id, readonly=True)
+    except service.InvoicingError as exc:
+        _raise_http(exc)
+    return _review_payload(data)
+
+
+@invoices_router.get("/inbox")
+async def invoice_inbox(
+    identity: HistoryViewer,
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = service.INBOX_LIMIT,
+) -> InboxOut:
+    """Bandeja SELF ONLY, también para `tenant_admin`, con resumen y cursor estable."""
+    if not is_rollout_enabled(get_settings(), FeatureFlag.REVIEW_INBOX, identity.tenant_id):
+        raise HTTPException(status_code=404, detail="Recurso no encontrado")
+    try:
+        data = await service.inbox(identity, cursor=cursor, limit=limit)
+    except service.InvalidInboxCursor as exc:
+        raise HTTPException(status_code=422, detail="Cursor de bandeja no válido") from exc
+    return InboxOut(
+        items=[
+            InboxItemOut(
+                id=item.id,
+                status=item.status,
+                processing_stage=item.processing_stage,
+                created_at=item.created_at,
+                direction=cast(Literal["recibida", "emitida"] | None, item.direction),
+                page_count=item.page_count,
+                capture_session_id=item.capture_session_id,
+                capture_sequence=item.capture_sequence,
+                draft_updated_at=item.draft_updated_at,
+            )
+            for item in data.items
+        ],
+        summary=InboxSummaryOut(
+            processing=data.summary.processing,
+            ready=data.summary.ready,
+            attention=data.summary.attention,
+        ),
+        next_cursor=data.next_cursor,
     )
 
 

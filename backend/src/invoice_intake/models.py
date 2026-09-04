@@ -41,6 +41,12 @@ class UploadedFile(Base):
             "direction IS NULL OR direction IN ('recibida', 'emitida')",
             name="uploaded_files_direction_check",
         ),
+        CheckConstraint(
+            "processing_stage IS NULL OR processing_stage IN "
+            "('queued', 'loading_document', 'primary_ocr', 'validating', 'fallback_ocr', "
+            "'consensus', 'persisting')",
+            name="uploaded_files_processing_stage_check",
+        ),
         UniqueConstraint(
             "company_id",
             "uploaded_by",
@@ -53,6 +59,19 @@ class UploadedFile(Base):
             "status",
             "ocr_claim_expires_at",
             "ocr_recovery_enqueued_at",
+        ),
+        Index(
+            "ix_uploaded_files_capture_session",
+            "tenant_id",
+            "uploaded_by",
+            "capture_session_id",
+            "capture_sequence",
+            postgresql_where="capture_session_id IS NOT NULL",
+        ),
+        CheckConstraint(
+            "((capture_session_id IS NULL AND capture_sequence IS NULL) OR "
+            "(capture_session_id IS NOT NULL AND capture_sequence BETWEEN 1 AND 50))",
+            name="uploaded_files_capture_session_check",
         ),
     )
 
@@ -74,7 +93,16 @@ class UploadedFile(Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending_ocr")
+    processing_stage: Mapped[str | None] = mapped_column(
+        Text, nullable=True, server_default="queued"
+    )
+    ocr_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ocr_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     direction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    capture_session_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), nullable=True
+    )
+    capture_sequence: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     ocr_claim_token: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     ocr_claim_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

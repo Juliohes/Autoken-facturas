@@ -9,17 +9,21 @@ autocontenido).
 el contexto del tenant desde el host (`public_tenant_context`) y se limita por IP (anti-spam). La
 gestión (`GET /registrations`, `approve`, `reject`) es solo `tenant_admin` (portero de S1.6),
 acotada al tenant por RLS.
+
+`GET/POST /auth/registrations/decision` son TAMBIÉN públicos (2026-09-03): la puerta no es un
+`require_roles`, es el propio token de un solo uso del email de aviso (`identity.
+registration_decision`), ligado a qué admin decide para que la auditoría siga siendo correcta.
 """
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from identity import registration
+from identity import registration, registration_decision
 from identity.authz import require_roles
 from identity.client_ip import client_ip
 from identity.dependencies import AuthContext
@@ -46,6 +50,7 @@ class RegisterRequest(BaseModel):
     company_name: str
     cif: str
     password: str
+    legal_consent: bool
 
 
 class RegisterResponse(BaseModel):
@@ -73,6 +78,29 @@ class ApprovalResponse(BaseModel):
     status: str
 
 
+class DecisionInfoOut(BaseModel):
+    """Lo que ve la pantalla de decisión por email antes de que el admin elija (`GET
+    /auth/registrations/decision`): nunca muta nada, solo informa."""
+
+    email: str
+    company: str | None
+    already_decided: bool
+
+
+class DecideRequest(BaseModel):
+    """Cuerpo de `POST /auth/registrations/decision`: la única llamada que de verdad aprueba o
+    rechaza (F5, ver `identity.registration_decision`)."""
+
+    token: str
+    decision: Literal["approve", "reject"]
+
+
+class DecideResponse(BaseModel):
+    """Respuesta de la decisión por email."""
+
+    status: Literal["approved", "rejected", "already_decided"]
+
+
 @router.post("/register", status_code=201)
 async def register(
     request: Request, body: RegisterRequest, context: PublicContext, notifier: NotifierDep
@@ -90,10 +118,12 @@ async def register(
             redis=get_redis(),
             ip=ip,
             tenant_id=context.tenant.id,
+            tenant_slug=context.tenant.slug,
             email=body.email,
             company_name=body.company_name,
             cif=body.cif,
             password=body.password,
+            legal_consent=body.legal_consent,
             settings=settings,
             notifier=notifier,
         )
@@ -103,6 +133,8 @@ async def register(
         raise HTTPException(status_code=503, detail="Service unavailable") from exc
     except registration.RegistrationRateLimited as exc:
         raise HTTPException(status_code=429, detail="Too many registrations") from exc
+    except registration.LegalConsentRequired as exc:
+        raise HTTPException(status_code=422, detail="legal consent is required") from exc
     except registration.WeakPassword as exc:
         raise HTTPException(status_code=422, detail="password does not meet policy") from exc
     except registration.InvalidCif as exc:
@@ -125,6 +157,51 @@ async def list_registrations(identity: TenantAdmin) -> list[RegistrationOut]:
         )
         for r in rows
     ]
+
+
+@router.get("/auth/registrations/decision")
+async def registration_decision_info(token: str, context: PublicContext) -> DecisionInfoOut:
+    """Lo que muestra la pantalla de decisión por email antes de elegir. Nunca muta nada (F5): un
+    escáner de enlaces de email que precargue esta URL no aprueba ni rechaza nada."""
+    settings = get_settings()
+    try:
+        summary = await registration_decision.peek(
+            get_redis(),
+            context.session,
+            token=token,
+            expected_tenant_id=context.tenant.id,
+            settings=settings,
+        )
+    except RedisError as exc:
+        raise HTTPException(status_code=503, detail="Service unavailable") from exc
+    except registration_decision.InvalidDecisionToken as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
+    return DecisionInfoOut(
+        email=summary.email, company=summary.company, already_decided=summary.already_decided
+    )
+
+
+@router.post("/auth/registrations/decision")
+async def registration_decide(body: DecideRequest, context: PublicContext) -> DecideResponse:
+    """Aprueba o rechaza un registro desde el enlace de un solo uso del email (2026-09-03, a
+    petición de Julio): sin token de sesión, sin panel, la única llamada que de verdad decide."""
+    settings = get_settings()
+    try:
+        summary = await registration_decision.decide(
+            get_redis(),
+            context.session,
+            token=body.token,
+            decision=body.decision,
+            expected_tenant_id=context.tenant.id,
+            settings=settings,
+        )
+    except RedisError as exc:
+        raise HTTPException(status_code=503, detail="Service unavailable") from exc
+    except registration_decision.InvalidDecisionToken as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
+    if summary.already_decided:
+        return DecideResponse(status="already_decided")
+    return DecideResponse(status="approved" if body.decision == "approve" else "rejected")
 
 
 @router.post("/registrations/{user_id}/approve")

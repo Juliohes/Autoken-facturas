@@ -21,9 +21,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # fuente que usa la RLS), para que auditar y aislar no puedan discrepar. `payload_hash` vincula el
 # snapshot de la acción (cuando el llamante lo aporta) sin guardar el payload crudo en el log.
 _INSERT_AUDIT = text(
-    "INSERT INTO audit_log (tenant_id, actor_id, action, entity, entity_id, payload_hash) "
+    "INSERT INTO audit_log (tenant_id, actor_id, action, entity, entity_id, payload_hash, "
+    "request_id, source_ip) "
     "VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, "
-    ":actor_id, :action, :entity, :entity_id, :payload_hash)"
+    ":actor_id, :action, :entity, :entity_id, :payload_hash, :request_id, :source_ip)"
 )
 
 
@@ -40,11 +41,13 @@ def _canonical_payload_hash(payload: dict[str, Any]) -> str:
 async def write_audit(
     session: AsyncSession,
     *,
-    actor_id: UUID,
+    actor_id: UUID | None,
     action: str,
     entity: str,
     entity_id: UUID,
     payload: dict[str, Any] | None = None,
+    request_id: str | None = None,
+    source_ip: str | None = None,
 ) -> None:
     """Inserta una entrada en `audit_log` en el contexto de tenant de la sesión (append-only).
 
@@ -57,10 +60,12 @@ async def write_audit(
     await session.execute(
         _INSERT_AUDIT,
         {
-            "actor_id": str(actor_id),
+            "actor_id": str(actor_id) if actor_id is not None else None,
             "action": action,
             "entity": entity,
             "entity_id": str(entity_id),
             "payload_hash": _canonical_payload_hash(payload) if payload is not None else None,
+            "request_id": request_id,
+            "source_ip": source_ip,
         },
     )

@@ -17,22 +17,23 @@ from tenancy.repository import TenantBranding
 # Si se cambia el color/nombre de marca por defecto en un sitio, revisar también el otro.
 DEFAULT_APP_NAME = "Autoken Facturas"
 DEFAULT_SHORT_NAME = "Facturas"
-DEFAULT_COLOR = "#0f172a"
+DEFAULT_COLOR = "#021232"
 
 # Recomendación del estándar de Web App Manifest: short_name legible en un icono de pantalla de
 # inicio.
 _SHORT_NAME_MAX_LENGTH = 12
 
 # Mismos 3 iconos que generaba `vite-plugin-pwa` (`frontend/vite.config.ts`, hasta esta tarea): se
-# mantienen como fallback cuando el tenant no tiene `logo_url` (spec S4.3 decisión 3). Rutas con `/`
+# mantienen como fallback cuando el tenant no tiene `logo_url` (spec S4.3 decisión 3), ahora con
+# reducción óptica del 5% y esquinas redondeadas. Rutas con `/`
 # inicial a propósito: un `src` de icono relativo se resuelve contra la URL del PROPIO manifest (no
 # contra la del documento HTML), y el manifest ya no vive en la raíz sino en
 # `/api/v1/manifest.webmanifest`; sin el `/` inicial resolverían a `/api/v1/icons/...` (404, los
 # iconos son estáticos del frontend, servidos en `/icons/...`).
 _DEFAULT_ICONS: list[dict[str, str]] = [
-    {"src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
-    {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
-    {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    {"src": "/icons/autofactu-icon-192-rounded.svg", "sizes": "192x192", "type": "image/svg+xml"},
+    {"src": "/icons/autofactu-icon-512-rounded.svg", "sizes": "512x512", "type": "image/svg+xml"},
+    {"src": "/icons/autofactu-icon-512-rounded.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable"},
 ]
 
 

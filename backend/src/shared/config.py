@@ -8,8 +8,9 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Self
+from uuid import UUID
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Valor por defecto del secreto JWT: SOLO para desarrollo/test. En producción se rechaza al arrancar
@@ -50,6 +51,14 @@ class AppEnv(StrEnum):
     DEVELOPMENT = "development"
     STAGING = "staging"
     PRODUCTION = "production"
+    LOAD_TEST = "load_test"
+
+
+class DeploymentProfile(StrEnum):
+    """Topología de red en la que se ejecuta la aplicación."""
+
+    STANDALONE = "standalone"
+    PROXY = "proxy"
 
 
 class LogLevel(StrEnum):
@@ -78,6 +87,9 @@ class Settings(BaseSettings):
     app_name: str = "Autoken Facturas v2"
     app_version: str = "0.1.0"
     app_env: AppEnv = AppEnv.DEVELOPMENT
+    # El perfil se inyecta desde Compose. En staging/producción el overlay debe declarar `proxy`; si
+    # se arranca solo el Compose base, API y worker fallan antes de aceptar tráfico.
+    deployment_profile: DeploymentProfile | None = None
     log_level: LogLevel = LogLevel.INFO
     api_prefix: str = "/api/v1"
 
@@ -90,6 +102,32 @@ class Settings(BaseSettings):
         siendo un error de validación (fail-loud), en vez de tragarse y caer a INFO (BP-5).
         """
         return value.lower() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def _require_proxy_profile_outside_local(self) -> Self:
+        """Evita desplegar staging/producción sin el overlay que conecta Traefik.
+
+        El valor implícito mantiene cómodos los tests y el uso directo de `Settings`; Compose fija
+        explícitamente `standalone` en la pila base y `proxy` en el overlay real. Así el fallo real
+        de arrancar solo el fichero base queda convertido en un error de startup visible, en vez de
+        en una web que devuelve `index.html` para las llamadas `/api/*`.
+        """
+        if self.deployment_profile is None:
+            default_profile = (
+                DeploymentProfile.PROXY
+                if self.app_env in {AppEnv.STAGING, AppEnv.PRODUCTION}
+                else DeploymentProfile.STANDALONE
+            )
+            object.__setattr__(self, "deployment_profile", default_profile)
+        if (
+            self.app_env in {AppEnv.STAGING, AppEnv.PRODUCTION}
+            and self.deployment_profile is not DeploymentProfile.PROXY
+        ):
+            raise ValueError(
+                "staging/production requieren DEPLOYMENT_PROFILE=proxy; "
+                "arranca el stack con docker-compose.yml + docker-compose.prod.yml"
+            )
+        return self
 
     @model_validator(mode="after")
     def _reject_insecure_jwt_secret_in_production(self) -> Self:
@@ -148,6 +186,18 @@ class Settings(BaseSettings):
     # app, el total de conexiones a Postgres es la suma de todas — ajustar aquí, no en el código.
     db_pool_size: int = 20
     db_max_overflow: int = 20
+    db_pool_pre_ping: bool = True
+
+    # R-051: flags cerrados y reversibles. Los defaults conservan el comportamiento actual; un
+    # despliegue puede apagar una fase o limitarla a tenants piloto sin cambiar migraciones.
+    scanner_v2_enabled: bool = True
+    continuous_capture_enabled: bool = True
+    review_inbox_enabled: bool = True
+    draft_autosave_enabled: bool = True
+    processing_stages_enabled: bool = True
+    ocr_policy_v2_enabled: bool = True
+    supplier_learning_enabled: bool = True
+    rollout_tenant_allowlist: list[UUID] = Field(default_factory=list)
 
     # Dominio base para extraer el subdominio->tenant (S1.2). `localhost` se acepta además en
     # desarrollo (p. ej. `ilex.localhost`). Los subdominios de plataforma no resuelven a tenant.
@@ -208,11 +258,40 @@ class Settings(BaseSettings):
     register_max_per_ip: int = 20
     register_window_seconds: int = 60 * 60  # ventana del rate-limit de registro (1 h)
 
-    # Notificaciones (aviso al `tenant_admin` de un registro pendiente). El envío real por SMTP está
-    # diferido (spec S1.4 §6): SIN `smtp_host` se usa el grabador en memoria (RecordingNotifier);
-    # cuando existan las credenciales de soporte@autoken.es se cablea el transporte SMTP. Secreto:
-    # llega por env var en el VPS (§9.1), nunca en el repo.
+    # Verificación del email del registrante (PROMPT-AUTOFACTU-AUTH-COMPLETO, bloque 2): token de un
+    # solo uso, mismo patrón que la activación. No bloquea la aprobación del admin (solo informa),
+    # así que un TTL más corto que la activación (24h) es suficiente: si caduca, no bloquea el alta.
+    # Enlace de decisión (aprobar/rechazar) por email a cada tenant_admin (a petición de Julio,
+    # 2026-09-03, sustituye la verificación de email del registrante): generoso a propósito, un
+    # admin puede tardar días en revisar su bandeja.
+    registration_decision_ttl: int = 7 * 24 * 60 * 60
+
+    # Recuperación de contraseña (bloque 1): token de un solo uso ligado a user+tenant, TTL corto
+    # (más corto que la activación: el riesgo de un enlace de reset filtrado es mayor que el de
+    # activación, que ya exige conocer el email exacto que sembró el operador). Rate-limit mismo
+    # patrón que login (IP+email e IP), cubos propios para no compartir contador con intentos de
+    # login fallidos (semántica distinta: "olvidé mi contraseña" no es un login fallido).
+    password_reset_ttl: int = 60 * 60
+    password_reset_max_per_email: int = 5
+    password_reset_max_per_ip: int = 20
+    password_reset_window_seconds: int = 15 * 60
+
+    # Notificaciones (aviso al `tenant_admin` de un registro pendiente, verificación de email,
+    # activación, restablecer contraseña). SIN `smtp_host` se usa el grabador en memoria
+    # (RecordingNotifier, test/dev); con `smtp_host` configurado se usa `SmtpNotifier` (bloque 3).
+    # Secretos: llegan por env var en el VPS (§9.1), nunca en el repo (mismo criterio que
+    # `jwt_secret`/`db_encryption_master_key`: no se usa `SecretStr`, ver comentario ahí).
     smtp_host: str | None = None
+    smtp_port: int = 587  # 465 = SSL directo, 587 = STARTTLS (smtp_use_tls decide cuál)
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None  # remitente (p. ej. "Autofactu <soporte@autoken.es>")
+    smtp_use_tls: bool = True  # True = STARTTLS (587); False = SSL directo (465)
+    # Lista de bloqueo de emergencia (Julio, 2026-09-03): direcciones que NUNCA deben recibir
+    # ningún correo de la app, sea cual sea el motivo (registro, restablecimiento...). Coma-
+    # separado, sin espacios necesarios (se recortan). Filtro en SmtpNotifier, no en el dominio: un
+    # solo sitio para cualquier tipo de aviso presente o futuro.
+    smtp_blocklist: str = ""
 
     # --- Importación de empresas S1.5 (companies) ----------------------------------------------
     # Guardarraíles anti-DoS por memoria del `POST /companies/import` (proceso compartido por todas
@@ -246,7 +325,7 @@ class Settings(BaseSettings):
     azure_docintel_key: str | None = None
     azure_docintel_model: str = "prebuilt-layout"
 
-    # OCR — Google Gemini vía Vertex AI (candidatos del bench: Flash y Pro). El proyecto y la ruta
+    # OCR — Google Gemini vía Vertex AI. El proyecto y la ruta
     # al JSON de la service account son secretos; la región y los ids de modelo no lo son. Los
     # nombres de campo mapean a las env vars estándar de Vertex (GOOGLE_CLOUD_*, GOOGLE_APP_*).
     google_cloud_project: str | None = None
@@ -254,9 +333,16 @@ class Settings(BaseSettings):
     google_application_credentials: str | None = None
     # Gemini 3 aún no está en europe-west4: se accede por el endpoint `global` (decisión de Julio,
     # 2026-07-04). Región propia para no atar el resto de usos Vertex a global. Ids verificados
-    # contra `models.list()` de Vertex; `gemini-3-pro` pelado no existe, el Pro actual es 3.1.
+    # contra `models.list()` de Vertex; no usar `latest`, porque cambiaría el benchmark
+    # sin revisión.
     gemini_location: str = "global"
-    gemini_flash_model: str = "gemini-3-flash-preview"
+    # Producción: selección manual estable, independiente de los candidatos del laboratorio.
+    gemini_flash_model: str = "gemini-3.5-flash"
+    # Candidatos explícitos del benchmark R-030.
+    gemini_35_flash_model: str = "gemini-3.5-flash"
+    gemini_36_flash_model: str = "gemini-3.6-flash"
+    gemini_35_flash_lite_model: str = "gemini-3.5-flash-lite"
+    # Se conserva para el benchmark histórico S4.8 hasta completar R-032.
     gemini_pro_model: str = "gemini-3.1-pro-preview"
 
     # OCR — Azure OpenAI (gpt-5.1, chat-visión). Candidato del bench. Endpoint, clave y despliegue
@@ -301,14 +387,19 @@ class Settings(BaseSettings):
     max_request_body_bytes: int = 16 * 1024 * 1024
 
     # --- Worker OCR S2.3 (jobs, arq) -----------------------------------------------------------
-    # Cola de arq en la que la API encola `run_ocr` tras una subida aceptada y de la que el worker
-    # consume. No es secreto; se comparte el mismo Redis que el resto de la app.
-    ocr_queue_name: str = "autoken:queue:ocr"
+    # Colas separadas: el OCR que desbloquea al usuario no compite con benchmark, comparativas ni
+    # mantenimiento. `ocr_queue_name` se conserva como alias operativo de la cola primaria.
+    ocr_primary_queue_name: str = "autoken:queue:ocr:primary"
+    ocr_background_queue_name: str = "autoken:queue:ocr:background"
+    ocr_queue_name: str = "autoken:queue:ocr:primary"
+    ocr_worker_max_jobs: int = 4
+    ocr_background_worker_max_jobs: int = 1
     ocr_claim_lease_seconds: int = (
         5 * 60
     )  # S6.15 C4: bajado de 10 a 5 min (coherente con timeout de 150s)
     ocr_provider_timeout_seconds: int = 150  # S6.15 C4: 150s (suficiente para pico de 52s)
     ocr_recovery_batch_size: int = 100
+    retention_batch_size: int = 100
     intake_rate_limit_window_seconds: int = 60
     intake_uploads_per_user: int = 20
     intake_uploads_per_tenant: int = 100

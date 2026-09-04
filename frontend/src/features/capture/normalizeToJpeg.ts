@@ -24,17 +24,21 @@ export function imageDataToJpegBlob(imageData: ImageData): Promise<Blob> {
  * re-codifica a JPEG — mismo destino final que `imageDataToJpegBlob`, entrada distinta. */
 export async function fileToJpegBlob(file: Blob): Promise<Blob> {
   const bitmap = await createImageBitmap(file)
-  const canvas = document.createElement('canvas')
-  canvas.width = bitmap.width
-  canvas.height = bitmap.height
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('No se pudo obtener el contexto 2D del canvas')
-  ctx.drawImage(bitmap, 0, 0)
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('No se pudo generar el JPEG'))),
-      'image/jpeg',
-      JPEG_QUALITY,
-    )
-  })
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('No se pudo obtener el contexto 2D del canvas')
+    ctx.drawImage(bitmap, 0, 0)
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error('No se pudo generar el JPEG'))),
+        'image/jpeg',
+        JPEG_QUALITY,
+      )
+    })
+  } finally {
+    bitmap.close()
+  }
 }

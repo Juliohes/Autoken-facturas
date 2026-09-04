@@ -72,6 +72,29 @@ async def test_c15_refresh_ausente_o_manipulado_da_401(authapi: Api) -> None:
     assert manipulado.status_code == 401
 
 
+async def test_revoke_all_sessions_invalida_el_refresh_sin_conocer_el_token(authapi: Api) -> None:
+    """`revoke_all_sessions(user_id)` invalida el refresh vigente sin que nadie lo presente antes.
+
+    Caso real: restablecer la contraseña por "olvidé mi contraseña" (bloque 1 del sistema de acceso
+    completo) debe cerrar cualquier sesión abierta en OTRO dispositivo, del que no se tiene cookie.
+    """
+    from identity.sessions import revoke_all_sessions
+    from shared.redis import get_redis
+
+    client, dsns = authapi
+    _tenant_id, user_id = await seed_active_user(dsns, email="ana@ilex.es")
+    rt = await _login_ilex(client)
+
+    await revoke_all_sessions(get_redis(), user_id, ttl_seconds=3600)
+
+    tras = await client.post(REFRESH, cookies={REFRESH_COOKIE: rt}, headers=host("ilex.localhost"))
+    assert tras.status_code == 401  # la sesión abierta antes del cambio deja de valer
+
+    rt2 = await _login_ilex(client)  # una sesión nueva, iniciada DESPUÉS del cambio, sigue viva
+    ref2 = await client.post(REFRESH, cookies={REFRESH_COOKIE: rt2}, headers=host("ilex.localhost"))
+    assert ref2.status_code == 200
+
+
 async def test_c16_logout_revoca_la_familia_y_borra_la_cookie(authapi: Api) -> None:
     """C16: `/auth/logout` revoca la familia y borra la cookie; sin cookie es idempotente."""
     client, dsns = authapi

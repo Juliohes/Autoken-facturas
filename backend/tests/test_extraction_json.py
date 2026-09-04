@@ -40,6 +40,19 @@ _VALID_PAYLOAD = {
     ],
 }
 
+_COMMON_PAYLOAD = {
+    "schema_version": "1",
+    "issue_date": "2026-05-10",
+    "invoice_number": "F-2026-001",
+    "total_amount": "121.00",
+    "net_amount": "100.00",
+    "tax_amount": "21.00",
+    "irpf_rate": "19.00",
+    "irpf_amount": "19.00",
+    "tax_lines": [{"base": "100.00", "rate": "21", "quota": "21.00"}],
+    "tax_ids": [{"value": "B06183446", "name": "Mi Empresa SL"}],
+}
+
 
 def test_parsea_un_json_valido_a_extracted_invoice() -> None:
     invoice = parse_structured_invoice(
@@ -52,6 +65,58 @@ def test_parsea_un_json_valido_a_extracted_invoice() -> None:
     assert invoice.tax_lines[0].cuota == Decimal("21.0")
     assert invoice.irpf_rate == Decimal("19.0")
     assert invoice.irpf_amount == Decimal("19.0")
+
+
+def test_r031_parsea_el_contrato_comun_con_amounts_string() -> None:
+    invoice = parse_structured_invoice(
+        json.dumps(_COMMON_PAYLOAD), engine="gemini-3.5-flash", model="gemini-3.5-flash"
+    )
+
+    assert invoice.total_amount == Decimal("121.00")
+    assert invoice.tax_lines[0].base == Decimal("100.00")
+    assert invoice.tax_lines[0].cuota == Decimal("21.00")
+    assert invoice.total_confidence == "baja"
+    assert invoice.raw["schema_version"] == "1"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("450,00", Decimal("450.00")),
+        ("1.234,56", Decimal("1234.56")),
+        ("1,234.56", Decimal("1234.56")),
+    ],
+)
+def test_r031_parsea_importes_con_formato_espanol_o_ingles(
+    value: str, expected: Decimal
+) -> None:
+    payload = dict(
+        _COMMON_PAYLOAD,
+        total_amount=value,
+        tax_lines=[{"base": value, "rate": "21", "quota": "94,50"}],
+    )
+
+    invoice = parse_structured_invoice(
+        json.dumps(payload), engine="gemini-3.5-flash", model="gemini-3.5-flash"
+    )
+
+    assert invoice.total_amount == expected
+    assert invoice.tax_lines[0].base == expected
+    assert invoice.tax_lines[0].cuota == Decimal("94.50")
+
+
+def test_r031_rechaza_una_version_de_schema_desconocida() -> None:
+    payload = dict(_COMMON_PAYLOAD, schema_version="2")
+
+    with pytest.raises(InvoiceExtractionError, match="Versión de schema no soportada"):
+        parse_structured_invoice(json.dumps(payload), engine="claude-vertex", model="x")
+
+
+def test_r031_rechaza_importes_numericos_en_el_contrato_comun() -> None:
+    payload = dict(_COMMON_PAYLOAD, total_amount=121.0)
+
+    with pytest.raises(InvoiceExtractionError, match="contrato común"):
+        parse_structured_invoice(json.dumps(payload), engine="gpt-5.1", model="x")
 
 
 def test_s6_14_c4_parsea_confianza_del_valor_y_del_nombre_por_separado() -> None:
@@ -145,21 +210,23 @@ def test_irpf_se_parsea_separado_de_los_tramos_de_iva() -> None:
     assert invoice.irpf_amount == Decimal("19.0")
 
 
-def test_el_prompt_separa_irpf_y_restringe_los_tipos_de_iva() -> None:
+def test_el_prompt_separa_irpf_y_conserva_tipos_de_iva_desconocidos() -> None:
     from ocr.extraction_json import EXTRACTION_PROMPT
 
     prompt = EXTRACTION_PROMPT.lower()
     assert "irpf_rate" in EXTRACTION_PROMPT
     assert "irpf_amount" in EXTRACTION_PROMPT
     assert "retención" in prompt
-    assert "21%, 10%, 4% o 0%" in prompt
+    assert "conserva cualquier tipo de iva numérico y finito" in prompt
 
 
-def test_un_tipo_de_iva_invalido_no_se_guarda_como_tramo() -> None:
+def test_un_tipo_de_iva_desconocido_se_conserva_y_se_marca() -> None:
     payload = dict(_VALID_PAYLOAD, tax_lines=[{"base": 100, "rate": 19, "cuota": 19}])
 
-    with pytest.raises(InvoiceExtractionError, match="Tipo de IVA no permitido"):
-        parse_structured_invoice(json.dumps(payload), engine="gemini-3-flash", model="x")
+    invoice = parse_structured_invoice(json.dumps(payload), engine="gemini-3-flash", model="x")
+
+    assert invoice.tax_lines[0].rate == Decimal("19")
+    assert invoice.raw["_unknown_tax_rates"] == ["19"]
 
 
 def test_respuesta_vacia_da_error_tipado() -> None:

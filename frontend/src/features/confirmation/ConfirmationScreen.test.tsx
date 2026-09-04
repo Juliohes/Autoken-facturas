@@ -15,12 +15,13 @@ import { CaptureUnreadableError, PendingOcrError } from './useReview'
 import type { ReviewResponse } from './types'
 
 vi.mock('../../api/client', () => ({
-  api: { GET: vi.fn(), POST: vi.fn() },
+  api: { GET: vi.fn(), POST: vi.fn(), PUT: vi.fn() },
 }))
 
 type AsyncMock = Mock<(...args: never[]) => Promise<unknown>>
 const getMock = api.GET as unknown as AsyncMock
 const postMock = api.POST as unknown as AsyncMock
+const putMock = api.PUT as unknown as AsyncMock
 
 function makeReview(over: Partial<ReviewResponse> = {}): ReviewResponse {
   return {
@@ -63,19 +64,45 @@ function renderScreen(direction?: Direction, locationState?: Record<string, unkn
   return { onConfirmed, onRetry }
 }
 
-/** Marca la responsabilidad y espera a que el botón se habilite. */
+/** Marca la responsabilidad. La revisión explícita se marca en los escenarios que la completan. */
 async function acceptResponsibility(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('checkbox'))
+  await user.click(screen.getByLabelText('Acepto la responsabilidad de la veracidad de los datos que confirmo.'))
+}
+
+async function acknowledgeReview(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByLabelText('He revisado todos los datos de la factura.'))
 }
 
 beforeEach(() => {
   getMock.mockReset()
   postMock.mockReset()
+  putMock.mockReset()
   getMock.mockResolvedValue({ data: makeReview(), error: undefined })
   postMock.mockResolvedValue({ data: { id: 'inv-1' }, error: undefined })
+  putMock.mockResolvedValue({ data: { revision: 1, updated_at: '2026-08-21T10:00:00Z' }, error: undefined })
 })
 
 describe('ConfirmationScreen (S2.4)', () => {
+  it('R-052 C10: muestra el duplicado y bloquea el guardado', async () => {
+    getMock.mockResolvedValue({
+      data: makeReview({
+        duplicate: {
+          uploaded_file_id: 'file-original',
+          invoice_id: 'invoice-original',
+          kind: 'confirmed',
+          matching_fields: ['invoice_number', 'own_tax_id', 'counterparty_tax_id', 'total_amount'],
+        },
+        blocking_reasons: ['duplicate_invoice'],
+      }),
+      error: undefined,
+    })
+    renderScreen()
+
+    expect(await screen.findByTestId('warning-duplicate')).toHaveTextContent('ya está guardada como duplicado')
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Revisar factura original' })).toBeInTheDocument()
+  })
+
   it('C1 (enmienda S6.1 §8): datos organizados en 4 secciones siempre visibles', async () => {
     renderScreen()
 
@@ -106,27 +133,22 @@ describe('ConfirmationScreen (S2.4)', () => {
     expect(screen.queryByTestId('more-fields')).not.toBeInTheDocument()
   })
 
-  it('C2: media = dudoso (amarillo), alta sin marca (spec S6.1 C20: baja+valor ya no es "no leído")', async () => {
+  it('C2: la confianza del OCR no pinta los campos como errores', async () => {
     getMock.mockResolvedValue({
       data: makeReview({
-        // `issue_date` tiene valor en `makeReview()` (no es null): con confianza `baja` debe
-        // marcarse "Dudoso, revisar" (spec S6.1 C20), NO "No leído" (eso es solo para C21, valor
-        // realmente ausente — ver el describe "S6.1" más abajo).
+        // La confianza sigue llegando del OCR, pero la persona la revisa mediante la confirmación
+        // explícita del formulario, no mediante bordes rojos/amarillos.
         confidences: { total_amount: 'media', issue_date: 'baja', counterparty_tax_id: 'alta' },
       }),
       error: undefined,
     })
     renderScreen()
 
-    const totalMark = await screen.findByTestId('mark-total_amount')
-    expect(totalMark).toHaveAttribute('data-mark', 'dudoso')
-    expect(totalMark).toHaveTextContent('Dudoso')
-
-    const dateMark = screen.getByTestId('mark-issue_date')
-    expect(dateMark).toHaveAttribute('data-mark', 'revisar')
-    expect(dateMark).toHaveTextContent('Dudoso, revisar')
-
-    // `alta` no lleva marca de aviso.
+    await screen.findByLabelText('Importe total')
+    expect(screen.queryByTestId('mark-total_amount')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('mark-issue_date')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Importe total')).not.toHaveClass('border-red-500')
+    expect(screen.getByLabelText('Importe total')).not.toHaveClass('border-yellow-500')
     expect(screen.queryByTestId('mark-counterparty_tax_id')).not.toBeInTheDocument()
   })
 
@@ -213,7 +235,9 @@ describe('ConfirmationScreen (S2.4)', () => {
     renderScreen()
     await screen.findByLabelText('Importe total')
     await acceptResponsibility(user)
+    await acknowledgeReview(user)
     expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+    expect(screen.getByTestId('confirm-blockers')).toHaveTextContent('El CIF de la contraparte no es válido. Corrígelo.')
   })
 
   it('C5: counterparty_cif_not_found deshabilita el botón (con checkbox marcado)', async () => {
@@ -225,7 +249,9 @@ describe('ConfirmationScreen (S2.4)', () => {
     renderScreen()
     await screen.findByLabelText('Importe total')
     await acceptResponsibility(user)
+    await acknowledgeReview(user)
     expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+    expect(screen.getByTestId('confirm-blockers')).toHaveTextContent('No encontramos el CIF de la contraparte. Revísalo.')
   })
 
   it('C6: own_tax_id_missing deshabilita el botón (con checkbox marcado)', async () => {
@@ -237,7 +263,9 @@ describe('ConfirmationScreen (S2.4)', () => {
     renderScreen()
     await screen.findByLabelText('Importe total')
     await acceptResponsibility(user)
+    await acknowledgeReview(user)
     expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+    expect(screen.getByTestId('confirm-blockers')).toHaveTextContent('Confirma que la factura corresponde a tu empresa.')
   })
 
   it('C6 (2026-08-08, hallazgo de Julio): own_tax_id_missing explica en pantalla por qué no se puede confirmar', async () => {
@@ -280,6 +308,7 @@ describe('ConfirmationScreen (S2.4)', () => {
       '/api/v1/uploads/{file_id}/counterparty-verdict',
       expect.objectContaining({ body: { counterparty_tax_id: 'A12345678', counterparty_name: 'Proveedor SL' } }),
     ))
+    await acknowledgeReview(user)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeEnabled())
   })
 
@@ -294,10 +323,11 @@ describe('ConfirmationScreen (S2.4)', () => {
     renderScreen()
     await screen.findByLabelText('Importe total')
     await user.click(screen.getByLabelText('Acepto la responsabilidad de la veracidad de los datos que confirmo.'))
-    expect(screen.getByText('Marca la confirmación para guardar.')).toBeInTheDocument()
+    expect(screen.getByTestId('confirm-blockers')).toHaveTextContent('Confirma que la factura corresponde a tu empresa.')
     expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
 
     await user.click(screen.getByLabelText('Confirmo que esta factura corresponde a Mi Empresa SL (A11111111)'))
+    await acknowledgeReview(user)
     expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
     await waitFor(() => expect(postMock).toHaveBeenCalledWith(
@@ -312,7 +342,7 @@ describe('ConfirmationScreen (S2.4)', () => {
     expect(screen.queryByTestId('warning-own-tax-id-missing')).not.toBeInTheDocument()
   })
 
-  it('C7: sin aceptar responsabilidad el botón está deshabilitado; al marcarlo se habilita', async () => {
+  it('C7: sin aceptar responsabilidad el botón está deshabilitado; al marcar ambas confirmaciones se habilita', async () => {
     const user = userEvent.setup()
     renderScreen()
     await screen.findByLabelText('Importe total')
@@ -321,7 +351,36 @@ describe('ConfirmationScreen (S2.4)', () => {
     expect(button).toBeDisabled()
 
     await acceptResponsibility(user)
+    expect(button).toBeDisabled()
+    expect(screen.getByTestId('confirm-blockers')).toHaveTextContent('Marca que has revisado todos los datos de la factura.')
+    await acknowledgeReview(user)
     expect(button).toBeEnabled()
+  })
+
+  it('exige marcar que se han revisado los datos antes de habilitar guardar', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByLabelText('Importe total')
+    await user.click(screen.getByLabelText('Acepto la responsabilidad de la veracidad de los datos que confirmo.'))
+
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+    expect(screen.getByTestId('confirm-blockers')).toHaveTextContent('Marca que has revisado todos los datos de la factura.')
+
+    await user.click(screen.getByLabelText('He revisado todos los datos de la factura.'))
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeEnabled()
+  })
+
+  it('obliga a volver a marcar la revisión si se edita cualquier dato después', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await screen.findByLabelText('Importe total')
+    await acceptResponsibility(user)
+    await acknowledgeReview(user)
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeEnabled()
+
+    await user.clear(screen.getByLabelText('Importe total'))
+    expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeDisabled()
+    expect(screen.getByTestId('confirm-blockers')).toHaveTextContent('Marca que has revisado todos los datos de la factura.')
   })
 
   it('C8: sin bloqueos y con responsabilidad, confirma y llama onConfirmed al 201', async () => {
@@ -329,6 +388,7 @@ describe('ConfirmationScreen (S2.4)', () => {
     const { onConfirmed } = renderScreen()
     await screen.findByLabelText('Importe total')
     await acceptResponsibility(user)
+    await acknowledgeReview(user)
 
     await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
 
@@ -348,6 +408,27 @@ describe('ConfirmationScreen (S2.4)', () => {
     await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1))
   })
 
+  it('no reescribe un borrador existente sin cambios antes de confirmar', async () => {
+    getMock.mockResolvedValueOnce({
+      data: makeReview({ draft_revision: 2 }),
+      error: undefined,
+    })
+    const user = userEvent.setup()
+    const { onConfirmed } = renderScreen()
+
+    await screen.findByRole('heading', { name: 'Revisar y confirmar' })
+    await acceptResponsibility(user)
+    await acknowledgeReview(user)
+    await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
+
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledOnce())
+    expect(putMock).not.toHaveBeenCalled()
+    expect(postMock).toHaveBeenCalledWith(
+      '/api/v1/uploads/{file_id}/confirm',
+      expect.objectContaining({ params: { path: { file_id: 'file-1' } } }),
+    )
+  })
+
   it('C9: aviso rojo de responsabilidad siempre bajo el botón', async () => {
     renderScreen()
     expect(await screen.findByText(RESPONSIBILITY_NOTICE)).toBeInTheDocument()
@@ -362,8 +443,9 @@ describe('ConfirmationScreen (S2.4)', () => {
     renderScreen()
     expect(await screen.findByTestId('warning-imbalance')).toHaveTextContent('El total no cuadra con el IVA.')
 
-    // El descuadre NO bloquea: con la responsabilidad marcada el botón se habilita.
+    // El descuadre NO bloquea: con las confirmaciones marcadas el botón se habilita.
     await acceptResponsibility(user)
+    await acknowledgeReview(user)
     expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeEnabled()
   })
 
@@ -390,6 +472,7 @@ describe('ConfirmationScreen (S2.4)', () => {
     await user.type(total, '250.00')
 
     await acceptResponsibility(user)
+    await acknowledgeReview(user)
     await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
 
     // Error legible mostrado; no se navega a éxito; el valor editado se conserva.
@@ -440,6 +523,7 @@ describe('ConfirmationScreen (S2.4)', () => {
     await user.click(
       screen.getByLabelText('Acepto la responsabilidad de la veracidad de los datos que confirmo.'),
     )
+    await acknowledgeReview(user)
 
     await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
 
@@ -472,6 +556,7 @@ describe('ConfirmationScreen (S2.4)', () => {
     await screen.findByLabelText('Importe total')
     expect(screen.queryByText('Factura de prueba (no aparecerá en informes)')).not.toBeInTheDocument()
     await acceptResponsibility(user)
+    await acknowledgeReview(user)
 
     await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
 
@@ -562,6 +647,7 @@ describe('ConfirmationScreen (S2.4)', () => {
 
     await screen.findByLabelText('Importe total')
     await acceptResponsibility(user)
+    await acknowledgeReview(user)
     await user.click(screen.getByRole('button', { name: 'Confirmar y guardar' }))
 
     await waitFor(() => expect(postMock).toHaveBeenCalledWith(
@@ -581,6 +667,7 @@ describe('ConfirmationScreen (S2.4)', () => {
 
     await user.click(screen.getByRole('radio', { name: 'Emitida' }))
     await acceptResponsibility(user)
+    await acknowledgeReview(user)
     expect(screen.getByRole('button', { name: 'Confirmar y guardar' })).toBeEnabled()
   })
 
@@ -867,7 +954,9 @@ describe('ConfirmationScreen — S6.1 rediseño de celdas de comprobación', () 
     expect(irpfInput).toHaveValue('15,00')
   })
 
-  it('C20: un valor presente con confianza baja se marca "Dudoso, revisar", no "No leído"', async () => {
+  // Bloque 6 (sistema de tokens): `border-slate-600` -> `border-line`, mismo borde neutro por
+  // defecto de FieldRow; el comportamiento verificado (sin marca de aviso) no cambia.
+  it('C20: un valor presente con confianza baja sigue teniendo un campo neutral para revisar', async () => {
     getMock.mockResolvedValue({
       // `total_amount` tiene un valor real ('100.00') en `makeReview()`.
       data: makeReview({ confidences: { total_amount: 'baja' } }),
@@ -875,12 +964,12 @@ describe('ConfirmationScreen — S6.1 rediseño de celdas de comprobación', () 
     })
     renderScreen()
 
-    const mark = await screen.findByTestId('mark-total_amount')
-    expect(mark).toHaveAttribute('data-mark', 'revisar')
-    expect(mark).toHaveTextContent('Dudoso, revisar')
+    await screen.findByLabelText('Importe total')
+    expect(screen.queryByTestId('mark-total_amount')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Importe total')).toHaveClass('border-line')
   })
 
-  it('C21: un campo REALMENTE ausente (null) se marca "No leído"', async () => {
+  it('C21: un campo REALMENTE ausente sigue siendo editable y neutral', async () => {
     getMock.mockResolvedValue({
       data: makeReview({
         fields: { ...makeReview().fields, total_amount: null },
@@ -890,8 +979,8 @@ describe('ConfirmationScreen — S6.1 rediseño de celdas de comprobación', () 
     })
     renderScreen()
 
-    const mark = await screen.findByTestId('mark-total_amount')
-    expect(mark).toHaveAttribute('data-mark', 'no_leido')
-    expect(mark).toHaveTextContent('No leído')
+    await screen.findByLabelText('Importe total')
+    expect(screen.queryByTestId('mark-total_amount')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Importe total')).toHaveClass('border-line')
   })
 })

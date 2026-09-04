@@ -14,12 +14,24 @@ const AUTH_EXCLUDED_PATHS = new Set([
   '/api/v1/auth/login',
   '/api/v1/auth/refresh',
   '/api/v1/auth/logout',
+  // Bloque 4 (PROMPT-AUTOFACTU-AUTH-COMPLETO): endpoints públicos sin token. Un 401 aquí (token de
+  // activación/restablecimiento/verificación inválido o caducado) no tiene nada que ver con la
+  // sesión del navegador -- no debe disparar un refresh silencioso ni un `notifyUnauthorized()`.
+  '/api/v1/auth/password/forgot',
+  '/api/v1/auth/password/reset',
+  '/api/v1/register',
+  '/api/v1/auth/activate',
+  '/api/v1/auth/activate/confirm',
+  // Decisión de un alta por email (2026-09-03): mismo motivo, un token inválido/caducado del
+  // enlace del email no tiene nada que ver con la sesión del navegador.
+  '/api/v1/auth/registrations/decision',
 ])
 
 type MultipartPath = '/api/v1/uploads' | '/api/v1/uploads/batch'
 // Contrato S6.13 pendiente de que el backend publique OpenAPI actualizado. Se acota la ruta en
 // origen para no aceptar URLs arbitrarias mientras `schema.d.ts` aún no la puede describir.
 type RetryOcrPath = `/api/v1/uploads/${string}/retry-ocr`
+type DeleteUploadPath = `/api/v1/uploads/${string}`
 
 /**
  * Envía ficheros multipart sin forzar un `FormData` a través del tipo JSON que FastAPI publica
@@ -64,6 +76,26 @@ export async function postJson(path: RetryOcrPath): Promise<Response> {
 
   headers.set('Authorization', `Bearer ${newToken}`)
   response = await fetch(path, { method: 'POST', headers })
+  return response
+}
+
+/** Borra un fichero pendiente manteniendo el mismo refresh transparente que el resto de acciones. */
+export async function deleteUpload(path: DeleteUploadPath): Promise<Response> {
+  const headers = new Headers()
+  const token = getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  let response = await fetch(path, { method: 'DELETE', headers })
+  if (response.status !== 401) return response
+
+  const newToken = await refreshOnce()
+  if (!newToken) {
+    notifyUnauthorized()
+    return response
+  }
+
+  headers.set('Authorization', `Bearer ${newToken}`)
+  response = await fetch(path, { method: 'DELETE', headers })
   return response
 }
 

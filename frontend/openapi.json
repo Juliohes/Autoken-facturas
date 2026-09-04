@@ -283,6 +283,90 @@
         }
       }
     },
+    "/api/v1/auth/password/forgot": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Forgot Password",
+        "description": "Solicita un enlace de restablecimiento. Respuesta gen\u00e9rica: 200 exista o no la cuenta.\n\nTope por (IP+email) e IP -> 429. Sin Redis no se puede aplicar el anti-spam ni sembrar el\ntoken: la petici\u00f3n falla cerrada (503).",
+        "operationId": "forgot_password_api_v1_auth_password_forgot_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgotPasswordResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password/reset": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Reset Password",
+        "description": "Fija la nueva contrase\u00f1a con un token de restablecimiento v\u00e1lido y cierra otras sesiones.\n\nToken inv\u00e1lido/caducado/consumido, o de otro tenant (F2) -> 401 (no distingue el motivo).\nContrase\u00f1a d\u00e9bil -> 422.",
+        "operationId": "reset_password_api_v1_auth_password_reset_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetPasswordResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/register": {
       "post": {
         "tags": [
@@ -344,6 +428,89 @@
                   },
                   "type": "array",
                   "title": "Response List Registrations Api V1 Registrations Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/registrations/decision": {
+      "get": {
+        "tags": [
+          "registration"
+        ],
+        "summary": "Registration Decision Info",
+        "description": "Lo que muestra la pantalla de decisi\u00f3n por email antes de elegir. Nunca muta nada (F5): un\nesc\u00e1ner de enlaces de email que precargue esta URL no aprueba ni rechaza nada.",
+        "operationId": "registration_decision_info_api_v1_auth_registrations_decision_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionInfoOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "registration"
+        ],
+        "summary": "Registration Decide",
+        "description": "Aprueba o rechaza un registro desde el enlace de un solo uso del email (2026-09-03, a\npetici\u00f3n de Julio): sin token de sesi\u00f3n, sin panel, la \u00fanica llamada que de verdad decide.",
+        "operationId": "registration_decide_api_v1_auth_registrations_decision_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecideResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -719,6 +886,43 @@
         }
       }
     },
+    "/api/v1/uploads/{file_id}": {
+      "delete": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Delete Unconfirmed Upload",
+        "description": "Elimina un fichero propio todav\u00eda no confirmado; una factura guardada es inmutable.",
+        "operationId": "delete_unconfirmed_upload_api_v1_uploads__file_id__delete",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/uploads/batch": {
       "post": {
         "tags": [
@@ -744,6 +948,50 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{file_id}/status": {
+      "get": {
+        "tags": [
+          "intake"
+        ],
+        "summary": "Upload Status",
+        "description": "Consulta el estado de OCR con la misma autorizaci\u00f3n privada que la descarga.",
+        "operationId": "upload_status_api_v1_uploads__file_id__status_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadStatusOut"
                 }
               }
             }
@@ -972,6 +1220,60 @@
         }
       }
     },
+    "/api/v1/uploads/{file_id}/draft": {
+      "put": {
+        "tags": [
+          "invoicing"
+        ],
+        "summary": "Save Review Draft",
+        "description": "Guarda un borrador con control optimista de revisi\u00f3n (R-022).",
+        "operationId": "save_review_draft_api_v1_uploads__file_id__draft_put",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewDraftIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewDraftOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/uploads/{file_id}/review": {
       "get": {
         "tags": [
@@ -1128,14 +1430,168 @@
         }
       }
     },
+    "/api/v1/uploads/{file_id}/review-readonly": {
+      "get": {
+        "tags": [
+          "invoicing"
+        ],
+        "summary": "Review Upload Readonly",
+        "description": "Abre un pendiente ajeno para supervisi\u00f3n sin exponer acciones de escritura (R-026).",
+        "operationId": "review_upload_readonly_api_v1_uploads__file_id__review_readonly_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Review Upload Readonly Api V1 Uploads  File Id  Review Readonly Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoices/pending-supervision": {
+      "get": {
+        "tags": [
+          "invoicing"
+        ],
+        "summary": "Pending Supervision",
+        "description": "Pendientes de otros usuarios del tenant, solo metadata y paginaci\u00f3n estable (R-026).",
+        "operationId": "pending_supervision_api_v1_invoices_pending_supervision_get",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupervisionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/invoices/history": {
       "get": {
         "tags": [
           "invoicing"
         ],
         "summary": "Invoice History",
-        "description": "\u00daltimos documentos aceptados del contexto del usuario (S6.12). Solo lectura.",
+        "description": "Facturas confirmadas de los \u00faltimos cuatro meses, con cursor estable (R-056).\n\n`period` (bloque D, PROMPT-AUTOFACTU-AJUSTES-v3) filtra server-side por `invoice_date`, con\ntrimestres naturales; \"total\" (por defecto) no filtra.",
         "operationId": "invoice_history_api_v1_invoices_history_get",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "total",
+                "month",
+                "quarter",
+                "year"
+              ],
+              "type": "string",
+              "default": "total",
+              "title": "Period"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1143,6 +1599,78 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HistoryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoices/inbox": {
+      "get": {
+        "tags": [
+          "invoicing"
+        ],
+        "summary": "Invoice Inbox",
+        "description": "Bandeja SELF ONLY, tambi\u00e9n para `tenant_admin`, con resumen y cursor estable.",
+        "operationId": "invoice_inbox_api_v1_invoices_inbox_get",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -2122,6 +2650,182 @@
         }
       }
     },
+    "/api/v1/platform/ocr-policy": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Get Ocr Policy",
+        "operationId": "get_ocr_policy_api_v1_platform_ocr_policy_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OcrPolicy"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Set Ocr Policy",
+        "operationId": "set_ocr_policy_api_v1_platform_ocr_policy_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OcrPolicy"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OcrPolicy"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/pending": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "List Global Pending",
+        "operationId": "list_global_pending_api_v1_platform_pending_get",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalPendingPageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/pending/{tenant_id}/{file_id}/review-readonly": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Global Review Readonly",
+        "operationId": "global_review_readonly_api_v1_platform_pending__tenant_id___file_id__review_readonly_get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Global Review Readonly Api V1 Platform Pending  Tenant Id   File Id  Review Readonly Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/ocr-ranking": {
       "get": {
         "tags": [
@@ -2368,6 +3072,107 @@
         }
       }
     },
+    "/api/v1/platform/ocr-lab/settings": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Get Lab Settings",
+        "operationId": "get_lab_settings_api_v1_platform_ocr_lab_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OcrLabSettingsOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Set Lab Settings",
+        "operationId": "set_lab_settings_api_v1_platform_ocr_lab_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OcrLabSettingsPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OcrLabSettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/ocr-lab/promote": {
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Promote Ocr Policy",
+        "operationId": "promote_ocr_policy_api_v1_platform_ocr_lab_promote_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OcrPolicy"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OcrPolicyPromotionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/benchmark/backfill": {
       "post": {
         "tags": [
@@ -2456,6 +3261,32 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BenchmarkRankingOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/benchmark/ranking/metrics": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Get Benchmark Metrics",
+        "description": "Informe R-032 de m\u00e9tricas comparables, sin ejecutar motores OCR.",
+        "operationId": "get_benchmark_metrics_api_v1_platform_benchmark_ranking_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BenchmarkMetricsSummaryOut"
+                  },
+                  "type": "array",
+                  "title": "Response Get Benchmark Metrics Api V1 Platform Benchmark Ranking Metrics Get"
                 }
               }
             }
@@ -2614,6 +3445,171 @@
         ],
         "title": "BatchStatusOut"
       },
+      "BenchmarkMetricsSummaryOut": {
+        "properties": {
+          "variant": {
+            "type": "string",
+            "title": "Variant"
+          },
+          "engine": {
+            "type": "string",
+            "title": "Engine"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "executions": {
+            "type": "integer",
+            "title": "Executions"
+          },
+          "errors": {
+            "type": "integer",
+            "title": "Errors"
+          },
+          "field_exact_accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Exact Accuracy"
+          },
+          "critical_field_accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Critical Field Accuracy"
+          },
+          "all_critical_exact_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "All Critical Exact Rate"
+          },
+          "tax_lines_accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Lines Accuracy"
+          },
+          "arithmetic_valid_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arithmetic Valid Rate"
+          },
+          "hallucination_cases": {
+            "type": "integer",
+            "title": "Hallucination Cases"
+          },
+          "p50_duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P50 Duration Ms"
+          },
+          "p95_duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Duration Ms"
+          },
+          "pages": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pages"
+          },
+          "api_cost_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Cost Usd"
+          },
+          "manual_corrections_per_invoice": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Corrections Per Invoice"
+          }
+        },
+        "type": "object",
+        "required": [
+          "variant",
+          "engine",
+          "model",
+          "executions",
+          "errors",
+          "field_exact_accuracy",
+          "critical_field_accuracy",
+          "all_critical_exact_rate",
+          "tax_lines_accuracy",
+          "arithmetic_valid_rate",
+          "hallucination_cases",
+          "p50_duration_ms",
+          "p95_duration_ms",
+          "pages",
+          "api_cost_usd",
+          "manual_corrections_per_invoice"
+        ],
+        "title": "BenchmarkMetricsSummaryOut"
+      },
       "BenchmarkRankingOut": {
         "properties": {
           "by_field_group": {
@@ -2732,6 +3728,29 @@
               }
             ],
             "title": "Sharpness Score"
+          },
+          "capture_session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Session Id"
+          },
+          "capture_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Sequence"
           }
         },
         "type": "object",
@@ -3254,6 +4273,79 @@
         "title": "CustomDomainIn",
         "description": "Cuerpo de `PATCH /platform/tenants/{tenant_id}/custom-domain` (S4.6). `None` lo quita."
       },
+      "DecideRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "decision"
+        ],
+        "title": "DecideRequest",
+        "description": "Cuerpo de `POST /auth/registrations/decision`: la \u00fanica llamada que de verdad aprueba o\nrechaza (F5, ver `identity.registration_decision`)."
+      },
+      "DecideResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected",
+              "already_decided"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "DecideResponse",
+        "description": "Respuesta de la decisi\u00f3n por email."
+      },
+      "DecisionInfoOut": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "already_decided": {
+            "type": "boolean",
+            "title": "Already Decided"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "company",
+          "already_decided"
+        ],
+        "title": "DecisionInfoOut",
+        "description": "Lo que ve la pantalla de decisi\u00f3n por email antes de que el admin elija (`GET\n/auth/registrations/decision`): nunca muta nada, solo informa."
+      },
       "DeleteTenantIn": {
         "properties": {
           "confirm_slug": {
@@ -3472,6 +4564,129 @@
         ],
         "title": "FieldGroupRankingOut"
       },
+      "ForgotPasswordRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "ForgotPasswordRequest",
+        "description": "Cuerpo de `POST /auth/password/forgot`."
+      },
+      "ForgotPasswordResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ForgotPasswordResponse",
+        "description": "Respuesta gen\u00e9rica del olvido de contrase\u00f1a (id\u00e9ntica exista o no la cuenta:\nanti-enumeraci\u00f3n)."
+      },
+      "GlobalPendingOut": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tenant Id"
+          },
+          "tenant_slug": {
+            "type": "string",
+            "title": "Tenant Slug"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_email": {
+            "type": "string",
+            "title": "User Email"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "recibida",
+                  "emitida"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "tenant_slug",
+          "id",
+          "user_email",
+          "company_name",
+          "status",
+          "created_at",
+          "direction",
+          "page_count"
+        ],
+        "title": "GlobalPendingOut"
+      },
+      "GlobalPendingPageOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GlobalPendingOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "GlobalPendingPageOut"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3544,6 +4759,29 @@
               }
             ],
             "title": "Direction"
+          },
+          "invoice_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Number"
+          },
+          "invoice_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Date"
           }
         },
         "type": "object",
@@ -3551,10 +4789,12 @@
           "id",
           "status",
           "created_at",
-          "direction"
+          "direction",
+          "invoice_number",
+          "invoice_date"
         ],
         "title": "HistoryEntryOut",
-        "description": "Una entrada privada de historial, sin PII de contraparte (S6.12)."
+        "description": "Una entrada privada de historial, sin PII de contraparte (S6.12).\n\n``invoice_number``/``invoice_date``: datos del documento propio (no de contraparte, S6.12),\nsolo presentes en facturas `confirmed`. `None` cuando falta el dato, nunca un valor inventado."
       },
       "HistoryOut": {
         "properties": {
@@ -3564,14 +4804,31 @@
             },
             "type": "array",
             "title": "Entries"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
           }
         },
         "type": "object",
         "required": [
-          "entries"
+          "entries",
+          "next_cursor",
+          "count"
         ],
         "title": "HistoryOut",
-        "description": "Respuesta de `GET /invoices/history`: \u00faltimos env\u00edos, m\u00e1s reciente primero."
+        "description": "Respuesta de `GET /invoices/history`: \u00faltimos env\u00edos, m\u00e1s reciente primero.\n\n``count``: total de facturas que cumplen el filtro `period` (bloque D), no solo las de esta\np\u00e1gina -- el n\u00famero junto al desplegable de periodo en el frontend."
       },
       "ImportReportOut": {
         "properties": {
@@ -3607,6 +4864,158 @@
         ],
         "title": "ImportReportOut",
         "description": "Informe de la importaci\u00f3n del Excel."
+      },
+      "InboxItemOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "processing_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Stage"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "recibida",
+                  "emitida"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count"
+          },
+          "capture_session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Session Id"
+          },
+          "capture_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Sequence"
+          },
+          "draft_updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "processing_stage",
+          "created_at",
+          "direction",
+          "page_count",
+          "capture_session_id",
+          "capture_sequence",
+          "draft_updated_at"
+        ],
+        "title": "InboxItemOut",
+        "description": "Documento de la bandeja personal, sin PII fiscal (R-020)."
+      },
+      "InboxOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InboxItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/InboxSummaryOut"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "summary",
+          "next_cursor"
+        ],
+        "title": "InboxOut"
+      },
+      "InboxSummaryOut": {
+        "properties": {
+          "processing": {
+            "type": "integer",
+            "title": "Processing"
+          },
+          "ready": {
+            "type": "integer",
+            "title": "Ready"
+          },
+          "attention": {
+            "type": "integer",
+            "title": "Attention"
+          }
+        },
+        "type": "object",
+        "required": [
+          "processing",
+          "ready",
+          "attention"
+        ],
+        "title": "InboxSummaryOut"
       },
       "InvalidRowOut": {
         "properties": {
@@ -4385,6 +5794,13 @@
           "is_admin_tech": {
             "type": "boolean",
             "title": "Is Admin Tech"
+          },
+          "feature_flags": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Feature Flags"
           }
         },
         "type": "object",
@@ -4394,10 +5810,180 @@
           "role",
           "tenant",
           "company",
-          "is_admin_tech"
+          "is_admin_tech",
+          "feature_flags"
         ],
         "title": "MeOut",
         "description": "Respuesta de `GET /auth/me` (S1.6 C5/C6), tipada para que el cliente autogenerado la use\nsin `unknown` (S3.5: la necesita el frontend para saber el rol del usuario autenticado).\n\n`tenant`/`company` son `null` para un `platform_admin` (sin tenant, hotfix S4.10) adem\u00e1s del\ncaso ya existente de `company=null` para un `tenant_admin`. `is_admin_tech` (S4.10): siempre\n`False` salvo para un `platform_admin` con el flag activado (nunca desde la aplicaci\u00f3n)."
+      },
+      "OcrLabSettingsOut": {
+        "properties": {
+          "lab_visible": {
+            "type": "boolean",
+            "title": "Lab Visible"
+          },
+          "auto_benchmark_enabled": {
+            "type": "boolean",
+            "title": "Auto Benchmark Enabled"
+          },
+          "benchmark_engines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Benchmark Engines"
+          },
+          "benchmark_variants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Benchmark Variants"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lab_visible",
+          "auto_benchmark_enabled",
+          "benchmark_engines",
+          "benchmark_variants"
+        ],
+        "title": "OcrLabSettingsOut"
+      },
+      "OcrLabSettingsPayload": {
+        "properties": {
+          "lab_visible": {
+            "type": "boolean",
+            "title": "Lab Visible"
+          },
+          "auto_benchmark_enabled": {
+            "type": "boolean",
+            "title": "Auto Benchmark Enabled"
+          },
+          "benchmark_engines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Benchmark Engines"
+          },
+          "benchmark_variants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Benchmark Variants"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lab_visible",
+          "auto_benchmark_enabled",
+          "benchmark_engines",
+          "benchmark_variants"
+        ],
+        "title": "OcrLabSettingsPayload"
+      },
+      "OcrPolicy": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "primary_engine": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Primary Engine"
+          },
+          "primary_model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Primary Model"
+          },
+          "fallback_enabled": {
+            "type": "boolean",
+            "title": "Fallback Enabled"
+          },
+          "fallback_engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Engine"
+          },
+          "fallback_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Model"
+          },
+          "consensus_mode": {
+            "type": "string",
+            "enum": [
+              "primary_only",
+              "per_field"
+            ],
+            "title": "Consensus Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "primary_engine",
+          "primary_model",
+          "fallback_enabled",
+          "consensus_mode"
+        ],
+        "title": "OcrPolicy",
+        "description": "Pol\u00edtica versionada que decide qu\u00e9 motor puede usar producci\u00f3n."
+      },
+      "OcrPolicyPromotionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "old_policy": {
+            "$ref": "#/components/schemas/OcrPolicy"
+          },
+          "new_policy": {
+            "$ref": "#/components/schemas/OcrPolicy"
+          },
+          "actor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Actor Id"
+          },
+          "promoted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Promoted At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "old_policy",
+          "new_policy",
+          "actor_id",
+          "promoted_at"
+        ],
+        "title": "OcrPolicyPromotionOut"
       },
       "OcrRetryOut": {
         "properties": {
@@ -4499,6 +6085,10 @@
           "password": {
             "type": "string",
             "title": "Password"
+          },
+          "legal_consent": {
+            "type": "boolean",
+            "title": "Legal Consent"
           }
         },
         "type": "object",
@@ -4506,7 +6096,8 @@
           "email",
           "company_name",
           "cif",
-          "password"
+          "password",
+          "legal_consent"
         ],
         "title": "RegisterRequest",
         "description": "Cuerpo de `POST /register`."
@@ -4561,6 +6152,285 @@
         ],
         "title": "RegistrationOut",
         "description": "Un registro pendiente en el listado del admin (email + empresa + se\u00f1al de uni\u00f3n a existente).\n\n`joins_existing_company` avisa a la pantalla de aprobaci\u00f3n de que el CIF casaba con una empresa\nya activa (el usuario se une a ella, no crea empresa nueva): defensa ante secuestro por CIF."
+      },
+      "ResetPasswordRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "ResetPasswordRequest",
+        "description": "Cuerpo de `POST /auth/password/reset`."
+      },
+      "ResetPasswordResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ResetPasswordResponse",
+        "description": "Respuesta del restablecimiento efectivo."
+      },
+      "ReviewDraftIn": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "recibida",
+                  "emitida"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "invoice_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Number"
+          },
+          "counterparty_tax_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Tax Id"
+          },
+          "counterparty_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Name"
+          },
+          "net_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Amount"
+          },
+          "tax_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Amount"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
+          },
+          "irpf_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Irpf Amount"
+          },
+          "tax_lines": {
+            "items": {
+              "$ref": "#/components/schemas/TaxLineIn"
+            },
+            "type": "array",
+            "title": "Tax Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision"
+        ],
+        "title": "ReviewDraftIn",
+        "description": "Snapshot editable previo a confirmar una factura (R-022)."
+      },
+      "ReviewDraftOut": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision",
+          "updated_at"
+        ],
+        "title": "ReviewDraftOut"
+      },
+      "SupervisionItemOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_email": {
+            "type": "string",
+            "title": "User Email"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "recibida",
+                  "emitida"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_email",
+          "company_name",
+          "status",
+          "created_at",
+          "direction",
+          "page_count"
+        ],
+        "title": "SupervisionItemOut",
+        "description": "Metadata de un pendiente ajeno para `tenant_admin`, sin acciones de escritura (R-026)."
+      },
+      "SupervisionOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SupervisionItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "SupervisionOut"
       },
       "TaxLineIn": {
         "properties": {
@@ -4990,6 +6860,92 @@
         ],
         "title": "UploadOut",
         "description": "Fichero de intake creado (respuesta 201)."
+      },
+      "UploadStatusOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "processing_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Stage"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "ocr_started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocr Started At"
+          },
+          "ocr_finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocr Finished At"
+          },
+          "eta_seconds_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta Seconds Min"
+          },
+          "eta_seconds_max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta Seconds Max"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "processing_stage",
+          "created_at",
+          "ocr_started_at",
+          "ocr_finished_at"
+        ],
+        "title": "UploadStatusOut",
+        "description": "Estado operativo de un fichero, sin PII ni detalles de almacenamiento (R-019)."
       },
       "ValidationError": {
         "properties": {

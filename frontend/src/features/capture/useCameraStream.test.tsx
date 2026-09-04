@@ -49,11 +49,11 @@ describe('useCameraStream (S6.9)', () => {
 
     await waitFor(() => expect(screen.getByText('active')).toBeInTheDocument())
     expect(getUserMedia).toHaveBeenNthCalledWith(1, {
-      video: { facingMode: { exact: 'environment' }, width: { ideal: 4096 }, height: { ideal: 2160 } },
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false,
     })
     expect(getUserMedia).toHaveBeenNthCalledWith(2, {
-      video: { width: { ideal: 4096 }, height: { ideal: 2160 } },
+      video: true,
       audio: false,
     })
   })
@@ -68,7 +68,7 @@ describe('useCameraStream (S6.9)', () => {
 
     await waitFor(() => expect(screen.getByText('active')).toBeInTheDocument())
     expect(getUserMedia).toHaveBeenNthCalledWith(2, {
-      video: { width: { ideal: 4096 }, height: { ideal: 2160 } },
+      video: true,
       audio: false,
     })
   })
@@ -83,8 +83,9 @@ describe('useCameraStream (S6.9)', () => {
 
     await waitFor(() => expect(screen.getByText('active')).toBeInTheDocument())
     for (const call of getUserMedia.mock.calls) {
-      const constraints = call[0] as { video: MediaTrackConstraints }
-      expect(constraints.video).toMatchObject({ width: { ideal: 4096 }, height: { ideal: 2160 } })
+      const constraints = call[0] as { video: MediaTrackConstraints | boolean }
+      if (typeof constraints.video !== 'object') continue
+      expect(constraints.video).toMatchObject({ width: { ideal: 1920 }, height: { ideal: 1080 } })
       const width = constraints.video.width as Record<string, unknown>
       const height = constraints.video.height as Record<string, unknown>
       expect(width).not.toHaveProperty('exact')

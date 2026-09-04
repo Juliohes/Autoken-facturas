@@ -10,10 +10,14 @@
 // estado del desplegable; por debajo, la clase `hidden`/`flex` según `mobileOpen` decide si se ve.
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
+import { AlertTriangle, FileUp, Files, Scan, type LucideIcon } from 'lucide-react'
 
 import { useSession } from '../features/session/SessionProvider'
 import type { AppliedTheme } from '../features/tenancy/theme'
 import { menuLinksForRole, type MenuLink, type Role } from './routes'
+import { useInvoiceInbox } from '../features/inbox/useInvoiceInbox'
+import { Modal } from '../shared/Modal'
+import { ThemeToggle } from '../ui/ThemeToggle'
 
 interface Props {
   role: Role
@@ -22,15 +26,67 @@ interface Props {
 }
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
-  isActive ? 'font-semibold text-emerald-400' : 'text-slate-300 hover:text-slate-100'
+  isActive ? 'font-semibold text-cyan-300' : 'text-slate-200 hover:text-white'
+
+// Un icono por destino, encima del nombre (SUPERPROMPT-AUTOFACTU-AJUSTES-FLUJO-USUARIO paso 1).
+const USER_NAV_ICONS: Record<string, LucideIcon> = {
+  '/capturar': Scan,
+  '/subir-archivo': FileUp,
+  '/mis-facturas': AlertTriangle,
+  '/historial': Files,
+}
 
 export function Menu({ role, isAdminTech, theme }: Props) {
   const { logout } = useSession()
+  const [logoutOpen, setLogoutOpen] = useState(false)
+  const { data } = useInvoiceInbox(null, role === 'user')
   const [mobileOpen, setMobileOpen] = useState(false)
   const links: MenuLink[] = menuLinksForRole(role, { isAdminTech })
 
+  if (role === 'user') {
+    const actionable = (data?.summary?.ready ?? 0) + (data?.summary?.attention ?? 0)
+    const order = ['/capturar', '/subir-archivo', '/mis-facturas', '/historial']
+    const userLinks = [...links].sort((left, right) => order.indexOf(left.to) - order.indexOf(right.to))
+    return (
+      <>
+        <nav aria-label="Navegación principal" className="tn-user-nav">
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
+            {theme.logoUrl && (
+              <span className="tn-brand-logo-frame">
+                <img src={theme.logoUrl} alt={theme.appName} referrerPolicy="no-referrer" className="tn-brand-logo max-h-8" />
+              </span>
+            )}
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <button type="button" aria-label="Cerrar sesión" onClick={() => setLogoutOpen(true)} className="min-h-11 min-w-11 rounded border border-line px-3 text-xl text-fg">×</button>
+            </div>
+          </div>
+          <div className="tn-user-nav-links">
+            {userLinks.map((link) => {
+              const Icon = USER_NAV_ICONS[link.to] ?? Scan
+              return (
+                <NavLink key={link.to} to={link.to} className={linkClass}>
+                  <span className="tn-user-nav-icon">
+                    <Icon aria-hidden="true" className="h-6 w-6" strokeWidth={2} />
+                    {link.to === '/mis-facturas' && actionable > 0 && (
+                      <span aria-label={`${actionable} pendientes accionables`} className="tn-user-nav-badge">
+                        {actionable > 9 ? '9+' : actionable}
+                      </span>
+                    )}
+                  </span>
+                  <span>{link.label}</span>
+                </NavLink>
+              )
+            })}
+          </div>
+        </nav>
+        {logoutOpen && <Modal title="Cerrar sesión" onClose={() => setLogoutOpen(false)} panelClassName="max-w-md space-y-4"><p>¿Quieres cerrar sesión?</p><div className="flex justify-end gap-2"><button type="button" onClick={() => setLogoutOpen(false)} className="rounded border border-line px-4 py-2 text-fg">Cancelar</button><button type="button" onClick={() => void logout()} className="tn-primary-action rounded px-4 py-2 font-semibold">Cerrar sesión</button></div></Modal>}
+      </>
+    )
+  }
+
   return (
-    <nav className="border-b border-slate-700 bg-slate-800 text-slate-100">
+    <nav className="tn-top-nav tn-liquid-glass text-white">
       <div className="flex flex-wrap items-center justify-between gap-y-2 px-4 py-3 sm:px-6">
         {theme.logoUrl && (
           // Más grande (2026-08-02, a petición de Julio): `max-h-8` (32px) quedaba minúsculo junto
@@ -39,7 +95,7 @@ export function Menu({ role, isAdminTech, theme }: Props) {
             src={theme.logoUrl}
             alt={theme.appName}
             referrerPolicy="no-referrer"
-            className="max-h-14"
+            className="tn-brand-logo max-h-14"
           />
         )}
         <button
@@ -47,7 +103,7 @@ export function Menu({ role, isAdminTech, theme }: Props) {
           onClick={() => setMobileOpen((open) => !open)}
           aria-expanded={mobileOpen}
           aria-label={mobileOpen ? 'Cerrar menú' : 'Abrir menú'}
-          className="rounded-md border border-slate-600 p-2 text-slate-100 md:hidden"
+          className="rounded-md border border-cyan-200/50 p-2 text-white md:hidden"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
             {mobileOpen ? (
@@ -64,7 +120,7 @@ export function Menu({ role, isAdminTech, theme }: Props) {
         <ul
           className={
             (mobileOpen ? 'flex' : 'hidden') +
-            ' w-full flex-col gap-3 border-t border-slate-700 pt-3 md:flex md:w-auto md:flex-row md:items-center md:gap-6 md:border-t-0 md:pt-0'
+             ' w-full flex-col gap-3 border-t border-cyan-100/20 pt-3 md:flex md:w-auto md:flex-row md:items-center md:gap-6 md:border-t-0 md:pt-0'
           }
         >
           {links.map((link) => (
@@ -78,7 +134,7 @@ export function Menu({ role, isAdminTech, theme }: Props) {
             <button
               type="button"
               onClick={() => void logout()}
-              className="text-sm text-slate-300 hover:text-slate-100"
+              className="text-sm text-slate-200 hover:text-white"
             >
               Cerrar sesión
             </button>

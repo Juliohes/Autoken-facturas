@@ -59,6 +59,18 @@ export interface ReviewResponse {
   // S6.13: el contrato generado aún no contiene este campo. `null` significa histórico previo que
   // requiere elección explícita, no una dirección por defecto.
   direction?: Direction | null
+  source?: 'ocr' | 'draft'
+  draft_revision?: number | null
+  draft_updated_at?: string | null
+  page_count?: number
+  duplicate?: DuplicateInfo | null
+}
+
+export interface DuplicateInfo {
+  uploaded_file_id: string
+  invoice_id: string | null
+  kind: 'confirmed' | 'suspected'
+  matching_fields: string[]
 }
 
 /** Motivos de bloqueo que el servidor reimpone en `confirm` (spec §2). */
@@ -66,6 +78,7 @@ export const BLOCKING_REASONS = {
   cifInvalid: 'counterparty_cif_invalid',
   cifNotFound: 'counterparty_cif_not_found',
   ownTaxIdMissing: 'own_tax_id_missing',
+  duplicate: 'duplicate_invoice',
 } as const
 
 /** Aviso de descuadre aritmético (no bloquea; regla 5, C10). */

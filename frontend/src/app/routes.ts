@@ -13,14 +13,31 @@ import type { Role } from '../features/session/SessionProvider'
 
 export const ROUTES = {
   login: '/login',
+  // Públicas, sin token (Bloque 4 de PROMPT-AUTOFACTU-AUTH-COMPLETO): no llevan `roles` en
+  // `ROUTE_DEFS` (no son protegidas ni aparecen en el menú), se montan directas en `AppRoutes.tsx`.
+  register: '/registro',
+  forgotPassword: '/recuperar',
+  resetPassword: '/restablecer',
+  activate: '/activar',
+  // Decisión de un alta por email (2026-09-03, sustituye la verificación de email del
+  // registrante): cada admin recibe su propio enlace de un solo uso a esta pantalla.
+  registrationDecision: '/decidir-alta',
+  terms: '/terminos',
+  privacy: '/privacidad',
   platform: '/plataforma',
   platformSettings: '/plataforma/ajustes',
   platformOcrRanking: '/plataforma/ranking-ocr',
   platformLab: '/plataforma/laboratorio',
+  platformPending: '/plataforma/pendientes',
   invoices: '/facturas',
   companies: '/empresas',
   history: '/historial',
+  inbox: '/mis-facturas',
+  supervision: '/pendientes-equipo',
+  supervisionReviewPattern: '/pendientes-equipo/:fileId',
+  supervisionReview: (fileId: string) => `/pendientes-equipo/${fileId}`,
   capture: '/capturar',
+  upload: '/subir-archivo',
   confirmationPattern: '/confirmar/:fileId',
   confirmation: (fileId: string) => `/confirmar/${fileId}`,
 } as const
@@ -71,14 +88,24 @@ const ROUTE_DEFS: RouteDef[] = [
     label: 'Laboratorio',
     visible: (ctx) => ctx.isAdminTech,
   },
+  {
+    path: ROUTES.platformPending,
+    roles: ['platform_admin'],
+    label: 'Pendientes globales',
+    visible: (ctx) => ctx.isAdminTech,
+  },
   { path: ROUTES.invoices, roles: ['tenant_admin'], label: 'Facturas' },
   { path: ROUTES.companies, roles: ['tenant_admin'], label: 'Empresas' },
   // Sin `label` (2026-08-01, a petición de Julio): ya no es una entrada propia del menú, sigue
   // siendo una ruta protegida igual, pero se llega a ella desde el enlace "Ver historial" dentro
   // de `CaptureScreen` ("Subir factura"), no desde el menú principal.
-  { path: ROUTES.history, roles: ['tenant_admin', 'user'] },
+  { path: ROUTES.history, roles: ['user'], label: 'Historial' },
+  { path: ROUTES.inbox, roles: ['tenant_admin', 'user'], label: 'Mis facturas' },
+  { path: ROUTES.supervision, roles: ['tenant_admin'], label: 'Pendientes del equipo' },
   { path: ROUTES.capture, roles: ['tenant_admin', 'user'], label: 'Subir factura' },
+  { path: ROUTES.upload, roles: ['user'], label: 'Subir Archivo' },
   { path: ROUTES.confirmationPattern, roles: ['tenant_admin', 'user'] },
+  { path: ROUTES.supervisionReviewPattern, roles: ['tenant_admin'] },
 ]
 
 // `user` entra directo a capturar (S2.2 decisión 1): subir facturas es su tarea principal del día a
@@ -98,7 +125,11 @@ export function menuLinksForRole(role: Role, ctx: MenuVisibilityContext): MenuLi
     (def) => def.label && def.roles.includes(role) && (def.visible?.(ctx) ?? true),
   ).map((def) => ({
     to: def.path,
-    label: def.label as string,
+    label: def.path === ROUTES.capture && role === 'user'
+      ? 'Escáner'
+      : def.path === ROUTES.inbox && role === 'user'
+        ? 'Pendientes'
+        : def.label as string,
   }))
 }
 

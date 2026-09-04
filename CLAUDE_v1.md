@@ -4,6 +4,10 @@
 > para retomar contexto en cualquier sesión. Si hay conflicto, manda el PLAN MAESTRO.
 > Se actualiza al cerrar cada tarea (sección "Estado actual").
 
+La fuente principal de requisitos para Autofactu es:
+docs/specs/ESPECIFICACION_MAESTRA_AUTOKEN_AUTOFACTU_PRODUCCION_v3.md
+
+
 ---
 
 ## 1. Reglas de Oro (innegociables — sección 1 del plan)
@@ -1010,3 +1014,161 @@
 - **Pantalla de revisión**: siempre visibles total + CIF contraparte + fecha; el resto plegado; aviso rojo
   grande de responsabilidad bajo el botón. Implementación en tarea **S2.8** (+ refuerzos S2.3/S2.4).
 - **Pendientes de Julio**: certificado electrónico para AEAT censal; decidir si se contrata API comercial de pago.
+
+
+
+
+# MODO DE TRABAJO OBLIGATORIO — AUTOKEN / AUTOFACTU
+
+La fuente principal de requisitos del proyecto es:
+
+docs/specs/ESPECIFICACION_MAESTRA_AUTOKEN_AUTOFACTU_PRODUCCION_v3.md
+
+Debes consultarla antes de planificar o implementar cualquier cambio relacionado
+con sus requisitos.
+
+## REGLA GENERAL
+
+No debes limitarte a implementar literalmente una petición.
+
+Debes trabajar de forma proactiva y autónoma siguiendo este ciclo:
+
+1. Identificar el siguiente requisito pendiente que pueda ejecutarse según sus dependencias.
+2. Leer completamente la parte relevante de la especificación maestra.
+3. Inspeccionar el código existente antes de diseñar cambios.
+4. Comprobar si ya existe implementación parcial o completa.
+5. Crear una especificación técnica de implementación suficientemente detallada.
+6. Dividir esa especificación en tareas pequeñas, ordenadas y verificables.
+7. Definir ANTES de programar:
+   - criterios de aceptación;
+   - tests necesarios;
+   - invariantes que no pueden romperse;
+   - casos normales;
+   - casos límite;
+   - casos de error;
+   - regresiones que deben evitarse.
+8. Implementar una tarea cada vez.
+9. Ejecutar los tests correspondientes después de cada bloque lógico.
+10. Corregir cualquier fallo antes de continuar.
+11. Ejecutar los tests de regresión relevantes.
+12. Revisar el diff final.
+13. Verificar explícitamente todos los criterios de aceptación.
+14. Solo entonces considerar el requisito COMPLETADO.
+15. Continuar con el siguiente requisito desbloqueado.
+
+## ESPECIFICACIONES
+
+Si la especificación maestra ya contiene suficiente detalle, no debes duplicarla
+innecesariamente.
+
+Si falta detalle para implementar con seguridad, debes crearlo tú mismo antes de
+programar.
+
+No debes detener el trabajo para preguntarme detalles técnicos menores que puedan
+resolverse razonablemente inspeccionando:
+
+- el código;
+- tests existentes;
+- ADR;
+- specs;
+- documentación;
+- patrones del propio proyecto.
+
+Pregunta únicamente cuando exista una decisión real de producto, negocio,
+seguridad o arquitectura con varias alternativas significativamente distintas.
+
+## TESTS
+
+Los tests forman parte de la implementación, no son una fase opcional posterior.
+
+Para cada requisito debes decidir antes de programar qué evidencia demostrará que
+está terminado.
+
+Cuando proceda deben existir:
+
+- unit tests;
+- integration tests;
+- API tests;
+- frontend tests;
+- tests de autorización/tenancy/RLS;
+- tests de concurrencia;
+- tests de errores;
+- tests de regresión;
+- pruebas E2E.
+
+Un requisito NO está terminado porque el código compile.
+
+Está terminado únicamente cuando:
+
+IMPLEMENTACIÓN
++
+TESTS
++
+CRITERIOS DE ACEPTACIÓN
++
+REGRESIÓN
++
+REVISIÓN DEL DIFF
+
+están correctos.
+
+## REGLA DE INICIATIVA
+
+No esperes a que yo diga:
+
+"crea tests"
+"haz la especificación"
+"revisa dependencias"
+"prueba los errores"
+"comprueba regresiones"
+"continúa con la siguiente tarea"
+
+Todo eso forma parte automáticamente de tu trabajo.
+
+## CONTROL DE PROGRESO
+
+Mantén un documento:
+
+docs/specs/IMPLEMENTATION_STATUS.md
+
+Debe registrar para cada requisito:
+
+- ID;
+- estado;
+- dependencias;
+- especificación técnica asociada;
+- archivos modificados;
+- tests creados;
+- tests ejecutados;
+- resultado;
+- observaciones;
+- commit/PR si existe.
+
+Estados permitidos:
+
+TODO
+BLOCKED
+READY
+IN_PROGRESS
+VERIFYING
+DONE
+
+Nunca marques DONE sin evidencia verificable.
+
+## PRINCIPIO FINAL
+
+Trabaja requisito por requisito.
+
+No realices grandes cambios simultáneos cuando puedan dividirse en unidades
+independientes y comprobables.
+
+Prioriza siempre:
+
+correctitud
+> seguridad
+> aislamiento multitenant
+> integridad de datos
+> verificabilidad
+> mantenibilidad
+> rendimiento
+> velocidad de implementación.

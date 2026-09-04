@@ -137,7 +137,7 @@ export function PlatformLab() {
 
   if (labFileId) {
     return (
-      <section className="mx-auto max-w-6xl space-y-6 p-6 text-slate-100">
+      <section className="tn-panel-page mx-auto max-w-6xl space-y-6 p-6">
         <button type="button" onClick={closeLab} className="text-sm text-emerald-400 underline">
           Volver al resumen
         </button>
@@ -162,7 +162,7 @@ export function PlatformLab() {
   }
 
   return (
-    <section className="mx-auto max-w-5xl space-y-4 p-6 text-slate-100">
+    <section className="tn-panel-page mx-auto max-w-5xl space-y-4 p-6">
       <h1 className="text-xl font-semibold">Laboratorio OCR</h1>
       <p className="text-sm text-slate-400">
         Diagnóstico por factura: Lectura 1 (lo que leyó la IA), Lectura 2 (tras los ajustes

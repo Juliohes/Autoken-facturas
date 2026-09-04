@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-08-27",
+  "scenario": "primary provider 429 with successful fallback",
+  "provider": {
+    "engine": "fake-primary",
+    "model": "fake-primary-v1",
+    "response": 429
+  },
+  "result": {
+    "fallback_used": true,
+    "final_file_status": "ocr_done",
+    "provider_429_metric_increment": 1,
+    "provider_error_persisted": false,
+    "adapter_preserves_rate_limit_classification": true
+  },
+  "tests": [
+    "tests/test_r050_provider_429.py::test_429_del_primario_activa_fallback_y_no_guarda_el_error",
+    "tests/test_r050_provider_429.py::test_adaptador_gemini_conserva_un_429_del_sdk_en_la_causa"
+  ]
+}

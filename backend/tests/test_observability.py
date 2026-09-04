@@ -103,6 +103,10 @@ async def test_c3_metrics_expone_formato_prometheus(authapi: Api) -> None:
     assert resp.headers["content-type"].startswith("text/plain")
     assert "autoken_http_requests_total" in resp.text
     assert "autoken_ocr_queue_depth" in resp.text
+    assert "autoken_db_pool_size" in resp.text
+    assert "autoken_db_pool_checked_out" in resp.text
+    assert "autoken_db_pool_capacity" in resp.text
+    assert "autoken_ocr_queue_backend_up" in resp.text
 
 
 async def _enqueue_dummy_ocr_job(redis_url: str, queue_name: str) -> None:

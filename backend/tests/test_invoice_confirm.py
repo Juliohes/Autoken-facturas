@@ -8,6 +8,7 @@ aún no existen.
 
 from __future__ import annotations
 
+import asyncpg
 import httpx
 
 from tests._dbtest import seed_company, seed_membership, seed_tenant, seed_user
@@ -27,7 +28,7 @@ from tests._invoicing import (
     review_url,
     seed_confirmable,
 )
-from tests._ocr import seed_uploaded_file
+from tests._ocr import seed_uploaded_file, seed_uploaded_file_page
 
 Api = tuple[httpx.AsyncClient, dict[str, str]]
 
@@ -324,6 +325,145 @@ async def test_c12_review_devuelve_campos_confianzas_y_veredicto(authapi: Api) -
     assert body["counterparty_verdict"]["status"] == "valid"
     assert body["own"]["cif"] == OWN_CIF
     assert "total_amount" in body["fields"]
+
+
+async def test_r023_review_prioriza_el_borrador_y_expone_su_metadata(authapi: Api) -> None:
+    """Un snapshot guardado sustituye los campos OCR sin perder confianza ni veredicto."""
+    client, dsns = authapi
+    s = await seed_confirmable(dsns, client)
+    await seed_uploaded_file_page(
+        dsns,
+        tenant_id=s["tenant_id"],
+        company_id=s["company_id"],
+        root_uploaded_file_id=s["file_id"],
+        page_number=2,
+        content=b"draft-review-page-2",
+    )
+    draft = await client.put(
+        f"/api/v1/uploads/{s['file_id']}/draft",
+        headers=auth(s["token"]),
+        json={
+            "revision": 0,
+            "direction": "recibida",
+            "issue_date": "2026-08-21",
+            "invoice_number": "D-1",
+            "counterparty_tax_id": COUNTERPARTY_CIF,
+            "counterparty_name": "Nombre corregido",
+            "net_amount": "100.00",
+            "tax_amount": "21.00",
+            "total_amount": "122.00",
+            "irpf_amount": None,
+            "tax_lines": [{"iva_pct": "21", "base": "100", "cuota": "21"}],
+        },
+    )
+    assert draft.status_code == 200, draft.text
+
+    response = await client.get(review_url(s["file_id"]), headers=auth(s["token"]))
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["source"] == "draft"
+    assert body["draft_revision"] == 1
+    assert body["draft_updated_at"]
+    assert body["page_count"] == 2
+    assert body["fields"]["total_amount"] == "122.00"
+    assert body["fields"]["counterparty_name"] == "Nombre corregido"
+    assert body["fields"]["invoice_number"] == "D-1"
+    assert body["confidences"] == {}
+
+
+async def test_r023_review_sin_borrador_usa_ocr_y_metadata_de_fallback(authapi: Api) -> None:
+    """Sin snapshot editable se conserva exactamente la lectura OCR existente."""
+    client, dsns = authapi
+    s = await seed_confirmable(dsns, client)
+
+    response = await client.get(review_url(s["file_id"]), headers=auth(s["token"]))
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["source"] == "ocr"
+    assert body["draft_revision"] is None
+    assert body["draft_updated_at"] is None
+    assert body["page_count"] == 1
+    assert body["fields"]["total_amount"] == "121.00"
+
+
+async def test_r024_confirmar_usa_el_borrador_y_lo_elimina_dentro_de_la_confirmacion(
+    authapi: Api,
+) -> None:
+    """La versión persistida manda sobre un body obsoleto y el borrador desaparece al confirmar."""
+    client, dsns = authapi
+    s = await seed_confirmable(dsns, client)
+    draft = await client.put(
+        f"/api/v1/uploads/{s['file_id']}/draft",
+        headers=auth(s["token"]),
+        json={
+            "revision": 0,
+            "direction": "recibida",
+            "issue_date": "2026-08-21",
+            "invoice_number": "D-1",
+            "counterparty_tax_id": COUNTERPARTY_CIF,
+            "counterparty_name": "Proveedor SA",
+            "net_amount": "100.00",
+            "tax_amount": "21.00",
+            "total_amount": "122.00",
+            "irpf_amount": None,
+            "tax_lines": [{"iva_pct": "21", "base": "100", "cuota": "21"}],
+        },
+    )
+    assert draft.status_code == 200
+
+    confirmed = await client.post(
+        confirm_url(s["file_id"]),
+        headers=auth(s["token"]),
+        json=confirm_body(total="999.00", invoice_number="stale-body"),
+    )
+
+    assert confirmed.status_code == 201, confirmed.text
+    invoice_total = await fetch_invoice(dsns, file_id=s["file_id"])
+    assert invoice_total["total_amount"] == 122
+    assert invoice_total["invoice_number"] == "D-1"
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        remaining = await conn.fetchval(
+            "SELECT count(*) FROM review_drafts WHERE uploaded_file_id = $1", s["file_id"]
+        )
+    finally:
+        await conn.close()
+    assert remaining == 0
+
+
+async def test_r024_confirmacion_fallida_conserva_el_borrador(authapi: Api) -> None:
+    """Una guarda previa al commit no borra el snapshot editable."""
+    client, dsns = authapi
+    s = await seed_confirmable(dsns, client)
+    draft = await client.put(
+        f"/api/v1/uploads/{s['file_id']}/draft",
+        headers=auth(s["token"]),
+        json={
+            "revision": 0,
+            "direction": "recibida",
+            "total_amount": "122.00",
+            "tax_lines": [{"iva_pct": "21", "base": "100", "cuota": "21"}],
+        },
+    )
+    assert draft.status_code == 200
+
+    failed = await client.post(
+        confirm_url(s["file_id"]),
+        headers=auth(s["token"]),
+        json=confirm_body(responsibility_accepted=False),
+    )
+
+    assert failed.status_code == 422
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        remaining = await conn.fetchval(
+            "SELECT count(*) FROM review_drafts WHERE uploaded_file_id = $1", s["file_id"]
+        )
+    finally:
+        await conn.close()
+    assert remaining == 1
 
 
 # --- S6.1: número de factura + base imponible/IVA como campos de oro ------------------------------

@@ -1,0 +1,3 @@
+# Dependencias adicionales para PADDLE_PIPELINE=structure.
+# No se instalan en staging: PP-StructureV3 requiere una máquina de benchmark dedicada.
+paddlex[ocr]>=3.7,<3.8

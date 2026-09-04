@@ -32,9 +32,11 @@ uvicorn main:app --reload --app-dir src
 
 ```bash
 docker build -t autoken/api:dev .
-# O con la pila completa (api + postgres + redis):
+# O con la pila local completa (api + postgres + redis):
 docker compose -f ../infrastructure/docker-compose.yml up --build
 ```
+
+Para staging/producción, usar `bash ../infrastructure/deploy.sh`; no arrancar el Compose base aislado.
 
 ## Migraciones
 Ver `migrations/README.md`. La URL de BD se toma de `DATABASE_URL` (nunca de `alembic.ini`).

@@ -11,6 +11,7 @@ import pytest
 from ocr.ranking_engines import (
     build_additional_ranking_extractors,
     build_default_ranking_extractor,
+    build_named_benchmark_extractors,
     build_named_ranking_extractors,
     build_ranking_extractors,
 )
@@ -81,6 +82,23 @@ async def test_s6_7_el_benchmark_conserva_los_seis_motores_sin_credenciales() ->
         "claude-vertex",
         "gpt-5.1",
         "azure-docintel",
+        "mistral-ocr-4",
+    ]
+    for _, extractor in extractors:
+        with pytest.raises(InvoiceExtractionError, match="engine_unavailable"):
+            await extractor.extract(b"no hay llamada", "image/jpeg")
+
+
+async def test_r032_fija_los_cuatro_candidatos_minimos_sin_credenciales() -> None:
+    """R-032 no mezcla el ranking histórico ni reduce artificialmente la salida estructurada."""
+    from ocr.extraction import InvoiceExtractionError
+
+    extractors = build_named_benchmark_extractors(Settings(_env_file=None))  # type: ignore[call-arg]
+
+    assert [name for name, _ in extractors] == [
+        "gemini-3.5-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash-lite",
         "mistral-ocr-4",
     ]
     for _, extractor in extractors:

@@ -2,8 +2,8 @@
 docs/specs/S6.7-benchmark-real-motor-variante.md, C1): cablea I/O (sesión+RLS, MinIO, motores
 reales, verdad confirmada) con el motor de dominio `ocr.benchmark.run_benchmark`.
 
-Único punto de producción legítimo que construye los 6 motores reales desde `.env`
-(`ocr.ranking_engines.build_named_ranking_extractors`) -- mismo criterio ya auditado que
+Único punto de producción legítimo que construye los 4 candidatos R-032 desde `.env`
+(`ocr.ranking_engines.build_named_benchmark_extractors`) -- mismo criterio ya auditado que
 `jobs.ocr.run_ocr`/`jobs.ocr_ranking.run_ocr_ranking` (ver sus docstrings para el incidente real de
 coste de S4.8 que este patrón evita: un test que llama a `run_ocr_benchmark_task` sin inyectar sus
 propios extractores SÍ dispara llamadas de pago reales si el entorno tiene credenciales configuradas
@@ -16,7 +16,7 @@ Este job resuelve TAMBIÉN el interruptor (`platform_settings.ocr_experiment_ena
 propio de la empresa (2026-08-11, S6.7 auditoría, hallazgo de arquitectura): `ocr.benchmark` ya no
 importa `companies`/`platform_admin` (invertía la dirección de dependencias del monorepo, ver su
 docstring) -- los recibe ya resueltos. Si el interruptor está apagado, el job sale de inmediato, SIN
-descargar de MinIO ni construir los 6 extractores reales (evita el mismo coste que `run_benchmark`
+descargar de MinIO ni construir los 4 extractores reales (evita el mismo coste que `run_benchmark`
 ya evitaba, pero ahora también el de la descarga y la construcción de motores).
 
 Sesión CORTA (mismo patrón que `jobs.ocr_ranking_backfill._process_candidate`) solo para leer el
@@ -56,11 +56,18 @@ from invoice_intake import storage
 from invoicing import repository as invoicing_repo
 from ocr.benchmark import run_benchmark
 from ocr.extraction import DocumentPage, InvoiceExtractor
-from ocr.ranking_engines import build_named_ranking_extractors
+from ocr.ranking_engines import (
+    build_named_benchmark_extractors,
+    build_named_ranking_extractors,
+)
 from platform_admin import settings_repository
 from shared.config import get_settings
 from shared.db import platform_session, tenant_session
 from shared.encryption import tenant_encryption_key
+
+# Nombre conservado para los tests y consumidores del wiring histórico; el benchmark R-032 usa la
+# función versionada de arriba y no mezcla los candidatos del ranking S4.8.
+_legacy_ranking_builder = build_named_ranking_extractors
 
 logger = structlog.get_logger(__name__)
 
@@ -122,8 +129,8 @@ async def _run_for_invoice(
     settings = get_settings()
     encryption_key = tenant_encryption_key(settings, tenant_id)
     async with tenant_session(tenant_id, company_id) as session:
-        settings_row = await settings_repository.get_settings(session)
-        if not settings_row.ocr_experiment_enabled:
+        lab_settings = await settings_repository.get_lab_settings(session)
+        if not lab_settings.auto_benchmark_enabled:
             # Interruptor apagado (C1, spec §4): coste cero, sin descargar de MinIO ni construir
             # ningún motor real.
             return
@@ -160,6 +167,9 @@ async def _run_for_invoice(
             )
             return
         truth = _build_truth(invoice)
+        manual_corrections_per_invoice = await invoicing_repo.count_corrections(
+            session, uploaded_file_id
+        )
 
     pages = [
         DocumentPage(
@@ -177,6 +187,7 @@ async def _run_for_invoice(
         own_cif=company.cif,
         ocr_experiment_enabled=True,
         extractors=extractors,
+        manual_corrections_per_invoice=manual_corrections_per_invoice,
         raise_on_orchestration_error=True,
     )
 
@@ -188,8 +199,9 @@ async def run_ocr_benchmark_task(
     job abre su propia sesión con contexto tenant), igual que `jobs.worker.run_ocr_task`. Nunca
     propaga una excepción (experimento de fondo).
 
-    Comprueba el interruptor (S6.7 auditoría 2026-08-11, hallazgo ALTO) ANTES de construir los 6
-    motores reales (`build_named_ranking_extractors`): antes, esa construcción ocurría siempre, con
+    Comprueba el interruptor (S6.7 auditoría 2026-08-11, hallazgo ALTO) ANTES de construir los 4
+    candidatos R-032 (`build_named_benchmark_extractors`): antes, esa construcción ocurría siempre,
+    con
     el experimento encendido o apagado, dejando de ser el interruptor lo primero que se ejecuta en
     este camino -- misma categoría de riesgo ya corregida dos veces en el proyecto (S4.8, S2.10).
     Los constructores son perezosos (no llaman a la red en `__init__`), así que hoy es inofensivo,
@@ -200,10 +212,10 @@ async def run_ocr_benchmark_task(
     tid, cid, fid = UUID(tenant_id), UUID(company_id), UUID(uploaded_file_id)
     try:
         async with platform_session() as session:
-            settings_row = await settings_repository.get_settings(session)
-        if not settings_row.ocr_experiment_enabled:
+            lab_settings = await settings_repository.get_lab_settings(session)
+        if not lab_settings.auto_benchmark_enabled:
             return
-        extractors = build_named_ranking_extractors(get_settings())
+        extractors = build_named_benchmark_extractors(get_settings())
         await _run_for_invoice(tid, cid, fid, extractors=extractors)
     except Exception:  # noqa: BLE001  (experimento de fondo: nunca debe tumbar al worker)
         logger.error("ocr_benchmark.task_failed", uploaded_file_id=str(fid))

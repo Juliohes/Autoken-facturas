@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-08-26T21:47:47+00:00",
+  "kind": "latency_phase_diagnostic",
+  "scenario": {
+    "users": 10,
+    "uploads_per_user": 10,
+    "ocr_worker": "stopped",
+    "review_inbox_allowlist": "enabled_for_ephemeral_tenant"
+  },
+  "uploads": {
+    "requested": 100,
+    "status_codes": {
+      "201": 100
+    },
+    "p50_seconds": 3.6455919360014377,
+    "p95_seconds": 3.944545773608843,
+    "mean_seconds": 3.541420310459216
+  },
+  "upload_phase_metrics": {
+    "identity": {"count": 100, "sum_seconds": 41.61409341584658},
+    "authorization": {"count": 100, "sum_seconds": 0.0016854050918482244},
+    "rate_limit": {"count": 100, "sum_seconds": 5.0464800029294565},
+    "request_body": {"count": 100, "sum_seconds": 0.0014189421781338751},
+    "validation": {"count": 100, "sum_seconds": 5.286811280850088},
+    "deduplication": {"count": 100, "sum_seconds": 43.824036300124135},
+    "antivirus": {"count": 100, "sum_seconds": 6.75486045103753},
+    "storage": {"count": 100, "sum_seconds": 7.3347324130591005},
+    "persistence": {"count": 100, "sum_seconds": 46.21627141497447}
+  },
+  "queue": {
+    "depth_after_uploads": 100,
+    "backend_up": 1
+  },
+  "privacy_check": {
+    "cross_user_leaks": 0,
+    "inbox_http_errors": 0
+  },
+  "recovery": {
+    "pending": 0,
+    "processing": 0,
+    "failed_delta": 0
+  },
+  "disposition": "diagnostic_only",
+  "conclusion": "La resolución fresca de empresa aporta 41,61 s agregados. La carrera de MinIO está corregida, pero el p95 sigue por encima de 3 s; no se introduce una caché que pueda retrasar revocaciones de pertenencia."
+}

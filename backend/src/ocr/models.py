@@ -26,11 +26,15 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
+    Identity,
+    Index,
     Integer,
     Numeric,
     Text,
     UniqueConstraint,
+    desc,
     func,
 )
 from sqlalchemy.dialects.postgresql import BYTEA, JSONB
@@ -107,7 +111,44 @@ class OcrRecoveryMetrics(Base):
     processing: Mapped[int] = mapped_column(BigInteger, nullable=False)
     abandoned: Mapped[int] = mapped_column(BigInteger, nullable=False)
     failed: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    ready: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
     observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class OcrProcessingSample(Base):
+    """Muestra agregada de duración OCR para ETA, sin tenant ni identificadores de factura."""
+
+    __tablename__ = "ocr_processing_samples"
+    __table_args__ = (
+        CheckConstraint(
+            "page_count_bucket IN ('1', '2-5', '6-10', '11+')",
+            name="ocr_processing_samples_page_count_bucket_check",
+        ),
+        CheckConstraint(
+            "queue_wait_seconds >= 0", name="ocr_processing_samples_queue_wait_seconds_check"
+        ),
+        CheckConstraint(
+            "processing_seconds >= 0", name="ocr_processing_samples_processing_seconds_check"
+        ),
+        Index(
+            "ix_ocr_processing_samples_lookup",
+            "engine",
+            "model",
+            "page_count_bucket",
+            desc("completed_at"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    engine: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    page_count_bucket: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    queue_wait_seconds: Mapped[float] = mapped_column(Float, nullable=False)
+    processing_seconds: Mapped[float] = mapped_column(Float, nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
@@ -211,6 +252,20 @@ class OcrBenchmarkResult(Base):
     comparables: Mapped[int] = mapped_column(Integer, nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    benchmark_contract_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    schema_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    normalization_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ground_truth_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    document_sha256: Mapped[str | None] = mapped_column(Text, nullable=True)
+    variant_sha256: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    field_exact_accuracy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    critical_field_accuracy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    all_critical_exact: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    arithmetic_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    hallucination_flags: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    manual_corrections_per_invoice: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    api_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

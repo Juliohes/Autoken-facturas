@@ -10,23 +10,38 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useState, type ReactNode } from 'react'
 
 import { CaptureScreen } from '../features/capture/CaptureScreen'
 import type { Direction } from '../features/capture/types'
 import { CompaniesPanel } from '../features/companies/CompaniesPanel'
 import { ConfirmationScreen } from '../features/confirmation/ConfirmationScreen'
+import { PostConfirmDialog } from '../features/confirmation/PostConfirmDialog'
+import { InvoiceInbox } from '../features/inbox/InvoiceInbox'
 import { InvoiceHistory } from '../features/history/InvoiceHistory'
+import { UploadFileScreen } from '../features/upload/UploadFileScreen'
+import { PendingSupervisionPanel } from '../features/supervision/PendingSupervisionPanel'
+import { SupervisionReviewScreen } from '../features/supervision/SupervisionReviewScreen'
 import { InvoicesPanel } from '../features/panel/InvoicesPanel'
 import { BenchmarkRanking } from '../features/platform/BenchmarkRanking'
 import { PlatformLab } from '../features/platform/PlatformLab'
+import { GlobalPendingPanel } from '../features/platform/GlobalPendingPanel'
 import { PlatformSettings } from '../features/platform/PlatformSettings'
 import { PlatformTenants } from '../features/platform/PlatformTenants'
+import { ActivateScreen } from '../features/auth/ActivateScreen'
+import { ForgotPasswordScreen } from '../features/auth/ForgotPasswordScreen'
+import { RegisterScreen } from '../features/auth/RegisterScreen'
+import { RegistrationDecisionScreen } from '../features/auth/RegistrationDecisionScreen'
+import { ResetPasswordScreen } from '../features/auth/ResetPasswordScreen'
+import { PrivacidadScreen } from '../features/legal/PrivacidadScreen'
+import { TerminosScreen } from '../features/legal/TerminosScreen'
 import { LoginScreen } from '../features/session/LoginScreen'
 import { useSession } from '../features/session/SessionProvider'
 import type { AppliedTheme } from '../features/tenancy/theme'
 import { Menu } from './Menu'
 import { homeRouteForRole, rolesAllowedFor, ROUTES } from './routes'
+import { navigateAfterConfirm } from '../features/confirmation/postConfirmNavigation'
 
 function ProtectedRoute({ children, path }: { children: ReactNode; path: string }) {
   const { status, user } = useSession()
@@ -85,33 +100,51 @@ function InvoicesRoute() {
 }
 
 function CaptureRoute() {
-  const navigate = useNavigate()
-  return (
-    <CaptureScreen
-      onUploaded={(fileId, direction, lowSharpness) =>
-        // `lowSharpness` viaja como estado de navegación efímero (S6.14 C8), mismo patrón ya usado
-        // para `direction` antes de S6.13: es un aviso informativo de una sola vez, no un dato
-        // persistente ni crítico, así que no reaparece si se recarga o se reabre más tarde.
-        navigate(ROUTES.confirmation(fileId), { state: { direction, lowSharpness } })
-      }
-    />
-  )
+  return <CaptureScreen onUploaded={() => undefined} />
 }
 
 function ConfirmationRoute() {
   const { fileId } = useParams<{ fileId: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const location = useLocation()
+  const [nextInvoice, setNextInvoice] = useState<Awaited<ReturnType<typeof navigateAfterConfirm>>>(null)
   if (!fileId) return <Navigate to={ROUTES.history} replace />
   const direction = (location.state as { direction?: Direction } | null)?.direction
   return (
-    <ConfirmationScreen
-      fileId={fileId}
-      direction={direction}
-      onConfirmed={() => navigate(ROUTES.history)}
-      onRetry={() => navigate(ROUTES.history)}
-    />
+    <>
+      <ConfirmationScreen
+        fileId={fileId}
+        direction={direction}
+        onConfirmed={async () => {
+          const next = await navigateAfterConfirm(queryClient)
+          if (next) setNextInvoice(next)
+          else navigate(ROUTES.inbox)
+        }}
+        onRetry={() => navigate(ROUTES.history)}
+        onDeleted={() => navigate(ROUTES.inbox, { state: { message: 'La factura no se ha confirmado ni guardado.' } })}
+      />
+      {nextInvoice && (
+        <PostConfirmDialog
+          onReview={() => {
+            const next = nextInvoice
+            setNextInvoice(null)
+            navigate(ROUTES.confirmation(next.id), { state: { direction: next.direction ?? undefined } })
+          }}
+          onClose={() => {
+            setNextInvoice(null)
+            navigate(ROUTES.inbox)
+          }}
+        />
+      )}
+    </>
   )
+}
+
+function SupervisionReviewRoute() {
+  const { fileId } = useParams<{ fileId: string }>()
+  if (!fileId) return <Navigate to={ROUTES.supervision} replace />
+  return <SupervisionReviewScreen fileId={fileId} />
 }
 
 export function AppRoutes({ theme }: { theme: AppliedTheme }) {
@@ -124,13 +157,25 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
     // sin esto, el fondo por defecto es blanco y ese texto queda casi invisible (hallazgo real,
     // reportado por Julio al entrar de verdad). El login ya tenía su propio fondo aparte
     // (`LoginScreen`); este envoltorio cubre el resto del árbol autenticado.
-    <div className="min-h-screen bg-slate-900 text-slate-100">
+    <div className="tn-app-shell min-h-screen">
       {status === 'authenticated' && user && (
         <Menu role={user.role} isAdminTech={user.is_admin_tech} theme={theme} />
       )}
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path={ROUTES.login} element={<LoginRoute theme={theme} />} />
+        {/* Públicas, sin token (Bloque 4 de PROMPT-AUTOFACTU-AUTH-COMPLETO): fuera de `ProtectedRoute`,
+            cada una resuelve su propio estado (token de la URL, éxito/error) sin depender de la sesión. */}
+        <Route path={ROUTES.register} element={<RegisterScreen theme={theme} />} />
+        <Route path={ROUTES.forgotPassword} element={<ForgotPasswordScreen theme={theme} />} />
+        <Route path={ROUTES.resetPassword} element={<ResetPasswordScreen theme={theme} />} />
+        <Route path={ROUTES.activate} element={<ActivateScreen theme={theme} />} />
+        <Route
+          path={ROUTES.registrationDecision}
+          element={<RegistrationDecisionScreen theme={theme} />}
+        />
+        <Route path={ROUTES.terms} element={<TerminosScreen theme={theme} />} />
+        <Route path={ROUTES.privacy} element={<PrivacidadScreen theme={theme} />} />
         <Route
           path={ROUTES.platform}
           element={
@@ -164,10 +209,34 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
           }
         />
         <Route
+          path={ROUTES.platformPending}
+          element={
+            <ProtectedRoute path={ROUTES.platformPending}>
+              <GlobalPendingPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path={ROUTES.invoices}
           element={
             <ProtectedRoute path={ROUTES.invoices}>
               <InvoicesRoute />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.supervision}
+          element={
+            <ProtectedRoute path={ROUTES.supervision}>
+              <PendingSupervisionPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.supervisionReviewPattern}
+          element={
+            <ProtectedRoute path={ROUTES.supervisionReviewPattern}>
+              <SupervisionReviewRoute />
             </ProtectedRoute>
           }
         />
@@ -188,10 +257,26 @@ export function AppRoutes({ theme }: { theme: AppliedTheme }) {
           }
         />
         <Route
+          path={ROUTES.inbox}
+          element={
+            <ProtectedRoute path={ROUTES.inbox}>
+              <InvoiceInbox />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path={ROUTES.capture}
           element={
             <ProtectedRoute path={ROUTES.capture}>
               <CaptureRoute />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.upload}
+          element={
+            <ProtectedRoute path={ROUTES.upload}>
+              <UploadFileScreen />
             </ProtectedRoute>
           }
         />

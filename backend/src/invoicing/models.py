@@ -23,6 +23,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     Text,
     UniqueConstraint,
@@ -107,6 +108,55 @@ class Invoice(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ReviewDraft(Base):
+    """Estado editable previo a confirmar, nunca una factura contable (R-021)."""
+
+    __tablename__ = "review_drafts"
+    __table_args__ = (
+        CheckConstraint(
+            "direction IS NULL OR direction IN ('recibida', 'emitida')",
+            name="review_drafts_direction_check",
+        ),
+        Index("ix_review_drafts_owner_updated", "owner_user_id", "updated_at"),
+    )
+
+    uploaded_file_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("uploaded_files.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    direction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    invoice_number: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Los campos identificativos se cifran mediante SQL en `draft_repository`, igual que invoices.
+    counterparty_tax_id: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
+    counterparty_tax_id_blind_index: Mapped[str | None] = mapped_column(Text, nullable=True)
+    counterparty_name: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
+    net_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    total_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    irpf_amount: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    tax_lines: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
@@ -197,5 +247,51 @@ class InvoiceEdit(Base):
         PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     edited_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class SupplierProfile(Base):
+    """Patrones agregados aprendidos solo de facturas confirmadas (R-038)."""
+
+    __tablename__ = "supplier_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "company_id",
+            "counterparty_cif_blind_index",
+            name="supplier_profiles_scope_unique",
+        ),
+        CheckConstraint("confirmations >= 0", name="supplier_profiles_confirmations_check"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    counterparty_cif_blind_index: Mapped[str] = mapped_column(Text, nullable=False)
+    confirmations: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    invoice_number_patterns: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    tax_rate_histogram: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    tax_line_count_histogram: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    field_correction_stats: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

@@ -1,26 +1,14 @@
-"""Adaptador de Mistral OCR 4 al ranking multi-modelo (S4.8), sin campos inventados.
-
-Mistral OCR 4 (`POST /v1/ocr`, ver `ocr/engines/mistral_ocr4.py`) es una API de OCR puro: no es un
-modelo de lenguaje, no sigue instrucciones, no se le puede "pedir" un esquema de JSON — solo
-devuelve markdown y bloques de texto por página. No hay forma honesta de convertir eso en
-fecha/importes/CIF verificados sin inventar ese paso intermedio (que además mediría la calidad de
-OTRO componente, no la de Mistral).
-
-Decisión de dominio (spec S4.8 §0/C5): este extractor SÍ llama a Mistral (para medir su coste,
-latencia y disponibilidad como los demás motores del ranking), pero su lectura estructurada tiene
-TODOS los campos a `None` con confianza `baja` — nunca un valor inventado. Es información real: el
-ranking de "acierto de campos estructurados" mostrará a Mistral en el fondo por diseño de su propia
-API, no por un fallo de este adaptador.
-
-No se ejerce en CI: los tests inyectan un doble del cliente. Cualquier fallo de la API se traduce a
-`InvoiceExtractionError`; nunca cruza una excepción cruda.
-"""
+"""Adaptador de Mistral OCR 4 con anotación JSON estructurada (R-029)."""
 
 from __future__ import annotations
 
+import json
+from dataclasses import replace
 from typing import Any
 
 from ocr.extraction import ExtractedInvoice, InvoiceExtractionError, InvoiceExtractor
+from ocr.extraction_json import parse_structured_invoice
+from ocr.schema import INVOICE_EXTRACTION_PROMPT, InvoiceExtractionSchema
 
 __all__ = ["ENGINE_NAME", "MistralInvoiceExtractor", "build_mistral_extractor"]
 
@@ -38,7 +26,7 @@ _IMAGE_MIME_BY_CONTENT_TYPE = {
 
 
 class MistralInvoiceExtractor:
-    """Llama a Mistral OCR 4 pero nunca inventa campos: ver docstring del módulo."""
+    """Llama a Mistral OCR 4 y convierte su anotación al contrato OCR interno."""
 
     def __init__(
         self,
@@ -57,7 +45,7 @@ class MistralInvoiceExtractor:
         self._client = client
 
     async def extract(self, content: bytes, content_type: str) -> ExtractedInvoice:
-        """Llama a Mistral OCR 4; devuelve SIEMPRE una lectura sin campos (ver docstring)."""
+        """Llama a Mistral OCR 4 y valida la anotación estructurada devuelta por el proveedor."""
         if content_type not in _SUPPORTED_CONTENT_TYPES:
             raise InvoiceExtractionError(
                 f"Tipo de contenido no soportado por el motor: {content_type}"
@@ -72,6 +60,14 @@ class MistralInvoiceExtractor:
                 include_image_base64=False,
                 include_blocks=True,
                 confidence_scores_granularity="page",
+                document_annotation_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "invoice_extraction",
+                        "schema": InvoiceExtractionSchema.model_json_schema(),
+                    },
+                },
+                document_annotation_prompt=INVOICE_EXTRACTION_PROMPT,
                 timeout_ms=self._timeout_s * 1000,
             )
         except Exception as exc:  # frontera del proveedor: nada crudo cruza al llamador
@@ -81,7 +77,21 @@ class MistralInvoiceExtractor:
 
         model_version = getattr(response, "model", None) or self._model
         raw = response.model_dump() if hasattr(response, "model_dump") else dict(response)
-        return _empty_invoice(model=model_version, raw=raw)
+        annotation = getattr(response, "document_annotation", None)
+        if not isinstance(annotation, str) or not annotation.strip():
+            raise InvoiceExtractionError("Mistral no devolvió document_annotation estructurado")
+        try:
+            schema = InvoiceExtractionSchema.model_validate(json.loads(annotation))
+            invoice = parse_structured_invoice(
+                json.dumps(_to_parser_payload(schema)),
+                engine=ENGINE_NAME,
+                model=model_version,
+            )
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            raise InvoiceExtractionError(
+                f"La anotación estructurada de Mistral no es válida: {exc}"
+            ) from exc
+        return replace(invoice, raw=raw)
 
     def _build_document(self, content: bytes, content_type: str) -> dict[str, str]:
         import base64
@@ -103,29 +113,36 @@ class MistralInvoiceExtractor:
         return self._client
 
 
-def _empty_invoice(*, model: str, raw: dict[str, Any]) -> ExtractedInvoice:
-    """Lectura sin ningún campo: Mistral no expone extracción estructurada (spec S4.8 §0/C5)."""
-    return ExtractedInvoice(
-        issue_date=None,
-        issue_date_confidence="baja",
-        total_amount=None,
-        total_confidence="baja",
-        net_amount=None,
-        net_amount_confidence="baja",
-        tax_amount=None,
-        tax_amount_confidence="baja",
-        irpf_rate=None,
-        irpf_rate_confidence="baja",
-        irpf_amount=None,
-        irpf_amount_confidence="baja",
-        invoice_number=None,
-        invoice_number_confidence="baja",
-        tax_lines=(),
-        tax_ids=(),
-        engine=ENGINE_NAME,
-        model=model,
-        raw=raw,
-    )
+def _to_parser_payload(schema: InvoiceExtractionSchema) -> dict[str, Any]:
+    """Traduce el contrato común a las claves históricas del dominio OCR."""
+    return {
+        "issue_date": schema.issue_date,
+        "issue_date_confidence": "baja",
+        "total_amount": schema.total_amount,
+        "total_confidence": "baja",
+        "net_amount": schema.net_amount,
+        "net_amount_confidence": "baja",
+        "tax_amount": schema.tax_amount,
+        "tax_amount_confidence": "baja",
+        "irpf_rate": schema.irpf_rate,
+        "irpf_rate_confidence": "baja",
+        "irpf_amount": schema.irpf_amount,
+        "irpf_amount_confidence": "baja",
+        "invoice_number": schema.invoice_number,
+        "invoice_number_confidence": "baja",
+        "tax_lines": [
+            {"base": line.base, "rate": line.rate, "cuota": line.quota} for line in schema.tax_lines
+        ],
+        "tax_ids": [
+            {
+                "value": tax_id.value,
+                "name": tax_id.name,
+                "value_confidence": "baja",
+                "name_confidence": "baja",
+            }
+            for tax_id in schema.tax_ids
+        ],
+    }
 
 
 def build_mistral_extractor(settings: Any) -> InvoiceExtractor:

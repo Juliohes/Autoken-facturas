@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-__all__ = ["FileStatus"]
+__all__ = ["FileStatus", "ProcessingStage"]
 
 
 class FileStatus(StrEnum):
@@ -32,3 +32,15 @@ class FileStatus(StrEnum):
     OCR_FAILED = "ocr_failed"
     CAPTURE_UNREADABLE = "capture_unreadable"
     CONFIRMED = "confirmed"
+
+
+class ProcessingStage(StrEnum):
+    """Etapas transitorias del OCR, separadas del estado final del fichero (R-016)."""
+
+    QUEUED = "queued"
+    LOADING_DOCUMENT = "loading_document"
+    PRIMARY_OCR = "primary_ocr"
+    VALIDATING = "validating"
+    FALLBACK_OCR = "fallback_ocr"
+    CONSENSUS = "consensus"
+    PERSISTING = "persisting"

@@ -20,6 +20,7 @@ class OcrRecoveryMetrics:
     processing: int
     abandoned: int
     failed: int
+    ready: int
 
 
 async def recover_ocr_documents() -> OcrRecoveryMetrics:
@@ -34,7 +35,8 @@ async def recover_ocr_documents() -> OcrRecoveryMetrics:
         metrics = (
             await session.execute(
                 text(
-                    "SELECT pending, processing, abandoned, failed FROM ocr_recovery_metrics "
+                    "SELECT pending, processing, abandoned, failed, ready "
+                    "FROM ocr_recovery_metrics "
                     "WHERE id = true"
                 )
             )
@@ -49,6 +51,7 @@ async def recover_ocr_documents() -> OcrRecoveryMetrics:
         processing=metrics.processing,
         abandoned=metrics.abandoned,
         failed=metrics.failed,
+        ready=metrics.ready,
     )
 
 
@@ -58,7 +61,8 @@ async def read_ocr_recovery_metrics() -> OcrRecoveryMetrics | None:
         row = (
             await session.execute(
                 text(
-                    "SELECT pending, processing, abandoned, failed FROM ocr_recovery_metrics "
+                    "SELECT pending, processing, abandoned, failed, ready "
+                    "FROM ocr_recovery_metrics "
                     "WHERE id = true"
                 )
             )
@@ -70,6 +74,7 @@ async def read_ocr_recovery_metrics() -> OcrRecoveryMetrics | None:
         processing=row.processing,
         abandoned=row.abandoned,
         failed=row.failed,
+        ready=row.ready,
     )
 
 

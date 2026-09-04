@@ -413,7 +413,7 @@ Para CADA endpoint que toque datos:
 | Runbook | Contenido |
 |---|---|
 | `provisioning.md` | Hardening y acceso de los VPS (tarea 0.3), claves SSH, Docker |
-| `rollback.md` | (pendiente) Vuelta atrás: tag + Alembic downgrade + restore |
+| `rollback.md` | Rollback funcional por flags, de versión, de migración y restore seguro; enlaza los runbooks R-051 y S5.3 |
 
 ### 11.3 Desvíos del plan registrados
 | Fecha | Desvío | Dónde queda | Tarea de cierre |
@@ -915,3 +915,300 @@ días — el interruptor existe precisamente para no dejarlo así de forma indef
   un MinIO temporal aislado. Después se desplegó en la VPS real: `0040_ocr_irpf_fields` aplicada, imágenes
   actuales de API/worker/frontend reconstruidas y health de `setex.autoken.es` OK. La factura subida antes
   de ese despliegue conserva una lectura antigua sin campos IRPF y debe volver a procesarse.
+
+### 11.22 R-051 — Canario técnico aislado de Setex (2026-08-25)
+
+- **Activación:** los siete flags de R-051 se activaron únicamente para el tenant piloto Setex mediante
+  `ROLLOUT_TENANT_ALLOWLIST`; Paddle-lab conserva los siete apagados. El preflight devuelve `ready: true`
+  y ni la allowlist ni los secretos se exponen al cliente.
+- **Corrección de despliegue:** la base de datos estaba en `0040_ocr_irpf_fields` mientras las imágenes
+  actuales necesitaban el esquema posterior. Se aplicaron transaccionalmente las migraciones `0041` a
+  `0054`, quedando Alembic en `0054_r013_capture_session (head)`. Esto corrigió la columna `ready` ausente
+  que hacía fallar `/api/v1/metrics`.
+- **Verificación:** API health y `/api/v1/metrics` responden `200`; API, worker, Postgres, Redis, MinIO,
+  ClamAV y PaddleOCR están saludables; nueve tests focalizados de flags y preflight pasan. Queda pendiente
+  la prueba funcional manual con una factura real de Setex, para la que hay que elegir documento y credenciales.
+
+### 11.23 Aislamiento de bases efímeras de test (2026-08-25)
+
+- **Incidente de verificación:** una suite backend completa lanzada en un contenedor Docker quedó viva al
+  agotar el timeout y otra ejecución compartió su nombre `autoken_test_*`, porque ambas tenían el mismo PID
+  interno. Eso produjo cierres de conexión y migraciones concurrentes, no un fallo del runtime de Autofactu.
+- **Corrección:** `tests._dbtest._worker_suffix` conserva el prefijo de PID/worker para diagnóstico y añade
+  ocho caracteres aleatorios por ejecución. La regresión cubre ejecuciones con y sin `pytest-xdist`; una
+  suite de activación aislada pasa 8/8. El Redis de test en `/15` sigue siendo compartido y exige no ejecutar
+   suites paralelas, ya que el fixture limpia ese índice con `flushdb()`.
+
+### 11.24 Corrección de importes OCR y ETA R-048 (2026-08-26)
+
+- **Incidente real:** una captura móvil se aceptaba con `201`, pero Gemini devolvía importes españoles como
+  `450,00`. El parser compartido intentaba convertirlos directamente con `Decimal`, la extracción acababa
+  en `ocr_failed` y la pantalla mostraba el error genérico como si la foto fuera inválida.
+- **Corrección:** `ocr/extraction_json.py` normaliza separadores decimales y de miles españoles/ingleses,
+  conserva el rechazo de valores no finitos y queda cubierto por tests de comportamiento para `450,00`,
+  `1.234,56` y `1,234.56`.
+- **ETA:** la función `record_ocr_processing_sample` tenía permisos insuficientes para su rol
+  `SECURITY DEFINER`. La migración `0055_r048_eta_definer_grants` concede solo `SELECT/INSERT/DELETE` y
+  uso de la secuencia al rol definidor; el rol de aplicación conserva únicamente la llamada y la lectura
+  prevista. Alembic quedó en `0055_r048_eta_definer_grants` y la función se probó contra Postgres real.
+- **Evidencia:** la misma factura móvil se reprocesó sin volver a subir bytes y terminó en `needs_review`,
+  con importes persistidos; frontend `410 passed`, typecheck y build correctos, Ruff dirigido correcto.
+  El arnés R-050 no se ejecuta contra Setex: requiere diez usuarios sintéticos y un proveedor OCR de prueba
+  controlado para no generar cien llamadas reales de pago. Ese bloqueo ya se resolvió con un tenant efímero;
+  queda pendiente el objetivo de latencia.
+
+### 11.25 Primera carga sintética R-050 (2026-08-26)
+
+- Se ejecutaron 100 uploads concurrentes en un tenant efímero con diez usuarios, API y worker separados,
+  Redis DB `/15`, MinIO, ClamAV y `APP_ENV=load_test`. No se llamó a Gemini ni a Setex.
+- Resultado: 100 respuestas `201`, 100 `needs_review`, `0` `429`, `cross_user_leaks=0`, cola vacía y
+  delta de fallos OCR `0`. El informe conserva la línea base porque las métricas de recuperación son
+  globales y ya existía un fallo histórico de otro tenant.
+- p50 `3.68 s`, p95 `4.44 s`; el criterio `p95 <= 3 s` sigue abierto. El tenant, documentos y
+  contenedores temporales fueron eliminados y el cleanup se corrigió para respetar las FK.
+
+### 11.26 Optimización y evidencia reproducible de R-050 (2026-08-26)
+
+- Se eliminaron comprobaciones repetidas de `bucket_exists` en MinIO, se agruparon los dos contadores
+  Redis del rate-limit en un `EVAL` atómico y se fusionaron los dos `set_config` de RLS cuando aplica.
+  El permiso de upload resuelve solo el identificador de empresa, sin descifrar su nombre.
+- La repetición final válida obtuvo 100/100 `201`, 100 `needs_review`, `0` `429`,
+  `cross_user_leaks=0`, p50 `2,905 s`, media `2,838 s` y p95 `3,261 s`. Es la mejor medición
+  reproducible, pero sigue por encima del SLO `p95 <= 3 s`.
+- El perfil SQL contra Postgres real mostró `0,03 ms` para la búsqueda de raíz y `0,09 ms` para raíz
+  más páginas, usando las restricciones únicas existentes. No se añadió una optimización especulativa.
+- La evidencia anonimizada queda versionada en `docs/evidence/load/r050-final-report.json` y
+  `docs/evidence/load/r050-sql-plan.md`. El tenant de carga y Redis DB `/15` quedaron limpios.
+
+### 11.27 Despliegue público fail-closed y corrección definitiva de Traefik (2026-08-26)
+
+- **Incidente:** el VPS se arrancó solo con `docker-compose.yml`, aunque el tráfico público requiere el
+  overlay `docker-compose.prod.yml`. API y frontend quedaron fuera de la topología correcta y Nginx
+  devolvía `index.html` para `/api/*`; el navegador recibía HTTP 200 HTML y el login no podía terminar.
+- **Corrección inmediata verificada:** se relanzaron API, worker y frontend con ambos ficheros y se
+  reinició Traefik para recargar los routers. Los tres dominios responden `200 application/json` en
+  `/api/v1/health`, `401 application/json` en `/api/v1/auth/me` sin sesión y `422 application/json` en
+  `/api/v1/auth/login` con un cuerpo incompleto, demostrando que el tráfico llega a FastAPI.
+- **Solución definitiva:** `DEPLOYMENT_PROFILE=standalone` queda en la pila base y `proxy` en el overlay.
+  `Settings` hace fallar API/worker en `staging`/`production` si falta `proxy`. `infrastructure/deploy.sh`
+  reconstruye las imágenes, espera healthchecks, valida la red externa y las etiquetas Traefik, y exige
+  health público JSON antes de declarar éxito. ADR-0020 y los runbooks documentan la decisión.
+
+### 11.28 Verificación funcional del canario R-051 (2026-08-26)
+
+- Se probó en `https://setex.autoken.es` con el usuario `soporte@autoken.es` y la empresa `Estudio
+  Inghervi, S.L.U.`. La factura se subió desde el móvil, pasó el OCR, se revisó y quedó confirmada por el
+  mismo usuario. El fichero recibió `201` y no se volvió a subir durante el reprocesado.
+- La extracción persistió una factura emitida `26F00001`, con fecha `01/01/2026`, contraparte
+  `INGENIEROS CONSULTORES GLOBAL ENERGY S.L.` (`B06727739`), base `1.100,00 €`, IVA 21% de `231,00 €`,
+  IRPF 19% de `209,00 €` y total `1.122,00 €`. El cuadre `base + IVA - IRPF` fue válido.
+- El estado OCR fue `needs_review`, como exige la política cuando la confianza de varios importes es baja;
+  no es un fallo de subida. R-051 ya tiene evidencia funcional real; permanece en `VERIFYING` por sus
+  dependencias R-049/R-050 y por la validación completa de staging.
+
+### 11.29 Coordinación de creación de buckets en R-050 (2026-08-26)
+
+- La caché de MinIO evitaba el `HEAD` repetido después de la primera subida, pero no evitaba que varias
+  subidas simultáneas de un tenant nuevo ejecutaran a la vez `bucket_exists()` y `make_bucket()`.
+- `invoice_intake.storage` ahora coordina ese primer acceso con un lock por bucket (single-flight), sin
+  serializar tenants distintos. Se conserva la creación idempotente entre procesos y la invalidación con
+  reintento si MinIO confirma que el bucket desapareció.
+- La regresión concurrente exige una sola comprobación y una sola creación para 32 llamadas simultáneas.
+  La prueba focalizada de storage, carga y cortacircuitos queda en `10 passed`. La oleada de control
+  posterior dio `100/100` respuestas `201`, `100 needs_review`, `0` `429`, `cross_user_leaks=0` y p95
+  `4,52 s`; por tanto el cambio corrige la carrera, pero no demuestra el SLO `p95 <= 3 s`. El informe no
+  sustituye a la mejor medición reproducible anterior (`3,26 s`) y R-050 sigue abierto.
+
+### 11.30 Telemetría por fase del intake en R-050 (2026-08-26)
+
+- Se añadió el histograma Prometheus `autoken_upload_phase_seconds` con un conjunto cerrado de fases:
+  autorización, rate-limit, lectura del cuerpo, validación, deduplicación, antivirus, almacenamiento y
+  persistencia. No admite etiquetas arbitrarias ni datos de tenant, usuario o factura.
+- La oleada diagnóstica aislada obtuvo `100/100` respuestas `201`, p50 `4,66 s` y p95 `5,01 s`. Los
+  tiempos agregados más altos fueron deduplicación (`57,61 s`) y persistencia (`53,83 s`); el antivirus
+  y MinIO sumaron `8,38 s` cada uno. La medición queda como diagnóstico, no reemplaza la evidencia válida
+  anterior, porque la bandeja estaba fuera del allowlist del tenant efímero.
+- Se corrigió el arnés para separar `inbox_http_errors` de `cross_user_leaks`; un `404` por rollout no se
+  contabiliza como fuga. R-050 sigue abierto hasta resolver o justificar formalmente el p95.
+
+### 11.31 Resolución de identidad y comparación de pool en R-050 (2026-08-26)
+
+- La métrica de fases incluye ahora la resolución fresca de empresa que ocurre en la dependencia de
+  autenticación. La corrida con la bandeja habilitada para el tenant efímero dio `100/100` `201`, p50
+  `3,65 s`, p95 `3,94 s`, cero fugas y cero errores HTTP de bandeja.
+- La fase `identity` sumó `41,61 s`; deduplicación sumó `43,82 s` y persistencia `46,22 s`. La pertenencia
+  se sigue resolviendo por petición, sin caché, para no retrasar revocaciones ni cambios de membresía.
+- La prueba `DB_POOL_SIZE=30`/`DB_MAX_OVERFLOW=0` provocó `QueuePool timeout` durante el polling aunque las
+  subidas fueron aceptadas. No se adopta: reducir el overflow no es una corrección segura del SLO.
+
+### 11.32 Comparación de `pool_pre_ping` en R-050 (2026-08-26)
+
+- `DB_POOL_PRE_PING` queda expuesto como configuración con `true` por defecto; `shared/db.py` conserva la
+  comprobación de salud de conexiones reutilizadas.
+- Un ensayo efímero con `DB_POOL_PRE_PING=false` dio `100/100` `201`, cero fugas y p95 `3,86 s`, frente a
+  `3,94 s` con `true`. La mejora es marginal y sigue incumpliendo `p95 <= 3 s`, por lo que no compensa
+  perder la protección ante conexiones muertas.
+- R-050 continúa abierto. La investigación queda centrada en la espera de identidad, deduplicación y
+  persistencia bajo concurrencia, no en desactivar protecciones de conectividad.
+
+### 11.33 Atribución de adquisición de sesiones RLS en R-050 (2026-08-26)
+
+- `shared.db.tenant_session` registra ahora cuánto tarda en adquirir una conexión y fijar `SET LOCAL`
+  para cada fase de upload. La etiqueta está limitada al contexto técnico actual u `other`; no contiene
+  identificadores de negocio.
+- La oleada final dio `100/100` `201`, p50 `3,62 s`, p95 `3,85 s`, cero fugas y cero errores de bandeja.
+  La preparación de sesión sumó `24,83 s` en identidad, `33,05 s` en deduplicación y `22,32 s` en
+  persistencia, confirmando espera de pool/configuración como parte importante del coste bajo carga.
+- No se eleva el pool de forma indiscriminada: Postgres tiene `max_connections=100` y el consumo total
+  debe considerar API, worker y número de réplicas. R-050 sigue abierto para optimizar round-trips o
+  presupuestar el pool por proceso con una nueva prueba completa.
+
+### 11.35 Persistencia atómica en un CTE para R-050 (2026-08-26)
+
+- La subida simple inserta `uploaded_files` y `audit_log` en un único CTE SQL dentro de la misma
+  transacción y contexto RLS. La auditoría sigue siendo atómica con el registro y la compensación de
+  MinIO sigue perteneciendo al llamante.
+- La validación obtuvo `100/100` `201`, cero fugas, suma de persistencia `38,40 s` y p95 total `4,06 s`.
+  La optimización se conserva, pero no cierra R-050 porque el SLO continúa sin cumplirse.
+- Evidencia: `docs/evidence/load/r050-cte-audit-2026-08-26.json`.
+
+### 11.36 Decisión de prioridad para R-050 (2026-08-26)
+
+- Julio decide que el objetivo estricto de `p95 <=3 s` no es un bloqueo de producto. Se acepta un flujo
+  completo del orden de 8-10 segundos si conserva `201`, antivirus previo, aislamiento, auditoría atómica,
+  cero fugas y recuperación de los documentos aceptados.
+- No se añade una caché de permisos ni se desactivan `pool_pre_ping`, RLS o el overflow del pool: cualquiera
+  de esas opciones podría retrasar revocaciones, ocultar conexiones muertas o romper la recuperación bajo
+  concurrencia.
+- La migración `0056_r050_ctx` encapsula las lecturas RLS de identidad y deduplicación en funciones
+  `SECURITY INVOKER` con `set_config(..., true)`. Fresh database, `28` contratos de intake y `23` gates
+  focalizados contra servicios reales pasan. R-050 queda pendiente solo de la verificación completa de
+  staging; el siguiente foco es la fase de despliegue y sus smoke tests.
+
+### 11.34 Comparación de capacidad del pool en R-050 (2026-08-26)
+
+- El baseline `20/20` obtuvo p95 `3,85 s`, con `100/100` respuestas `201` y cero fugas.
+- `30/0` aceptó las subidas, pero agotó conexiones durante las consultas de estado y produjo `QueuePool
+  timeout`; `40/20` mantuvo `100/100` `201` pero empeoró a p95 `4,86 s`.
+- No se cambia el pool por una mejora teórica. La evidencia apunta a round-trips y coordinación de
+  transacciones; el baseline `20/20` conserva el mejor equilibrio observado.
+
+### 11.37 Verificación HTTP de ETA R-048 (2026-08-27)
+
+- Se añadió el escenario de comportamiento `test_status_endpoint_muestra_eta_solo_con_muestras_suficientes`.
+  Crea dos documentos pendientes, persiste 30 muestras recientes para la combinación del primario y
+  consulta el endpoint real de estado bajo RLS.
+- Con `pending_ahead=1`, concurrencia efectiva `4`, espera de cola `5 s` y procesamiento `20 s`, el
+  endpoint devuelve `eta_seconds_min=25` y `eta_seconds_max=30`. Con menos de 30 muestras continúa sin
+  ETA numérica. La regresión combinada R-016/R-017/R-048 pasa `7 tests` contra servicios reales.
+- R-048 sigue en `VERIFYING` hasta comprobar la representación visual de la ETA en la UI durante staging;
+  no se inventa evidencia de navegador o dispositivo.
+
+### 11.38 Despliegue proxy y preflight de staging (2026-08-27)
+
+- Se ejecutó el entrypoint oficial `HEALTHCHECK_HOSTS=panel-staging.autoken.es,setex.autoken.es bash
+  infrastructure/deploy.sh`. Reconstruyó API y frontend, recreó API/worker con `DEPLOYMENT_PROFILE=proxy`
+  y verificó la red externa `proxy`, los routers Traefik y los healthchecks.
+- El preflight de R-051, ejecutado dentro de la imagen desplegable porque el host no tiene Python, devuelve
+  `ready: true`: siete flags booleanos válidos, un tenant piloto y las variables secretas requeridas
+  presentes. No se imprimieron secretos.
+- Antes del despliegue oficial `/api/v1/health` devolvía por error el HTML del frontend en ambos dominios,
+  evidencia de que el overlay no estaba activo. Después del despliegue, ambos dominios devuelven `200` JSON
+  desde Uvicorn con cabeceras privadas y de seguridad. La regresión focalizada combinada pasa `28 tests`.
+- R-050/R-051 siguen en `VERIFYING`: falta ejecutar la carga y recuperación completas en el entorno final,
+  hacer el canario funcional guiado y verificar rollback desde la interfaz pública.
+
+### 11.39 Nueva prueba manual del canario Setex (2026-08-27)
+
+- Julio realizó una nueva subida manual desde `setex.autoken.es` con la cuenta de soporte y la empresa
+  asignada. La API respondió `201` y el worker OCR real terminó en aproximadamente 12 segundos.
+- El documento quedó primero en `needs_review`, la revisión humana se guardó y la confirmación terminó con
+  estado `confirmed` en Postgres. No se observaron errores de OCR ni de cola en la ejecución.
+- Esta evidencia cubre otro recorrido funcional real de R-051, pero no sustituye la carga sintética R-050,
+  la recuperación controlada de Redis ni el rollback guiado de staging.
+
+### 11.40 Carga y recuperación aisladas R-050 (2026-08-27)
+
+- Se ejecutó una oleada aislada con API y worker efímeros en `APP_ENV=load_test`, extractor determinista,
+  tenant efímero, diez usuarios sintéticos y diez uploads por usuario. El resultado fue `100/100` `201`,
+  p50 `3,59 s`, p95 `3,97 s`, cero fugas, cero errores de bandeja y cero `429`; los 100 documentos llegaron
+  a estado terminal. El tenant y su bucket se limpiaron al terminar.
+- La recuperación se ejecutó con Redis dedicada para no tocar el staging público. De 100 intentos, 69
+  fueron aceptados y 31 rechazados durante una ventana de indisponibilidad controlada. Tras restaurar Redis,
+  `recover_ocr_documents()` reencoló los aceptados y el worker terminó los 69, sin pendientes ni fallidos.
+- Se conservan los informes sin credenciales, tokens, correos ni IDs de factura en
+  `docs/evidence/load/r050-isolated-2026-08-27.json` y
+  `docs/evidence/load/r050-recovery-isolated-2026-08-27.json`. R-050 queda pendiente solo de la
+  comprobación equivalente en el entorno de staging final y del escenario separado de proveedor `429`.
+
+### 11.41 Escenario controlado de proveedor `429` (2026-08-27)
+
+- Se añadió `test_r050_provider_429.py` contra Postgres, Redis y MinIO reales, con un extractor primario
+  falso que devuelve `429` y un fallback falso que completa una lectura válida. El escenario pasa `2`
+  casos; el segundo comprueba que el adaptador Gemini conserva la clasificación si el SDK solo expone
+  `status_code=429`.
+- El resultado observable es `ocr_done`, el contador `autoken_ocr_provider_429_total` aumenta una vez y
+  el error crudo no se almacena en `ocr_extractions`. La evidencia está en
+  `docs/evidence/load/r050-provider-429-2026-08-27.json`.
+- R-050 queda pendiente solo de repetir el escenario con el adaptador HTTP real del proveedor de prueba
+  durante staging; nunca se usará la credencial de Gemini de Setex para forzar un `429`.
+
+### 11.42 Simulación aislada de rollback R-051 (2026-08-27)
+
+- `test_rollout_flags.py` cubre los siete flags cerrados con el tenant dentro de la allowlist y confirma
+  que poner cualquiera a `false` gana siempre sobre la allowlist. La suite pasa `12 tests`.
+- La comprobación se ejecutó sin modificar `.env`, sin reiniciar API/worker y sin cambiar el canario Setex.
+  Demuestra el mecanismo de rollback funcional, pero no se registra como rollback manual real.
+- El siguiente paso manual requiere elegir un flag de bajo impacto, registrar la observación de Setex,
+  cambiarlo a `false`, reiniciar solo API/worker según el runbook y restaurarlo después; no se hará sin una
+  orden explícita para evitar afectar a usuarios reales.
+
+### 11.43 Rollback real del canario Setex (2026-08-27)
+
+- Con autorización explícita, `SUPPLIER_LEARNING_ENABLED` pasó temporalmente a `false` en staging. El
+  entrypoint oficial recreó solo API/worker, mantuvo `DEPLOYMENT_PROFILE=proxy`, y ambos procesos cargaron
+  el valor apagado.
+- Los otros seis flags y `ROLLOUT_TENANT_ALLOWLIST` conservaron sus valores. El preflight devolvió
+  `ready: true` y `panel-staging.autoken.es`/`setex.autoken.es` devolvieron health JSON `200`.
+- El flag se restauró a `true` mediante el mismo procedimiento. API y worker volvieron a cargarlo, sin
+  cambiar migraciones, borrar datos ni tocar facturas. Evidencia en
+  `docs/evidence/load/r051-rollback-supplier-learning-2026-08-27.json`.
+
+### 11.44 Auditoría de prerrequisitos de go-live (2026-08-27)
+
+- La consulta de Alembic debe ejecutarse mediante el servicio `migrate`, con el rol administrador; API usa
+  correctamente `autoken_app` sin permiso sobre `alembic_version`. El comando del runbook devuelve
+  `0056_r050_ctx (head)`.
+- El cron real generó y subió el backup cifrado del `2026-08-27` al servidor externo `72.62.189.27`:
+  `373833` bytes y `0,62 s`. El restore drill contra una base vacía ya cuenta con evidencia previa.
+- Staging permanece en `APP_ENV=staging` y `DEPLOYMENT_PROFILE=proxy`; los dos hosts públicos devuelven
+  health JSON `200`.
+- Antes de D.1-D.4 faltan decisiones/material externo: aprobar el tag `v2.0.0`, entregar el inventario
+  definitivo de migración de Setex y la ventana nocturna, confirmar DNS definitivo y obtener las credenciales
+  SMTP de `soporte@autoken.es`. La base de código no debe simular esos datos.
+
+### 11.45 Flujo controlado de revisión y deduplicación R-052 (2026-08-27)
+
+- Julio aprobó la spec `docs/specs/R-052-flujo-revision-borrado-duplicados-y-latencia.md`.
+- La confirmación ya no salta automáticamente a otra factura: si quedan pendientes, se pregunta con
+  opciones **Sí, revisar** y **No, volver a mis facturas**.
+- Las facturas no confirmadas se pueden eliminar desde la bandeja o la revisión, con confirmación explícita,
+  borrado protegido contra carreras y limpieza posterior del objeto privado. Las confirmadas devuelven `409`.
+- El hash exacto sigue evitando crear una segunda factura. Además, el OCR compara número, CIF propio, CIF de
+  contraparte e importe; coincidencia completa o sospecha por número+CIF bloquea la nueva confirmación.
+- La captura registra tiempos locales por fase y precalienta OpenCV al abrir la cámara. La medición manual en
+  el PC de Julio sigue pendiente; no se usarán facturas reales de Setex para este ensayo.
+- Verificación actual: frontend `446` tests, backend R-052 `6` tests contra stack Docker, typecheck/build,
+  `ruff`, `mypy`, `compileall` y despliegue proxy de staging correctos. No hubo migraciones.
+
+### 11.46 Paleta clara del app shell R-053 (2026-08-27)
+
+- Julio aprobó aplicar la paleta recomendada A: fondo crema claro, superficies blancas, texto oscuro y
+  acento naranja dinámico, conservando la barra superior oscura.
+- El alcance queda limitado a colores. No se modifican botones, textos, rutas, estados, tamaños,
+  espaciados, estructura, permisos ni funcionalidades; el botón **Seguir subiendo facturas** queda para
+  una tarea posterior.
+- La superficie de cámara permanece oscura para conservar el contraste de la factura. La paleta se aplica
+  a todos los usuarios y tenants con acceso existente, y a los paneles tenant/admin-tech.
+- Verificación actual: `446` tests frontend, typecheck, lint y build correctos; despliegue proxy de staging
+  correcto. Pendiente de revisión visual manual en los roles y pantallas reales.

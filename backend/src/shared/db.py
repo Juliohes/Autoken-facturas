@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from shared.config import get_settings
+from shared.metrics import observe_db_session_setup
 
 
 class Base(DeclarativeBase):
@@ -53,7 +54,7 @@ def _get_sessionmaker() -> async_sessionmaker[AsyncSession]:
         # subida de facturas moderadamente concurrente — ver `shared.config.Settings.db_pool_size`.
         _engine = create_async_engine(
             settings.database_url,
-            pool_pre_ping=True,
+            pool_pre_ping=settings.db_pool_pre_ping,
             hide_parameters=True,
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
@@ -126,13 +127,30 @@ async def tenant_session(
     empresa (ve solo esa). Las variables viven solo en la transacción; no fugan entre peticiones.
     """
     async with _get_sessionmaker()() as session, session.begin():
-        await session.execute(
-            text("SELECT set_config('app.tenant_id', :tid, true)"),
-            {"tid": str(tenant_id)},
-        )
-        if company_id is not None:
-            await session.execute(
-                text("SELECT set_config('app.company_id', :cid, true)"),
-                {"cid": str(company_id)},
-            )
+        with observe_db_session_setup():
+            if company_id is None:
+                await session.execute(
+                    text("SELECT set_config('app.tenant_id', :tid, true)"),
+                    {"tid": str(tenant_id)},
+                )
+            else:
+                await session.execute(
+                    text(
+                        "SELECT set_config('app.tenant_id', :tid, true), "
+                        "set_config('app.company_id', :cid, true)"
+                    ),
+                    {"tid": str(tenant_id), "cid": str(company_id)},
+                )
+        yield session
+
+
+@asynccontextmanager
+async def tenant_statement_session() -> AsyncIterator[AsyncSession]:
+    """Sesión transaccional para funciones SQL que fijan su propio contexto RLS.
+
+    Solo debe usarse con funciones `SECURITY INVOKER` versionadas que ejecuten
+    `set_config(..., true)` antes de leer o escribir tablas protegidas. No entrega
+    una sesión genérica sin contexto al resto de la aplicación.
+    """
+    async with _get_sessionmaker()() as session, session.begin():
         yield session

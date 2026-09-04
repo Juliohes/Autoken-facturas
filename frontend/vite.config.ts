@@ -6,6 +6,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 // backend por tenant en `GET /api/v1/manifest.webmanifest` (mismo branding que S4.2), enlazado a
 // mano en `index.html`. `vite-plugin-pwa` sigue generando el service worker, igual que hasta ahora.
 export default defineConfig({
+  worker: {
+    format: 'es',
+  },
   plugins: [
     react(),
     VitePWA({

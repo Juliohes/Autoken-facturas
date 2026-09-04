@@ -19,10 +19,12 @@ from identity.dependencies import (
     AdminTechAuthContext,
     AuthContext,
     PlatformAuthContext,
+    UploadAuthContext,
     current_admin_tech_identity,
     current_identity,
     current_identity_for_me,
     current_platform_identity,
+    current_upload_identity,
 )
 from tenancy.constants import Role
 
@@ -39,6 +41,21 @@ def require_roles(*roles: Role) -> Callable[..., Coroutine[Any, Any, AuthContext
     async def guard(
         identity: Annotated[AuthContext, Depends(current_identity)],
     ) -> AuthContext:
+        if identity.role not in allowed:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return identity
+
+    setattr(guard, ROLES_MARKER, allowed)
+    return guard
+
+
+def require_upload_roles(*roles: Role) -> Callable[..., Coroutine[Any, Any, UploadAuthContext]]:
+    """Exige RBAC para intake sin mantener una sesión DB durante I/O externo."""
+    allowed = frozenset(str(role) for role in roles)
+
+    async def guard(
+        identity: Annotated[UploadAuthContext, Depends(current_upload_identity)],
+    ) -> UploadAuthContext:
         if identity.role not in allowed:
             raise HTTPException(status_code=403, detail="Forbidden")
         return identity

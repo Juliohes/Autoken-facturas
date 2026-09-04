@@ -3,7 +3,14 @@
 // opencv/documentEdges.test.ts) — aquí solo importa la decisión de estado, no el algoritmo.
 import { describe, expect, it } from 'vitest'
 
-import { captureReducer, INITIAL_CAPTURE_STATE } from './captureLoop'
+import {
+  captureReducer,
+  INITIAL_CAPTURE_STATE,
+  INITIAL_SCANNER_STATE,
+  acquireCaptureLock,
+  releaseCaptureLock,
+  scannerReducer,
+} from './captureLoop'
 import type { FrameAnalysis } from './types'
 
 const THRESHOLD = 100
@@ -90,5 +97,44 @@ describe('captureReducer', () => {
       THRESHOLD,
     )
     expect(captureReducer(captured, { type: 'retake' }, THRESHOLD)).toEqual(INITIAL_CAPTURE_STATE)
+  })
+})
+
+describe('scannerReducer (R-007)', () => {
+  it('abre la cámara en AUTO y arma la captura solo tras estabilizarse', () => {
+    const valid = scannerReducer(INITIAL_SCANNER_STATE, {
+      type: 'quality_evaluated',
+      ready: true,
+      stableLongEnough: false,
+    })
+    expect(valid.phase).toBe('stabilizing')
+
+    const armed = scannerReducer(valid, {
+      type: 'quality_evaluated',
+      ready: true,
+      stableLongEnough: true,
+    })
+    expect(armed.phase).toBe('auto_armed')
+    expect(armed.mode).toBe('auto')
+  })
+
+  it('cambiar entre AUTO y MANUAL reinicia estabilidad, temporizador y armado', () => {
+    const armed = scannerReducer(INITIAL_SCANNER_STATE, {
+      type: 'quality_evaluated',
+      ready: true,
+      stableLongEnough: true,
+    })
+
+    const manual = scannerReducer(armed, { type: 'mode_changed', mode: 'manual' })
+    expect(manual).toMatchObject({ mode: 'manual', phase: 'scanning', stableFrames: 0, stableSince: null })
+    expect(manual.autoArmed).toBe(false)
+  })
+
+  it('el lock compartido rechaza un segundo disparo hasta liberarse', () => {
+    const lock = { current: false }
+    expect(acquireCaptureLock(lock)).toBe(true)
+    expect(acquireCaptureLock(lock)).toBe(false)
+    releaseCaptureLock(lock)
+    expect(acquireCaptureLock(lock)).toBe(true)
   })
 })

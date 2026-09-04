@@ -28,7 +28,11 @@ from ocr.engines.azure_openai_extractor import (
 from ocr.engines.azure_openai_extractor import build_azure_openai_extractor
 from ocr.engines.claude_extractor import ENGINE_NAME as CLAUDE_ENGINE_NAME
 from ocr.engines.claude_extractor import build_claude_extractor
-from ocr.engines.gemini_extractor import build_default_extractor, build_gemini_pro_extractor
+from ocr.engines.gemini_extractor import (
+    build_default_extractor,
+    build_gemini_model_extractor,
+    build_gemini_pro_extractor,
+)
 from ocr.engines.mistral_extractor import ENGINE_NAME as MISTRAL_ENGINE_NAME
 from ocr.engines.mistral_extractor import build_mistral_extractor
 from ocr.extraction import ExtractedInvoice, InvoiceExtractionError, InvoiceExtractor
@@ -39,6 +43,7 @@ __all__ = [
     "build_additional_ranking_extractors",
     "build_default_ranking_extractor",
     "build_named_ranking_extractors",
+    "build_named_benchmark_extractors",
     "build_ranking_extractors",
 ]
 
@@ -114,6 +119,49 @@ def build_named_ranking_extractors(settings: Any) -> list[tuple[str, InvoiceExtr
     extractor que falla localmente, sin red y con un código seguro persistible."""
     extractors: list[tuple[str, InvoiceExtractor]] = []
     for name, builder in _NAMED_BUILDERS:
+        try:
+            extractors.append((name, builder(settings)))
+        except InvoiceExtractionError:
+            logger.warning("benchmark.engine_unavailable", engine=name)
+            extractors.append((name, _UnavailableBenchmarkExtractor()))
+    return extractors
+
+
+def build_named_benchmark_extractors(settings: Any) -> list[tuple[str, InvoiceExtractor]]:
+    """Construye exclusivamente los candidatos mínimos versionados de R-032.
+
+    Los candidatos históricos del ranking se mantienen separados para que un benchmark nuevo no
+    mezcle modelos, prompts o denominadores distintos.
+    """
+    builders: tuple[tuple[str, Callable[[Any], InvoiceExtractor]], ...] = (
+        (
+            "gemini-3.5-flash",
+            lambda current: build_gemini_model_extractor(
+                current,
+                engine="gemini-3.5-flash",
+                model=current.gemini_35_flash_model,
+            ),
+        ),
+        (
+            "gemini-3.6-flash",
+            lambda current: build_gemini_model_extractor(
+                current,
+                engine="gemini-3.6-flash",
+                model=current.gemini_36_flash_model,
+            ),
+        ),
+        (
+            "gemini-3.5-flash-lite",
+            lambda current: build_gemini_model_extractor(
+                current,
+                engine="gemini-3.5-flash-lite",
+                model=current.gemini_35_flash_lite_model,
+            ),
+        ),
+        (MISTRAL_ENGINE_NAME, build_mistral_extractor),
+    )
+    extractors: list[tuple[str, InvoiceExtractor]] = []
+    for name, builder in builders:
         try:
             extractors.append((name, builder(settings)))
         except InvoiceExtractionError:

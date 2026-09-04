@@ -50,6 +50,8 @@ mismo tipo de agotamiento de pool que causó el incidente real ya documentado y 
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -59,6 +61,7 @@ from uuid import UUID
 import structlog
 
 from ocr.analysis import InvoiceAnalysis, analyze_invoice
+from ocr.benchmark_metrics import calculate_metrics
 from ocr.benchmark_repository import upsert_benchmark_result
 from ocr.benchmark_scoring import score_combination
 from ocr.extraction import DocumentPage, ExtractedInvoice, InvoiceExtractor, extract_document
@@ -76,6 +79,10 @@ from shared.encryption import tenant_encryption_key
 logger = structlog.get_logger(__name__)
 
 __all__ = ["run_benchmark"]
+
+BENCHMARK_CONTRACT_VERSION = "r032-v1"
+SCHEMA_VERSION = "1"
+NORMALIZATION_VERSION = "field-matching-v1"
 
 # Ningún proveedor puede consumir indefinidamente un worker ni provocar que ARQ reentregue el lote
 # por superar su límite global. El timeout se aplica por combinación y el resultado queda guardado
@@ -113,6 +120,12 @@ class _CombinationResult:
     comparables: int
     error: str | None
     duration_ms: int | None
+    field_exact_accuracy: float | None
+    critical_field_accuracy: float | None
+    all_critical_exact: bool | None
+    arithmetic_valid: bool | None
+    hallucination_flags: list[str]
+    manual_corrections_per_invoice: int | None
 
 
 async def run_benchmark(
@@ -127,6 +140,7 @@ async def run_benchmark(
     own_cif: str,
     ocr_experiment_enabled: bool,
     extractors: list[tuple[str, InvoiceExtractor]],
+    manual_corrections_per_invoice: int | None = None,
     raise_on_orchestration_error: bool = False,
 ) -> None:
     """Ejecuta las combinaciones (variante, motor) sobre una factura y persiste cada resultado.
@@ -145,6 +159,8 @@ async def run_benchmark(
         pages = [DocumentPage(content, content_type)]
     if not pages:
         raise ValueError("El benchmark requiere al menos una página")
+    document_sha256 = _hash_pages(pages)
+    ground_truth_hash = _hash_json(truth)
     try:
         for variant in await _build_variants(pages):
             await _run_variant(
@@ -155,6 +171,10 @@ async def run_benchmark(
                 own_cif=own_cif,
                 truth=truth,
                 extractors=extractors,
+                document_sha256=document_sha256,
+                ground_truth_hash=ground_truth_hash,
+                pages_count=len(pages),
+                manual_corrections_per_invoice=manual_corrections_per_invoice,
             )
     except Exception:  # noqa: BLE001  (solo el lote necesita distinguir fallo de orquestación)
         logger.error("benchmark.failed", uploaded_file_id=str(uploaded_file_id))
@@ -205,6 +225,10 @@ async def _run_variant(
     own_cif: str,
     truth: Mapping[str, object],
     extractors: list[tuple[str, InvoiceExtractor]],
+    document_sha256: str,
+    ground_truth_hash: str,
+    pages_count: int,
+    manual_corrections_per_invoice: int | None,
 ) -> None:
     """Calcula los resultados de esta variante (llamando a los motores reales SIN ninguna sesión de
     Postgres abierta) y los persiste al final, en una sesión corta abierta solo para eso -- ver
@@ -227,6 +251,12 @@ async def _run_variant(
                     comparables=0,
                     error=variant.error,
                     duration_ms=None,
+                    field_exact_accuracy=None,
+                    critical_field_accuracy=None,
+                    all_critical_exact=None,
+                    arithmetic_valid=None,
+                    hallucination_flags=[],
+                    manual_corrections_per_invoice=None,
                 ),
             )
             for engine_name, _ in extractors
@@ -260,6 +290,24 @@ async def _run_variant(
                 comparables=result.comparables,
                 error=result.error,
                 duration_ms=result.duration_ms,
+                benchmark_contract_version=BENCHMARK_CONTRACT_VERSION,
+                schema_version=SCHEMA_VERSION,
+                normalization_version=NORMALIZATION_VERSION,
+                ground_truth_hash=ground_truth_hash,
+                document_sha256=document_sha256,
+                variant_sha256=_hash_pages(variant.pages) if variant.pages is not None else None,
+                pages=pages_count,
+                field_exact_accuracy=result.field_exact_accuracy,
+                critical_field_accuracy=result.critical_field_accuracy,
+                all_critical_exact=result.all_critical_exact,
+                arithmetic_valid=result.arithmetic_valid,
+                hallucination_flags=result.hallucination_flags,
+                manual_corrections_per_invoice=(
+                    manual_corrections_per_invoice
+                    if manual_corrections_per_invoice is not None
+                    else result.manual_corrections_per_invoice
+                ),
+                api_cost_usd=None,
                 encryption_key=encryption_key,
             )
 
@@ -292,6 +340,12 @@ async def _run_combination(
         # real detectado al implementar el hallazgo CRÍTICO de la auditoría, corregido en el mismo
         # cambio).
         score = score_combination(reading, truth)
+        metrics = calculate_metrics(
+            score,
+            reading,
+            truth,
+            arithmetic_valid_after_extraction=_arithmetic_valid(analysis),
+        )
         return _CombinationResult(
             model=extracted.model,
             counterparty_tax_id=analysis.counterparty_tax_id,
@@ -306,6 +360,12 @@ async def _run_combination(
             comparables=score.comparables,
             error=None,
             duration_ms=duration_ms,
+            field_exact_accuracy=metrics.field_exact_accuracy,
+            critical_field_accuracy=metrics.critical_field_accuracy,
+            all_critical_exact=metrics.all_critical_exact,
+            arithmetic_valid=metrics.arithmetic_valid_after_extraction,
+            hallucination_flags=list(metrics.hallucination_flags),
+            manual_corrections_per_invoice=metrics.manual_corrections_per_invoice,
         )
     except Exception:  # noqa: BLE001  (motor caído: se persiste el error, nunca se propaga)
         # Un extractor es un adaptador externo: su excepción puede incluir prompts, respuestas o
@@ -322,11 +382,40 @@ async def _run_combination(
             comparables=0,
             error="engine_failed",
             duration_ms=_elapsed_ms(started),
+            field_exact_accuracy=None,
+            critical_field_accuracy=None,
+            all_critical_exact=None,
+            arithmetic_valid=None,
+            hallucination_flags=[],
+            manual_corrections_per_invoice=None,
         )
 
 
 def _elapsed_ms(started: float) -> int:
     return int((time.monotonic() - started) * 1000)
+
+
+def _hash_pages(pages: list[DocumentPage]) -> str:
+    digest = hashlib.sha256()
+    for page in pages:
+        digest.update(page.content_type.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(len(page.content).to_bytes(8, "big"))
+        digest.update(page.content)
+    return digest.hexdigest()
+
+
+def _hash_json(value: Mapping[str, object]) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _arithmetic_valid(analysis: InvoiceAnalysis) -> bool | None:
+    validation = analysis.validations.get("totals")
+    if not isinstance(validation, Mapping):
+        return None
+    value = validation.get("valid")
+    return value if isinstance(value, bool) else None
 
 
 def _build_reading(extracted: ExtractedInvoice, analysis: InvoiceAnalysis) -> dict[str, Any]:

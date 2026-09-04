@@ -3,12 +3,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { api } from '../api/client'
 import * as tokenStore from '../api/tokenStore'
 import { SessionProvider } from '../features/session/SessionProvider'
+import type { Direction } from '../features/capture/types'
 import type { AppliedTheme } from '../features/tenancy/theme'
 import { AppRoutes } from './AppRoutes'
 
@@ -23,6 +24,23 @@ const THEME: AppliedTheme = {
 vi.mock('../api/client', () => ({
   api: { GET: vi.fn(), POST: vi.fn() },
 }))
+
+vi.mock('../features/capture/CaptureScreen', () => ({
+  CaptureScreen: ({ onUploaded }: { onUploaded: (fileId: string, direction: Direction, lowSharpness: boolean) => void }) => (
+    <CaptureScreenStub onUploaded={onUploaded} />
+  ),
+}))
+
+function CaptureScreenStub({ onUploaded }: { onUploaded: (fileId: string, direction: Direction, lowSharpness: boolean) => void }) {
+  const navigate = useNavigate()
+  return (
+    <section>
+      <h1>Capturar factura</h1>
+      <button type="button" role="link" onClick={() => navigate('/historial')}>Ver historial</button>
+      <button type="button" onClick={() => onUploaded('file-accepted', 'recibida', false)}>Simular subida aceptada</button>
+    </section>
+  )
+}
 
 type AsyncMock = Mock<(...args: never[]) => Promise<unknown>>
 const getMock = api.GET as unknown as AsyncMock
@@ -88,6 +106,7 @@ function mockAuthenticatedAs(role: keyof typeof ME_BY_ROLE) {
     if (path.includes('/reporting/companies')) return Promise.resolve({ data: COMPANIES, error: undefined })
     if (path === '/api/v1/companies') return Promise.resolve({ data: COMPANIES, error: undefined })
     if (path.includes('/registrations')) return Promise.resolve({ data: [], error: undefined })
+    if (path.includes('/invoices/inbox')) return Promise.resolve({ data: { items: [], next_cursor: null, summary: { processing: 0, ready: 0, attention: 0 } }, error: undefined })
     if (path.includes('/invoices/history')) return Promise.resolve({ data: { entries: [] }, error: undefined })
     throw new Error(`ruta GET no mockeada: ${path}`)
   })
@@ -199,20 +218,22 @@ describe('AppRoutes (S4.9)', () => {
     expect(within(nav).queryByText('Plataforma')).not.toBeInTheDocument()
   })
 
-  it('C11: user ve Subir factura en el menú, nada más (Historial vive dentro, no en el menú)', async () => {
+  it('R-056 C1: user ve exactamente los cuatro destinos del flujo', async () => {
     mockAuthenticatedAs('user')
     renderApp('/historial')
 
     await waitFor(() => expect(screen.getByRole('navigation')).toBeInTheDocument())
     const nav = screen.getByRole('navigation')
-    expect(within(nav).getByText('Subir factura')).toBeInTheDocument()
-    expect(within(nav).queryByText('Historial')).not.toBeInTheDocument()
+    expect(within(nav).getByText('Escáner')).toBeInTheDocument()
+    expect(within(nav).getByText('Subir Archivo')).toBeInTheDocument()
+    expect(within(nav).getByText('Pendientes')).toBeInTheDocument()
+    expect(within(nav).getByText('Historial')).toBeInTheDocument()
     expect(within(nav).queryByText('Facturas')).not.toBeInTheDocument()
     expect(within(nav).queryByText('Empresas')).not.toBeInTheDocument()
     expect(within(nav).queryByText('Plataforma')).not.toBeInTheDocument()
   })
 
-  it('2026-08-01: "Ver historial" vive dentro de "Subir factura" (Julio), no en el menú principal', async () => {
+  it('R-056: historial es una pantalla propia de confirmadas', async () => {
     mockAuthenticatedAs('user')
     renderApp('/capturar')
     const user = userEvent.setup()
@@ -220,9 +241,19 @@ describe('AppRoutes (S4.9)', () => {
     expect(await screen.findByRole('heading', { name: 'Capturar factura' })).toBeInTheDocument()
     await user.click(screen.getByRole('link', { name: 'Ver historial' }))
 
-    // Sin facturas mockeadas, `InvoiceHistory` muestra su estado vacío (sin encabezado propio):
-    // basta para confirmar que la navegación llegó de verdad a `/historial`.
-    expect(await screen.findByText('Todavía no has enviado ninguna factura.')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Historial' })).toBeInTheDocument()
+  })
+
+  it('R-014: una subida aceptada no navega directamente a confirmación', async () => {
+    mockAuthenticatedAs('user')
+    renderApp('/capturar')
+    const user = userEvent.setup()
+
+    await screen.findByRole('heading', { name: 'Capturar factura' })
+    await user.click(screen.getByRole('button', { name: 'Simular subida aceptada' }))
+
+    expect(await screen.findByRole('heading', { name: 'Capturar factura' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Confirmar factura' })).not.toBeInTheDocument()
   })
 
   it('S2.2 decisión 1: la ruta de inicio de user es /capturar, no /historial', async () => {

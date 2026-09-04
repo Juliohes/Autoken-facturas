@@ -39,6 +39,22 @@ end
 return count
 """
 
+# Mismo contrato que `_RECORD_FAILURE_LUA`, pero para los dos cubos del intake en una sola llamada.
+# Redis ejecuta el script de forma atómica, por lo que ningún upload puede observar solo uno de los
+# contadores actualizado. Las dos claves se pasan como KEYS para mantener compatibilidad con Redis
+# Cluster.
+_RECORD_INTAKE_LUA = """
+local user_count = redis.call('INCR', KEYS[1])
+if redis.call('TTL', KEYS[1]) < 0 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+local tenant_count = redis.call('INCR', KEYS[2])
+if redis.call('TTL', KEYS[2]) < 0 then
+    redis.call('EXPIRE', KEYS[2], ARGV[1])
+end
+return {user_count, tenant_count}
+"""
+
 
 def _ip_email_key(ip: str, email: str) -> str:
     return f"login:fail:{ip}:{email}"
@@ -46,6 +62,14 @@ def _ip_email_key(ip: str, email: str) -> str:
 
 def _ip_key(ip: str) -> str:
     return f"login:ipfail:{ip}"
+
+
+def _password_reset_ip_email_key(ip: str, email: str) -> str:
+    return f"pwreset:fail:{ip}:{email}"
+
+
+def _password_reset_ip_key(ip: str) -> str:
+    return f"pwreset:ipfail:{ip}"
 
 
 def _register_ip_key(ip: str) -> str:
@@ -99,6 +123,28 @@ async def record_failure(
 async def reset(redis: aioredis.Redis, ip: str, email: str) -> None:
     """Borra el contador por (IP+email) tras un login correcto."""
     await redis.delete(_ip_email_key(ip, email))
+
+
+async def password_reset_attempt_exceeds(
+    redis: aioredis.Redis,
+    ip: str,
+    email: str,
+    *,
+    max_per_email: int,
+    max_per_ip: int,
+    window_seconds: int,
+) -> bool:
+    """Cuenta una solicitud de "olvidé mi contraseña" y dice si supera el tope de (IP+email) o IP.
+
+    A diferencia del login (que solo cuenta *fallos*), aquí se cuenta CADA solicitud, exista o no la
+    cuenta: como la respuesta es genérica y no puede distinguir un email real de uno inventado
+    (anti-enumeración), el propio conteo tampoco puede depender de esa distinción -- si solo
+    contara cuando la cuenta existe, el tope alcanzado revelaría por sí mismo que el email es real
+    (mismo oráculo de enumeración que ya evita `activation_confirm_blocked`).
+    """
+    email_count = await _record_hit(redis, _password_reset_ip_email_key(ip, email), window_seconds)
+    ip_count = await _record_hit(redis, _password_reset_ip_key(ip), window_seconds)
+    return email_count > max_per_email or ip_count > max_per_ip
 
 
 async def register_attempt_exceeds_ip(
@@ -163,8 +209,13 @@ async def intake_attempt_exceeds(
     window_seconds: int,
 ) -> bool:
     """Limita intake/OCR por usuario y tenant antes de recursos costosos (S6.13)."""
-    user_count = await _record_hit(
-        redis, _intake_key(kind, tenant_id, f"user:{user_id}"), window_seconds
+    # Un único EVAL atómico actualiza ambos cubos y evita los viajes de red de dos EVAL separados
+    # o de un MULTI/EXEC bajo una oleada de subidas.
+    user_count, tenant_count = await redis.eval(
+        _RECORD_INTAKE_LUA,
+        2,
+        _intake_key(kind, tenant_id, f"user:{user_id}"),
+        _intake_key(kind, tenant_id, "tenant"),
+        str(window_seconds),
     )
-    tenant_count = await _record_hit(redis, _intake_key(kind, tenant_id, "tenant"), window_seconds)
-    return user_count > max_per_user or tenant_count > max_per_tenant
+    return int(user_count) > max_per_user or int(tenant_count) > max_per_tenant

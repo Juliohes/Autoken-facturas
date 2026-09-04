@@ -1,22 +1,21 @@
-// Pantalla de ajustes de plataforma (S4.10): hoy, un único interruptor — el experimento OCR que
-// gobernará S2.9/S2.10/S4.8 (tareas futuras, todavía sin enganchar a nada real). Comportamientos
-// C8-C10 de la spec.
+import { useState } from 'react'
+
 import { useSession } from '../session/SessionProvider'
-import { useAdminSettings } from './useAdminSettings'
-import { useUpdateAdminSettings } from './useUpdateAdminSettings'
+import { useOcrLabSettings } from './useOcrLabSettings'
+import { useOcrPolicy } from './useOcrPolicy'
+import { useUpdateOcrLabSettings } from './useUpdateOcrLabSettings'
+import { usePromoteOcrPolicy } from './usePromoteOcrPolicy'
 
 export function PlatformSettings() {
   const { user } = useSession()
-  // `enabled` evita una petición GET que el backend rechazaría de todos modos (403) cuando el
-  // usuario no tiene el flag: no es una fuga (el backend ya deniega correctamente), pero ahorra una
-  // llamada de red visible en el inspector que delataba la existencia del endpoint sin necesidad
-  // (hallazgo de auditoría S4.10).
-  const settings = useAdminSettings(user?.is_admin_tech ?? false)
-  const update = useUpdateAdminSettings()
+  const enabled = user?.is_admin_tech ?? false
+  const policy = useOcrPolicy(enabled)
+  const lab = useOcrLabSettings(enabled)
+  const updateLab = useUpdateOcrLabSettings()
+  const promote = usePromoteOcrPolicy()
+  const [promotionOpen, setPromotionOpen] = useState(false)
 
-  // C9: un platform_admin sin el flag nunca ve el interruptor, aunque entre a la URL a mano — la
-  // ruta ya está protegida por rol (app/routes.ts); esta comprobación es la del flag en sí.
-  if (!user?.is_admin_tech) {
+  if (!enabled) {
     return (
       <div className="p-6">
         <p className="text-red-400" role="alert">
@@ -26,34 +25,94 @@ export function PlatformSettings() {
     )
   }
 
+  const loading = policy.isLoading || lab.isLoading
+  const error = policy.isError || lab.isError
+
   return (
-    <section className="mx-auto max-w-xl space-y-4 p-6 text-slate-100">
-      <h1 className="text-xl font-semibold">Ajustes de plataforma</h1>
+    <section className="tn-panel-page mx-auto max-w-3xl space-y-6 p-6">
+      <header>
+        <h1 className="text-xl font-semibold">Ajustes de plataforma</h1>
+        <p className="mt-1 text-sm text-slate-400">Producción y laboratorio OCR tienen controles separados.</p>
+      </header>
 
-      {settings.isLoading && <p className="text-slate-400">Cargando…</p>}
+      {loading && <p className="text-slate-400">Cargando configuración OCR...</p>}
+      {error && <p role="alert" className="text-red-400">No se pudo cargar la configuración OCR.</p>}
 
-      {settings.isError && (
-        <p role="alert" className="text-red-400">
-          No se pudo cargar el ajuste. Inténtalo de nuevo.
-        </p>
+      {policy.data && (
+        <article className="rounded-lg border border-slate-700 bg-slate-900/60 p-5">
+          <h2 className="font-semibold">Producción OCR</h2>
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+            <div><dt className="text-slate-400">Primario</dt><dd>{policy.data.primary_engine} / {policy.data.primary_model}</dd></div>
+            <div><dt className="text-slate-400">Fallback</dt><dd>{policy.data.fallback_enabled ? `${policy.data.fallback_engine} / ${policy.data.fallback_model}` : 'Desactivado'}</dd></div>
+            <div><dt className="text-slate-400">Política</dt><dd>v{policy.data.version}</dd></div>
+            <div><dt className="text-slate-400">Consenso</dt><dd>{policy.data.consensus_mode}</dd></div>
+          </dl>
+          <p className="mt-4 text-xs text-slate-400">La producción continúa usando esta política aunque el laboratorio automático esté apagado.</p>
+          <button
+            type="button"
+            className="mt-4 rounded border border-sky-500/60 px-3 py-2 text-sm text-sky-200"
+            onClick={() => setPromotionOpen(true)}
+          >
+            Promover esta combinación a producción
+          </button>
+          {promotionOpen && (
+            <div role="dialog" aria-modal="true" className="mt-4 rounded border border-slate-600 bg-white p-4">
+              <h3 className="font-medium">Confirmar promoción</h3>
+              <p className="mt-2 text-sm text-slate-400">Se registrará la política anterior, la nueva política, el actor y la fecha.</p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  className="rounded bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+                  disabled={promote.isPending}
+                  onClick={() => {
+                    if (!policy.data) return
+                    promote.mutate({ ...policy.data, version: policy.data.version + 1 })
+                    setPromotionOpen(false)
+                  }}
+                >
+                  Confirmar promoción
+                </button>
+                <button type="button" className="rounded border border-slate-600 px-3 py-2 text-sm" onClick={() => setPromotionOpen(false)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+          {promote.isError && <p role="alert" className="mt-3 text-sm text-red-400">No se pudo promover la combinación.</p>}
+        </article>
       )}
 
-      {settings.data && (
-        <label className="flex items-center gap-3 text-sm text-slate-300">
-          <input
-            type="checkbox"
-            checked={settings.data.ocr_experiment_enabled}
-            disabled={update.isPending}
-            onChange={(e) => update.mutate(e.target.checked)}
-          />
-          Experimento OCR (preprocesado + comparativa multi-modelo)
-        </label>
-      )}
-
-      {update.isError && (
-        <p role="alert" className="text-sm text-red-400">
-          No se pudo cambiar el ajuste. Inténtalo de nuevo.
-        </p>
+      {lab.data && (
+        <article className="rounded-lg border border-slate-700 bg-slate-900/60 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">Laboratorio</h2>
+              <p className="mt-1 text-sm text-slate-400">Las llamadas automáticas de benchmark permanecen aisladas de producción.</p>
+            </div>
+            <button
+              type="button"
+              className="rounded border border-amber-500/60 px-3 py-2 text-sm text-amber-200 disabled:opacity-50"
+              disabled={updateLab.isPending || !lab.data.auto_benchmark_enabled}
+              onClick={() => updateLab.mutate({ ...lab.data, auto_benchmark_enabled: false })}
+            >
+              Desactivar laboratorio automático
+            </button>
+          </div>
+          <label className="mt-5 flex items-center gap-3 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={lab.data.lab_visible}
+              disabled={updateLab.isPending}
+              onChange={(event) => updateLab.mutate({ ...lab.data, lab_visible: event.target.checked })}
+            />
+            Mostrar laboratorio en el panel admin-tech
+          </label>
+          <p className="mt-3 text-sm text-slate-300">
+            Benchmark automático: <strong>{lab.data.auto_benchmark_enabled ? 'Activado' : 'Desactivado'}</strong>
+          </p>
+          <p className="mt-2 text-xs text-slate-400">Motores: {lab.data.benchmark_engines.join(', ')}. Variantes: {lab.data.benchmark_variants.join(', ')}.</p>
+          {updateLab.isError && <p role="alert" className="mt-3 text-sm text-red-400">No se pudo cambiar el laboratorio.</p>}
+        </article>
       )}
     </section>
   )

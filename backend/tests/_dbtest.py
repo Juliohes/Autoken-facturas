@@ -20,23 +20,27 @@ ADMIN_DSN = os.environ.get(
 
 
 def _worker_suffix() -> str:
-    """Sufijo único por worker para aislar la BD efímera en ejecución paralela (#56).
+    """Sufijo único por ejecución para aislar la BD efímera en ejecución paralela (#56).
 
     Bajo `pytest-xdist` cada worker exporta `PYTEST_XDIST_WORKER` (gw0, gw1...): se usa tal cual.
-    Sin xdist (ejecución en un solo proceso) no hay colisión posible entre procesos, pero se
-    ancla igualmente al PID para que dos ejecuciones simultáneas de la suite en la misma máquina
-    no compartan la BD `autoken_test`. Así la suite corre en paralelo sin el flake y se puede
-    retirar el `-p no:randomly`.
+    El identificador aleatorio adicional evita colisiones entre dos contenedores simultáneos que
+    tengan el mismo PID interno, algo habitual en Docker. El PID o worker queda como prefijo útil
+    para diagnosticar la base `autoken_test` sin depender de que sea globalmente único.
     """
     worker = os.environ.get("PYTEST_XDIST_WORKER")
-    return worker if worker else f"p{os.getpid()}"
+    prefix = worker if worker else f"p{os.getpid()}"
+    return f"{prefix}_{uuid4().hex[:8]}"
 
 
 # Nombre de la BD efímera de test, único por worker (#56): evita que dos workers dropeen/creen la
 # misma base a la vez. Los identificadores de BD de Postgres van sin comillas aquí porque el sufijo
 # es alfanumérico controlado (worker id o PID), no entrada externa.
 TEST_DB = f"autoken_test_{_worker_suffix()}"
-APP_PASSWORD = "apptest"  # noqa: S105  (solo para la BD efímera de test)
+# En una ejecución contra el stack compartido debe conservarse la contraseña del rol runtime; en CI
+# aislada, donde no existe `POSTGRES_APP_PASSWORD`, se usa una credencial efímera de test.
+APP_PASSWORD = os.environ.get(
+    "TEST_DATABASE_APP_PASSWORD", os.environ.get("POSTGRES_APP_PASSWORD", "apptest")
+)  # noqa: S105
 
 
 async def _run_migrations(db_dsn: str) -> None:

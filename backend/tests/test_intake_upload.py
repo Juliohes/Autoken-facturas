@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from uuid import uuid4
 
+import asyncpg
 import httpx
 import pytest
 
@@ -66,6 +68,47 @@ async def test_c1_subir_imagen_valida(authapi: Api) -> None:
     assert await object_exists(
         dsns, tenant_id=tenant_id, company_id=company_id, sha256=_sha256(JPEG)
     )
+
+
+async def test_r013_guarda_y_ordena_metadatos_de_sesion_sin_cambiar_el_scope(authapi: Api) -> None:
+    client, dsns = authapi
+    _tenant_id, _uid, company_id = await seed_uploader(dsns)
+    token = await token_for(client, email="ana@ilex.es")
+    session_id = str(uuid4())
+
+    for content, sequence in ((PNG, 2), (JPEG, 1)):
+        parts = upload_parts(content, company_id, filename="factura.jpg", content_type=JPEG_CT)
+        parts["data"].update(
+            {"capture_session_id": session_id, "capture_sequence": str(sequence)}
+        )
+        response = await client.post(UPLOADS, headers=auth(token), **parts)
+        assert response.status_code == 201, response.text
+
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        rows = await conn.fetch(
+            "SELECT capture_session_id, capture_sequence FROM uploaded_files "
+            "WHERE capture_session_id = $1 ORDER BY capture_sequence, id",
+            session_id,
+        )
+    finally:
+        await conn.close()
+    assert [(str(row["capture_session_id"]), row["capture_sequence"]) for row in rows] == [
+        (session_id, 1),
+        (session_id, 2),
+    ]
+
+
+async def test_r013_rechaza_metadatos_de_sesion_incompletos_o_fuera_de_rango(authapi: Api) -> None:
+    client, _dsns = authapi
+    _tenant_id, _uid, company_id = await seed_uploader(_dsns)
+    token = await token_for(client, email="ana@ilex.es")
+    parts = upload_parts(JPEG, company_id, filename="factura.jpg", content_type=JPEG_CT)
+    parts["data"]["capture_sequence"] = "51"
+
+    response = await client.post(UPLOADS, headers=auth(token), **parts)
+
+    assert response.status_code == 422
 
 
 async def test_c2_subir_pdf_valido(authapi: Api) -> None:
@@ -342,7 +385,7 @@ async def test_c12b_fallo_al_registrar_no_deja_objeto_huerfano(
     async def _boom(*_a: object, **_k: object) -> None:
         raise RuntimeError("fallo al insertar (test)")
 
-    monkeypatch.setattr(repository, "insert_uploaded_file", _boom)
+    monkeypatch.setattr(repository, "insert_uploaded_file_with_audit", _boom)
 
     resp = await client.post(
         UPLOADS,

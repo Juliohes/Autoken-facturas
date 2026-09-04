@@ -26,9 +26,10 @@ from companies import repository as companies_repo
 from companies.service import InvalidTaxId, is_cif_unique_violation, validated_cif
 from companies.service import cif_blind_index as company_cif_blind_index
 from companies.service import tenant_encryption_key as company_encryption_key
-from identity import ratelimit, registration_repo
+from identity import ratelimit, registration_decision, registration_repo
 from identity.passwords import hash_password, validate_password_policy
 from notifications import Message, Notifier
+from notifications import templates as email_templates
 from shared.audit import write_audit
 from shared.config import Settings
 from shared.integrity import violates_unique_constraint
@@ -56,6 +57,11 @@ class RegistrationError(Exception):
 
 class WeakPassword(RegistrationError):
     """La contraseña no cumple la política (S1.3) (-> 422)."""
+
+
+class LegalConsentRequired(RegistrationError):
+    """El registrante no aceptó los términos/condiciones (Bloque 5, PROMPT-AUTOFACTU-AUTH-COMPLETO)
+    (-> 422). Sin esto no hay alta: es el propio consentimiento, no un detalle accesorio."""
 
 
 class InvalidCif(RegistrationError):
@@ -88,21 +94,27 @@ async def register(
     redis: aioredis.Redis,
     ip: str,
     tenant_id: UUID,
+    tenant_slug: str,
     email: str,
     company_name: str,
     cif: str,
     password: str,
+    legal_consent: bool,
     settings: Settings,
     notifier: Notifier,
 ) -> None:
     """Da de alta un registro pendiente: usuario + empresa (1-A) + membership, todo o nada.
 
-    Limita por IP (429), valida contraseña (422) y CIF (422) antes de tocar nada. La contraseña se
-    **hashea siempre** antes de ramificar por la existencia del email, para no filtrar por latencia
-    si el email ya existe (mismo criterio que `verify_password` en el login). Si el email ya existe
-    no crea un segundo usuario ni avisa: la respuesta la genera el router de forma **genérica e
-    idéntica** (anti-enumeración). Deja traza `user.register` (actor = el propio usuario nuevo) y
-    avisa al `tenant_admin` tras el commit, nunca al usuario final.
+    Limita por IP (429), exige el consentimiento legal (422) y valida contraseña (422) y CIF (422)
+    antes de tocar nada. La contraseña se **hashea siempre** antes de ramificar por la existencia
+    del email, para no filtrar por latencia si el email ya existe (mismo criterio que
+    `verify_password` en el login). Si el email ya existe no crea un segundo usuario ni avisa: la
+    respuesta la genera el router de forma **genérica e idéntica** (anti-enumeración). Deja traza
+    `user.register` (actor = el propio usuario nuevo) y avisa a cada `tenant_admin` tras el commit,
+    con su propio enlace de un solo uso para aprobar o rechazar directamente desde el email
+    (`identity.registration_decision`) -- al registrante no se le avisa de nada (a petición de
+    Julio, 2026-09-03: la puerta de entrada de verdad es la decisión del admin, no que el
+    registrante confirme su email).
     """
     if await ratelimit.register_attempt_exceeds_ip(
         redis,
@@ -111,6 +123,8 @@ async def register(
         window_seconds=settings.register_window_seconds,
     ):
         raise RegistrationRateLimited
+    if not legal_consent:
+        raise LegalConsentRequired
     if not validate_password_policy(password, settings):
         raise WeakPassword
     canonical_cif = _validated_cif(cif)
@@ -121,7 +135,7 @@ async def register(
     if await registration_repo.email_exists(session, email):
         return  # anti-enumeración (fast-path): email ya presente, respuesta genérica sin crear nada
 
-    if not await _persist_registration(
+    user_id = await _persist_registration(
         session,
         tenant_id=tenant_id,
         settings=settings,
@@ -129,10 +143,20 @@ async def register(
         company_name=company_name,
         canonical_cif=canonical_cif,
         password_hash=password_hash,
-    ):
+    )
+    if user_id is None:
         return  # carrera de email: otra alta ganó el UNIQUE; respuesta genérica, sin crear
 
-    _dispatch_after_commit(session, notifier, await _admin_messages(session, new_email=email))
+    messages = await _admin_messages(
+        session,
+        redis=redis,
+        new_email=email,
+        user_id=user_id,
+        tenant_id=tenant_id,
+        tenant_slug=tenant_slug,
+        settings=settings,
+    )
+    _dispatch_after_commit(session, notifier, messages)
 
 
 def _validated_cif(cif: str) -> str:
@@ -152,12 +176,13 @@ async def _persist_registration(
     company_name: str,
     canonical_cif: str,
     password_hash: str,
-) -> bool:
-    """Inserta usuario + empresa (1-A) + membership + traza en un SAVEPOINT; True si se creó.
+) -> UUID | None:
+    """Inserta usuario + empresa (1-A) + membership + traza en un SAVEPOINT; el id del usuario si se
+    creó, o `None` si no se creó nada.
 
     El pre-check de unicidad no es atómico: dos altas concurrentes pueden esquivarlo y chocar en un
     UNIQUE. Se capturan esas carreras (TOCTOU):
-    - UNIQUE de email -> devuelve False (nada creado): el router responde igual que un alta buena.
+    - UNIQUE de email -> devuelve `None` (nada creado): el router responde igual que un alta buena.
     - UNIQUE de CIF -> reintenta dentro del SAVEPOINT: al reintentar el SELECT encuentra la empresa
       recién creada por la otra alta y se vincula a ella (1-A), sin duplicarla.
     El SAVEPOINT único evita dejar una empresa huérfana si el alta del usuario falla en la carrera.
@@ -186,11 +211,14 @@ async def _persist_registration(
                     action=AUDIT_ACTION_REGISTER,
                     entity=_AUDIT_ENTITY,
                     entity_id=user_id,
+                    # `legal_consent` deja constancia verificable (hash) de que el alta se dio con
+                    # el consentimiento aceptado (Bloque 5): llegar aquí ya lo exigió `register()`.
+                    payload={"legal_consent": True, "email": email, "cif": canonical_cif},
                 )
-            return True
+            return user_id
         except IntegrityError as exc:
             if violates_unique_constraint(exc, _USERS_EMAIL_UNIQUE):
-                return False  # carrera de email: nada creado, respuesta genérica
+                return None  # carrera de email: nada creado, respuesta genérica
             if is_cif_unique_violation(exc) and attempts < _MAX_PERSIST_ATTEMPTS:
                 continue  # carrera de CIF: la empresa ya existe; reintenta y vincúlate a ella
             raise  # cualquier otra violación de integridad no se enmascara
@@ -219,21 +247,53 @@ async def _resolve_company(
     return record.id
 
 
-async def _admin_messages(session: AsyncSession, *, new_email: str) -> list[Message]:
-    """Construye el aviso (mock) a cada `tenant_admin` activo del registro pendiente (C12).
+def _admin_panel_url(settings: Settings, *, slug: str) -> str:
+    """Enlace directo a "Empresas -> Registros pendientes de aprobación", en el subdominio del
+    propio tenant (nunca cruzado, mismo criterio que `_reset_url`/`verification_url`).
 
-    Se avisa SOLO al admin; nunca al usuario final en esta fase (spec S1.4). Los destinatarios se
-    leen ahora (dentro del contexto RLS de la transacción); el envío se difiere al post-commit.
+    Hallazgo real (Julio, 2026-09-03): el aviso al admin decía "entra en el panel de tu asesoría
+    para revisarlo" sin ningún enlace, así que había que ir a buscar la pantalla a mano.
     """
-    return [
-        Message(
-            to=admin_email,
-            subject="Nuevo registro pendiente de aprobación",
-            body=f"El usuario {new_email} se ha registrado y está pendiente de tu aprobación.",
-            kind="registration_pending",
+    return f"https://{slug}.{settings.base_domain}/empresas"
+
+
+async def _admin_messages(
+    session: AsyncSession,
+    *,
+    redis: aioredis.Redis,
+    new_email: str,
+    user_id: UUID,
+    tenant_id: UUID,
+    tenant_slug: str,
+    settings: Settings,
+) -> list[Message]:
+    """Construye el aviso a cada `tenant_admin` activo del registro pendiente (C12), con su propio
+    enlace de decisión de un solo uso (`registration_decision`, 2026-09-03): cada admin puede
+    aprobar o rechazar directamente desde ese enlace, sin iniciar sesión, o desde el panel de
+    siempre -- lo que decida antes. Los destinatarios se leen ahora (dentro del contexto RLS de la
+    transacción); el envío se difiere al post-commit.
+    """
+    panel_url = _admin_panel_url(settings, slug=tenant_slug)
+    messages = []
+    for admin in await registration_repo.tenant_admins(session):
+        token = await registration_decision.issue_decision_token(
+            redis,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            admin_id=admin.id,
+            ttl_seconds=settings.registration_decision_ttl,
         )
-        for admin_email in await registration_repo.tenant_admin_emails(session)
-    ]
+        messages.append(
+            email_templates.registration_pending_admin(
+                admin_email=admin.email,
+                registrant_email=new_email,
+                panel_url=panel_url,
+                decision_url=registration_decision.decision_url(
+                    settings, slug=tenant_slug, token=token
+                ),
+            )
+        )
+    return messages
 
 
 def _dispatch_after_commit(

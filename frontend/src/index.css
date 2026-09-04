@@ -2,7 +2,251 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Tipografía auto-hospedada (PWA/offline: nada de CDN en runtime). Plus Jakarta Sans para
+ * títulos/display e Inter para texto/UI, ambas con font-display: swap y stack del sistema. */
+@import '@fontsource/plus-jakarta-sans/400.css';
+@import '@fontsource/plus-jakarta-sans/600.css';
+@import '@fontsource/plus-jakarta-sans/700.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+
 @layer base {
+  :root {
+    color-scheme: light;
+
+    /* Acento por tenant: theme.ts inyecta --tn-accent-rgb como triplete "r g b" (para
+     * <alpha-value>); --tn-accent lo consume. Fallback al naranja de marca #FA6703. */
+    --tn-accent-rgb: 250 103 3;
+    --tn-accent: rgb(var(--tn-accent-rgb));
+    /* Texto sobre acento naranja: NAVY (AA 6.18:1). Nunca blanco sobre #FA6703 (3.0:1, falla). */
+    --tn-accent-ink: #021231;
+    /* Variante oscura del acento para cuando se necesite texto blanco (pasa 4.5:1). */
+    --tn-accent-strong: #c24e00;
+
+    --tn-font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --tn-font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+    --app-background: #f4f7fb;
+    --surface: #ffffff;
+    --surface-soft: #f8fafc;
+    --navy-glass: rgba(2, 18, 49, 0.84);
+    --navy-glass-border: rgba(255, 255, 255, 0.25);
+    --brand-navy: var(--color-secondary, #021231);
+    --brand-navy-rgb: 2, 18, 49;
+    --brand-navy-dark: var(--brand-navy);
+    --brand-navy-light: var(--brand-navy);
+    --brand-cyan: var(--brand-navy);
+    --brand-cyan-dark: var(--brand-navy);
+    --brand-cyan-light: #ffffff;
+    --brand-orange: #fa6703;
+    --brand-orange-dark: var(--brand-orange);
+    --brand-orange-light: #ffe1d1;
+    --background-primary: #f4f7fb;
+    --background-secondary: #edf3f8;
+    --surface-primary: #ffffff;
+    --surface-secondary: #f8fafc;
+    /* Superficie de la navegación de usuario (Menu.tsx): azul clarito de marca, nunca blanco
+     * puro (el logo de Autofactu es blanco y desaparece sobre #fff). AA con texto/iconos navy. */
+    --tn-nav-surface: #dce6f4;
+    /* Texto/iconos inactivos de la nav sobre --tn-nav-surface: --text-secondary (#667085) solo
+     * da 3.95:1 sobre este azul, no llega a AA (4.5:1). Gris-navy dedicado: 5.82:1. */
+    --tn-nav-ink-muted: #4b5768;
+    --text-primary: #101828;
+    --text-secondary: #667085;
+    --text-tertiary: #98a2b3;
+    --text-on-navy: #f7fbff;
+    --border-default: #e4e7ec;
+    --divider-default: #eaecf0;
+    --success: #20b486;
+    --success-surface: #eafaf4;
+    /* Texto sobre success-surface: --success (#20B486) da solo 2.46:1 en claro (falla AA).
+     * --tn-success-ink es un verde oscuro dedicado a TEXTO, mismo criterio que --tn-warning-ink. */
+    --tn-success-ink: #0c6e49;
+    --warning: var(--brand-orange);
+    --warning-surface: var(--brand-orange-light);
+    /* Texto sobre warning-surface: el naranja de marca (#FA6703) sobre --warning-surface claro
+     * da ~2.5:1 (falla AA). --tn-warning-ink es un ámbar oscuro dedicado a TEXTO, distinto del
+     * acento de marca (regla del sistema: "semántica aparte del acento"), 6.2:1 en claro. */
+    --tn-warning-ink: #92400e;
+    --error: #e5484d;
+    --error-surface: #fff0f0;
+    /* Texto sobre error-surface: --error (#E5484D) da solo 3.54:1 en claro (falla AA 4.5:1).
+     * --tn-error-ink es un rojo oscuro dedicado a TEXTO, mismo criterio que --tn-success-ink. */
+    --tn-error-ink: #a5221b;
+    --glass-navy-background: rgba(2, 18, 49, 0.84);
+    --glass-navy-background-strong: rgba(2, 18, 49, 0.94);
+    --glass-navy-background-soft: rgba(2, 18, 49, 0.72);
+    --glass-navy-border: rgba(255, 255, 255, 0.25);
+    --glass-navy-highlight: rgba(255, 255, 255, 0.34);
+
+    /* Alias de las clases existentes para no cambiar contratos visuales de los componentes. */
+    --color-primary: #fa6703;
+    --color-secondary: #021231;
+    --tn-accent-wash: color-mix(in srgb, var(--brand-orange) 16%, transparent);
+    --tn-accent-ink: var(--brand-navy);
+    --tn-background: var(--background-primary);
+    --tn-background-secondary: var(--background-secondary);
+    --tn-surface: var(--surface-primary);
+    --tn-surface-subtle: var(--surface-secondary);
+    --tn-text-primary: var(--text-primary);
+    --tn-text-secondary: var(--text-secondary);
+    --tn-text-tertiary: var(--text-tertiary);
+    --tn-text-on-glass: var(--text-on-navy);
+    --tn-navy-950: var(--brand-navy);
+    --tn-navy-900: var(--brand-navy);
+    --tn-navy-800: var(--brand-navy);
+    --tn-navy-700: var(--brand-navy);
+    --tn-navy-600: var(--brand-navy);
+    --tn-cyan-500: var(--brand-navy);
+    --tn-cyan-600: var(--brand-navy);
+    --tn-cyan-edge: var(--brand-orange);
+    --tn-success: var(--success);
+    --tn-success-surface: var(--success-surface);
+    --tn-warning: var(--brand-orange);
+    --tn-warning-surface: var(--warning-surface);
+    --tn-error: var(--error);
+    --tn-error-surface: var(--error-surface);
+    --tn-draft: var(--text-secondary);
+    --tn-draft-surface: #f2f4f7;
+    --tn-border: var(--border-default);
+    --tn-divider: var(--divider-default);
+    --tn-glass-background: var(--glass-navy-background);
+    --tn-glass-background-strong: var(--glass-navy-background-strong);
+    --tn-glass-background-soft: var(--glass-navy-background-soft);
+    --tn-glass-border: var(--glass-navy-border);
+    --tn-glass-highlight: var(--glass-navy-highlight);
+    --tn-glass-shadow: 0 14px 34px rgba(var(--brand-navy-rgb), 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.34), inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+    --tn-radius-xs: 8px;
+    --tn-radius-sm: 12px;
+    --tn-radius-md: 16px;
+    --tn-radius-lg: 22px;
+    --tn-radius-xl: 28px;
+    --tn-radius-pill: 999px;
+    --tn-shadow-card: 0 5px 18px rgba(16, 24, 40, 0.07);
+    --tn-shadow-glass: var(--tn-glass-shadow);
+    /* Altura de cada ítem de la barra inferior fija (.tn-user-nav-links a, por debajo de 768px).
+     * Token compartido con --tn-bottom-nav-clearance para que el contenido scrolleable de Pendientes
+     * e Historial no quede tapado detrás de la barra (Julio: "la última factura apenas se ve"). */
+    --tn-bottom-nav-height: 88px;
+    --tn-bottom-nav-clearance: calc(var(--tn-bottom-nav-height) + max(8px, env(safe-area-inset-bottom)) + 16px);
+  }
+
+  /* Modo oscuro: se activa por data-theme="dark" en <html> (toggle de usuario) o por
+   * prefers-color-scheme cuando no hay override explícito. Solo se redefinen tokens, nunca
+   * componentes, para que ambos temas resuelvan como un conjunto coherente. */
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --app-background: #021231;
+    --background-primary: #021231;
+    --background-secondary: #06152c;
+    --surface: #0a1c39;
+    --surface-primary: #0a1c39;
+    --surface-secondary: #0e2242;
+    --surface-soft: #0e2242;
+    --text-primary: #eaf1fb;
+    --text-secondary: #93a6c4;
+    --text-tertiary: #5f75a0;
+    --text-on-navy: #eaf1fb;
+    --border-default: #1c3357;
+    --divider-default: #152a49;
+    --brand-orange: #ff7a3d;
+    --tn-accent-ink: #021231;
+    --success: #3ddc97;
+    --success-surface: #0f2a22;
+    --warning-surface: #2e2118;
+    --error: #ff7a72;
+    --error-surface: #2e1615;
+    --tn-background: var(--background-primary);
+    --tn-background-secondary: var(--background-secondary);
+    --tn-surface: var(--surface-primary);
+    --tn-surface-subtle: var(--surface-secondary);
+    --tn-nav-surface: var(--surface-primary);
+    --tn-nav-ink-muted: var(--text-secondary);
+    --tn-text-primary: var(--text-primary);
+    --tn-text-secondary: var(--text-secondary);
+    --tn-text-tertiary: var(--text-tertiary);
+    --tn-text-on-glass: var(--text-on-navy);
+    --tn-border: var(--border-default);
+    --tn-divider: var(--divider-default);
+    --tn-success: var(--success);
+    --tn-success-surface: var(--success-surface);
+    /* En oscuro, --success (#3DDC97) ya pasa AA sobre success-surface (~8.64:1). */
+    --tn-success-ink: var(--success);
+    --tn-warning: var(--brand-orange);
+    --tn-warning-surface: var(--warning-surface);
+    /* En oscuro, el naranja de marca (#FF7A3D) ya pasa AA sobre warning-surface (~6.15:1). */
+    --tn-warning-ink: var(--brand-orange);
+    --tn-error: var(--error);
+    --tn-error-surface: var(--error-surface);
+    /* En oscuro, --error (#FF7A72) ya pasa AA sobre error-surface (~6.67:1). */
+    --tn-error-ink: var(--error);
+    --tn-shadow-card: 0 5px 18px rgba(0, 0, 0, 0.4);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      color-scheme: dark;
+      --app-background: #021231;
+      --background-primary: #021231;
+      --background-secondary: #06152c;
+      --surface: #0a1c39;
+      --surface-primary: #0a1c39;
+      --surface-secondary: #0e2242;
+      --surface-soft: #0e2242;
+      --text-primary: #eaf1fb;
+      --text-secondary: #93a6c4;
+      --text-tertiary: #5f75a0;
+      --text-on-navy: #eaf1fb;
+      --border-default: #1c3357;
+      --divider-default: #152a49;
+      --brand-orange: #ff7a3d;
+      --tn-accent-ink: #021231;
+      --success: #3ddc97;
+      --success-surface: #0f2a22;
+      --warning-surface: #2e2118;
+      --error: #ff7a72;
+      --error-surface: #2e1615;
+      --tn-background: var(--background-primary);
+      --tn-background-secondary: var(--background-secondary);
+      --tn-surface: var(--surface-primary);
+      --tn-surface-subtle: var(--surface-secondary);
+      --tn-nav-surface: var(--surface-primary);
+      --tn-nav-ink-muted: var(--text-secondary);
+      --tn-text-primary: var(--text-primary);
+      --tn-text-secondary: var(--text-secondary);
+      --tn-text-tertiary: var(--text-tertiary);
+      --tn-text-on-glass: var(--text-on-navy);
+      --tn-border: var(--border-default);
+      --tn-divider: var(--divider-default);
+      --tn-success: var(--success);
+      --tn-success-surface: var(--success-surface);
+      --tn-success-ink: var(--success);
+      --tn-warning: var(--brand-orange);
+      --tn-warning-surface: var(--warning-surface);
+      --tn-warning-ink: var(--brand-orange);
+      --tn-error: var(--error);
+      --tn-error-surface: var(--error-surface);
+      --tn-error-ink: var(--error);
+      --tn-shadow-card: 0 5px 18px rgba(0, 0, 0, 0.4);
+    }
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  html[data-theme='dark'] {
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--background-primary);
+    color: var(--tn-text-primary);
+    overflow-x: hidden;
+    font-family: var(--tn-font-sans);
+  }
+
   /* El texto de un botón nunca debe partirse en 2 líneas, en ninguna pantalla (plataforma o
      tenant). Regla global en vez de tocar cada botón uno a uno, mismo patrón que las paletas
      slate/emerald de tailwind.config.js. Los contenedores que agrupan varios botones deben usar
@@ -10,5 +254,1040 @@
      el texto dentro de uno. */
   button {
     white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
+@layer components {
+  .tn-app-shell {
+    position: relative;
+    isolation: isolate;
+    min-height: 100dvh;
+    color: var(--tn-text-primary);
+    background: var(--background-primary);
+  }
+
+  .tn-top-nav {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    border-color: var(--glass-navy-border);
+    border-radius: 0;
+    background: var(--brand-navy) !important;
+  }
+
+  .tn-user-nav {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: var(--tn-nav-surface);
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  /* Registros pendientes de aprobación, fijos arriba del todo de "Empresas" (Julio, 2026-09-04):
+   * un admin no debería tener que bajar a buscarlos. `top: 0` + z-index por debajo de .tn-user-nav
+   * (40): al ser hermanos dentro de .tn-app-shell, el navegador los apila uno bajo el otro solo con
+   * eso, sin necesidad de calcular a mano la altura del nav en píxeles. Fondo opaco a propósito: sin
+   * él, las filas de la tabla de empresas se verían "pasar por debajo" al hacer scroll. */
+  .tn-pending-registrations-pinned {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  /* El logo de Autofactu es blanco: sobre el azul clarito de --tn-nav-surface necesita un fondo
+   * navy propio para seguir viéndose, en claro y en oscuro. */
+  .tn-brand-logo-frame {
+    display: inline-flex;
+    align-items: center;
+    background: var(--brand-navy);
+    border-radius: var(--tn-radius-md);
+    padding: 6px 10px;
+  }
+
+  .tn-user-nav-links {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 41;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding: 0 8px max(8px, env(safe-area-inset-bottom));
+    background: var(--tn-nav-surface);
+    border-top-left-radius: var(--tn-radius-lg);
+    border-top-right-radius: var(--tn-radius-lg);
+    /* Recorta cualquier cosa (la barra del activo incluida) a las esquinas curvas (bloque B.2). */
+    overflow: hidden;
+    box-shadow: 0 -4px 16px rgba(2, 18, 49, 0.1);
+  }
+
+  .tn-user-nav-links a {
+    position: relative;
+    min-height: var(--tn-bottom-nav-height);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 4px;
+    text-align: center;
+    color: var(--tn-nav-ink-muted);
+    font-size: 0.75rem;
+    transition: color 140ms ease;
+  }
+
+  /* Barra del activo (bloque B): 3px (antes 2px), centrada al ~60% del ancho del ítem con margen
+   * a los dos lados -- nunca toca los extremos del primer/último ítem ni invade la curva. */
+  .tn-user-nav-links a::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 60%;
+    height: 3px;
+    background: transparent;
+    border-radius: var(--tn-radius-pill);
+    transform: translateX(-50%);
+    transition: background-color 180ms ease;
+  }
+
+  /* Estado activo: texto navy + barra de acento naranja (color + forma, no solo color). */
+  .tn-user-nav-links a[aria-current='page'],
+  .tn-user-nav-links a.active {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .tn-user-nav-links a[aria-current='page']::before,
+  .tn-user-nav-links a.active::before {
+    background: var(--tn-accent);
+  }
+
+  /* Envoltorio del icono: ancla el badge en su esquina superior derecha. */
+  .tn-user-nav-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Badge de pendientes: acento naranja con texto navy (AA), nunca blanco sobre #FA6703. */
+  .tn-user-nav-badge {
+    position: absolute;
+    top: -6px;
+    right: -10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--tn-accent);
+    color: var(--tn-accent-ink);
+    font-size: 0.6875rem;
+    font-weight: 700;
+  }
+
+  @media (min-width: 768px) {
+    .tn-user-nav {
+      position: sticky;
+      top: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      background: var(--tn-nav-surface);
+    }
+
+    .tn-user-nav-links {
+      position: static;
+      display: flex;
+      gap: 12px;
+      padding: 8px 0;
+      border-radius: 0;
+      box-shadow: none;
+      background: transparent;
+    }
+
+    .tn-user-nav-links a {
+      min-height: 44px;
+      flex-direction: row;
+      padding: 0 12px;
+      font-size: 0.875rem;
+    }
+  }
+
+  .tn-login-shell {
+    padding: 24px;
+    background: var(--background-primary);
+    color: var(--text-primary);
+  }
+
+  .tn-login-card {
+    color: var(--text-primary);
+    background: var(--surface-primary);
+    border: 1px solid var(--border-default);
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-login-label {
+    color: var(--text-secondary);
+  }
+
+  .tn-login-input {
+    color: var(--text-primary) !important;
+    background: var(--surface-primary) !important;
+    border: 1px solid var(--border-default) !important;
+  }
+
+  .tn-login-input:focus {
+    border-color: var(--brand-orange) !important;
+    outline: 3px solid rgba(250, 103, 3, 0.22);
+    outline-offset: 1px;
+  }
+
+  .tn-liquid-glass input,
+  .tn-liquid-glass select,
+  .tn-liquid-glass textarea {
+    color: var(--text-primary) !important;
+    background: var(--surface-primary) !important;
+    border-color: var(--border-default) !important;
+  }
+
+  .tn-brand-logo {
+    background: transparent;
+    object-fit: contain;
+  }
+
+  .tn-password-field {
+    position: relative;
+    display: block;
+  }
+
+  .tn-password-field .tn-login-input {
+    width: 100%;
+    padding-right: 42px;
+  }
+
+  .tn-password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    border: 0;
+    border-radius: 8px;
+    color: var(--brand-navy);
+    background: transparent;
+    transform: translateY(-50%);
+  }
+
+  .tn-password-toggle:hover {
+    color: #fff;
+    background: rgba(141, 230, 255, 0.14);
+  }
+
+  .tn-password-toggle:focus-visible {
+    outline: 2px solid var(--tn-cyan-edge);
+    outline-offset: 1px;
+  }
+
+  .tn-password-toggle svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Enlaces de las pantallas de auth (Bloque 4): subrayado + --text-secondary, no --tn-accent (color
+   * por tenant, sin garantía de AA como texto plano sobre la tarjeta) -- mismo criterio que
+   * .tn-login-label, que ya usa --text-secondary en esta misma sección. */
+  .tn-auth-link {
+    color: var(--text-secondary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .tn-auth-link:hover {
+    color: var(--text-primary);
+  }
+
+  .tn-auth-link:focus-visible {
+    outline: 2px solid rgb(var(--tn-accent-rgb) / 0.5);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .tn-liquid-glass {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    color: var(--tn-text-on-glass);
+    background: linear-gradient(145deg, rgba(15, 42, 82, 0.86), rgba(2, 18, 49, 0.94)) !important;
+    border: 1px solid var(--glass-navy-border);
+    border-radius: var(--tn-radius-lg);
+    box-shadow: var(--tn-shadow-glass);
+    -webkit-backdrop-filter: blur(18px) saturate(145%);
+    backdrop-filter: blur(18px) saturate(145%);
+    transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .tn-liquid-glass::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    background: linear-gradient(130deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.1) 20%, transparent 48%);
+    pointer-events: none;
+  }
+
+  .tn-liquid-glass::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 1px;
+    border-radius: calc(var(--tn-radius-lg) - 1px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 1px 0 0 rgba(141, 230, 255, 0.12), inset -1px 0 0 rgba(141, 230, 255, 0.08);
+    pointer-events: none;
+  }
+
+  .tn-liquid-glass[data-interactive='true']:hover {
+    border-color: rgba(141, 230, 255, 0.86);
+    box-shadow: 0 16px 38px rgba(2, 18, 49, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  }
+
+  .tn-liquid-glass[data-interactive='true']:active {
+    transform: scale(0.985);
+  }
+
+  .tn-liquid-glass:focus-visible {
+    outline: 3px solid rgba(25, 191, 242, 0.38);
+    outline-offset: 3px;
+  }
+
+  [data-liquid-glass='off'] .tn-liquid-glass {
+    background: var(--brand-navy) !important;
+    border-color: rgba(255, 255, 255, 0.18);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  [data-liquid-glass='off'] .tn-liquid-glass::before,
+  [data-liquid-glass='off'] .tn-liquid-glass::after {
+    display: none;
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .tn-liquid-glass {
+      background: var(--brand-navy) !important;
+    }
+  }
+
+  .tn-panel-page {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    color: var(--text-primary);
+    background: var(--surface-primary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--tn-radius-xl);
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-panel-page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: transparent;
+    pointer-events: none;
+  }
+
+  /* Variante sin tarjeta: el contenido se apoya directamente sobre el fondo de la app
+   * (UploadFileScreen, paso 7). Solo color de texto, sin superficie/borde/sombra. */
+  .tn-page-plain {
+    color: var(--text-primary);
+  }
+
+  /* Deja hueco al final para que la barra inferior fija (.tn-user-nav-links, por debajo de 768px)
+   * no tape el último elemento al hacer scroll (Pendientes, Historial). En escritorio la barra deja
+   * de ser fija (pasa a fila estática en la cabecera), así que ahí no hace falta hueco extra. */
+  .tn-scroll-clear-bottom-nav {
+    padding-bottom: calc(1.5rem + var(--tn-bottom-nav-clearance)) !important;
+  }
+
+  @media (min-width: 768px) {
+    .tn-scroll-clear-bottom-nav {
+      padding-bottom: 1.5rem !important;
+    }
+  }
+
+  /* Las pantallas existentes usan una paleta slate diseñada para el shell oscuro anterior. */
+  .tn-panel-page .text-slate-100 { color: var(--text-primary) !important; }
+  .tn-panel-page .text-slate-200 { color: var(--text-primary) !important; }
+  .tn-panel-page .text-slate-300 { color: var(--text-secondary) !important; }
+  .tn-panel-page .text-slate-400 { color: var(--text-secondary) !important; }
+  .tn-panel-page .text-slate-500 { color: var(--text-tertiary) !important; }
+  .tn-panel-page .text-emerald-400,
+  .tn-panel-page .text-emerald-300,
+  .tn-panel-page .text-emerald-200 { color: #16794a !important; }
+  .tn-panel-page .text-amber-400,
+  .tn-panel-page .text-amber-300,
+  .tn-panel-page .text-amber-200,
+  .tn-panel-page .text-amber-100 { color: var(--brand-orange-dark) !important; }
+  .tn-panel-page .text-red-400,
+  .tn-panel-page .text-red-300,
+  .tn-panel-page .text-red-200 { color: var(--error) !important; }
+  .tn-panel-page [class~='bg-slate-800'],
+  .tn-panel-page [class*='bg-slate-800/'] {
+    background: var(--surface-secondary) !important;
+  }
+  .tn-panel-page [class~='bg-slate-900'],
+  .tn-panel-page [class*='bg-slate-900/'] {
+    background: var(--surface-primary) !important;
+  }
+  .tn-panel-page [class~='bg-slate-700'] {
+    background: var(--surface-secondary) !important;
+  }
+  .tn-panel-page [class~='border-slate-700'], .tn-panel-page [class~='border-slate-600'] {
+    border-color: var(--border-default) !important;
+  }
+  .tn-panel-page [class~='bg-emerald-600'] {
+    background: var(--brand-cyan) !important;
+    border: 1px solid var(--brand-cyan-dark);
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-panel-page [class~='border-emerald-600'], .tn-panel-page [class~='border-emerald-700'] {
+    border-color: var(--tn-cyan-600) !important;
+  }
+
+  .tn-panel-page [class~='divide-slate-700'] > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--divider-default) !important;
+  }
+
+  .tn-panel-page .tn-camera-stage {
+    color: #f7fbff;
+    background: var(--tn-navy-950) !important;
+  }
+
+  .tn-panel-page .tn-camera-stage .text-slate-100,
+  .tn-panel-page .tn-camera-stage .text-slate-200,
+  .tn-panel-page .tn-camera-stage .text-slate-300,
+  .tn-panel-page .tn-camera-stage .text-slate-400 {
+    color: #f7fbff !important;
+  }
+
+  .tn-liquid-glass .text-slate-100,
+  .tn-liquid-glass .text-slate-200,
+  .tn-liquid-glass .text-slate-300 {
+    color: #f7fbff !important;
+  }
+
+  .tn-liquid-glass .text-slate-400,
+  .tn-liquid-glass .text-slate-500 {
+    color: var(--text-secondary) !important;
+  }
+
+  .tn-solid-card {
+    color: var(--tn-text-primary);
+    background: var(--tn-surface);
+    border: 1px solid var(--tn-border);
+    border-radius: var(--tn-radius-md);
+    box-shadow: var(--tn-shadow-card);
+    -webkit-backdrop-filter: blur(14px) saturate(115%);
+    backdrop-filter: blur(14px) saturate(115%);
+  }
+
+  .tn-glass-action {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid var(--tn-glass-border) !important;
+    border-radius: var(--tn-radius-md) !important;
+    color: #f7fbff !important;
+    background: var(--tn-glass-background) !important;
+    box-shadow: 0 10px 24px rgba(2, 18, 49, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+    -webkit-backdrop-filter: blur(12px) saturate(125%);
+    backdrop-filter: blur(12px) saturate(125%);
+    transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 220ms ease, box-shadow 220ms ease;
+  }
+
+  .tn-glass-action:hover:not(:disabled) {
+    border-color: var(--tn-cyan-edge) !important;
+    box-shadow: 0 14px 28px rgba(2, 18, 49, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.46);
+  }
+
+  .tn-glass-action:active:not(:disabled) {
+    transform: translateY(1px) scale(0.985);
+  }
+
+  .tn-panel-page .tn-glass-action {
+    color: #fff !important;
+  }
+
+  /* La aplicación tenía muchos botones antiguos sin una clase propia. Esta capa les da el mismo
+     tratamiento glass sin tocar botones con estado semántico explícito (éxito, error o aviso). */
+  .tn-panel-page button:not(.tn-primary-action):not(.tn-capture-secondary-action):not([class*='bg-emerald']):not([class*='bg-red']):not([class*='bg-sky']):not([class*='bg-amber']),
+  .tn-panel-page a[class*='border-'] {
+    min-height: 44px;
+    border: 1px solid var(--tn-glass-border) !important;
+    border-radius: var(--tn-radius-md) !important;
+    color: var(--text-primary) !important;
+    background: var(--surface-secondary) !important;
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-panel-page button:not(.tn-primary-action):not(.tn-capture-secondary-action):not([class*='bg-emerald']):not([class*='bg-red']):not([class*='bg-sky']):not([class*='bg-amber']):hover:not(:disabled),
+  .tn-panel-page a[class*='border-']:hover {
+    border-color: var(--tn-cyan-edge) !important;
+    box-shadow: 0 14px 28px rgba(2, 18, 49, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.46);
+  }
+
+  .tn-primary-action {
+    min-height: 56px;
+    border: 1px solid var(--brand-navy) !important;
+    border-radius: var(--tn-radius-pill) !important;
+    /* Texto navy sobre naranja de acento (AA 6.18:1); nunca blanco sobre #FA6703 (3.0:1, falla). */
+    color: var(--tn-accent-ink) !important;
+    background: var(--tn-accent) !important;
+    box-shadow: 0 10px 24px rgba(var(--brand-navy-rgb), 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+    transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), filter 140ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .tn-primary-action:hover:not(:disabled) {
+    filter: brightness(1.035);
+    box-shadow: 0 14px 28px rgba(2, 18, 49, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+
+  .tn-primary-action:active:not(:disabled) {
+    transform: translateY(1px) scale(0.985);
+  }
+
+  .tn-secondary-action {
+    color: var(--text-on-navy) !important;
+    background: var(--brand-navy) !important;
+    border-color: var(--tn-glass-border) !important;
+    box-shadow: var(--tn-shadow-glass);
+  }
+
+  .tn-capture-entry-screen {
+    display: flex;
+    min-height: calc(100dvh - 72px);
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .tn-capture-entry-screen > * {
+    width: min(100%, 620px);
+  }
+
+  .tn-capture-entry-screen > .space-y-5 {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  /* "Tomar foto" y "Varias hojas" (feedback de Julio tras ver el Escáner desplegado): ya no tienen
+   * clases propias. "Tomar foto" reutiliza .tn-primary-action tal cual (idéntico a "Elegir imágenes
+   * o PDF" en Subir Archivo); "Varias hojas" reutiliza .tn-btn/.tn-btn-secondary (sólido, sin
+   * transparencia/blur), igual que el resto de botones secundarios de la app. */
+  .tn-capture-secondary-actions {
+    display: flex;
+    width: min(100%, 360px);
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .tn-capture-secondary-action {
+    display: inline-flex;
+    min-height: 46px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 7px;
+    border: 1px solid var(--tn-glass-border);
+    border-radius: var(--tn-radius-md);
+    color: #f7fbff !important;
+    background: color-mix(in srgb, white 64%, transparent);
+    box-shadow: 0 8px 18px rgba(2, 18, 49, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .tn-capture-secondary-action:hover {
+    border-color: var(--tn-cyan-edge);
+    box-shadow: 0 12px 24px rgba(2, 18, 49, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  }
+
+  .tn-capture-secondary-action:active {
+    transform: scale(0.985);
+  }
+
+  .tn-capture-upload-action {
+    color: var(--brand-navy) !important;
+    background: var(--brand-orange) !important;
+    border-color: var(--brand-orange) !important;
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-capture-upload-action:hover {
+    border-color: var(--brand-orange-dark) !important;
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-capture-icon {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+  }
+
+  /* .tn-direction-toggle / .tn-toggle-option: retirados (bloque A.3, PROMPT-AUTOFACTU-AJUSTES-v3).
+   * El Escáner usa ahora el SegmentedControl compartido (.tn-segmented / .tn-segmented-option),
+   * igual que Subir Archivo. Ningún componente usa ya estas clases. */
+
+  /* ---- src/ui (Bloque 2): primitivos del sistema de diseño ---- */
+  .tn-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid transparent;
+    border-radius: var(--tn-radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 140ms ease, transform 140ms ease, box-shadow 180ms ease;
+  }
+  .tn-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  /* "Varias hojas" en el Escáner (feedback de Julio: se veía "pálido" frente a Subir Archivo):
+   * bloqueado hasta elegir dirección (R-056), pero sin la atenuación de opacidad de .tn-btn:disabled
+   * -- el color debe quedar tan sólido como el resto de la app, no un botón "cargando". Solo afecta
+   * a este botón, no a los demás .tn-btn-secondary (p. ej. "Cargar más" sí atenúa mientras carga). */
+  .tn-btn.tn-capture-secondary-solid:disabled { opacity: 1; }
+  .tn-btn:focus-visible { outline: 3px solid rgb(var(--tn-accent-rgb) / 0.4); outline-offset: 2px; }
+  .tn-btn-sm { min-height: 36px; padding: 0 12px; font-size: 0.8125rem; }
+  .tn-btn-md { min-height: 44px; padding: 0 16px; font-size: 0.9375rem; }
+  .tn-btn-lg { min-height: 56px; padding: 0 22px; font-size: 1.0625rem; }
+  .tn-btn-primary { color: var(--tn-accent-ink); background: var(--tn-accent); border-color: var(--tn-accent); }
+  .tn-btn-primary:hover:not(:disabled) { filter: brightness(1.04); }
+  .tn-btn-secondary { color: var(--tn-text-primary); background: var(--tn-surface); border-color: var(--tn-border); }
+  /* Estado pulsado (p. ej. "Varias hojas" en el Escáner, aria-pressed="true"): mismo tratamiento
+   * navy sólido que ya usaba antes, ahora sobre la base sólida de .tn-btn-secondary. */
+  .tn-btn-secondary[aria-pressed='true'] { color: #fff; background: var(--brand-navy); border-color: var(--brand-navy); }
+  .tn-btn-ghost { color: var(--tn-text-secondary); background: transparent; }
+  .tn-btn-danger { color: #fff; background: var(--tn-error); border-color: var(--tn-error); }
+  .tn-btn-spinner {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid currentColor; border-top-color: transparent;
+    animation: tn-spin 0.7s linear infinite;
+  }
+  @keyframes tn-spin { to { transform: rotate(360deg); } }
+
+  .tn-status-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: var(--tn-radius-pill);
+    font-size: 0.8125rem; font-weight: 600; line-height: 1.4;
+    border: 1px solid transparent;
+  }
+  /* color: el ink dedicado (AA), no el tono crudo -- --tn-success/--tn-error dan 2.46:1/3.54:1
+   * sobre su propia surface en claro, no llegan a 4.5:1. */
+  .tn-status-ok { color: var(--tn-success-ink); background: var(--tn-success-surface); border-color: var(--tn-success); }
+  .tn-status-warn { color: var(--tn-warning-ink); background: var(--tn-warning-surface); border-color: var(--tn-warning); }
+  .tn-status-bad { color: var(--tn-error-ink); background: var(--tn-error-surface); border-color: var(--tn-error); }
+  .tn-status-neutral { color: var(--tn-text-secondary); background: var(--tn-surface-subtle); border-color: var(--tn-border); }
+  /* Texto principal sobre superficie sólida (no el acento de marca ni --brand-navy, que no se
+   * redefine en oscuro): --tn-text-primary es dual-theme por diseño y siempre contrasta con
+   * --tn-surface-subtle de su propio tema, sin depender de un fondo con alpha. */
+  .tn-status-info { color: var(--tn-text-primary); background: var(--tn-surface-subtle); border-color: var(--tn-border); }
+
+  /* Variante sin caja (bloque C): conserva el color del tono, icono y texto (AA), sin fondo ni
+   * borde sólido -- p. ej. el estado dentro de InboxItem. */
+  .tn-status-badge.tn-status-plain {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .tn-spinner-wrap { display: inline-flex; align-items: center; }
+  .tn-spinner {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 3px solid var(--tn-border); border-top-color: var(--tn-accent);
+    animation: tn-spin 0.8s linear infinite;
+  }
+
+  .tn-banner {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    padding: 12px 14px; border-radius: var(--tn-radius-md); border: 1px solid transparent;
+    font-size: 0.9375rem;
+  }
+  .tn-banner-info { color: var(--tn-text-primary); background: var(--tn-surface-subtle); border-color: var(--tn-border); }
+  .tn-banner-ok { color: var(--tn-success); background: var(--tn-success-surface); border-color: var(--tn-success); }
+  .tn-banner-warn { color: var(--tn-warning-ink); background: var(--tn-warning-surface); border-color: var(--tn-warning); }
+  .tn-banner-bad { color: var(--tn-error); background: var(--tn-error-surface); border-color: var(--tn-error); }
+
+  .tn-empty-state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 20px; text-align: center; }
+  .tn-empty-icon { color: var(--tn-text-tertiary); }
+  .tn-empty-title { font-family: var(--tn-font-display); font-size: 1.125rem; font-weight: 600; color: var(--tn-text-primary); }
+  .tn-empty-desc { color: var(--tn-text-secondary); max-width: 40ch; }
+  .tn-empty-action { margin-top: 6px; }
+
+  .tn-segmented {
+    display: inline-flex; gap: 3px; padding: 4px;
+    border: 1px solid var(--tn-border); border-radius: var(--tn-radius-pill);
+    background: var(--tn-surface-subtle);
+  }
+  .tn-segmented-option {
+    min-height: 44px; min-width: 96px; padding: 0 18px; border: 0;
+    border-radius: var(--tn-radius-pill); color: var(--tn-text-secondary);
+    background: transparent; font-size: 0.9375rem; font-weight: 600; cursor: pointer;
+    transition: color 140ms ease, background 180ms ease, box-shadow 180ms ease;
+  }
+  .tn-segmented-option-active { color: var(--tn-accent-ink); background: var(--tn-accent); box-shadow: 0 4px 10px rgba(var(--brand-navy-rgb), 0.16); }
+  .tn-segmented-option:focus-visible { outline: 3px solid rgb(var(--tn-accent-rgb) / 0.4); outline-offset: 2px; }
+
+  /* Desplegable de periodo del Historial (bloque D). */
+  .tn-select {
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--tn-border);
+    border-radius: var(--tn-radius-md);
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+  .tn-select:focus-visible {
+    outline: 3px solid rgb(var(--tn-accent-rgb) / 0.4);
+    outline-offset: 2px;
+  }
+
+  .tn-card {
+    background: var(--tn-surface); border: 1px solid var(--tn-border);
+    border-radius: var(--tn-radius-md); box-shadow: var(--tn-shadow-card); padding: 18px;
+  }
+  .tn-section { display: flex; flex-direction: column; gap: 10px; }
+  .tn-section-title {
+    font-family: var(--tn-font-display); font-size: 0.8125rem; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--tn-text-secondary);
+  }
+
+  .tn-field { display: flex; flex-direction: column; gap: 6px; }
+  .tn-field-label { font-size: 0.9375rem; font-weight: 600; color: var(--tn-text-primary); }
+  .tn-field-hint { font-size: 0.8125rem; color: var(--tn-text-secondary); }
+  .tn-field-error { font-size: 0.8125rem; color: var(--tn-error); }
+
+  /* Toggle de tema (Bloque 1): segmented claro/oscuro/sistema. Estado activo = acento naranja
+   * con texto navy (AA); el resto neutro sobre superficie. */
+  .tn-theme-toggle {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--tn-border);
+    border-radius: var(--tn-radius-pill);
+    background: var(--tn-surface-subtle);
+  }
+
+  .tn-theme-toggle-option {
+    display: inline-flex;
+    min-height: 44px;
+    min-width: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: var(--tn-radius-pill);
+    color: var(--tn-text-secondary);
+    background: transparent;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    transition: color 140ms ease, background 180ms ease;
+  }
+
+  .tn-theme-toggle-option-active {
+    color: var(--tn-accent-ink) !important;
+    background: var(--tn-accent);
+  }
+
+  .tn-theme-toggle-option:focus-visible {
+    outline: 2px solid var(--tn-accent);
+    outline-offset: 2px;
+  }
+
+  .tn-display {
+    font-family: var(--tn-font-display);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tn-preview-shell {
+    color: var(--text-primary) !important;
+  }
+
+  .tn-preview-image {
+    background: var(--tn-surface) !important;
+    border-color: var(--tn-border) !important;
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  .tn-inbox-item {
+    margin-bottom: 10px;
+    padding: 16px !important;
+    background: var(--surface-primary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--tn-radius-md);
+    box-shadow: var(--tn-shadow-card);
+  }
+
+  /* Acciones de Pendientes (bloque C): botones con recuadro, padding cómodo, AA en claro y
+   * oscuro. "Revisar factura" verde, "Eliminar" rojo, "Ver progreso" neutro suave. */
+  .tn-inbox-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 8px 16px;
+    border: 1px solid transparent;
+    border-radius: var(--tn-radius-md);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    transition: filter 140ms ease;
+  }
+
+  .tn-inbox-action:hover {
+    filter: brightness(1.05);
+  }
+
+  .tn-inbox-action:disabled {
+    opacity: 0.5;
+  }
+
+  .tn-inbox-action-success {
+    color: var(--tn-success-ink);
+    background: var(--tn-success-surface);
+    border-color: var(--tn-success);
+  }
+
+  .tn-inbox-action-danger {
+    color: var(--tn-error-ink);
+    background: var(--tn-error-surface);
+    border-color: var(--tn-error);
+  }
+
+  .tn-inbox-action-neutral {
+    color: var(--text-primary);
+    background: var(--surface-secondary);
+    border-color: var(--tn-border);
+  }
+
+  .tn-summary-card {
+    background: var(--glass-navy-background) !important;
+    border-color: var(--glass-navy-border) !important;
+    box-shadow: var(--tn-shadow-glass);
+    color: var(--text-on-navy) !important;
+  }
+
+  .tn-summary-card p:first-child {
+    color: var(--tn-cyan-edge) !important;
+  }
+
+  .tn-capture-stage {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .tn-capture-stage-body {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .tn-capture-stage-controls {
+    flex: 0 0 auto;
+    max-height: 45dvh;
+    overflow-y: auto;
+  }
+
+  .tn-camera-viewport-boundary {
+    border: 0;
+  }
+
+  .tn-document-overlay {
+    color: var(--brand-orange);
+  }
+
+  .camera-toolbar,
+  .camera-toolbar label,
+  .camera-control {
+    color: var(--text-on-navy) !important;
+  }
+
+  .camera-mode-option {
+    border-color: rgba(255, 255, 255, 0.44) !important;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .camera-mode-option:has(input:checked) {
+    color: #fff !important;
+    border-color: rgba(255, 255, 255, 0.6) !important;
+    background: rgba(255, 255, 255, 0.22) !important;
+  }
+
+  .camera-control[aria-pressed='true'] {
+    color: var(--brand-orange) !important;
+    border-color: var(--brand-orange) !important;
+  }
+
+  .camera-capture-button {
+    min-width: 56px;
+    min-height: 56px;
+    color: var(--brand-navy) !important;
+    background: var(--brand-orange) !important;
+    border-color: var(--brand-orange-dark) !important;
+    box-shadow: none;
+  }
+
+  .tn-panel-page select,
+  .tn-panel-page input,
+  .tn-panel-page textarea {
+    color: var(--text-primary) !important;
+    background: var(--surface-primary) !important;
+    border-color: var(--border-default) !important;
+  }
+
+  .tn-panel-page select:focus,
+  .tn-panel-page input:focus,
+  .tn-panel-page textarea:focus {
+    border-color: var(--brand-orange) !important;
+    outline: 3px solid color-mix(in srgb, var(--brand-orange) 24%, transparent);
+    outline-offset: 1px;
+  }
+
+  .tn-panel-page table {
+    color: var(--text-primary);
+  }
+
+  .tn-panel-page thead {
+    color: var(--text-secondary);
+    background: var(--surface-secondary);
+  }
+
+  .tn-panel-page pre,
+  .tn-panel-page code {
+    color: var(--text-primary);
+    background: var(--surface-secondary);
+  }
+
+  .tn-panel-page .text-sky-200,
+  .tn-panel-page .text-sky-300,
+  .tn-panel-page .text-cyan-300 { color: var(--brand-navy) !important; }
+
+  /* El botón de "Entrar" ahora usa las clases del sistema (.tn-btn-primary) directamente en el
+   * JSX de LoginScreen.tsx; ya no necesita este override por selector de tag+atributo. */
+
+  .tn-auth-layout {
+    display: grid;
+    width: min(100%, 920px);
+    grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1fr);
+    gap: 24px;
+    align-items: stretch;
+  }
+
+  .tn-auth-brand {
+    display: flex;
+    min-height: 430px;
+    flex-direction: column;
+    justify-content: center;
+    padding: 40px;
+    background: var(--brand-navy) !important;
+  }
+
+  .tn-auth-brand .tn-brand-logo {
+    width: min(100%, 310px);
+    margin-bottom: 28px;
+  }
+
+  .tn-auth-brand h1 {
+    max-width: 14ch;
+    margin: 0;
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    line-height: 1.05;
+  }
+
+  .tn-auth-brand p {
+    max-width: 34ch;
+    margin-top: 16px;
+    color: color-mix(in srgb, var(--text-on-navy) 78%, transparent);
+  }
+
+  .tn-auth-form-card {
+    align-self: center;
+  }
+
+  @media (max-width: 720px) {
+    .tn-login-shell {
+      padding: 16px;
+    }
+
+    .tn-auth-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .tn-auth-brand {
+      min-height: 0;
+      padding: 28px;
+    }
+
+    .tn-auth-brand h1 {
+      font-size: 2rem;
+    }
+  }
+
+  @media (max-width: 419px) {
+    /* Bloque 8: en móvil estrecho el ThemeToggle solo muestra icono (icono+aria-label siguen
+     * siendo accesibles; el texto visible se retira para no desbordar la cabecera junto al
+     * logo del tenant y el botón de cerrar sesión, sin generar scroll horizontal). */
+    .tn-theme-toggle-option {
+      min-width: 44px;
+      padding: 0 10px;
+    }
+
+    .tn-theme-toggle-option span {
+      display: none;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .tn-liquid-glass {
+    background: var(--tn-navy-950) !important;
+    border-color: #fff;
+  }
+}
+
+@media (forced-colors: active) {
+  .tn-liquid-glass, .tn-primary-action, .tn-solid-card {
+    forced-color-adjust: auto;
+    border: 1px solid CanvasText;
   }
 }

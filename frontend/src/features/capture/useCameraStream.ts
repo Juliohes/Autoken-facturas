@@ -8,7 +8,10 @@ const CAMERA_REQUEST_TIMEOUT_MS = 10_000
 // que no soporte esto sigue negociando la resolución que su hardware permita, sin lanzar
 // `OverconstrainedError`. Sin `aspectRatio`: no se fuerza, la persona puede encuadrar en horizontal
 // o vertical.
-const RESOLUTION_HINT = { width: { ideal: 4096 }, height: { ideal: 2160 } }
+// Una resolución 4K como `ideal` puede dejar algunos navegadores de escritorio en requesting
+// indefinidamente aunque la cámara sí exista. 1920x1080 sigue siendo alta resolución y permite que
+// el dispositivo negocie una resolución superior si la soporta.
+const RESOLUTION_HINT = { width: { ideal: 1920 }, height: { ideal: 1080 } }
 
 export type CameraStatus = 'idle' | 'requesting' | 'active' | 'unavailable'
 
@@ -58,15 +61,17 @@ export function useCameraStream(): CameraStreamState {
         // webcam o la única cámara disponible sigue siendo una cámara válida (S6.9 C1).
         let media: MediaStream
         try {
-          media = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { exact: 'environment' }, ...RESOLUTION_HINT },
+            media = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: { ideal: 'environment' }, ...RESOLUTION_HINT },
             audio: false,
           })
         } catch (error) {
           // Solo la ausencia de lente trasera permite probar otra cámara. Repetir una petición tras
           // un permiso denegado no ayuda al usuario y puede provocar dos avisos del navegador.
           if (!(error instanceof DOMException) || !['OverconstrainedError', 'NotFoundError'].includes(error.name)) throw error
-          media = await navigator.mediaDevices.getUserMedia({ video: { ...RESOLUTION_HINT }, audio: false })
+          // Si el navegador no puede negociar ni siquiera la preferencia de resolución, pedir solo
+          // vídeo permite mostrar la cámara con la resolución nativa del dispositivo.
+          media = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         }
         if (cancelled || timedOut || requestIdRef.current !== attempt) {
           stop(media)

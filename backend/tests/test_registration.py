@@ -8,6 +8,8 @@ al admin, sin email al usuario final. Fase roja: `/register` y `/registrations` 
 
 from __future__ import annotations
 
+import re
+
 import asyncpg
 import httpx
 import pytest
@@ -21,7 +23,7 @@ from tests._companies import (
     seed_admin,
     valid_nif,
 )
-from tests._dbtest import cif_blind_index_for, seed_company, seed_membership, seed_user
+from tests._dbtest import cif_blind_index_for, seed_company, seed_membership, seed_tenant, seed_user
 
 Api = tuple[httpx.AsyncClient, dict[str, str]]
 
@@ -41,9 +43,16 @@ async def _register(
     company: str = "Empresa Nueva SL",
     password: str = USER_PASSWORD,
     hostname: str = "ilex.localhost",
+    legal_consent: bool = True,
 ) -> httpx.Response:
     """Alta autoservicio en el subdominio `hostname`."""
-    body = {"email": email, "company_name": company, "cif": cif, "password": password}
+    body = {
+        "email": email,
+        "company_name": company,
+        "cif": cif,
+        "password": password,
+        "legal_consent": legal_consent,
+    }
     return await client.post(REGISTER, json=body, headers=host(hostname))
 
 
@@ -107,6 +116,17 @@ async def test_c3_password_floja_rechaza_el_registro(authapi: Api) -> None:
     resp = await _register(client, email="x@correo.es", cif=VALID_CIF, password="corta")
     assert resp.status_code == 422
     assert await _user_row(dsns, tid, "x@correo.es") is None
+
+
+async def test_c3b_sin_aceptar_las_condiciones_rechaza_el_registro(authapi: Api) -> None:
+    """Bloque 5 (PROMPT-AUTOFACTU-AUTH-COMPLETO): sin consentimiento legal -> 422, nada creado."""
+    client, dsns = authapi
+    tid, _ = await seed_admin(dsns)
+    resp = await _register(
+        client, email="sinconsentir@correo.es", cif=VALID_CIF, legal_consent=False
+    )
+    assert resp.status_code == 422
+    assert await _user_row(dsns, tid, "sinconsentir@correo.es") is None
 
 
 async def test_c4_email_duplicado_no_crea_duplicado(authapi: Api) -> None:
@@ -285,18 +305,22 @@ async def test_c11_gestion_acotada_a_la_asesoria(authapi: Api) -> None:
 # --- Notificación (mock), trazabilidad y anti-abuso ---------------------------------------------
 
 
-async def test_c12_al_registrarse_avisa_solo_al_admin(authapi: Api) -> None:
-    """C12: al registrarse se avisa (mock) SOLO al admin; no se genera email al usuario final."""
-    from notifications import get_notifier  # seam del backend mock (aún no existe -> rojo)
+async def test_c12_al_registrarse_avisa_solo_al_admin_sin_avisar_al_registrante(
+    authapi: Api,
+) -> None:
+    """C12 (revisado 2026-09-03, a petición de Julio): se avisa al admin (pendiente de aprobación),
+    pero a NADIE más -- el registrante no recibe ningún email, la puerta de entrada de verdad es la
+    decisión del admin, no que el registrante confirme nada."""
+    from notifications import get_notifier
 
     client, dsns = authapi
     await seed_admin(dsns)  # admin@ilex.es
     get_notifier().reset()
     resp = await _register(client, email="nuevo@correo.es", cif=VALID_CIF)
     assert resp.status_code in (201, 202)
-    destinatarios = [m.to for m in get_notifier().messages]
-    assert "admin@ilex.es" in destinatarios
-    assert "nuevo@correo.es" not in destinatarios
+    mensajes = {m.to: m for m in get_notifier().messages}
+    assert set(mensajes) == {"admin@ilex.es"}
+    assert mensajes["admin@ilex.es"].kind == "registration_pending"
 
 
 async def test_c13_registro_y_aprobacion_dejan_rastro_en_audit(authapi: Api) -> None:
@@ -337,3 +361,160 @@ async def test_c14_registro_limitado_por_ip(authapi: Api, monkeypatch: pytest.Mo
     assert extra.status_code == 429
 
     config.get_settings.cache_clear()
+
+
+# --- Decisión de un alta por email (2026-09-03, a petición de Julio) ----------------------------
+
+DECISION = "/api/v1/auth/registrations/decision"
+
+
+def _decision_token_from(body: str) -> str:
+    match = re.search(r"decidir-alta\?token=([^\s]+)", body)
+    assert match, f"no se encontró un enlace de decisión en: {body!r}"
+    return match.group(1)
+
+
+async def test_admin_aprueba_desde_el_enlace_de_su_email_sin_iniciar_sesion(authapi: Api) -> None:
+    """El admin no necesita loguearse ni ir al panel: su propio enlace de un solo uso basta."""
+    from notifications import get_notifier
+
+    client, dsns = authapi
+    tid, admin_id = await seed_admin(dsns)
+    get_notifier().reset()
+    resp = await _register(client, email="nuevo@correo.es", cif=VALID_CIF)
+    assert resp.status_code in (201, 202)
+    mensaje = next(m for m in get_notifier().messages if m.to == "admin@ilex.es")
+    token = _decision_token_from(mensaje.body)
+
+    info = await client.get(DECISION, params={"token": token}, headers=host("ilex.localhost"))
+    assert info.status_code == 200
+    assert info.json() == {
+        "email": "nuevo@correo.es",
+        "company": "Empresa Nueva SL",
+        "already_decided": False,
+    }
+
+    decidir = await client.post(
+        DECISION, json={"token": token, "decision": "approve"}, headers=host("ilex.localhost")
+    )
+    assert decidir.status_code == 200
+    assert decidir.json() == {"status": "approved"}
+
+    row = await _user_row(dsns, tid, "nuevo@correo.es")
+    assert row["status"] == "active"
+
+    conn = await asyncpg.connect(dsns["admin"])
+    try:
+        # La auditoría atribuye la decisión al admin del enlace, no al propio registrante.
+        actor = await conn.fetchval(
+            "SELECT actor_id FROM audit_log WHERE tenant_id = $1 AND action = 'user.approve'", tid
+        )
+    finally:
+        await conn.close()
+    assert str(actor) == admin_id
+
+
+async def test_admin_rechaza_desde_el_enlace_de_su_email(authapi: Api) -> None:
+    from notifications import get_notifier
+
+    client, dsns = authapi
+    tid, _ = await seed_admin(dsns)
+    get_notifier().reset()
+    await _register(client, email="nuevo@correo.es", cif=VALID_CIF)
+    mensaje = next(m for m in get_notifier().messages if m.to == "admin@ilex.es")
+    token = _decision_token_from(mensaje.body)
+
+    decidir = await client.post(
+        DECISION, json={"token": token, "decision": "reject"}, headers=host("ilex.localhost")
+    )
+    assert decidir.status_code == 200
+    assert decidir.json() == {"status": "rejected"}
+    assert await _user_row(dsns, tid, "nuevo@correo.es") is None
+
+
+async def test_decision_token_desconocido_da_401(authapi: Api) -> None:
+    client, dsns = authapi
+    await seed_admin(dsns)
+    info = await client.get(
+        DECISION, params={"token": "no-es-un-token-real"}, headers=host("ilex.localhost")
+    )
+    assert info.status_code == 401
+    decidir = await client.post(
+        DECISION,
+        json={"token": "no-es-un-token-real", "decision": "approve"},
+        headers=host("ilex.localhost"),
+    )
+    assert decidir.status_code == 401
+
+
+async def test_decision_consume_el_token_de_un_solo_uso(authapi: Api) -> None:
+    from notifications import get_notifier
+
+    client, dsns = authapi
+    await seed_admin(dsns)
+    get_notifier().reset()
+    await _register(client, email="nuevo@correo.es", cif=VALID_CIF)
+    mensaje = next(m for m in get_notifier().messages if m.to == "admin@ilex.es")
+    token = _decision_token_from(mensaje.body)
+
+    primero = await client.post(
+        DECISION, json={"token": token, "decision": "approve"}, headers=host("ilex.localhost")
+    )
+    assert primero.status_code == 200
+    reuso = await client.post(
+        DECISION, json={"token": token, "decision": "approve"}, headers=host("ilex.localhost")
+    )
+    assert reuso.status_code == 401
+
+
+async def test_dos_admins_cada_uno_con_su_enlace_el_segundo_ve_ya_decidido(authapi: Api) -> None:
+    """Carrera normal entre admins del mismo tenant: el segundo enlace informa, no rompe nada."""
+    from notifications import get_notifier
+
+    client, dsns = authapi
+    tid, _ = await seed_admin(dsns)  # admin@ilex.es
+    await seed_user(
+        dsns["admin"],
+        tenant_id=tid,
+        email="admin2@ilex.es",
+        role="tenant_admin",
+        password_hash=USER_PASSWORD_HASH,
+    )
+    get_notifier().reset()
+    await _register(client, email="nuevo@correo.es", cif=VALID_CIF)
+    mensajes = {m.to: m for m in get_notifier().messages}
+    assert set(mensajes) == {"admin@ilex.es", "admin2@ilex.es"}
+    token1 = _decision_token_from(mensajes["admin@ilex.es"].body)
+    token2 = _decision_token_from(mensajes["admin2@ilex.es"].body)
+    assert token1 != token2
+
+    primero = await client.post(
+        DECISION, json={"token": token1, "decision": "approve"}, headers=host("ilex.localhost")
+    )
+    assert primero.json() == {"status": "approved"}
+
+    info2 = await client.get(DECISION, params={"token": token2}, headers=host("ilex.localhost"))
+    assert info2.json()["already_decided"] is True
+    segundo = await client.post(
+        DECISION, json={"token": token2, "decision": "reject"}, headers=host("ilex.localhost")
+    )
+    assert segundo.json() == {"status": "already_decided"}
+    # El segundo admin no deshace lo que ya decidió el primero.
+    row = await _user_row(dsns, tid, "nuevo@correo.es")
+    assert row["status"] == "active"
+
+
+async def test_decision_de_otro_tenant_da_401(authapi: Api) -> None:
+    """F2: un enlace de decisión sembrado en un tenant no vale desde el subdominio de otro."""
+    from notifications import get_notifier
+
+    client, dsns = authapi
+    await seed_admin(dsns)  # ilex
+    await seed_tenant(dsns["admin"], "otra", "Otra Asesoría SL")
+    get_notifier().reset()
+    await _register(client, email="nuevo@correo.es", cif=VALID_CIF)
+    mensaje = next(m for m in get_notifier().messages if m.to == "admin@ilex.es")
+    token = _decision_token_from(mensaje.body)
+
+    cruzado = await client.get(DECISION, params={"token": token}, headers=host("otra.localhost"))
+    assert cruzado.status_code == 401

@@ -47,13 +47,14 @@ def build_docintel_engine(settings: Settings) -> OcrEngine:
 
 
 def build_gemini_engines(settings: Settings) -> list[OcrEngine]:
-    """Construye los dos candidatos Gemini (Flash y Pro) que comparten proyecto/credenciales.
+    """Construye los tres candidatos Gemini versionados que comparten proyecto/credenciales.
 
     Lanza `GeminiOcrError` si faltan las credenciales de Vertex (así el runner los omite juntos).
     """
     tiers = (
-        ("gemini-3-flash", settings.gemini_flash_model),
-        ("gemini-3-pro", settings.gemini_pro_model),
+        ("gemini-3.5-flash", settings.gemini_35_flash_model),
+        ("gemini-3.6-flash", settings.gemini_36_flash_model),
+        ("gemini-3.5-flash-lite", settings.gemini_35_flash_lite_model),
     )
     return [
         GeminiEngine(

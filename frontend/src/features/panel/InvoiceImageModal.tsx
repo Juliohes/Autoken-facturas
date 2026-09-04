@@ -1,3 +1,5 @@
+import { Modal } from '../../shared/Modal'
+
 // Ventana con la foto original de una factura (2026-08-01): reemplaza a la vieja URL firmada de
 // MinIO (S2.7, inalcanzable desde el navegador en el despliegue real) — la imagen llega como blob
 // ya autenticado (`useInvoiceImage`) y se muestra aquí, dentro de la propia app.
@@ -8,14 +10,7 @@ interface Props {
 
 export function InvoiceImageModal({ src, onClose }: Props) {
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Foto de la factura"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onClick={onClose}
-    >
-      <div className="max-h-full max-w-full" onClick={(e) => e.stopPropagation()}>
+    <Modal title="Foto de la factura" onClose={onClose} panelClassName="max-h-full !w-auto max-w-full">
         <img
           src={src}
           alt="Foto original de la factura"
@@ -30,7 +25,6 @@ export function InvoiceImageModal({ src, onClose }: Props) {
             Cerrar
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

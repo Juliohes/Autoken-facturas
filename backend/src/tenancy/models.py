@@ -220,6 +220,8 @@ class AuditLog(Base):
     entity: Mapped[str] = mapped_column(Text, nullable=False)
     entity_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
     payload_hash: Mapped[str | None] = mapped_column(Text)
+    request_id: Mapped[str | None] = mapped_column(Text)
+    source_ip: Mapped[str | None] = mapped_column(Text)
     at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

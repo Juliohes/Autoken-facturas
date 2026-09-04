@@ -74,8 +74,8 @@ async def run_ocr_ranking(
     """
     try:
         async with tenant_session(tenant_id, company_id) as session:
-            settings_row = await settings_repository.get_settings(session)
-            if not settings_row.ocr_experiment_enabled:
+            lab_settings = await settings_repository.get_lab_settings(session)
+            if not lab_settings.auto_benchmark_enabled:
                 return
             if not extractors and default_reading is None:
                 return

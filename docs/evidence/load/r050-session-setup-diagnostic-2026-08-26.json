@@ -1,0 +1,43 @@
+{
+  "generated_at": "2026-08-26T22:16:14+00:00",
+  "kind": "session_setup_latency_diagnostic",
+  "scenario": {
+    "users": 10,
+    "uploads_per_user": 10,
+    "ocr_worker": "stopped",
+    "review_inbox_allowlist": "enabled_for_ephemeral_tenant"
+  },
+  "uploads": {
+    "requested": 100,
+    "status_codes": {
+      "201": 100
+    },
+    "p50_seconds": 3.618404291992192,
+    "p95_seconds": 3.8514693825971333,
+    "mean_seconds": 3.454717496171943
+  },
+  "upload_phase_metrics": {
+    "identity": {"count": 100, "sum_seconds": 39.972990542970365},
+    "rate_limit": {"count": 100, "sum_seconds": 5.013008072070079},
+    "validation": {"count": 100, "sum_seconds": 4.484964306931943},
+    "deduplication": {"count": 100, "sum_seconds": 47.2038712639187},
+    "antivirus": {"count": 100, "sum_seconds": 6.278693832020508},
+    "storage": {"count": 100, "sum_seconds": 6.145564995153109},
+    "persistence": {"count": 100, "sum_seconds": 40.965778323909035}
+  },
+  "db_session_setup_metrics": {
+    "identity": {"count": 100, "sum_seconds": 24.833173686783994},
+    "deduplication": {"count": 100, "sum_seconds": 33.04978650101111},
+    "persistence": {"count": 100, "sum_seconds": 22.319352273101686}
+  },
+  "queue": {
+    "depth_after_uploads": 100,
+    "backend_up": 1
+  },
+  "privacy_check": {
+    "cross_user_leaks": 0,
+    "inbox_http_errors": 0
+  },
+  "disposition": "diagnostic_only",
+  "conclusion": "La adquisición/configuración de sesiones RLS representa una parte sustancial de identity, deduplication y persistence bajo concurrencia. R-050 sigue por encima de p95 <= 3 s; no se aumenta el pool sin una política por proceso compatible con max_connections."
+}

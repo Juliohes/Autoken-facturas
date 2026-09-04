@@ -25,10 +25,16 @@ El esqueleto ejecutable llega en las tareas **0.4** (backend) y **0.5** (fronten
 Hasta entonces este repo contiene el scaffolding del monorepo, la configuración de calidad y CI.
 
 ```bash
-# (Pendiente 0.4) Levantar backend en Docker
+# Desarrollo local aislado
 # docker compose -f infrastructure/docker-compose.yml up api
 # Healthcheck: GET /api/v1/health
 ```
+
+Para staging o producción no uses el Compose base aislado. Ejecuta `bash infrastructure/deploy.sh`, que
+usa ambos ficheros Compose, espera a que los servicios estén sanos y verifica la red y los routers de
+Traefik antes de declarar el despliegue correcto. El motivo y el rollback están en
+[`docs/runbooks/despliegue-vps-b.md`](./docs/runbooks/despliegue-vps-b.md) y
+[`docs/adr/0020-despliegue-publico-con-overlay-proxy.md`](./docs/adr/0020-despliegue-publico-con-overlay-proxy.md).
 
 ## Convenciones (resumen — ver CLAUDE.md y plan §2)
 

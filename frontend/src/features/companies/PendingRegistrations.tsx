@@ -47,8 +47,13 @@ export function PendingRegistrations() {
   })
   const sortedRows = table.getRowModel().rows.map((r) => r.original)
 
+  // Fijo arriba solo si hay algo que decidir (Julio, 2026-09-04): con la lista vacía no queda
+  // ninguna barra pinchada sin contenido tapando la parte de arriba de la pantalla.
+  const isEmpty = !registrations.isLoading && !registrations.isError && rows.length === 0
+  if (isEmpty) return null
+
   return (
-    <section className="space-y-3">
+    <section className="tn-panel-page tn-pending-registrations-pinned mx-auto max-w-5xl space-y-3 p-6">
       <h2 className="text-lg font-semibold">Registros pendientes de aprobación</h2>
 
       {registrations.isLoading && <p className="text-slate-400">Cargando…</p>}
@@ -63,10 +68,6 @@ export function PendingRegistrations() {
         <p role="alert" className="text-sm text-red-400">
           {decide.error instanceof Error ? decide.error.message : 'No se pudo procesar el registro.'}
         </p>
-      )}
-
-      {!registrations.isLoading && !registrations.isError && rows.length === 0 && (
-        <p className="text-slate-400">No hay registros pendientes.</p>
       )}
 
       {rows.length > 0 && (

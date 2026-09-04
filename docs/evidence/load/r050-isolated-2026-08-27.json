@@ -1,0 +1,99 @@
+{
+  "generated_at": "2026-08-27T08:27:13+00:00",
+  "scenario": {
+    "users": 10,
+    "uploads_per_user": 10
+  },
+  "uploads": {
+    "requested": 100,
+    "status_codes": {
+      "201": 100
+    },
+    "p50_seconds": 3.589636816002894,
+    "p95_seconds": 3.9651595440023812,
+    "mean_seconds": 3.3916769831097917
+  },
+  "ocr_status_counts": {
+    "needs_review": 93,
+    "capture_unreadable": 7
+  },
+  "metrics_before": {
+    "autoken_ocr_queue_depth": 0.0,
+    "autoken_ocr_documents": 1.0,
+    "autoken_ocr_documents{state=\"pending\"}": 0.0,
+    "autoken_ocr_documents{state=\"processing\"}": 0.0,
+    "autoken_ocr_documents{state=\"abandoned\"}": 0.0,
+    "autoken_ocr_documents{state=\"failed\"}": 1.0,
+    "autoken_expired_pending_count": 0.0,
+    "autoken_db_pool_size": 20.0,
+    "autoken_db_pool_checked_out": 0.0,
+    "autoken_db_pool_overflow": 0.0,
+    "autoken_db_pool_capacity": 40.0,
+    "autoken_ocr_queue_backend_up": 1.0
+  },
+  "metrics_snapshot": {
+    "autoken_upload_phase_seconds_count": 900.0,
+    "autoken_upload_phase_seconds_count{phase=\"identity\"}": 100.0,
+    "autoken_upload_phase_seconds_sum": 142.71752803906566,
+    "autoken_upload_phase_seconds_sum{phase=\"identity\"}": 25.91982451506192,
+    "autoken_upload_phase_seconds_count{phase=\"authorization\"}": 100.0,
+    "autoken_upload_phase_seconds_sum{phase=\"authorization\"}": 0.0019736880785785615,
+    "autoken_upload_phase_seconds_count{phase=\"rate_limit\"}": 100.0,
+    "autoken_upload_phase_seconds_sum{phase=\"rate_limit\"}": 4.912476929079276,
+    "autoken_upload_phase_seconds_count{phase=\"request_body\"}": 100.0,
+    "autoken_upload_phase_seconds_sum{phase=\"request_body\"}": 0.001372865866869688,
+    "autoken_upload_phase_seconds_count{phase=\"validation\"}": 100.0,
+    "autoken_upload_phase_seconds_sum{phase=\"validation\"}": 4.8541767639108,
+    "autoken_upload_phase_seconds_count{phase=\"deduplication\"}": 100.0,
+    "autoken_upload_phase_seconds_sum{phase=\"deduplication\"}": 46.13483781600371,
+    "autoken_upload_phase_seconds_count{phase=\"antivirus\"}": 100.0,
+    "autoken_upload_phase_seconds_sum{phase=\"antivirus\"}": 10.301499700115528,
+    "autoken_upload_phase_seconds_count{phase=\"storage\"}": 100.0,
+    "autoken_upload_phase_seconds_sum{phase=\"storage\"}": 7.899278732016683,
+    "autoken_upload_phase_seconds_count{phase=\"persistence\"}": 100.0,
+    "autoken_upload_phase_seconds_sum{phase=\"persistence\"}": 42.69208702893229,
+    "autoken_ocr_queue_depth": 0.0,
+    "autoken_ocr_documents": 52.0,
+    "autoken_ocr_documents{state=\"pending\"}": 49.0,
+    "autoken_ocr_documents{state=\"processing\"}": 2.0,
+    "autoken_ocr_documents{state=\"abandoned\"}": 0.0,
+    "autoken_ocr_documents{state=\"failed\"}": 1.0,
+    "autoken_expired_pending_count": 0.0,
+    "autoken_db_pool_size": 20.0,
+    "autoken_db_pool_checked_out": 0.0,
+    "autoken_db_pool_overflow": 0.0,
+    "autoken_db_pool_capacity": 40.0,
+    "autoken_ocr_queue_backend_up": 1.0
+  },
+  "recovery_before": {
+    "queue_backend_up": 1.0,
+    "queue_depth": 0.0,
+    "pending": 0.0,
+    "processing": 0.0,
+    "abandoned": 0.0,
+    "failed": 1.0,
+    "expired_pending": 0.0
+  },
+  "recovery": {
+    "queue_backend_up": 1.0,
+    "queue_depth": 0.0,
+    "pending": 49.0,
+    "processing": 2.0,
+    "abandoned": 0.0,
+    "failed": 1.0,
+    "expired_pending": 0.0
+  },
+  "recovery_delta": {
+    "queue_backend_up": 0.0,
+    "queue_depth": 0.0,
+    "pending": 49.0,
+    "processing": 2.0,
+    "abandoned": 0.0,
+    "failed": 0.0,
+    "expired_pending": 0.0
+  },
+  "rate_limit_429": 0,
+  "provider_429": null,
+  "cross_user_leaks": 0,
+  "inbox_http_errors": 0
+}

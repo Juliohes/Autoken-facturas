@@ -19,8 +19,12 @@ services:
         required: false
     environment:
       APP_ENV: ${APP_ENV:-development}
+      # La pila base es local/aislada. El overlay de despliegue real lo sobreescribe a `proxy`.
+      DEPLOYMENT_PROFILE: ${DEPLOYMENT_PROFILE:-standalone}
       DATABASE_URL: postgresql+asyncpg://autoken_app:${POSTGRES_APP_PASSWORD:-autoken}@postgres:5432/${POSTGRES_DB:-autoken}
       REDIS_URL: redis://redis:6379/0
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
       # Object storage MinIO (intake S2.1): bucket por tenant. Credenciales por .env en staging/prod.
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
@@ -70,8 +74,12 @@ services:
         required: false
     environment:
       APP_ENV: ${APP_ENV:-development}
+      # Debe coincidir con API; en staging/producción el overlay lo fija a `proxy`.
+      DEPLOYMENT_PROFILE: ${DEPLOYMENT_PROFILE:-standalone}
       DATABASE_URL: postgresql+asyncpg://autoken_app:${POSTGRES_APP_PASSWORD:-autoken}@postgres:5432/${POSTGRES_DB:-autoken}
       REDIS_URL: redis://redis:6379/0
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
       OCR_QUEUE_NAME: ${OCR_QUEUE_NAME:-autoken:queue:ocr}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
@@ -82,7 +90,10 @@ services:
       # proyecto y la región no son secretos; el JSON de la service account SÍ (montado read-only).
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
       GEMINI_LOCATION: ${GEMINI_LOCATION:-global}
-      GEMINI_FLASH_MODEL: ${GEMINI_FLASH_MODEL:-gemini-3-flash-preview}
+      GEMINI_FLASH_MODEL: ${GEMINI_FLASH_MODEL:-gemini-3.5-flash}
+      GEMINI_35_FLASH_MODEL: ${GEMINI_35_FLASH_MODEL:-gemini-3.5-flash}
+      GEMINI_36_FLASH_MODEL: ${GEMINI_36_FLASH_MODEL:-gemini-3.6-flash}
+      GEMINI_35_FLASH_LITE_MODEL: ${GEMINI_35_FLASH_LITE_MODEL:-gemini-3.5-flash-lite}
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/vertex-sa.json
     volumes:
       # Service account de Vertex (secreto, NO versionado): vive en `secrets/vertex-sa.json` del VPS.
@@ -107,6 +118,80 @@ services:
       minio:
         condition: service_healthy
     restart: unless-stopped
+
+  # Challengers de layout R-041/R-042. Perfil opt-in: no se construyen ni arrancan con el stack
+  # normal, y sus SDK/modelos pesados nunca entran en la imagen de API.
+  ocr-layout-paddle:
+    build:
+      context: ..
+      dockerfile: services/ocr-layout-paddle/Dockerfile
+    image: autoken/ocr-layout-paddle:lab
+    profiles: ["lab"]
+    environment:
+      # El modo ligero evita cargar de golpe tablas/fórmulas de PP-StructureV3 en staging.
+      # Usar PADDLE_PIPELINE=structure solo en una máquina de benchmark con memoria suficiente.
+      PADDLE_PIPELINE: ${PADDLE_PIPELINE:-ocr}
+      # Los modelos mobile mantienen el laboratorio utilizable en CPU; se pueden cambiar para un bench.
+      PADDLE_TEXT_DETECTION_MODEL: ${PADDLE_TEXT_DETECTION_MODEL:-PP-OCRv5_mobile_det}
+      PADDLE_TEXT_RECOGNITION_MODEL: ${PADDLE_TEXT_RECOGNITION_MODEL:-latin_PP-OCRv5_mobile_rec}
+      # Evita que Paddle 3.3 active oneDNN por defecto con los modelos PP-StructureV3.
+      FLAGS_use_mkldnn: "0"
+      PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT: "false"
+      PADDLE_PDX_DISABLE_MKLDNN_MODEL_BL: "true"
+      # Los modelos se descargan una sola vez al volumen persistente del laboratorio.
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True"
+    ports:
+      - "127.0.0.1:8101:8101"
+    depends_on:
+      ocr-layout-paddle-init:
+        condition: service_completed_successfully
+    # Paddle es experimental: no debe poder agotar los recursos de la aplicación principal.
+    cpus: "2.0"
+    mem_limit: 6g
+    mem_reservation: 1g
+    pids_limit: 512
+    volumes:
+      - paddle-model-cache:/home/appuser/.paddlex
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8101/health', timeout=2)
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: "no"
+
+  # Los volúmenes nuevos los crea Docker como root. Este inicializador deja la caché escribible por
+  # appuser sin ejecutar el servidor Paddle con privilegios elevados.
+  ocr-layout-paddle-init:
+    image: autoken/ocr-layout-paddle:lab
+    profiles: ["lab"]
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["chown -R 10001:10001 /home/appuser/.paddlex"]
+    volumes:
+      - paddle-model-cache:/home/appuser/.paddlex
+    restart: "no"
+
+  ocr-layout-surya:
+    build:
+      context: ..
+      dockerfile: services/ocr-layout-surya/Dockerfile
+    image: autoken/ocr-layout-surya:lab
+    profiles: ["lab"]
+    environment:
+      # Surya 2 en CPU es deliberadamente conservador para permitir smoke tests reproducibles.
+      SURYA_INFERENCE_PARALLEL: ${SURYA_INFERENCE_PARALLEL:-1}
+      SURYA_INFERENCE_CTX_SIZE: ${SURYA_INFERENCE_CTX_SIZE:-16384}
+      SURYA_MAX_TOKENS_FULL_PAGE: ${SURYA_MAX_TOKENS_FULL_PAGE:-512}
+    ports:
+      - "127.0.0.1:8102:8102"
+    restart: "no"
 
   # `POSTGRES_USER` es el SUPERUSUARIO de arranque del clúster (`postgres` por defecto), nunca
   # `autoken_app`: si coincidieran de nombre, la migración 0001 (`CREATE ROLE autoken_app ... IF NOT
@@ -302,3 +387,4 @@ volumes:
   minio-data:
   prometheus-data:
   grafana-data:
+  paddle-model-cache:

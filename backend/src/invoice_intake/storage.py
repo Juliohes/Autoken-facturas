@@ -15,6 +15,7 @@ import io
 import json
 from datetime import timedelta
 from functools import lru_cache
+from threading import Lock
 from uuid import UUID
 
 from minio import Minio
@@ -32,6 +33,12 @@ _NOT_FOUND_CODES = frozenset({"NoSuchKey", "NoSuchBucket", "NoSuchObject"})
 # concurrentes de la PRIMERA factura de un tenant pueden lanzar dos `make_bucket` a la vez y la
 # perdedora recibir uno de estos; no es un fallo del almacén (evita un 503 espurio que rompe C14).
 _BUCKET_ALREADY_CODES = frozenset({"BucketAlreadyOwnedByYou", "BucketAlreadyExists"})
+
+# Los buckets de tenant viven tanto como el tenant. Evitar el HEAD repetido de cada subida reduce
+# tráfico interno bajo carga; la entrada se invalida si MinIO confirma que el bucket fue eliminado.
+_known_buckets: set[tuple[str, str, bool, str]] = set()
+_known_buckets_lock = Lock()
+_bucket_locks: dict[tuple[str, str, bool, str], Lock] = {}
 
 
 def bucket_for(tenant_id: object) -> str:
@@ -141,18 +148,42 @@ def _client() -> Minio:
 def _ensure_bucket(client: Minio, bucket: str) -> None:
     """Crea el bucket del tenant si aún no existe (idempotente, resistente a concurrencia).
 
-    El `bucket_exists` + `make_bucket` es un check-then-act: dos subidas concurrentes de la primera
-    factura de un tenant pueden entrar ambas al `make_bucket`; la perdedora recibe
-    `BucketAlreadyOwnedByYou`/`BucketAlreadyExists`, que aquí se trata como éxito (ya está creado),
-    no como fallo del almacén.
+    La comprobación inicial es single-flight por bucket: las subidas concurrentes de la primera
+    factura comparten una sola comprobación y creación, sin serializar buckets de otros tenants.
+    Los códigos `BucketAlreadyOwnedByYou`/`BucketAlreadyExists` siguen siendo éxito idempotente por
+    si el bucket se crea desde otro proceso.
     """
-    if client.bucket_exists(bucket):
-        return
-    try:
-        client.make_bucket(bucket)
-    except S3Error as exc:
-        if exc.code not in _BUCKET_ALREADY_CODES:
-            raise
+    settings = get_settings()
+    cache_key = (settings.minio_endpoint, settings.minio_access_key, settings.minio_secure, bucket)
+    with _known_buckets_lock:
+        if cache_key in _known_buckets:
+            return
+        bucket_lock = _bucket_locks.setdefault(cache_key, Lock())
+    with bucket_lock:
+        with _known_buckets_lock:
+            if cache_key in _known_buckets:
+                return
+        if client.bucket_exists(bucket):
+            with _known_buckets_lock:
+                _known_buckets.add(cache_key)
+            return
+        try:
+            client.make_bucket(bucket)
+        except S3Error as exc:
+            if exc.code not in _BUCKET_ALREADY_CODES:
+                raise
+        with _known_buckets_lock:
+            _known_buckets.add(cache_key)
+
+
+def _forget_bucket(bucket: str) -> None:
+    """Invalida el conocimiento local del bucket para permitir su recreación tras un borrado."""
+    settings = get_settings()
+    cache_key = (settings.minio_endpoint, settings.minio_access_key, settings.minio_secure, bucket)
+    with _known_buckets_lock:
+        bucket_lock = _bucket_locks.setdefault(cache_key, Lock())
+    with bucket_lock, _known_buckets_lock:
+        _known_buckets.discard(cache_key)
 
 
 def put_object(bucket: str, key: str, data: bytes, length: int, content_type: str) -> None:
@@ -160,7 +191,15 @@ def put_object(bucket: str, key: str, data: bytes, length: int, content_type: st
     client = _client()
     try:
         _ensure_bucket(client, bucket)
-        client.put_object(bucket, key, io.BytesIO(data), length, content_type=content_type)
+        try:
+            client.put_object(bucket, key, io.BytesIO(data), length, content_type=content_type)
+        except S3Error as exc:
+            if exc.code != "NoSuchBucket":
+                raise
+            # El bucket pudo desaparecer después de la caché; revalida y reintenta una sola vez.
+            _forget_bucket(bucket)
+            _ensure_bucket(client, bucket)
+            client.put_object(bucket, key, io.BytesIO(data), length, content_type=content_type)
     except (Urllib3HTTPError, S3Error, ConnectionError, OSError) as exc:
         raise StorageUnavailable(f"No se pudo almacenar el objeto en MinIO: {exc}") from exc
 
@@ -237,8 +276,10 @@ def remove_bucket_recursive(bucket: str) -> None:
                 f"No se pudieron borrar todos los objetos de {bucket}: {delete_errors}"
             )
         client.remove_bucket(bucket)
+        _forget_bucket(bucket)
     except S3Error as exc:
         if exc.code in _NOT_FOUND_CODES:
+            _forget_bucket(bucket)
             return
         raise StorageUnavailable(f"No se pudo borrar el bucket {bucket}: {exc}") from exc
     except (Urllib3HTTPError, ConnectionError, OSError) as exc:

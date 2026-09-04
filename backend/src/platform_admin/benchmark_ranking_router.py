@@ -51,6 +51,25 @@ class BenchmarkRankingOut(BaseModel):
     by_combination: list[CombinationSummaryOut]
 
 
+class BenchmarkMetricsSummaryOut(BaseModel):
+    variant: str
+    engine: str
+    model: str | None
+    executions: int
+    errors: int
+    field_exact_accuracy: float | None
+    critical_field_accuracy: float | None
+    all_critical_exact_rate: float | None
+    tax_lines_accuracy: float | None
+    arithmetic_valid_rate: float | None
+    hallucination_cases: int
+    p50_duration_ms: float | None
+    p95_duration_ms: float | None
+    pages: float | None
+    api_cost_usd: str | None
+    manual_corrections_per_invoice: float | None
+
+
 @router.get("")
 async def get_benchmark_ranking(identity: AdminTech) -> BenchmarkRankingOut:
     field_groups = await benchmark_ranking_service.get_benchmark_field_group_ranking(
@@ -84,3 +103,10 @@ async def get_benchmark_ranking(identity: AdminTech) -> BenchmarkRankingOut:
             for row in combinations
         ],
     )
+
+
+@router.get("/metrics", response_model=list[BenchmarkMetricsSummaryOut])
+async def get_benchmark_metrics(identity: AdminTech) -> list[BenchmarkMetricsSummaryOut]:
+    """Informe R-032 de métricas comparables, sin ejecutar motores OCR."""
+    rows = await benchmark_ranking_service.get_benchmark_metrics_summary(identity.session)
+    return [BenchmarkMetricsSummaryOut.model_validate(row, from_attributes=True) for row in rows]

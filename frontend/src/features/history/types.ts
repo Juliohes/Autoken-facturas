@@ -10,3 +10,7 @@ export type HistoryEntry = components['schemas']['HistoryEntryOut'] & {
 export type HistoryResponse = Omit<components['schemas']['HistoryOut'], 'entries'> & {
   entries: HistoryEntry[]
 }
+
+// Filtro de periodo del historial (bloque D, PROMPT-AUTOFACTU-AJUSTES-v3): filtra server-side por
+// la fecha de la propia factura (invoice_date), con trimestres naturales.
+export type HistoryPeriod = 'total' | 'month' | 'quarter' | 'year'

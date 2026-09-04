@@ -10,13 +10,19 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ocr.benchmark_ranking_repository import (
+    BenchmarkMetricsSummary,
     CombinationSummary,
     FieldGroupRanking,
     get_combination_summary,
     get_field_group_ranking,
+    get_metrics_summary,
 )
 
-__all__ = ["get_benchmark_combination_summary", "get_benchmark_field_group_ranking"]
+__all__ = [
+    "get_benchmark_combination_summary",
+    "get_benchmark_field_group_ranking",
+    "get_benchmark_metrics_summary",
+]
 
 
 async def get_benchmark_field_group_ranking(session: AsyncSession) -> list[FieldGroupRanking]:
@@ -25,3 +31,9 @@ async def get_benchmark_field_group_ranking(session: AsyncSession) -> list[Field
 
 async def get_benchmark_combination_summary(session: AsyncSession) -> list[CombinationSummary]:
     return await get_combination_summary(session)
+
+
+async def get_benchmark_metrics_summary(
+    session: AsyncSession,
+) -> list[BenchmarkMetricsSummary]:
+    return await get_metrics_summary(session)

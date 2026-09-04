@@ -20,12 +20,20 @@ _RECORDING_MAX_MESSAGES = 1000
 
 @dataclass(frozen=True)
 class Message:
-    """Un mensaje de notificación (hoy, un email). `to` es el destinatario."""
+    """Un mensaje de notificación (hoy, un email). `to` es el destinatario.
+
+    `body` es SIEMPRE texto plano (fuente de verdad; algunos tests extraen tokens de él con una
+    expresión regular). `html_body` (bloque 3, PROMPT-AUTOFACTU-AUTH-COMPLETO) es opcional: una
+    presentación más cuidada del MISMO contenido, nunca información adicional. `RecordingNotifier`
+    lo ignora (solo le importan los tests); `SmtpNotifier` lo usa si viene, y si no, envía solo la
+    parte de texto.
+    """
 
     to: str
     subject: str
     body: str
     kind: str = "generic"
+    html_body: str | None = None
 
 
 class Notifier(ABC):

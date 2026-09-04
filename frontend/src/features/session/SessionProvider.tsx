@@ -17,6 +17,15 @@ import * as tokenStore from '../../api/tokenStore'
 // a mano en sync con el enum real del backend (`backend/src/tenancy/constants.py`).
 export type Role = 'platform_admin' | 'tenant_admin' | 'user'
 
+export type FeatureFlag =
+  | 'scanner_v2_enabled'
+  | 'continuous_capture_enabled'
+  | 'review_inbox_enabled'
+  | 'draft_autosave_enabled'
+  | 'processing_stages_enabled'
+  | 'ocr_policy_v2_enabled'
+  | 'supplier_learning_enabled'
+
 function parseRole(value: string): Role | null {
   return value === 'platform_admin' || value === 'tenant_admin' || value === 'user' ? value : null
 }
@@ -24,7 +33,14 @@ function parseRole(value: string): Role | null {
 // El rol cerrado (spec §5 "rol desconocido/inesperado"): `parseRole` es el único punto que decide
 // si un valor cuenta como identidad válida; cualquier cosa fuera del conjunto cerrado se trata
 // igual que un `/auth/me` fallido, nunca como una sesión autenticada rota.
-export type CurrentUser = Omit<components['schemas']['MeOut'], 'role'> & { role: Role }
+export type CurrentUser = Omit<components['schemas']['MeOut'], 'role' | 'feature_flags'> & {
+  role: Role
+  feature_flags?: Record<string, boolean>
+}
+
+export function isFeatureEnabled(user: CurrentUser | null, flag: FeatureFlag): boolean {
+  return user?.feature_flags?.[flag] !== false
+}
 
 export type SessionStatus = 'loading' | 'authenticated' | 'unauthenticated'
 

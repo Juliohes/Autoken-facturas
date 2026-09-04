@@ -1,0 +1,39 @@
+{
+  "generated_at": "2026-08-26T18:22:06+00:00",
+  "kind": "latency_phase_diagnostic",
+  "scenario": {
+    "users": 10,
+    "uploads_per_user": 10,
+    "ocr_worker": "stopped"
+  },
+  "uploads": {
+    "requested": 100,
+    "status_codes": {
+      "201": 100
+    },
+    "p50_seconds": 4.655686083002365,
+    "p95_seconds": 5.012078656542871,
+    "mean_seconds": 4.528768432579673
+  },
+  "upload_phase_metrics": {
+    "authorization": {"count": 100, "sum_seconds": 0.0019700959674082696},
+    "rate_limit": {"count": 100, "sum_seconds": 7.003944288982893},
+    "request_body": {"count": 100, "sum_seconds": 0.0014983060100348666},
+    "validation": {"count": 100, "sum_seconds": 6.220576795938541},
+    "deduplication": {"count": 100, "sum_seconds": 57.60764777995064},
+    "antivirus": {"count": 100, "sum_seconds": 8.381234845990548},
+    "storage": {"count": 100, "sum_seconds": 8.381804090910009},
+    "persistence": {"count": 100, "sum_seconds": 53.82765541698609}
+  },
+  "queue": {
+    "depth_after_uploads": 100,
+    "backend_up": 1
+  },
+  "privacy_check": {
+    "cross_user_leaks": null,
+    "inbox_http_errors": 10,
+    "reason": "El tenant diagnóstico no estaba en el allowlist de REVIEW_INBOX_ENABLED; no se usa como evidencia de privacidad."
+  },
+  "disposition": "diagnostic_only",
+  "conclusion": "La carrera de MinIO está corregida, pero el p95 sigue por encima de 3 s. La siguiente optimización debe investigar la espera de Postgres/Redis y la coordinación entre fases."
+}

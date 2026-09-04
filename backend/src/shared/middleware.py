@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import Awaitable, Callable
+from time import perf_counter
 
 import structlog
 from starlette.datastructures import Headers
@@ -10,7 +11,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from shared.metrics import http_requests_total, normalize_http_method
+from shared.metrics import http_requests_total, normalize_http_method, upload_to_201_seconds
 from shared.security_headers import apply_static_security_headers
 from tenancy.resolution import (
     ResolvedTenant,
@@ -151,9 +152,16 @@ class MetricsMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
+        started = perf_counter()
         response = await call_next(request)
         method = normalize_http_method(request.method)
         http_requests_total.labels(method=method, status=str(response.status_code)).inc()
+        if (
+            request.method == "POST"
+            and request.url.path == "/api/v1/uploads"
+            and response.status_code == 201
+        ):
+            upload_to_201_seconds.observe(perf_counter() - started)
         return response
 
 

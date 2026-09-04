@@ -18,12 +18,13 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, 
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from identity.authz import require_roles
-from identity.dependencies import AuthContext
+from identity.authz import require_roles, require_upload_roles
+from identity.dependencies import AuthContext, UploadAuthContext
 from identity.ratelimit import intake_attempt_exceeds
 from invoice_intake import scanner, service, storage
 from invoice_intake.image import InvalidImage
 from shared.config import get_settings
+from shared.metrics import observe_upload_phase
 from shared.redis import get_redis
 from tenancy.constants import Role
 
@@ -31,10 +32,16 @@ router = APIRouter(prefix="/uploads", tags=["intake"])
 
 # Identidad autenticada autorizada a subir: empleado (`user`) o administrador de la asesoría
 # (`tenant_admin`). La pertenencia fina a la empresa destino la comprueba el servicio (C10).
-Uploader = Annotated[AuthContext, Depends(require_roles(Role.USER, Role.TENANT_ADMIN))]
+Uploader = Annotated[
+    UploadAuthContext, Depends(require_upload_roles(Role.USER, Role.TENANT_ADMIN))
+]
+BatchUploader = Annotated[
+    UploadAuthContext, Depends(require_upload_roles(Role.USER, Role.TENANT_ADMIN))
+]
 
 # Mismo conjunto de roles que `Uploader`; nombre propio porque descargar no es "subir" (S2.7).
-Downloader = Uploader
+Downloader = Annotated[AuthContext, Depends(require_roles(Role.USER, Role.TENANT_ADMIN))]
+Editor = Downloader
 
 _BINARY_IMAGE_CONTENT: dict[str, Any] = {
     "image/jpeg": {"schema": {"type": "string", "format": "binary"}},
@@ -82,6 +89,21 @@ async def duplicate_upload_handler(_request: Request, exc: Exception) -> JSONRes
     return JSONResponse(status_code=409, content={"duplicate_of": str(exc.duplicate_of)})
 
 
+def _validate_capture_grouping(
+    capture_session_id: UUID | None, capture_sequence: int | None
+) -> None:
+    """Valida metadatos UX sin conceder ningún scope adicional a la sesión."""
+    if (capture_session_id is None) != (capture_sequence is None):
+        raise HTTPException(
+            status_code=422,
+            detail="capture_session_id y capture_sequence deben enviarse juntos",
+        )
+    if capture_sequence is not None and not 1 <= capture_sequence <= 50:
+        raise HTTPException(
+            status_code=422, detail="capture_sequence debe estar entre 1 y 50"
+        )
+
+
 @router.post("", status_code=201)
 async def upload_file(
     identity: Uploader,
@@ -89,6 +111,8 @@ async def upload_file(
     company_id: Annotated[UUID, Form()],
     direction: Annotated[Literal["recibida", "emitida"] | None, Form()] = None,
     sharpness_score: Annotated[str | None, Form()] = None,
+    capture_session_id: Annotated[UUID | None, Form()] = None,
+    capture_sequence: Annotated[int | None, Form()] = None,
 ) -> UploadOut:
     """Sube un fichero de factura a una empresa. Ver spec S2.1 para los códigos (201/4xx/503).
 
@@ -98,37 +122,44 @@ async def upload_file(
     Laplaciano), string opcional. Es TELEMETRÍA, no dato de dominio: no se persiste ni se valida
     (un valor raro no rompe la subida); solo se loguea como métrica de calidad de captura.
     """
+    _validate_capture_grouping(capture_session_id, capture_sequence)
+
     # El servicio recibe primitivos (no el `AuthContext`, acoplado a FastAPI): el router es la única
     # capa que conoce la identidad HTTP y extrae de ella lo que la lógica de dominio necesita.
-    member_company_id = identity.company.id if identity.company is not None else None
-    try:
-        await service.authorize_upload(
-            tenant_id=identity.tenant_id,
-            role=identity.role,
-            member_company_id=member_company_id,
-            company_id=company_id,
-        )
-    except service.NotAMember as exc:
-        raise HTTPException(status_code=403, detail="No perteneces a la empresa destino") from exc
-    except service.CompanyNotInContext as exc:
-        raise HTTPException(status_code=404, detail="Empresa no encontrada") from exc
+    member_company_id = identity.company_id
+    with observe_upload_phase("authorization"):
+        try:
+            await service.authorize_upload(
+                tenant_id=identity.tenant_id,
+                role=identity.role,
+                member_company_id=member_company_id,
+                company_id=company_id,
+            )
+        except service.NotAMember as exc:
+            raise HTTPException(
+                status_code=403, detail="No perteneces a la empresa destino"
+            ) from exc
+        except service.CompanyNotInContext as exc:
+            raise HTTPException(status_code=404, detail="Empresa no encontrada") from exc
 
     settings = get_settings()
-    if await intake_attempt_exceeds(
-        get_redis(),
-        kind="upload",
-        tenant_id=str(identity.tenant_id),
-        user_id=str(identity.user_id),
-        max_per_user=settings.intake_uploads_per_user,
-        max_per_tenant=settings.intake_uploads_per_tenant,
-        window_seconds=settings.intake_rate_limit_window_seconds,
-    ):
-        raise HTTPException(status_code=429, detail="Demasiadas subidas. Espera un minuto.")
+    with observe_upload_phase("rate_limit"):
+        if await intake_attempt_exceeds(
+            get_redis(),
+            kind="upload",
+            tenant_id=str(identity.tenant_id),
+            user_id=str(identity.user_id),
+            max_per_user=settings.intake_uploads_per_user,
+            max_per_tenant=settings.intake_uploads_per_tenant,
+            window_seconds=settings.intake_rate_limit_window_seconds,
+        ):
+            raise HTTPException(status_code=429, detail="Demasiadas subidas. Espera un minuto.")
 
     max_bytes = settings.max_upload_bytes
     # Lectura acotada: como mucho `max_bytes + 1` bytes en memoria; si sobra, excede el tope (413),
     # sin materializar de golpe un fichero gigante ni caerse con un 500 (spec S2.1 C5).
-    content = await file.read(max_bytes + 1)
+    with observe_upload_phase("request_body"):
+        content = await file.read(max_bytes + 1)
     if len(content) > max_bytes:
         raise HTTPException(
             status_code=413, detail=f"El fichero supera el tamaño máximo ({max_bytes} bytes)"
@@ -136,12 +167,14 @@ async def upload_file(
 
     try:
         record = await service.create_upload(
-            session=identity.session,
             tenant_id=identity.tenant_id,
             user_id=identity.user_id,
             company_id=company_id,
+            rls_company_id=identity.company_id,
             content=content,
             direction=direction,
+            capture_session_id=capture_session_id,
+            capture_sequence=capture_sequence,
         )
     except service.EmptyFile as exc:
         raise HTTPException(status_code=422, detail="El fichero está vacío") from exc
@@ -176,9 +209,32 @@ async def upload_file(
     )
 
 
+@router.delete("/{file_id}", status_code=204)
+async def delete_unconfirmed_upload(identity: Editor, file_id: UUID) -> None:
+    """Elimina un fichero propio todavía no confirmado; una factura guardada es inmutable."""
+    try:
+        await service.delete_unconfirmed_file(
+            identity.session,
+            tenant_id=identity.tenant_id,
+            file_id=file_id,
+            actor_user_id=identity.user_id,
+            actor_role=identity.role,
+        )
+    except service.PrivateFileNotVisible as exc:
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
+    except service.FileForbidden as exc:
+        raise HTTPException(status_code=403, detail="Operación no permitida") from exc
+    except service.FileNotVisible as exc:
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
+    except service.ConfirmedFile as exc:
+        raise HTTPException(
+            status_code=409, detail="Las facturas confirmadas no se pueden eliminar"
+        ) from exc
+
+
 @router.post("/batch", status_code=201)
 async def upload_batch(
-    identity: Uploader,
+    identity: BatchUploader,
     files: list[UploadFile],
     company_id: Annotated[UUID, Form()],
     direction: Annotated[Literal["recibida", "emitida"], Form()],
@@ -192,7 +248,7 @@ async def upload_batch(
     `sharpness_score` (S6.14 C8): misma telemetría opcional que en la subida simple (hoy el cliente
     no calcula una nitidez de conjunto para varias páginas; el campo se admite igual).
     """
-    member_company_id = identity.company.id if identity.company is not None else None
+    member_company_id = identity.company_id
     try:
         await service.authorize_upload(
             tenant_id=identity.tenant_id,
@@ -231,10 +287,10 @@ async def upload_batch(
         contents.append(content)
     try:
         record = await service.create_upload_batch(
-            session=identity.session,
             tenant_id=identity.tenant_id,
             user_id=identity.user_id,
             company_id=company_id,
+            rls_company_id=identity.company_id,
             contents=contents,
             direction=direction,
         )
@@ -294,8 +350,46 @@ class OcrRetryOut(BaseModel):
     status: Literal["pending_ocr"]
 
 
+class UploadStatusOut(BaseModel):
+    """Estado operativo de un fichero, sin PII ni detalles de almacenamiento (R-019)."""
+
+    id: UUID
+    status: str
+    processing_stage: str | None
+    created_at: datetime
+    ocr_started_at: datetime | None
+    ocr_finished_at: datetime | None
+    eta_seconds_min: int | None = None
+    eta_seconds_max: int | None = None
+
+
+@router.get("/{file_id}/status")
+async def upload_status(identity: Downloader, file_id: UUID) -> UploadStatusOut:
+    """Consulta el estado de OCR con la misma autorización privada que la descarga."""
+    try:
+        result = await service.get_file_status(
+            identity.session,
+            tenant_id=identity.tenant_id,
+            file_id=file_id,
+            actor_user_id=identity.user_id,
+            actor_role=identity.role,
+        )
+    except (service.PrivateFileNotVisible, service.FileForbidden, service.FileNotVisible) as exc:
+        raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
+    return UploadStatusOut(
+        id=result.id,
+        status=result.status,
+        processing_stage=result.processing_stage,
+        created_at=result.created_at,
+        ocr_started_at=result.ocr_started_at,
+        ocr_finished_at=result.ocr_finished_at,
+        eta_seconds_min=result.eta_seconds_min,
+        eta_seconds_max=result.eta_seconds_max,
+    )
+
+
 @router.post("/{file_id}/retry-ocr", status_code=202)
-async def retry_ocr(identity: Uploader, file_id: UUID) -> OcrRetryOut:
+async def retry_ocr(identity: Editor, file_id: UUID) -> OcrRetryOut:
     """Reencola de forma autorizada una lectura que terminó en fallo, sin volver a subir bytes."""
     try:
         ctx = await service.prepare_ocr_retry(
@@ -305,7 +399,9 @@ async def retry_ocr(identity: Uploader, file_id: UUID) -> OcrRetryOut:
             actor_user_id=identity.user_id,
             actor_role=identity.role,
         )
-    except (service.FileForbidden, service.FileNotVisible) as exc:
+    except service.FileForbidden as exc:
+        raise HTTPException(status_code=403, detail="Operación no permitida") from exc
+    except service.FileNotVisible as exc:
         raise HTTPException(status_code=404, detail="Fichero no encontrado") from exc
     except service.OcrRetryUnavailable as exc:
         raise HTTPException(

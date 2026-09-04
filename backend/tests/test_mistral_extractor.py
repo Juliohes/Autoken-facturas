@@ -1,8 +1,4 @@
-"""Tests del extractor de Mistral OCR 4 para el ranking multi-modelo (S4.8).
-
-Mockea el cliente Mistral (sin red, sin coste). Criterio C5 de la spec: Mistral es una API de OCR
-puro sin campos estructurados — pase lo que pase, la lectura siempre tiene todos los campos `None`.
-"""
+"""Tests del extractor de Mistral OCR 4 para el ranking multi-modelo (R-029)."""
 
 from __future__ import annotations
 
@@ -19,7 +15,15 @@ from ocr.extraction import InvoiceExtractionError
 def _fake_response() -> SimpleNamespace:
     return SimpleNamespace(
         model="mistral-ocr-4-0",
-        model_dump=lambda: {"pages": [{"markdown": "texto libre, sin campos"}]},
+        document_annotation='{"issue_date":"2026-01-31","total_amount":"121.00",'
+        '"net_amount":"100.00","tax_amount":"21.00","invoice_number":"F-1",'
+        '"tax_lines":[{"rate":"21","base":"100.00","quota":"21.00"}],'
+        '"tax_ids":[{"value":"B12345678","name":"Proveedor SA"}]}',
+        model_dump=lambda: {
+            "model": "mistral-ocr-4-0",
+            "document_annotation": "structured",
+            "pages": [{"markdown": "texto libre"}],
+        },
     )
 
 
@@ -31,25 +35,42 @@ def _extractor(client: Any) -> MistralInvoiceExtractor:
     return MistralInvoiceExtractor("api-key", model="mistral-ocr-4-0", client=client)
 
 
-async def test_c5_todos_los_campos_quedan_null_pase_lo_que_pase() -> None:
-    """C5: Mistral no tiene forma de dar campos estructurados; nunca se inventan."""
-    extractor = _extractor(_client_returning(_fake_response()))
+async def test_r029_mistral_devuelve_campos_estructurados_y_amounts_decimal() -> None:
+    client = _client_returning(_fake_response())
+    extractor = _extractor(client)
 
     invoice = await extractor.extract(b"bytes de la imagen", "image/jpeg")
 
     assert invoice.engine == "mistral-ocr-4"
-    assert invoice.issue_date is None
-    assert invoice.total_amount is None
-    assert invoice.net_amount is None
-    assert invoice.tax_amount is None
-    assert invoice.tax_lines == ()
-    assert invoice.tax_ids == ()
+    assert str(invoice.issue_date) == "2026-01-31"
+    assert str(invoice.total_amount) == "121.00"
+    assert str(invoice.net_amount) == "100.00"
+    assert str(invoice.tax_amount) == "21.00"
+    assert str(invoice.tax_lines[0].cuota) == "21.00"
+    assert invoice.tax_ids[0].value == "B12345678"
     assert invoice.issue_date_confidence == "baja"
     assert invoice.total_confidence == "baja"
-    assert invoice.invoice_number is None  # spec: S6.1 C4 (asimetría de Mistral, sin inventar)
+    assert invoice.invoice_number == "F-1"
     assert invoice.invoice_number_confidence == "baja"
-    assert invoice.net_amount_confidence == "baja"  # spec: S6.1 C28
+    assert invoice.net_amount_confidence == "baja"
     assert invoice.tax_amount_confidence == "baja"
+    call = client.ocr.process_async.call_args.kwargs
+    assert call["confidence_scores_granularity"] == "page"
+    assert call["document_annotation_format"]["type"] == "json_schema"
+    assert call["document_annotation_format"]["json_schema"]["name"] == "invoice_extraction"
+    assert call["document_annotation_prompt"]
+
+
+async def test_r029_sin_anotacion_estructurada_da_error() -> None:
+    response = SimpleNamespace(
+        model="mistral-ocr-4-0",
+        document_annotation=None,
+        model_dump=lambda: {},
+    )
+    extractor = _extractor(_client_returning(response))
+
+    with pytest.raises(InvoiceExtractionError, match="document_annotation"):
+        await extractor.extract(b"bytes", "image/jpeg")
 
 
 async def test_content_type_no_soportado_da_error_tipado() -> None:
