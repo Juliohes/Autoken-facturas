@@ -285,6 +285,17 @@
     border-bottom: 1px solid var(--border-default);
   }
 
+  /* Registros pendientes de aprobación, fijos arriba del todo de "Empresas" (Julio, 2026-09-04):
+   * un admin no debería tener que bajar a buscarlos. `top: 0` + z-index por debajo de .tn-user-nav
+   * (40): al ser hermanos dentro de .tn-app-shell, el navegador los apila uno bajo el otro solo con
+   * eso, sin necesidad de calcular a mano la altura del nav en píxeles. Fondo opaco a propósito: sin
+   * él, las filas de la tabla de empresas se verían "pasar por debajo" al hacer scroll. */
+  .tn-pending-registrations-pinned {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
   /* El logo de Autofactu es blanco: sobre el azul clarito de --tn-nav-surface necesita un fondo
    * navy propio para seguir viéndose, en claro y en oscuro. */
   .tn-brand-logo-frame {

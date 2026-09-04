@@ -334,6 +334,25 @@ describe('CompaniesPanel (S3.4)', () => {
     expect(within(row).getByText(/se une a empresa existente/)).toBeInTheDocument()
   })
 
+  it('a petición de Julio (2026-09-04): con registros pendientes, la sección queda fija arriba del todo, antes que "Empresas"', async () => {
+    mockRoutes({
+      companies: [makeCompany()],
+      registrations: [makeRegistration({ email: 'a@ilex.es' })],
+    })
+    renderPanel()
+
+    const pending = await screen.findByText('Registros pendientes de aprobación')
+    const pendingSection = pending.closest('section')
+    expect(pendingSection).toHaveClass('tn-pending-registrations-pinned')
+
+    const empresasHeading = screen.getByRole('heading', { name: 'Empresas' })
+    // compareDocumentPosition: DOCUMENT_POSITION_FOLLOWING = "Empresas" viene DESPUÉS en el DOM.
+    // eslint-disable-next-line no-bitwise
+    expect(
+      pendingSection!.compareDocumentPosition(empresasHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
   it('C7: aprobar un registro llama al endpoint de aprobación', async () => {
     mockRoutes({ companies: [], registrations: [makeRegistration({ id: 'u1' })] })
     postMock.mockResolvedValue({ data: { status: 'active' }, error: undefined })
@@ -366,12 +385,14 @@ describe('CompaniesPanel (S3.4)', () => {
     })
   })
 
-  it('C9: sin empresas ni registros pendientes muestra los mensajes de vacío, no tablas vacías', async () => {
+  it('C9: sin empresas muestra el mensaje de vacío, no una tabla vacía; sin registros pendientes no enseña la sección', async () => {
     mockRoutes({ companies: [], registrations: [] })
     renderPanel()
 
     expect(await screen.findByText('Todavía no hay empresas.')).toBeInTheDocument()
-    expect(screen.getByText('No hay registros pendientes.')).toBeInTheDocument()
+    // Fijo arriba SOLO si hay algo que decidir (Julio, 2026-09-04): sin registros pendientes, la
+    // sección entera desaparece en vez de dejar una barra pinchada vacía.
+    expect(screen.queryByText('Registros pendientes de aprobación')).not.toBeInTheDocument()
     expect(screen.queryByTestId('companies-table')).not.toBeInTheDocument()
     expect(screen.queryByTestId('registrations-table')).not.toBeInTheDocument()
   })

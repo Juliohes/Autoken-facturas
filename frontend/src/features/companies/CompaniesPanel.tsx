@@ -209,7 +209,9 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
   }
 
   return (
-    <section className="tn-panel-page mx-auto max-w-5xl space-y-8 p-6">
+    <>
+      <PendingRegistrations />
+      <section className="tn-panel-page mx-auto max-w-5xl space-y-8 p-6">
       <div>
         <h1 className="text-xl font-semibold">Empresas</h1>
 
@@ -359,8 +361,8 @@ export function CompaniesPanel({ onViewInvoices }: Props) {
         />
       )}
 
-      <PendingRegistrations />
       <PurgeTestInvoices />
-    </section>
+      </section>
+    </>
   )
 }
